@@ -77,7 +77,7 @@ export function AdminPageState({
   return (
     <section
       aria-live="polite"
-      className={`rounded-[var(--fm-radius-panel)] border bg-white p-6 text-sm ${
+      className={`rounded-[var(--fm-radius-panel)] border bg-[var(--fm-admin-surface)] p-6 text-sm ${
         state === "conflict"
           ? "border-[var(--fm-warning-border)]"
           : state === "success"

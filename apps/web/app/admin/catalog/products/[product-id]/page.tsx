@@ -259,7 +259,7 @@ export default function ProductDetailPage({
       {(notice ?? variantNotice ?? command.notice) ? (
         <p
           role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-3 text-sm"
+          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
         >
           {notice ?? variantNotice ?? command.notice}
         </p>
@@ -267,7 +267,7 @@ export default function ProductDetailPage({
 
       <div
         aria-label="Product detail sections"
-        className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white/95 px-2 shadow-sm backdrop-blur"
+        className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]/95 px-2 shadow-sm backdrop-blur"
       >
         <div className="flex min-w-max gap-1 py-1">
           {detailSections.map(([label, href]) => (
@@ -512,7 +512,7 @@ export default function ProductDetailPage({
                           : { ...newSku, unitId: event.target.value },
                       )
                     }
-                    className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm"
+                    className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 text-sm"
                   >
                     <option value="">Select unit</option>
                     {countedSizes

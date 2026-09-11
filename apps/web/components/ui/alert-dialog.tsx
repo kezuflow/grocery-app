@@ -15,7 +15,10 @@ export function AlertDialogOverlay({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
   return (
     <AlertDialogPrimitive.Overlay
-      className={cn("fixed inset-0 z-50 bg-black/45", className)}
+      className={cn(
+        "fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.45)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        className,
+      )}
       {...props}
     />
   );
@@ -32,7 +35,7 @@ export function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-background)] p-5 text-[var(--fm-text)] shadow-xl focus:outline-none",
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-background)] p-5 text-[var(--fm-text)] shadow-xl focus:outline-none duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className,
         )}
         {...props}

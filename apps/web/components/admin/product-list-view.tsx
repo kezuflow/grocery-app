@@ -15,9 +15,10 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
+import { notifyCommandError, notifyCommandSuccess } from "./admin-feedback";
+import { AdminStatusPill } from "./admin-status-pill";
 import { ConfirmCommandDialog } from "./admin-controls";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import {
@@ -172,7 +173,14 @@ export function ProductListView({
       })),
       reason,
     );
-    setResult(outcome);
+    if (outcome.failed.length > 0) {
+      setResult(outcome);
+    } else {
+      notifyCommandSuccess(
+        "Products deactivated",
+        `${outcome.succeeded.length} product${outcome.succeeded.length === 1 ? "" : "s"} left storefront availability.`,
+      );
+    }
     clearSelection();
   }
 
@@ -190,15 +198,23 @@ export function ProductListView({
       ],
       reason,
     );
-    setResult(outcome);
+    if (outcome.failed.length > 0) {
+      setResult(outcome);
+    } else {
+      notifyCommandSuccess("Product deactivated", `${product.name} left storefront availability.`);
+    }
   }
 
   async function copyProductId(productId: string) {
-    await navigator.clipboard.writeText(productId);
-    setCopiedProductId(productId);
-    window.setTimeout(() => {
-      setCopiedProductId((current) => (current === productId ? null : current));
-    }, 2_000);
+    try {
+      await navigator.clipboard.writeText(productId);
+      setCopiedProductId(productId);
+      window.setTimeout(() => {
+        setCopiedProductId((current) => (current === productId ? null : current));
+      }, 2_000);
+    } catch {
+      notifyCommandError("Copy failed", "The product ID could not be written to the clipboard.");
+    }
   }
 
   const readiness = locationOperations
@@ -223,7 +239,7 @@ export function ProductListView({
         ))}
       </AdminDashboardGrid>
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         {selectedIds.size > 0 ? (
           <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -274,7 +290,7 @@ export function ProductListView({
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
-                  className="w-80 border-[var(--fm-border)] bg-white p-3 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+                  className="w-80 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
                 >
                   <div className="grid gap-3">{filters}</div>
                 </PopoverContent>
@@ -291,7 +307,7 @@ export function ProductListView({
               </PopoverTrigger>
               <PopoverContent
                 align="end"
-                className="w-56 border-[var(--fm-border)] bg-white p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+                className="w-56 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
               >
                 <p className="px-2 pb-1.5 text-xs font-medium text-[var(--fm-text-muted)]">
                   Show columns
@@ -318,29 +334,22 @@ export function ProductListView({
           </div>
         )}
         {result ? (
-          result.failed.length > 0 ? (
-            <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
-              <AlertTitle>Bulk deactivation finished with exceptions</AlertTitle>
-              <AlertDescription>
-                <p>
-                  {result.succeeded.length} deactivated; {result.failed.length} failed.
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {result.failed.map((failure) => (
-                    <li key={failure.productId}>
-                      {failure.name}: {failure.message}
-                      {failure.requestId ? ` (request ${failure.requestId})` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <p className="border-b border-[var(--fm-border)] px-4 py-3 text-sm" role="status">
-              {result.succeeded.length} product{result.succeeded.length === 1 ? "" : "s"}{" "}
-              deactivated.
-            </p>
-          )
+          <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+            <AlertTitle>Bulk deactivation finished with exceptions</AlertTitle>
+            <AlertDescription>
+              <p>
+                {result.succeeded.length} deactivated; {result.failed.length} failed.
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {result.failed.map((failure) => (
+                  <li key={failure.productId}>
+                    {failure.name}: {failure.message}
+                    {failure.requestId ? ` (request ${failure.requestId})` : ""}
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
         ) : null}
         <div className="overflow-x-auto">
           <Table aria-label="Products">
@@ -479,16 +488,11 @@ export function ProductListView({
                   ) : null}
                   {visibleColumns.has("status") ? (
                     <TableCell>
-                      <Badge
-                        className={`h-5 rounded-full px-2 py-0.5 font-medium capitalize whitespace-nowrap ${
-                          product.status === "active"
-                            ? "fm-product-status-active"
-                            : "fm-product-status-inactive"
-                        }`}
-                        variant="secondary"
-                      >
-                        {product.status}
-                      </Badge>
+                      <AdminStatusPill
+                        status={product.status}
+                        tone={product.status === "active" ? "success" : "danger"}
+                        label={product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                      />
                     </TableCell>
                   ) : null}
                   <TableCell className="w-12 text-right">

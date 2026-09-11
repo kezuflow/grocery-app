@@ -54,12 +54,13 @@ export function MetricCard({
         <CardContent className="flex items-center justify-between gap-3 border-t px-4 pt-3 text-xs text-[var(--fm-text-muted)]">
           <span>{freshness}</span>
           {href ? (
-            <a
+            <Link
               className="font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
               href={href}
+              prefetch={false}
             >
               Open workspace
-            </a>
+            </Link>
           ) : null}
         </CardContent>
       ) : null}
@@ -135,7 +136,7 @@ export function DetailWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 shadow-[var(--fm-shadow-card)] sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)] sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">{summary}</div>
         {actions ? (
           <div aria-label="Resource actions" className="flex flex-wrap gap-2" role="group">

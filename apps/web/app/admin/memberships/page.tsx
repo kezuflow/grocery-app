@@ -169,7 +169,7 @@ export default function MembershipsPage() {
       <PageHeader title="Memberships" />
       <AdminLiveRegion message={notice} />
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Membership list</h2>
         <form
           className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"

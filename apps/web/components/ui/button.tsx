@@ -3,14 +3,15 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 import { cn } from "../../lib/utils";
 export const buttonVariants = cva(
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--fm-radius-control)] px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--fm-radius-control)] px-4 text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-(--fm-motion-fast) ease-(--fm-ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fm-background)] active:scale-[0.97] disabled:pointer-events-none disabled:active:scale-100 disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-[var(--fm-primary-dark)] text-white hover:bg-[#294f30]",
+        default:
+          "bg-[var(--fm-primary-dark)] text-[var(--fm-primary-foreground)] hover:bg-[var(--fm-primary-hover)]",
         outline:
           "border border-[var(--fm-border)] bg-[var(--fm-background)] hover:bg-[var(--fm-hover)]",
-        destructive: "bg-[var(--fm-destructive)] text-white hover:bg-[#b42318]",
+        destructive: "bg-[var(--fm-destructive)] text-white hover:bg-[var(--fm-destructive-hover)]",
         ghost: "bg-transparent hover:bg-[var(--fm-hover)]",
         secondary: "bg-[var(--fm-surface-muted)] text-[var(--fm-text)] hover:bg-[var(--fm-hover)]",
         link: "h-auto bg-transparent p-0 text-[var(--fm-primary-dark)] underline-offset-4 hover:underline",

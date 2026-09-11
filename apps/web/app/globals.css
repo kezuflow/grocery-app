@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "mapbox-gl/dist/mapbox-gl.css";
 
 @font-face {
@@ -58,6 +59,32 @@
   display: none;
 }
 
+/*
+ * Bridge from shadcn-style semantic utilities (bg-muted, text-muted-foreground,
+ * ring-ring, ...) to the FreshMarkets token system. `inline` keeps the var()
+ * reference at the point of use so .fm-admin and .fm-admin-dark scoping wins.
+ */
+@theme inline {
+  --color-background: var(--fm-background);
+  --color-foreground: var(--fm-text);
+  --color-card: var(--fm-background);
+  --color-card-foreground: var(--fm-text);
+  --color-popover: var(--fm-background);
+  --color-popover-foreground: var(--fm-text);
+  --color-primary: var(--fm-primary-dark);
+  --color-primary-foreground: var(--fm-primary-foreground);
+  --color-secondary: var(--fm-surface-muted);
+  --color-secondary-foreground: var(--fm-text);
+  --color-muted: var(--fm-surface-muted);
+  --color-muted-foreground: var(--fm-text-muted);
+  --color-accent: var(--fm-hover);
+  --color-accent-foreground: var(--fm-text);
+  --color-destructive: var(--fm-destructive);
+  --color-border: var(--fm-border);
+  --color-input: var(--fm-border);
+  --color-ring: var(--fm-focus);
+}
+
 :root {
   color-scheme: light;
   --fm-background: #ffffff;
@@ -85,14 +112,20 @@
   --fm-info-border: #c2dce9;
   --fm-radius-control: 4px;
   --fm-radius-surface: 8px;
+  --fm-radius-panel: 8px;
   --fm-radius-overlay: 12px;
+  --fm-primary-hover: #294f30;
+  --fm-primary-foreground: #ffffff;
+  --fm-destructive-hover: #b42318;
   --fm-shadow-card: 0 8px 24px rgb(25 25 25 / 6%);
   --fm-shadow-overlay: 0 18px 48px rgb(25 25 25 / 14%);
   --fm-shadow-header: 0 1px 0 rgb(25 25 25 / 6%);
   --fm-container-admin: 1600px;
   --fm-container-content: 1180px;
-  --fm-motion-fast: 120ms;
-  --fm-motion-base: 180ms;
+  --fm-motion-fast: 150ms;
+  --fm-motion-base: 200ms;
+  --fm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --fm-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --fm-font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --fm-font-body: "Open Sans", ui-sans-serif, system-ui, sans-serif;
   background: var(--fm-background);
@@ -164,6 +197,8 @@ body {
   --fm-surface-muted: var(--fm-admin-surface-muted);
   --fm-primary-lime: var(--fm-admin-accent);
   --fm-primary-dark: #7c2d12;
+  --fm-primary-hover: #6a250e;
+  --fm-primary-foreground: #ffffff;
   --fm-text: lab(2.75381% 0 0);
   --fm-text-muted: lab(48.496% 0 0);
   --fm-focus: lab(66.128% -0.0000298023 0.0000119209);
@@ -195,6 +230,8 @@ html.fm-admin-dark .fm-admin {
   --fm-surface-muted: var(--fm-admin-surface-muted);
   --fm-primary-lime: var(--fm-admin-accent);
   --fm-primary-dark: #fdba74;
+  --fm-primary-hover: #fed7aa;
+  --fm-primary-foreground: #431407;
   --fm-text: lab(98.26% 0 0);
   --fm-text-muted: lab(66.128% -0.0000298023 0.0000119209);
   --fm-focus: lab(48.496% 0 0);
@@ -213,34 +250,6 @@ html.fm-admin-dark .fm-admin {
   color-scheme: dark;
   background: var(--fm-admin-canvas);
   color: var(--fm-text);
-}
-
-html.fm-admin-dark .fm-admin :where(.bg-white),
-html.fm-admin-dark .fm-admin :where([class~="bg-white/90"], [class~="bg-white/95"]) {
-  background-color: var(--fm-admin-surface);
-}
-
-html.fm-admin-dark
-  :where(
-    [data-slot="dropdown-menu-content"],
-    [data-slot="popover-content"],
-    [data-slot="select-content"]
-  ) {
-  border-color: var(--fm-border);
-  background-color: var(--fm-admin-surface);
-  color: var(--fm-text);
-}
-
-.fm-product-status-active {
-  border-color: #4ade80;
-  background-color: #f0fdf4;
-  color: #166534;
-}
-
-.fm-product-status-inactive {
-  border-color: #f87171;
-  background-color: var(--fm-danger-soft);
-  color: var(--fm-destructive);
 }
 
 .fm-admin-status-success {
@@ -279,10 +288,6 @@ html.fm-admin-dark
   color: #475569;
 }
 
-html.fm-admin-dark :where(.fm-product-status-active, .fm-product-status-inactive) {
-  color: rgb(255 255 255 / 80%);
-}
-
 html.fm-admin-dark
   :where(
     .fm-admin-status-success,
@@ -317,10 +322,6 @@ html.fm-admin-dark .fm-admin-status-danger {
 
 html.fm-admin-dark .fm-admin-status-neutral {
   background-color: rgb(51 65 85 / 70%);
-}
-
-html.fm-admin-dark .fm-product-status-active {
-  background-color: rgb(20 83 45 / 70%);
 }
 
 .fm-admin-reference-primary {
@@ -424,11 +425,15 @@ textarea {
   .fm-cart-drawer::backdrop {
     transition: none;
   }
+  /*
+   * Reduced motion means fewer and gentler animations, not zero: color and
+   * opacity transitions aid comprehension and stay, while movement animations
+   * collapse to their end state.
+   */
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }

@@ -15,7 +15,10 @@ export function SheetOverlay({
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
   return (
     <SheetPrimitive.Overlay
-      className={cn("fixed inset-0 z-50 bg-[rgb(25_25_25_/_0.4)]", className)}
+      className={cn(
+        "fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        className,
+      )}
       {...props}
     />
   );
@@ -34,11 +37,11 @@ export function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         className={cn(
-          "fixed inset-y-0 z-50 flex h-full w-72 flex-col gap-2 overflow-y-auto border-[var(--fm-border)] bg-white p-3 shadow-[var(--fm-shadow-overlay)] transition-transform duration-200 ease-in-out data-[state=closed]:duration-150 focus-visible:outline-none",
+          "fixed inset-y-0 z-50 flex h-full w-72 flex-col gap-2 overflow-y-auto border-[var(--fm-border)] bg-[var(--fm-background)] p-3 shadow-[var(--fm-shadow-overlay)] duration-(--fm-motion-base) ease-out focus-visible:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out",
           side === "left" &&
-            "left-0 border-r data-[state=closed]:-translate-x-full data-[state=open]:translate-x-0",
+            "left-0 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
           side === "right" &&
-            "right-0 border-l data-[state=closed]:translate-x-full data-[state=open]:translate-x-0",
+            "right-0 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
           className,
         )}
         {...props}

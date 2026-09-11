@@ -66,7 +66,7 @@ export default function NewCategoryPage() {
           {parents.error ? "Retry parent categories" : "More parent categories"}
         </Button>
       ) : null}
-      <section className="max-w-2xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
+      <section className="max-w-2xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-6">
         <CategoryForm
           value={value}
           categories={parents.items}

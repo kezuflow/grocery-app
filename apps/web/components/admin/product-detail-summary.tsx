@@ -30,7 +30,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
 
   return (
     <div className="space-y-4">
-      <div className="grid overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)] lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]">
+      <div className="grid overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)] lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]">
         <section
           aria-label="Product media preview"
           className="border-b border-[var(--fm-border)] bg-[var(--fm-surface-muted)] p-4 lg:border-r lg:border-b-0"
@@ -38,13 +38,13 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
           {primary ? (
             <img
               alt={primary.altText}
-              className="aspect-square w-full rounded-xl border border-[var(--fm-border)] bg-white object-cover"
+              className="aspect-square w-full rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] object-cover"
               height={640}
               src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
               width={640}
             />
           ) : (
-            <div className="grid aspect-square place-items-center rounded-xl border border-dashed border-[var(--fm-border)] bg-white text-[var(--fm-text-muted)]">
+            <div className="grid aspect-square place-items-center rounded-xl border border-dashed border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text-muted)]">
               <span className="grid justify-items-center gap-2 text-sm">
                 <ImageIcon className="size-7" aria-hidden /> No primary media
               </span>

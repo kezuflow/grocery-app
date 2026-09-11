@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AdminChartDatum } from "./admin-bar-chart";
+import { AdminChartTooltipContent } from "./admin-chart-tooltip";
 
 export default function AdminLineChart({
   data,
@@ -26,7 +27,10 @@ export default function AdminLineChart({
         <CartesianGrid vertical={false} stroke="var(--fm-border)" />
         <XAxis dataKey={categoryKey} tickLine={false} axisLine={false} fontSize={11} />
         <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-        <Tooltip cursor={{ stroke: "var(--fm-border)" }} />
+        <Tooltip
+          cursor={{ stroke: "var(--fm-border)" }}
+          content={<AdminChartTooltipContent />}
+        />
         <Line
           connectNulls={false}
           dataKey={valueKey}

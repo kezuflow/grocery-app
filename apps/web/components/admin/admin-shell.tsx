@@ -36,6 +36,8 @@ import {
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
+import { AdminCommandPalette } from "./admin-command-palette";
+import { adminStatusPillClassName } from "./admin-status-pill";
 import { useAdminTheme } from "./admin-theme-provider";
 import {
   adminNavigationFromContext,
@@ -70,6 +72,7 @@ export function AdminShell({
   environment: string;
 }) {
   const [collapsed, setCollapsed] = useState(true);
+  const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
   const active = mostSpecificActiveNavigation(items, pathname);
   const activeItem = active ? items.find((item) => item.code === active.code) : undefined;
@@ -102,6 +105,17 @@ export function AdminShell({
     setCollapsed(savedPreference === null ? true : savedPreference === "true");
   }, []);
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   function changeCollapsed(next: boolean) {
     setCollapsed(next);
     window.localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(next));
@@ -109,6 +123,7 @@ export function AdminShell({
 
   return (
     <div className="flex min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
+      <AdminCommandPalette items={items} open={commandOpen} onOpenChange={setCommandOpen} />
       <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
       <div
         className={cn(
@@ -122,6 +137,7 @@ export function AdminShell({
           environment={environment}
           collapsed={collapsed}
           onCollapsedChange={changeCollapsed}
+          onOpenSearch={() => setCommandOpen(true)}
         />
         <main
           id="main-content"
@@ -145,12 +161,14 @@ function AdminHeader({
   environment,
   collapsed,
   onCollapsedChange,
+  onOpenSearch,
 }: {
   items: ReadonlyArray<AdminNavigationEntry>;
   scopeLabel: string;
   environment: string;
   collapsed: boolean;
   onCollapsedChange: (next: boolean) => void;
+  onOpenSearch: () => void;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl">
@@ -185,6 +203,7 @@ function AdminHeader({
             )}
           </Button>
           <AdminScopeSelector fallbackLabel={scopeLabel} />
+          <AdminSearchTrigger onOpen={onOpenSearch} />
         </div>
         <div className="flex items-center gap-1.5 text-xs text-[var(--fm-text-muted)]">
           {environment !== "production" ? (
@@ -216,6 +235,28 @@ function AdminHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+function AdminSearchTrigger({ onOpen }: { onOpen: () => void }) {
+  const [shortcutLabel, setShortcutLabel] = useState("Ctrl K");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad|iPod/.test(window.navigator.platform)) setShortcutLabel("⌘K");
+  }, []);
+  return (
+    <button
+      type="button"
+      aria-label="Open admin search"
+      aria-keyshortcuts="Control+K Meta+K"
+      onClick={onOpen}
+      className="hidden h-8 items-center gap-2 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] pl-2.5 pr-1.5 text-xs text-[var(--fm-text-muted)] shadow-sm hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:inline-flex"
+    >
+      <Search className="size-3.5" aria-hidden="true" />
+      <span className="min-w-0">Search</span>
+      <kbd className="shrink-0 rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] px-1 py-0.5 text-[10px] font-medium">
+        {shortcutLabel}
+      </kbd>
+    </button>
   );
 }
 
@@ -298,7 +339,7 @@ function AdminIdentity() {
         sideOffset={8}
         role="menu"
         aria-label="Account menu"
-        className="w-64 border-[var(--fm-border)] bg-white p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+        className="w-64 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
       >
         <div className="px-2 py-2">
           <p className="truncate text-sm font-semibold">{label}</p>
@@ -393,7 +434,7 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
         side="bottom"
         sideOffset={4}
         align="start"
-        className="border-[var(--fm-border)] bg-white text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+        className="border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
       >
         {selections.map((selection) => {
           const value = JSON.stringify(selection.value);
@@ -953,14 +994,6 @@ export function PageHeader({
   );
 }
 
-export function FilterBar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-3 sm:flex-row sm:flex-wrap sm:items-center">
-      {children}
-    </div>
-  );
-}
-
 export function ListPageSection({
   title,
   description,
@@ -971,7 +1004,7 @@ export function ListPageSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+    <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
       <div className="border-b border-[var(--fm-border)] px-4 py-3 sm:px-5">
         <h2 className="font-semibold">{title}</h2>
         {description ? (
@@ -983,6 +1016,11 @@ export function ListPageSection({
   );
 }
 
+/**
+ * Compatibility wrapper over the single admin status pill. Tones map 1:1 to the
+ * `fm-admin-status-*` classes owned by globals.css; new surfaces should use
+ * AdminStatusPill directly.
+ */
 export function StatusBadge({
   tone = "neutral",
   children,
@@ -990,26 +1028,7 @@ export function StatusBadge({
   tone?: "neutral" | "success" | "warning" | "danger" | "info";
   children: ReactNode;
 }) {
-  const tones = {
-    neutral: "border-[var(--fm-border)] bg-white text-[var(--fm-text-muted)]",
-    success:
-      "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] text-[var(--fm-success)]",
-    warning:
-      "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] text-[var(--fm-warning)]",
-    danger:
-      "border-[var(--fm-danger-border)] bg-[var(--fm-danger-soft)] text-[var(--fm-destructive)]",
-    info: "border-[var(--fm-info-border)] bg-[var(--fm-info-soft)] text-[var(--fm-info)]",
-  };
   return (
-    <span
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "inline-flex items-center rounded-[var(--fm-radius-control)] border px-2 py-1 text-xs font-semibold",
-        tones[tone],
-      )}
-    >
-      {children}
-    </span>
+    <span className={cn(adminStatusPillClassName, `fm-admin-status-${tone}`)}>{children}</span>
   );
 }

@@ -64,7 +64,7 @@ export function CategoryForm({
         <label className="block space-y-1 text-sm font-medium">
           <span>Parent category</span>
           <select
-            className="h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+            className="h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
             value={value.parentCategoryId ?? ""}
             onChange={(event) =>
               onChange({ ...value, parentCategoryId: event.target.value || null })

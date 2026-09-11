@@ -108,7 +108,7 @@ export function ExternalDeliveryBooking({
 
   if (readiness.unavailableReason) return <p className="text-sm">{readiness.unavailableReason}</p>;
   return (
-    <section className="space-y-3 rounded border border-[var(--fm-border)] bg-white p-3">
+    <section className="space-y-3 rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3">
       <div>
         <h3 className="font-semibold">
           {delivery.status === "FAILED" || delivery.status === "RETRY_SCHEDULED"

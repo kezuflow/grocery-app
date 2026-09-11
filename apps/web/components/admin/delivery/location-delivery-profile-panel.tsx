@@ -145,7 +145,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
 
   if (!location.locationId && !pendingPayload) return null;
   return (
-    <details className="rounded border border-[var(--fm-border)] bg-white p-4">
+    <details className="rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4">
       <summary className="cursor-pointer font-semibold">Store courier pickup profile</summary>
       <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
         {view?.locationName ?? location.label}. Coordinates come from the store location record;

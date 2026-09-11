@@ -23,7 +23,10 @@ vi.mock("../../app/admin/admin-context-provider", () => ({
     ),
 }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: unknown }) => children }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/admin" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/admin",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
 
 const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
@@ -31,6 +34,7 @@ const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
 const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
 const alertDialog = readFileSync(new URL("../ui/alert-dialog.tsx", import.meta.url), "utf8");
 const controls = readFileSync(new URL("./admin-controls.tsx", import.meta.url), "utf8");
+const pageState = readFileSync(new URL("./admin-page-state.tsx", import.meta.url), "utf8");
 const productDetail = readFileSync(
   new URL("../../app/admin/catalog/products/[product-id]/page.tsx", import.meta.url),
   "utf8",
@@ -142,7 +146,7 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toContain('fetch("/api/auth/sign-out"');
     expect(shell).toContain('window.location.assign("/auth/login")');
     expect(shell).toContain(
-      'className="border-[var(--fm-border)] bg-white text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"',
+      'className="border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"',
     );
     expect(shell.slice(shell.indexOf("function AdminHeader"))).toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
@@ -176,7 +180,7 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toMatch(/<h1[^>]*>[\s\S]*Sign in required/);
     expect(shell).toMatch(/<h1[^>]*>[\s\S]*Staff access required/);
     expect(shell).toMatch(/role="status"/);
-    expect(shell).toMatch(/aria-live="polite"/);
+    expect(pageState).toContain('aria-live="polite"');
   });
 
   it("renders production loading, unauthenticated, forbidden, and error states", () => {
@@ -228,8 +232,10 @@ describe("shared Admin accessibility contract", () => {
         createElement(PageHeader, { title: "Orders", description: "Committed orders." }),
       ),
     );
-    expect(markup).toContain('role="status"');
-    expect(markup).toContain('aria-live="polite"');
+    // Status badges are labels, not announcements: the shared pill carries the
+    // tone class, and live semantics stay with AdminPageState/AdminLiveRegion.
+    expect(markup).toContain("fm-admin-status-warning");
+    expect(markup).not.toContain('role="status"');
     expect(markup).toContain('role="region"');
     expect(markup).toContain('aria-label="Order queue"');
     expect(markup).toContain('scope="col"');
@@ -329,7 +335,7 @@ describe("shared Admin accessibility contract", () => {
     expect(alertDialog).toContain("@radix-ui/react-dialog");
     expect(alertDialog).toContain("AlertDialogPrimitive.Content");
     expect(alertDialog).toContain("bg-[var(--fm-background)]");
-    expect(alertDialog).not.toContain("bg-white");
+    expect(alertDialog).not.toContain("bg-[var(--fm-admin-surface)]");
     expect(controls).toContain('role="alertdialog"');
     expect(controls).toContain('aria-label="Confirmation reason"');
     expect(controls).toContain("reasonRequired && reason.trim()");

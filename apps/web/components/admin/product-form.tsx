@@ -142,7 +142,7 @@ export function ProductForm({
                 <label className="block space-y-1 text-sm font-medium sm:col-span-2">
                   <span>Product description</span>
                   <textarea
-                    className="min-h-32 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 py-2"
+                    className="min-h-32 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 py-2"
                     value={value.description ?? ""}
                     onChange={(event) =>
                       onChange({ ...value, description: event.target.value || null })
@@ -327,7 +327,7 @@ export function ProductForm({
                         <label className="grid gap-1 text-sm font-medium">
                           <span>Sell unit</span>
                           <select
-                            className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+                            className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
                             value={
                               countedSizes
                                 ? variant.sellableUnitId
@@ -528,7 +528,7 @@ export function ProductForm({
                 <label className="block space-y-1 text-sm font-medium">
                   <span>Product category</span>
                   <select
-                    className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+                    className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
                     value={value.categoryId}
                     required
                     onChange={(event) => onChange({ ...value, categoryId: event.target.value })}
@@ -558,7 +558,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Stock sold by</span>
                       <select
-                        className="h-10 w-full rounded border bg-white px-3"
+                        className="h-10 w-full rounded border bg-[var(--fm-admin-surface)] px-3"
                         value={value.stockTracking ?? "SHARED"}
                         onChange={(event) =>
                           onChange({
@@ -592,7 +592,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Inventory base unit</span>
                       <select
-                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
                         value={value.inventoryBaseUnitId ?? ""}
                         required
                         onChange={(event) =>
@@ -624,7 +624,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Status</span>
                       <select
-                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
                         value={value.status}
                         onChange={(event) =>
                           onChange({

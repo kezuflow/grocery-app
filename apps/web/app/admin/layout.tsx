@@ -3,6 +3,7 @@ import "@fontsource-variable/dm-sans/wght.css";
 import { AdminContextProvider } from "./admin-context-provider";
 import { AdminShellBoundary } from "../../components/admin/admin-shell";
 import { AdminThemeProvider } from "../../components/admin/admin-theme-provider";
+import { AdminToaster } from "../../components/admin/admin-toaster";
 
 /**
  * The admin layout owns the capability-aware shell. Navigation and scope
@@ -16,6 +17,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <AdminContextProvider>
           <AdminShellBoundary>{children}</AdminShellBoundary>
         </AdminContextProvider>
+        <AdminToaster />
       </div>
     </AdminThemeProvider>
   );

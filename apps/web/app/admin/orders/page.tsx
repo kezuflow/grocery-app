@@ -122,7 +122,7 @@ export default function OrdersPage() {
     <div className="mx-auto max-w-[1280px] space-y-6">
       <PageHeader title="Orders" />
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Order list</h2>
         <div
           className="flex min-h-14 items-end gap-1 overflow-x-auto border-b border-[var(--fm-border)] px-3 pt-2"

@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { PageHeader, FilterBar, ListPageSection } from "../../../components/admin/admin-shell";
+import { FilterBar } from "../../../components/admin/admin-controls";
+import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 
 type PageState =
   | { phase: "loading" }
@@ -162,14 +163,11 @@ function AuditWorkspace() {
 
   return (
     <>
-      <FilterBar>
-        <form
-          className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilters(draft);
-          }}
-        >
+      <FilterBar
+        variant="card"
+        onSubmit={() => applyFilters(draft)}
+      >
+        <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Input
             aria-label="Filter by action"
             placeholder="Action, e.g. ORDER.ADJUSTED"
@@ -223,7 +221,7 @@ function AuditWorkspace() {
               </Button>
             ) : null}
           </div>
-        </form>
+        </div>
         <span className="text-xs text-[var(--fm-text-muted)]">
           {filters.locationId
             ? `Location scope filter: ${filters.locationId}`

@@ -35,6 +35,17 @@ Retain the current Admin visual system when changing an agreed screen:
 
 The public Shadcn UI Kit dashboard is a geometry/interaction reference only. FreshMarkets owns its code, copy, data and assets; no proprietary source/assets/demo values become implementation or fallback data.
 
+## Admin craft repair program — 2026-09-12
+
+Owner approval, 2026-09-12: repair the pinned Admin visual system so its intended behavior actually renders, plus the approved additions below. This does not change the pinned token palette, rail/header geometry, or restrained visual language.
+
+- Overlay motion comes from `tw-animate-css`: popovers/selects/menus/tooltips enter and exit with origin-aware fade/scale (150–250ms, ease-out family); modals and the command palette stay centered; sheets slide with a fading scrim. Radix `data-state` exit animations are the standard. Keyboard-repeated navigation stays unanimated, and reduced-motion keeps color/opacity transitions while collapsing movement animations.
+- Control feedback: pressable controls scale to 0.97 on `:active` over 150ms ease-out (`--fm-motion-fast`); control hover/focus colors use tokens (`--fm-primary-hover`, `--fm-primary-foreground`, `--fm-destructive-hover`), not literals. Tooltips wait 400ms before first show and skip the delay for subsequent tooltips.
+- One status pill: `AdminStatusPill`/`StatusBadge` render the `fm-admin-status-*` tone classes (rounded-full, min-height 24px). The old `.fm-product-status-*` classes and the per-badge `role="status"` live regions are removed; live announcements stay with AdminPageState/AdminLiveRegion/CommandBanner.
+- Toasts: Sonner is mounted inside the Admin scope (token-mapped colors, persisted dark appearance) and beside the auth provider. A toast only reports what Core already confirmed (transient full-success or a retryable browser failure such as clipboard write); pending, failed, conflict and partial outcomes keep persistent inline banners. Nothing toasts a financial or operational commitment before Core confirms it.
+- Command palette: Ctrl/Cmd+K opens a cmdk palette over the same capability-filtered navigation the shell renders; it only navigates and never widens access. A desktop search trigger with its shortcut hint sits in the header after the scope selector; mobile keeps the Sheet navigation search.
+- Token cohesion: shadcn-style semantic utilities (`bg-muted`, `text-muted-foreground`, `ring-ring`, …) are bridged to `--fm-*` tokens through `@theme inline` so Admin scoping and dark appearance resolve per element. Shared primitives use `--fm-background`/`--fm-text` instead of oklch literals or `dark:` variants; Admin surfaces use `--fm-admin-surface` instead of `bg-white`; the `.bg-white` and overlay dark-mode CSS patches are removed. Chart tooltips use admin tokens (`AdminChartTooltipContent`). `FilterBar` has one implementation in admin-controls with `section`/`card` variants.
+
 ## Lists, details, forms and reports
 
 Lists show title, scope/date/cycle context where relevant, one primary action, useful search/status/date filters, result count and bounded pagination. Use stable server-side sort/cursors, URL filters/tabs, clear-all and visible active filters. Product Filters and Columns controls share a toolbar; safe bulk selection replaces that toolbar with count/action/cancel. Bulk actions require real domain semantics and show preflight scope and explicit partial outcomes. No raw-table completeness requirement.

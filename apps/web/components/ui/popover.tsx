@@ -26,7 +26,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md border border-oklch(0.922 0 0) bg-oklch(1 0 0) p-4 text-oklch(0.145 0 0) shadow-md outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 dark:border-oklch(1 0 0 / 10%) dark:bg-oklch(0.205 0 0) dark:text-oklch(0.985 0 0)",
+          "z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-background)] p-4 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className,
         )}
         {...props}
@@ -57,7 +57,7 @@ function PopoverDescription({ className, ...props }: React.ComponentProps<"p">) 
   return (
     <p
       data-slot="popover-description"
-      className={cn("text-oklch(0.556 0 0) dark:text-oklch(0.708 0 0)", className)}
+      className={cn("text-[var(--fm-text-muted)]", className)}
       {...props}
     />
   );

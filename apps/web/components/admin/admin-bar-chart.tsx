@@ -1,6 +1,7 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AdminChartTooltipContent } from "./admin-chart-tooltip";
 
 export type AdminChartDatum = Readonly<Record<string, string | number | null>>;
 
@@ -19,7 +20,7 @@ export default function AdminBarChart({
         <CartesianGrid vertical={false} stroke="var(--fm-border)" />
         <XAxis dataKey={categoryKey} tickLine={false} axisLine={false} fontSize={11} />
         <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-        <Tooltip cursor={{ fill: "var(--fm-surface-muted)" }} />
+        <Tooltip cursor={{ fill: "var(--fm-surface-muted)" }} content={<AdminChartTooltipContent />} />
         <Bar dataKey={valueKey} fill="var(--fm-admin-accent)" radius={[5, 5, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

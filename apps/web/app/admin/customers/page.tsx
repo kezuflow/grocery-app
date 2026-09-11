@@ -226,7 +226,7 @@ export default function CustomersPage() {
       ) : null}
 
       {inviteOpen ? (
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 shadow-[var(--fm-shadow-card)]">
+        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)]">
           <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={invite}>
             <label className="grid flex-1 gap-1.5 text-sm font-medium sm:max-w-sm">
               Email address
@@ -322,7 +322,7 @@ export default function CustomersPage() {
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Customer list</h2>
         {selectedIds.size > 0 ? (
           <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">

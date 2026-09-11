@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -178,19 +179,29 @@ export function AdminConfirmationDialog({
 
 export const ConfirmCommandDialog = AdminConfirmationDialog;
 
+/**
+ * The one admin filter toolbar. `section` attaches under a ListPageSection
+ * header; `card` renders the standalone bordered toolbar used above sections.
+ */
 export function FilterBar({
   children,
   onSubmit,
   label = "Filters",
+  variant = "section",
 }: {
   children: ReactNode;
   onSubmit?: () => void;
   label?: string;
+  variant?: "section" | "card";
 }) {
   return (
     <form
       aria-label={label}
-      className="flex flex-wrap items-end gap-2 border-b p-4"
+      className={cn(
+        variant === "card" &&
+          "flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 sm:flex-row sm:flex-wrap sm:items-center",
+        variant === "section" && "flex flex-wrap items-end gap-2 border-b p-4",
+      )}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit?.();

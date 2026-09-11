@@ -235,7 +235,7 @@ export function ProductsPageClient({
                     aria-label="Product status"
                     value={status}
                     onChange={(event) => setFilter("status", event.target.value)}
-                    className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 font-normal"
+                    className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 font-normal"
                   >
                     <option value="all">All statuses</option>
                     <option value="active">Active</option>

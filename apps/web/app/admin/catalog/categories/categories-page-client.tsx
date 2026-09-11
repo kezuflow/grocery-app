@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { AdminStatusPill } from "@/components/admin/admin-status-pill";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -194,7 +194,7 @@ export function CategoriesPageClient({
         </Alert>
       ) : null}
       {payload?.ok ? (
-        <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
+        <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
           <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] p-4 sm:flex-row">
             <Input
               aria-label="Search categories"
@@ -207,7 +207,7 @@ export function CategoriesPageClient({
               aria-label="Category status"
               value={status}
               onChange={(event) => setFilter("status", event.target.value)}
-              className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3"
+              className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
             >
               <option value="all">All statuses</option>
               <option value="active">Active</option>
@@ -235,16 +235,11 @@ export function CategoriesPageClient({
                   </TableCell>
                   <TableCell>{item.parentName ?? "Top level"}</TableCell>
                   <TableCell>
-                    <Badge
-                      className={`h-5 rounded-full px-2 py-0.5 font-medium capitalize whitespace-nowrap ${
-                        item.status === "active"
-                          ? "fm-product-status-active"
-                          : "fm-product-status-inactive"
-                      }`}
-                      variant="secondary"
-                    >
-                      {item.status}
-                    </Badge>
+                    <AdminStatusPill
+                      status={item.status}
+                      tone={item.status === "active" ? "success" : "danger"}
+                      label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                    />
                   </TableCell>
                   <TableCell>{item.productCount}</TableCell>
                   <TableCell className="w-12 text-right">

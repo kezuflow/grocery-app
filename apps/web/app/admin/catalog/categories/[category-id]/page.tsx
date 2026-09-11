@@ -120,13 +120,13 @@ export default function CategoryDetailPage() {
       {notice ? (
         <p
           role="status"
-          className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white p-3 text-sm"
+          className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
         >
           {notice}
         </p>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-3">
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 lg:col-span-2">
+        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 lg:col-span-2">
           <h2 className="font-semibold">Category details</h2>
           <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
             <div>
@@ -152,7 +152,7 @@ export default function CategoryDetailPage() {
           </dl>
         </section>
         {category.allowedActions.includes("SET_STATUS") ? (
-          <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5">
+          <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
             <h2 className="font-semibold">Lifecycle</h2>
             <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
               {category.status === "active"

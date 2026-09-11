@@ -315,7 +315,7 @@ export default function InventoryPage() {
           {notice ? (
             <p
               role="status"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-3 text-sm"
+              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
             >
               {notice}
             </p>

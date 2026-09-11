@@ -133,7 +133,7 @@ export function CommerceConfigurationView({
                     <Label htmlFor="membership-reason">Reason for change</Label>
                     <Textarea
                       id="membership-reason"
-                      className="min-h-24 bg-white"
+                      className="min-h-24 bg-[var(--fm-admin-surface)]"
                       required
                       value={reason}
                       onChange={(event) => setReason(event.target.value)}

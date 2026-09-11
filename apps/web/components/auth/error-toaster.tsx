@@ -10,6 +10,7 @@ import { matchMutation, matchQuery, useQueryClient } from "@tanstack/react-query
 import type { BetterFetchError } from "better-auth/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { Toaster } from "../ui/sonner";
 
 export function ErrorToaster() {
   const queryClient = useQueryClient();
@@ -61,5 +62,7 @@ export function ErrorToaster() {
     };
   }, [queryClient]);
 
-  return null;
+  // Renders the surface the toast() calls above actually display on; without
+  // it these auth errors were fired into the void.
+  return <Toaster position="bottom-center" />;
 }

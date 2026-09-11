@@ -156,7 +156,7 @@ export default function EditProductPage() {
           <AlertDescription>{error ?? categories.error}</AlertDescription>
         </Alert>
       ) : null}
-      <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-6">
+      <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-6">
         <fieldset disabled={intent.pending || intent.uncertain || imageBusy}>
           <ProductForm
             value={value}
