@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.42 owner-requested test administrator (2026-09-11)
+
+Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `74fc8606`. Owner explicitly supplied test credentials and authorized creation after shared staging database disclosure. Existing target identity and Global scope were absent. Seeded only the requested test identity and Better Auth hashed credential into shared staging; verification is synthetic for this reserved test identity, not mailbox ownership evidence. No plaintext password stored in repository. Temporary SQL removed. No other user credentials changed.
+
+Initial credential issuer was incompatible with Better Auth 1.7.1; inspected installed sign-in implementation and corrected to its local credential issuer. Real localhost sign-in then succeeded. Temporarily enabled the chosen setup identity in ignored local environment/config, restarted development server, and executed the normal /setup Core command in the in-app browser. Actual D1 verification found active Global staff, 31 explicit capabilities, one immutable setup receipt and one setup audit event. Browser /admin loaded the Global Overview successfully. Temporary setup settings removed; unrelated staging config edits preserved. One restart failed because the temporary binding was duplicated as both var and secret; corrected before successful startup. Earlier read-only inspection referenced a nonexistent role-definition table; corrected to actual role schema. No application source change, deployment or email sent.
+
+CA-7.42 complete: account creation, credential sign-in, actual Core setup transaction and Admin browser access verified. Local server remains running. Next action: owner uses the supplied credentials for Admin; runtime issue CA-7.38 and remaining commerce/provider obligations remain open. This is explicitly seeded test authentication, not real email verification acceptance.
+
 ## Latest owner request — CA-7.41 sign-out confirmation (2026-09-11)
 
 Source: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Main at `9c10aade`. Owner requests popup confirmation before sign-out. Account popup and account page now open a shared compact dialog with Cancel and Sign out; no sign-out request before confirmation. Existing auth client owns sign-out. Success navigates home with a full load to discard in-memory authenticated state; errors remain visible for retry. In-flight guard prevents duplicate submission and dismissal while pending. Focus starts on Cancel. Preserved unrelated work.
