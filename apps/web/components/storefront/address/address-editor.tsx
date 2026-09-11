@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Navigation, MapPin } from "lucide-react";
+import { Search, Navigation, MapPin, ChevronDown } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -183,6 +183,11 @@ export function AddressEditor({
   geolocation = typeof navigator === "undefined" ? undefined : navigator.geolocation,
 }: AddressEditorProps) {
   const [showPinMap, setShowPinMap] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (compact && searchExpanded) searchInputRef.current?.focus();
+  }, [compact, searchExpanded]);
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<ReadonlyArray<AddressSearchCandidate>>([]);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "error">("idle");
@@ -231,7 +236,7 @@ export function AddressEditor({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
+    if (!trimmed || (compact && !searchExpanded)) {
       setCandidates([]);
       setSearchState("idle");
       setSearchError("");
@@ -279,7 +284,7 @@ export function AddressEditor({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [fetchImpl, query]);
+  }, [fetchImpl, query, compact, searchExpanded]);
 
   useEffect(
     () => () => {
@@ -585,37 +590,56 @@ export function AddressEditor({
               editor.
             </p>
           </div>
-          {compact ? (
-            <label className="relative block">
-              <span className="sr-only">Search for an address</span>
-              <Search
+          {compact && (
+            <button
+              type="button"
+              aria-expanded={searchExpanded}
+              aria-controls="address-search-panel"
+              onClick={() => setSearchExpanded((expanded) => !expanded)}
+              className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+            >
+              <Search aria-hidden="true" className="size-4 shrink-0" />
+              <span className="flex-1">Search for an address</span>
+              <ChevronDown
                 aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                className={`size-4 transition-transform motion-reduce:transition-none ${searchExpanded ? "rotate-180" : ""}`}
               />
-              <input
+            </button>
+          )}
+          <div id="address-search-panel" hidden={compact && !searchExpanded}>
+            {compact ? (
+              <label className="relative block">
+                <span className="sr-only">Search for an address</span>
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                />
+                <input
+                  ref={searchInputRef}
+                  id="address-search"
+                  placeholder="Search for an address"
+                  autoComplete="street-address"
+                  value={query}
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                  className="min-h-11 w-full rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-10 pr-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                />
+              </label>
+            ) : (
+              <TextField
                 id="address-search"
-                placeholder="Search for an address"
+                label="Search for an address"
+                placeholder="Enter a street or address"
+                description={
+                  compact
+                    ? undefined
+                    : "Choose a result, then move the map pin to the exact entrance if needed."
+                }
                 autoComplete="street-address"
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
-                className="min-h-11 w-full rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-10 pr-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
               />
-            </label>
-          ) : (
-            <TextField
-              id="address-search"
-              label="Search for an address"
-              placeholder="Enter a street or address"
-              description={
-                compact
-                  ? undefined
-                  : "Choose a result, then move the map pin to the exact entrance if needed."
-              }
-              autoComplete="street-address"
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-          )}
+            )}
+          </div>
           <button
             type="button"
             onClick={useCurrentLocation}
@@ -644,17 +668,17 @@ export function AddressEditor({
               {locationError}
             </p>
           ) : null}
-          {searchState === "searching" ? (
+          {(!compact || searchExpanded) && searchState === "searching" ? (
             <p role="status" aria-live="polite" className="text-sm text-slate-600">
               Searching for addresses…
             </p>
           ) : null}
-          {searchError ? (
+          {(!compact || searchExpanded) && searchError ? (
             <p role="alert" className="text-sm text-red-700">
               {searchError}
             </p>
           ) : null}
-          {candidates.length > 0 ? (
+          {(!compact || searchExpanded) && candidates.length > 0 ? (
             <ul aria-label="Address search results" className="divide-y rounded-lg border">
               {candidates.map((candidate) => (
                 <li key={candidate.candidateKey}>

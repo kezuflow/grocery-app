@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-7.44 collapsible delivery search (2026-09-11)
+
+Source: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, **Phase 7 — Complete journeys and activation evidence**. Main at 164ac8d0. Owner requests expand/collapse of search in Deliver to. Acceptance: compact search starts collapsed, accessible icon/chevron row toggles input/results, expansion focuses input, collapse cancels pending search while retaining typed text. Current-location/map/saved-address controls remain available. Only compact AddressEditor changes; full account editor stays expanded. Preserved unrelated work.
+
+Implemented disclosure with aria-expanded/controls, focus on expansion and search debounce/fetch cancellation on collapse. Verification: Web typecheck and focused oxlint/oxfmt passed; 19 address-editor tests passed including toggle/focus/query retention and cancellation. New timer test initially lacked fake-timer setup; corrected then passed. In-app browser verified collapsed row, expanded focused input and collapse. No address write, location permission or provider search performed. CA-7.44 complete at request-slice level; earlier Phase 7/provider/runtime obligations remain open. Next action: owner reviews dropdown behavior.
+
 ## Latest owner request — CA-7.43 standalone banners and upload limit (2026-09-11)
 
 Source: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, **Phase 7 — Complete journeys and activation evidence**. Main at 25126087. Owner requires independent promotional banners, not images tied to financial promo codes; follow-up reports uploader retry failure. Acceptance: separate authorized gallery, independently versioned images/schedules/optional links, publication without a promo code, and working advertised upload size. Preserved unrelated dirty source/config/documentation and archive deletions.

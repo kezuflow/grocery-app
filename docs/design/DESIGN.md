@@ -114,3 +114,5 @@ Owner correction, 2026-09-11: Account popup and account page Sign out actions op
 ## Standalone banners — 2026-09-11
 
 Admin Banners (/admin/banners) is a separate image gallery from Promotions. Create a draft, attach its image, then activate it for its dates. Show preview, status and priority; allow an optional storefront path. Dates use the operator browser timezone. Storefront Featured displays the published images without generated promo-code or eligibility captions; images without a destination are not links.
+
+Owner correction, 2026-09-11: compact Deliver to search is initially collapsed behind an icon/text/chevron disclosure. Expand focuses the input; collapse hides results and cancels pending searches while preserving the query. Current-location, map and saved-address actions remain directly available.

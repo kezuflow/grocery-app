@@ -799,3 +799,29 @@ it("defers the compact map until explicitly requested", async () => {
     act(() => root.unmount());
   }
 });
+it("expands compact search, focuses its input and cancels search on collapse", async () => {
+  vi.useFakeTimers();
+  const fetchImpl = vi.fn();
+  const { container, root } = mount({ compact: true, purpose: "serviceability", fetchImpl });
+  try {
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[aria-controls="address-search-panel"]',
+    )!;
+    const panel = container.querySelector<HTMLDivElement>("#address-search-panel")!;
+    expect(panel.hidden).toBe(true);
+    click(toggle);
+    const search = input(container, "Search for an address");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(search);
+    change(search, "Ayala Cebu");
+    click(toggle);
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(panel.hidden).toBe(true);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    click(toggle);
+    expect(search.value).toBe("Ayala Cebu");
+  } finally {
+    act(() => root.unmount());
+    vi.useRealTimers();
+  }
+});
