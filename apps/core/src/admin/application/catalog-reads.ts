@@ -27,6 +27,7 @@ import {
   decodeStaffCursor,
   encodeStaffCursor,
   resolveCatalogAdministrationAccess,
+  resolveCatalogAdministrationSession,
   type CatalogAdministrationDeps,
 } from "./catalog-administration-access";
 
@@ -250,21 +251,14 @@ export async function listAdminProducts(
   const locationScope = request.scopeKind === "LOCATION" ? request : null;
   const locationId = locationScope?.locationId ?? null;
   const marketId = locationScope?.marketId ?? "";
-  const access = await resolveCatalogAdministrationAccess(
-    deps,
-    request,
-    "catalog.read",
-    locationId ?? undefined,
-  );
-  if (!access.ok) return access;
+  // Shared session/scope resolution for both capability gates (see getAdminProduct).
+  const session = await resolveCatalogAdministrationSession(deps, request, locationId ?? undefined);
+  if (!session.ok) return session;
+  const readFailure = session.value.require("catalog.read");
+  if (readFailure) return readFailure;
   if (locationId !== null) {
-    const inventoryAccess = await resolveCatalogAdministrationAccess(
-      deps,
-      request,
-      "inventory.read",
-      locationId,
-    );
-    if (!inventoryAccess.ok) return inventoryAccess;
+    const inventoryFailure = session.value.require("inventory.read");
+    if (inventoryFailure) return inventoryFailure;
   }
 
   const target = locationScope
@@ -600,22 +594,18 @@ export async function getAdminProduct(
   const locationScope = request.scopeKind === "LOCATION" ? request : null;
   const marketId = locationScope?.marketId ?? "";
   const locationId = locationScope?.locationId ?? null;
-  const access = await resolveCatalogAdministrationAccess(
-    deps,
-    request,
-    "catalog.read",
-    locationId ?? undefined,
-  );
-  if (!access.ok) return access;
+  // One session/staff/scope resolution is shared by the catalog, inventory
+  // and manage capability gates below; sequential resolutions re-query the
+  // session and IAM rows for each capability.
+  const session = await resolveCatalogAdministrationSession(deps, request, locationId ?? undefined);
+  if (!session.ok) return session;
+  const readFailure = session.value.require("catalog.read");
+  if (readFailure) return readFailure;
   if (locationId !== null) {
-    const inventoryAccess = await resolveCatalogAdministrationAccess(
-      deps,
-      request,
-      "inventory.read",
-      locationId,
-    );
-    if (!inventoryAccess.ok) return inventoryAccess;
+    const inventoryFailure = session.value.require("inventory.read");
+    if (inventoryFailure) return inventoryFailure;
   }
+  const canManage = session.value.require("catalog.manage") === null;
   const target = locationScope
     ? await deps.db
         .prepare(
@@ -721,7 +711,7 @@ export async function getAdminProduct(
     )
     .all<SkuRow>();
 
-  const [details, media, audits, manage, inventoryPosition] = await Promise.all([
+  const [details, media, audits, inventoryPosition] = await Promise.all([
     deps.db
       .prepare(
         "SELECT id AS detailId, label, value, sort_order AS sortOrder FROM product_detail WHERE product_id=? ORDER BY sort_order, id",
@@ -748,7 +738,6 @@ export async function getAdminProduct(
       .all<
         Omit<AdminProductDetail["recentAudit"][number], "occurredAt"> & { occurredAt: number }
       >(),
-    resolveCatalogAdministrationAccess(deps, request, "catalog.manage", locationId ?? undefined),
     locationId
       ? deps.db
           .prepare(
@@ -792,7 +781,7 @@ export async function getAdminProduct(
             : null,
       },
       scope: target ? { kind: "LOCATION" as const, ...target } : { kind: "GLOBAL" as const },
-      allowedActions: locationId === null && manage.ok ? ["UPDATE", "SET_STATUS"] : [],
+      allowedActions: locationId === null && canManage ? ["UPDATE", "SET_STATUS"] : [],
       recentAudit: audits.results.map((audit) => ({
         ...audit,
         occurredAt: new Date(audit.occurredAt).toISOString(),

@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
-import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
+import type { AppError, AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
 import {
   applicationContextForRequest,
   hasOperationalScope,
@@ -23,6 +23,96 @@ export type CatalogAdministrationAccess = {
   staffId: string;
   authUserId: string;
 };
+
+export type CatalogAdministrationSession = {
+  access: CatalogAdministrationAccess;
+  /**
+   * Legacy per-capability gate over one shared session/scope resolution.
+   * Returns the same FORBIDDEN failure resolveCatalogAdministrationAccess
+   * would produce, or null when the capability is allowed.
+   */
+  require: (capability: CapabilityPair) => { ok: false; error: AppError } | null;
+};
+
+/**
+ * One session, staff-identity, capability and operational-scope resolution
+ * shared by every capability check in a request. Sequential
+ * resolveCatalogAdministrationAccess calls re-query the session, IAM rows and
+ * operational market for each capability; this resolves them once.
+ */
+export async function resolveCatalogAdministrationSession(
+  deps: CatalogAdministrationDeps,
+  request: AuthenticatedRequest,
+  operationalLocationId?: string,
+): Promise<RpcResult<CatalogAdministrationSession>> {
+  const database = drizzle(deps.db, { schema: iamSchema });
+  const context = await applicationContextForRequest(
+    deps.auth,
+    database,
+    request,
+    deps.accessContext,
+  );
+  if (!context.ok) return context;
+  if (!context.value.authenticated || !context.value.principal) {
+    return {
+      ok: false,
+      error: {
+        code: "UNAUTHENTICATED",
+        message: "Authentication is required",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
+  let operationalScope = globalScope;
+  if (operationalLocationId !== undefined) {
+    const marketRow = await deps.db
+      .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
+      .bind(operationalLocationId)
+      .first<{ market_id: string }>();
+    operationalScope = hasOperationalScope(
+      context.value.scopes,
+      operationalLocationId,
+      marketRow?.market_id,
+    );
+  }
+  const staffRecord = context.value.staffIdentity;
+  if (!staffRecord) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "Staff access is required",
+        requestId: request.requestId,
+      },
+    };
+  }
+  const require = (capability: CapabilityPair): { ok: false; error: AppError } | null => {
+    // Price capabilities keep global-only authorization in the per-capability
+    // resolver; every other capability accepts the operational scope.
+    const scopeAuthorized = capability.startsWith("prices.") ? globalScope : operationalScope;
+    if (context.value.capabilities.includes(capability) && scopeAuthorized) return null;
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message:
+          operationalLocationId === undefined
+            ? `Global-scope ${capability} is required`
+            : `${capability} is required for the selected operational location`,
+        requestId: request.requestId,
+      },
+    };
+  };
+  return {
+    ok: true,
+    value: {
+      access: { staffId: staffRecord.id, authUserId: context.value.principal.userId },
+      require,
+    },
+    requestId: request.requestId,
+  };
+}
 
 type CapabilityPair =
   | "catalog.read"

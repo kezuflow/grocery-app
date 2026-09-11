@@ -1,4 +1,12 @@
 # Commerce alignment — active checkpoint
+## Latest owner request — CA-7.47 shared admin catalog session resolution (2026-09-12)
+
+Owner asked why /admin/sales location-scoped product detail requests took 9.5-12.6s, then approved the proposed authorization fix. Diagnosis: pnpm dev runs staging D1 remote:true, so each of ~15 serial queries per getAdminProduct round-trips to Cloudflare (~0.5-1s each); three separate resolveCatalogAdministrationAccess calls re-resolved the session, IAM capability/scope rows and operational market per capability before any product data.
+
+Implemented: new resolveCatalogAdministrationSession in catalog-administration-access.ts resolves the application context, staff identity and operational scope once per request and exposes a require(capability) gate producing the same FORBIDDEN messages as the sequential resolver (prices capabilities keep global-only authorization). getAdminProduct and listAdminProducts now use it for their catalog.read/inventory.read checks; getAdminProduct's catalog.manage gate reuses the session instead of a fourth resolution (allowedActions unchanged). No contract, storage, API or error-code change; remaining data queries untouched.
+
+Verification: Core typecheck passed; focused admin-catalog integration tests passed (20); full Core suite passed 201 files/1686 tests (one earlier background attempt reported failure spuriously — vitest ran from the wrong working directory and never started; a correctly rooted pnpm-filtered run passed fully); oxlint and oxfmt on changed files passed. Expected effect: roughly halves the remote round-trips for these admin reads; deployed latency also improves. Owner browser verification pending on localhost with shared staging. Next action: owner re-times product selection in /admin/sales; broader read consolidation remains the documented loading-investigation option.
+
 ## Latest owner request — CA-7.46 slices 2 and 3, sale creation and promo rules (2026-09-11)
 
 Owner reported a 400 on sale creation from /admin/sales and disliked the create UI, then authorized finishing all redesign slices in one pass. The 400 was diagnosed as the generated SALE_ code containing lowercase hex (contract requires ^[A-Z][A-Z0-9_]*$); BFF validation rejected it before Core. Implemented at main before this commit.
