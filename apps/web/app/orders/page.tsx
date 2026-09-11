@@ -76,10 +76,7 @@ export default function OrdersPage() {
   return (
     <StorefrontShell>
       <div className="min-h-screen w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-        <Link href="/account" className="text-sm underline">
-          Account
-        </Link>
-        <h1 className="mt-6 text-3xl font-semibold">Orders</h1>
+        <h1 className="text-3xl font-semibold">Orders</h1>
         {authRequired ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
             <p className="font-medium">Sign in to view your orders.</p>
