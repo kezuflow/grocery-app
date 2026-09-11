@@ -682,25 +682,25 @@ export function AddressEditor({
               className="min-w-0 [&[hidden]]:hidden"
             >
               {compact ? (
-                <div className="flex items-center gap-2">
-                  <label className="block min-w-0 flex-1">
-                    <span className="sr-only">Search for an address</span>
-                    <input
-                      ref={searchInputRef}
-                      id="address-search"
-                      placeholder="Search address"
-                      autoComplete="street-address"
-                      value={query}
-                      onChange={(event) => setQuery(event.currentTarget.value)}
-                      className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
-                    />
+                <div className="relative">
+                  <label htmlFor="address-search" className="sr-only">
+                    Search for an address
                   </label>
+                  <input
+                    ref={searchInputRef}
+                    id="address-search"
+                    placeholder="Search address"
+                    autoComplete="street-address"
+                    value={query}
+                    onChange={(event) => setQuery(event.currentTarget.value)}
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-3 pr-11 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                  />
                   <button
                     type="button"
                     ref={searchToggleRef}
                     aria-label="Close address search"
                     onClick={() => setSearchExpanded(false)}
-                    className="flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--fm-hover)]"
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
                   >
                     <X aria-hidden="true" className="size-4" />
                   </button>
