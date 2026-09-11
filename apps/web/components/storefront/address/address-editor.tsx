@@ -202,15 +202,24 @@ export function AddressEditor({
       event.preventDefault();
       event.stopPropagation();
       setSearchExpanded(false);
-      searchToggleRef.current?.focus();
     }
     document.addEventListener("keydown", closeOnEscape, true);
     return () => {
       document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [compact, searchExpanded]);
+  const searchWasExpanded = useRef(false);
   useEffect(() => {
-    if (compact && searchExpanded) searchInputRef.current?.focus();
+    if (!compact) return;
+    if (searchExpanded) {
+      searchWasExpanded.current = true;
+      searchInputRef.current?.focus();
+      return;
+    }
+    if (searchWasExpanded.current) {
+      searchWasExpanded.current = false;
+      searchToggleRef.current?.focus();
+    }
   }, [compact, searchExpanded]);
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<ReadonlyArray<AddressSearchCandidate>>([]);
@@ -654,21 +663,17 @@ export function AddressEditor({
               </p>
             </div>
             {compact && compactHeading && <h2 className="text-base font-bold">{compactHeading}</h2>}
-            {compact && (
+            {compact && !searchExpanded && (
               <button
                 type="button"
                 ref={searchToggleRef}
                 aria-expanded={searchExpanded}
                 aria-controls="address-search-panel"
-                onClick={() => setSearchExpanded((expanded) => !expanded)}
+                onClick={() => setSearchExpanded(true)}
                 className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
               >
-                {searchExpanded ? (
-                  <X aria-hidden="true" className="size-4 shrink-0" />
-                ) : (
-                  <Map aria-hidden="true" className="size-4 shrink-0" />
-                )}
-                {searchExpanded ? "Close search" : "Choose map"}
+                <Map aria-hidden="true" className="size-4 shrink-0" />
+                Choose map
               </button>
             )}
             <div
@@ -677,18 +682,29 @@ export function AddressEditor({
               className="min-w-0 [&[hidden]]:hidden"
             >
               {compact ? (
-                <label className="block">
-                  <span className="sr-only">Search for an address</span>
-                  <input
-                    ref={searchInputRef}
-                    id="address-search"
-                    placeholder="Search address"
-                    autoComplete="street-address"
-                    value={query}
-                    onChange={(event) => setQuery(event.currentTarget.value)}
-                    className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
-                  />
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="block min-w-0 flex-1">
+                    <span className="sr-only">Search for an address</span>
+                    <input
+                      ref={searchInputRef}
+                      id="address-search"
+                      placeholder="Search address"
+                      autoComplete="street-address"
+                      value={query}
+                      onChange={(event) => setQuery(event.currentTarget.value)}
+                      className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    ref={searchToggleRef}
+                    aria-label="Close address search"
+                    onClick={() => setSearchExpanded(false)}
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--fm-hover)]"
+                  >
+                    <X aria-hidden="true" className="size-4" />
+                  </button>
+                </div>
               ) : (
                 <TextField
                   id="address-search"

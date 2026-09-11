@@ -880,13 +880,19 @@ it("expands compact search, focuses its input and cancels search on collapse", a
     expect(panel.hidden).toBe(true);
     click(toggle);
     const search = input(container, "Search for an address");
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const close = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Close address search"]',
+    )!;
+    if (!close) throw new Error("Missing close control beside the search input");
     expect(document.activeElement).toBe(search);
     change(search, "Ayala Cebu");
-    click(toggle);
+    click(close);
     await act(async () => vi.advanceTimersByTimeAsync(500));
     expect(panel.hidden).toBe(true);
     expect(fetchImpl).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(
+      container.querySelector('[aria-controls="address-search-panel"]'),
+    );
     click(toggle);
     expect(search.value).toBe("Ayala Cebu");
   } finally {
