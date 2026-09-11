@@ -41,7 +41,7 @@ export function StorefrontHeader() {
           />
           freshmarkets
         </Link>
-        <form action="/" className="mx-auto hidden min-w-0 flex-1 md:block md:max-w-md">
+        <form action="/" className="ml-auto hidden min-w-0 flex-1 md:block md:max-w-md">
           <label className="sr-only" htmlFor="storefront-search">
             Search groceries
           </label>
