@@ -1,4 +1,14 @@
 # Commerce alignment — active checkpoint
+## Latest owner request — PROMO-REASON-1 remove lifecycle reason entry (2026-09-12)
+
+Plan: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence. Owner explicitly requests removing reasons from Promotions and Inventory sales. Acceptance: list confirmations and shared detail lifecycle actions submit without reason; Core accepts omission while preserving authorization, version, transition, replay and audit enforcement.
+
+Implemented on main from 8224c25f: removed reason fields and client gates; shared contract/validation makes reason optional for existing callers. No fabricated reason or audit removal. Completed the existing uncommitted status-switch component/list wiring needed by both pages; preserved unrelated Switch styling, source/config changes and archive deletions. PRODUCT and API_CONTRACTS record the owner correction. No storage migration or deployment.
+
+Verification in the working tree: pnpm -r typecheck passed; focused Web status-switch tests passed (4); Core Worker/D1 admin-promotions and promotion-effects integration tests passed (29), including activation/deactivation/archive without reason and an activation audit with null reason and correct before/after status. Focused oxlint/oxfmt, architecture:check, readiness:check and naming:check passed. pnpm -r build passed Web build and Core dry-run (existing bundle/environment warnings). Browser opened Promotions confirmation and verified Cancel/Deactivate with no reason field; Cancel dismissed without writing shared data. Inventory sales uses the same tested component. No live promotion status was changed as a test.
+
+PROMO-REASON-1 complete at request-slice level. Earlier commerce/provider obligations remain open; full aggregate acceptance is not claimed. Next action: owner uses the simplified controls on localhost.
+
 ## Parallel owner request — Admin UI/UX craft repair P0–P3 (2026-09-12)
 
 Owner requested an emil-design-eng review of the Admin dashboard and approved fixing all findings P0–P3 in one pass (fix-in-place of the pinned visual system, not a redesign). Recorded as the "Admin craft repair program — 2026-09-12" section in docs/design/DESIGN.md, which owns the approved rules.

@@ -457,6 +457,7 @@ That transaction repair initially covered fixed/percentage merchandise discounts
 - Preview is read-only and deterministic (status/window/minimum-subtotal policy, fixed or `floor(subtotal x percent / 100)` computation capped at the subtotal) and never claims usage or writes a redemption.
 - Grants create targeted `promotion_grant` rows (`benefit_code` = promotion code, `customer_id` persisted, `max_redemptions >= 1`) for ACTIVE promotions only. `INTRO_TRIAL` and `LEGACY_TRIAL_HISTORY` are reserved system membership codes and are excluded from this surface. Exactly one grant may exist for a promotion/customer: an identical idempotent retry replays the original grant, while a distinct command conflicts without creating a duplicate. Redemptions are read-only inspections joined by promotion code.
 - Material commands are idempotent, version-guarded and audited, with reasons where the owning operational policy requires them (`PROMOTION.CREATED/UPDATED/ACTIVATED/DEACTIVATED/ARCHIVED/GRANTED`).
+- Promotion and inventory-sale lifecycle commands do not require a reason. `changeAdminPromotionStatus` accepts an optional nonempty `reason` for existing callers; Admin omits it. Automatic actor and before/after status audit remains mandatory.
 
 ### Catalog and Inventory services contract details
 
@@ -532,8 +533,8 @@ Operational command/read contracts publish the canonical Fulfillment (`NOT_START
 - `admin.promotions.create({ definition, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.update({ promotionId, expectedVersion, definition, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.activate({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.deactivate({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.archive({ promotionId, reason, expectedVersion, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.deactivate({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
+- `admin.promotions.archive({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
 - `admin.promotions.preview({ promotionId, customerId?, cartSnapshot? }) -> PromotionPreviewView`
 - `admin.promotions.getAudience({ promotionId, segmentQuery? }) -> PromotionAudienceView`
 - `admin.promotions.setAudience({ promotionId, rules, expectedVersion, idempotencyKey }) -> PromotionAudience`

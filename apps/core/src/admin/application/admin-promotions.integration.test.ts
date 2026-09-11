@@ -318,7 +318,6 @@ describe("promotion administration", () => {
         headers: { cookie: manager.cookie },
         promotionId,
         action,
-        reason: `${action} by crm`,
         expectedVersion: version,
         idempotencyKey: `life-${crypto.randomUUID()}`,
       });
@@ -329,6 +328,16 @@ describe("promotion administration", () => {
 
     const active = await change("ACTIVATE", 1);
     expect(active.status).toBe("ACTIVE");
+    const activationAudit = await env.DB.prepare(
+      "SELECT reason, before_json, after_json FROM audit_event WHERE aggregate_id = ? AND action = 'PROMOTION.ACTIVATED'",
+    )
+      .bind(promotionId)
+      .first();
+    expect(activationAudit).toMatchObject({
+      reason: null,
+      before_json: JSON.stringify({ status: "DRAFT" }),
+      after_json: JSON.stringify({ status: "ACTIVE" }),
+    });
 
     // Grant requires ACTIVE; replay returns the same grant.
     const grantKey = `grant-${crypto.randomUUID()}`;

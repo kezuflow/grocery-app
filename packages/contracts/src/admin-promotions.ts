@@ -120,7 +120,7 @@ export type AdminPromotionUpdateRequest = AuthenticatedRequest & {
 export type AdminPromotionStatusChangeRequest = AuthenticatedRequest & {
   promotionId: string;
   action: "ACTIVATE" | "DEACTIVATE" | "ARCHIVE";
-  reason: string;
+  reason?: string;
   expectedVersion: number;
   idempotencyKey: string;
 };

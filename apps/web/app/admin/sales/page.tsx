@@ -21,7 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
+import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
+import { PromotionStatusSwitch } from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
@@ -327,17 +328,20 @@ export default function InventorySalesPage() {
                       </TableCell>
                       <TableCell className="text-xs">{saleAllowance(promotion)}</TableCell>
                       <TableCell>
-                        <StatusBadge
-                          tone={
-                            promotion.status === "ACTIVE"
-                              ? "success"
-                              : promotion.status === "ARCHIVED"
-                                ? "neutral"
-                                : "info"
+                        <PromotionStatusSwitch
+                          promotion={promotion}
+                          onApplied={(summary) =>
+                            setPage((current) => {
+                              if (!current || !summary.productTargets?.length) return current;
+                              return {
+                                ...current,
+                                items: current.items.map((item) =>
+                                  item.promotionId === summary.promotionId ? summary : item,
+                                ),
+                              };
+                            })
                           }
-                        >
-                          {promotion.status}
-                        </StatusBadge>
+                        />
                       </TableCell>
                       <TableCell className="text-xs text-[var(--fm-text-muted)]">
                         {saleDiscountLabel(promotion)}

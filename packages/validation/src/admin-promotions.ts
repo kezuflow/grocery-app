@@ -55,7 +55,7 @@ export const adminPromotionUpdateBodySchema = z.object({
 });
 export const adminPromotionStatusBodySchema = z.object({
   action: z.enum(["ACTIVATE", "DEACTIVATE", "ARCHIVE"]),
-  reason: z.string().trim().min(1).max(1000),
+  reason: z.string().trim().min(1).max(1000).optional(),
   expectedVersion: integer.positive(),
 });
 export const adminPromotionGrantBodySchema = z.object({

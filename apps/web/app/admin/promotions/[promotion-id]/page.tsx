@@ -43,7 +43,6 @@ export default function PromotionDetailPage({
 }) {
   const { "promotion-id": promotionId } = use(params);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
-  const [reason, setReason] = useState("");
   const [deliverySubtotal, setDeliverySubtotal] = useState("");
   const [previewSubtotal, setPreviewSubtotal] = useState("");
   const [previewResult, setPreviewResult] = useState<AdminPromotionPreviewView | null>(null);
@@ -289,29 +288,16 @@ export default function PromotionDetailPage({
           onSaved={load}
         />
       </ListPageSection>
-      <ListPageSection
-        title="Lifecycle"
-        description="Every action requires a reason and is audited."
-      >
+      <ListPageSection title="Lifecycle" description="Status changes are audited automatically.">
         <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-          <Input
-            aria-label="Reason"
-            disabled={frozen}
-            placeholder="reason (required)"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className="sm:w-72"
-          />
           <div className="flex flex-wrap gap-2">
             {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
               <Button
                 size="sm"
                 disabled={frozen}
                 onClick={() => {
-                  if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
                     action: "ACTIVATE",
-                    reason: reason.trim(),
                     expectedVersion: promotion.version,
                   });
                 }}
@@ -325,10 +311,8 @@ export default function PromotionDetailPage({
                 variant="outline"
                 disabled={frozen}
                 onClick={() => {
-                  if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
                     action: "DEACTIVATE",
-                    reason: reason.trim(),
                     expectedVersion: promotion.version,
                   });
                 }}
@@ -342,10 +326,8 @@ export default function PromotionDetailPage({
                 variant="destructive"
                 disabled={frozen}
                 onClick={() => {
-                  if (reason.trim() === "") return setNotice("A reason is required.");
                   void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
                     action: "ARCHIVE",
-                    reason: reason.trim(),
                     expectedVersion: promotion.version,
                   });
                 }}
