@@ -168,10 +168,10 @@ export function DeliveryAddressDialog() {
             style={{ maxHeight: `calc(100dvh - ${placement.top + 12}px)` }}
             className="max-h-[inherit] overflow-y-auto rounded-xl bg-white shadow-[var(--fm-shadow-overlay)]"
           >
-            <h2 className="px-4 pt-4 text-base font-bold">Deliver to</h2>
             <div className="p-4">
               <AddressEditor
                 compact
+                compactHeading="Deliver to"
                 purpose="serviceability"
                 publicAccessToken={mapboxPublicAccessToken}
                 onServiceabilityConfirmed={chooseAddress}

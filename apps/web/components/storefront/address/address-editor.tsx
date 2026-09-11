@@ -54,6 +54,7 @@ export type AddressEditorProps = Readonly<{
   onServiceabilityConfirmed?: (selection: ServiceabilitySelection) => void;
   purpose?: "save" | "serviceability";
   compact?: boolean;
+  compactHeading?: string;
   initialAddress?: CustomerAddressView;
   defaultPhone?: string;
   publicAccessToken?: string;
@@ -175,6 +176,7 @@ export function AddressEditor({
   onServiceabilityConfirmed,
   purpose = "save",
   compact = false,
+  compactHeading,
   initialAddress,
   defaultPhone,
   publicAccessToken,
@@ -185,6 +187,29 @@ export function AddressEditor({
   const [showPinMap, setShowPinMap] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!compact || !searchExpanded) return;
+    function dismissSearch(event: PointerEvent) {
+      const target = event.target as Node;
+      if (!searchPanelRef.current?.contains(target) && !searchToggleRef.current?.contains(target))
+        setSearchExpanded(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSearchExpanded(false);
+      searchToggleRef.current?.focus();
+    }
+    document.addEventListener("pointerdown", dismissSearch);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissSearch);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [compact, searchExpanded]);
   useEffect(() => {
     if (compact && searchExpanded) searchInputRef.current?.focus();
   }, [compact, searchExpanded]);
@@ -337,6 +362,7 @@ export function AddressEditor({
   }
 
   function chooseCandidate(candidate: AddressSearchCandidate): void {
+    setSearchExpanded(false);
     coordinateActionGenerationRef.current += 1;
     reverseAbortRef.current?.abort();
     setLocationError("");
@@ -580,7 +606,7 @@ export function AddressEditor({
         className="contents"
         disabled={purpose === "save" && (saveState === "saving" || saveUncertain)}
       >
-        <section aria-labelledby="address-search-heading" className="grid gap-3">
+        <section aria-labelledby="address-search-heading" className="relative grid gap-3">
           <div className={compact ? "sr-only" : undefined}>
             <h2 id="address-search-heading" className="text-lg font-semibold text-slate-950">
               Find the delivery address
@@ -591,22 +617,36 @@ export function AddressEditor({
             </p>
           </div>
           {compact && (
-            <button
-              type="button"
-              aria-expanded={searchExpanded}
-              aria-controls="address-search-panel"
-              onClick={() => setSearchExpanded((expanded) => !expanded)}
-              className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
-            >
-              <Search aria-hidden="true" className="size-4 shrink-0" />
-              <span className="flex-1">Search for an address</span>
-              <ChevronDown
-                aria-hidden="true"
-                className={`size-4 transition-transform motion-reduce:transition-none ${searchExpanded ? "rotate-180" : ""}`}
-              />
-            </button>
+            <div className="relative flex items-center justify-between gap-3">
+              {compactHeading && <h2 className="text-base font-bold">{compactHeading}</h2>}
+              <button
+                type="button"
+                ref={searchToggleRef}
+                aria-label="Search for an address"
+                aria-expanded={searchExpanded}
+                aria-controls="address-search-panel"
+                onClick={() => setSearchExpanded((expanded) => !expanded)}
+                className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+              >
+                <Search aria-hidden="true" className="size-4 shrink-0" />
+                <span>Search</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-4 transition-transform motion-reduce:transition-none ${searchExpanded ? "rotate-180" : ""}`}
+                />
+              </button>
+            </div>
           )}
-          <div id="address-search-panel" hidden={compact && !searchExpanded}>
+          <div
+            id="address-search-panel"
+            ref={searchPanelRef}
+            hidden={compact && !searchExpanded}
+            className={
+              compact
+                ? "absolute left-0 right-0 top-12 z-20 grid gap-3 rounded-lg border border-[var(--fm-border)] bg-white p-3 shadow-lg [&[hidden]]:hidden"
+                : undefined
+            }
+          >
             {compact ? (
               <label className="relative block">
                 <span className="sr-only">Search for an address</span>
@@ -639,6 +679,31 @@ export function AddressEditor({
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
             )}
+            {(!compact || searchExpanded) && searchState === "searching" ? (
+              <p role="status" aria-live="polite" className="text-sm text-slate-600">
+                Searching for addresses…
+              </p>
+            ) : null}
+            {(!compact || searchExpanded) && searchError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {searchError}
+              </p>
+            ) : null}
+            {(!compact || searchExpanded) && candidates.length > 0 ? (
+              <ul aria-label="Address search results" className="divide-y rounded-lg border">
+                {candidates.map((candidate) => (
+                  <li key={candidate.candidateKey}>
+                    <button
+                      type="button"
+                      onClick={() => chooseCandidate(candidate)}
+                      className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
+                    >
+                      {candidate.displayAddress}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <button
             type="button"
@@ -667,31 +732,6 @@ export function AddressEditor({
             <p role="alert" className="text-sm text-red-700">
               {locationError}
             </p>
-          ) : null}
-          {(!compact || searchExpanded) && searchState === "searching" ? (
-            <p role="status" aria-live="polite" className="text-sm text-slate-600">
-              Searching for addresses…
-            </p>
-          ) : null}
-          {(!compact || searchExpanded) && searchError ? (
-            <p role="alert" className="text-sm text-red-700">
-              {searchError}
-            </p>
-          ) : null}
-          {(!compact || searchExpanded) && candidates.length > 0 ? (
-            <ul aria-label="Address search results" className="divide-y rounded-lg border">
-              {candidates.map((candidate) => (
-                <li key={candidate.candidateKey}>
-                  <button
-                    type="button"
-                    onClick={() => chooseCandidate(candidate)}
-                    className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
-                  >
-                    {candidate.displayAddress}
-                  </button>
-                </li>
-              ))}
-            </ul>
           ) : null}
         </section>
 

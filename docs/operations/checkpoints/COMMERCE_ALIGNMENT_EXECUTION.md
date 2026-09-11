@@ -1,5 +1,9 @@
 # Commerce alignment — active checkpoint
 
+## CA-7.44 owner correction — header search dropdown (2026-09-11)
+
+Owner corrects the initial implementation: Search belongs on the same line as Deliver to and opens a dropdown, not an accordion. Owner will verify visually; no browser tools used for this correction. Source remains docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence. Main at 8d53a43c. Moved Deliver to into the compact editor header beside Search and its chevron. Search input/results float below the header without expanding the layout; outside click, Escape and candidate selection dismiss it. Focus/query retention and cancellation remain. Full account editor unchanged. Web typecheck, focused lint/format and 31 editor/dialog tests passed. Visual acceptance belongs to owner. CA-7.44 correction implemented; unrelated changes and earlier phase obligations preserved. Next action: owner verifies dropdown placement.
+
 ## Latest owner request — CA-7.44 collapsible delivery search (2026-09-11)
 
 Source: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, **Phase 7 — Complete journeys and activation evidence**. Main at 164ac8d0. Owner requests expand/collapse of search in Deliver to. Acceptance: compact search starts collapsed, accessible icon/chevron row toggles input/results, expansion focuses input, collapse cancels pending search while retaining typed text. Current-location/map/saved-address controls remain available. Only compact AddressEditor changes; full account editor stays expanded. Preserved unrelated work.
