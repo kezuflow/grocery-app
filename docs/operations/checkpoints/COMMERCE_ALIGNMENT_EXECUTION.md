@@ -1,5 +1,9 @@
 # Commerce alignment — active checkpoint
 
+## CA-7.44 final owner correction — inline search input (2026-09-11)
+
+Main at 7cf37976. Owner clarifies icon click must reveal an input in the Deliver to header, not a dropdown. Replaced floating panel with inline header input and icon-only toggle; removed Search text/chevron and outside-click dismissal. Results remain below; focus, Escape, retained query and cancellation preserved. No browser tools used per owner instruction. Web typecheck, focused lint/format and 31 address editor/dialog tests passed. Source/phase remains docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence. CA-7.44 correction implemented; owner performs visual verification. Earlier phase/runtime obligations remain open. Next action: owner reviews inline search.
+
 ## CA-7.44 owner correction — header search dropdown (2026-09-11)
 
 Owner corrects the initial implementation: Search belongs on the same line as Deliver to and opens a dropdown, not an accordion. Owner will verify visually; no browser tools used for this correction. Source remains docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence. Main at 8d53a43c. Moved Deliver to into the compact editor header beside Search and its chevron. Search input/results float below the header without expanding the layout; outside click, Escape and candidate selection dismiss it. Focus/query retention and cancellation remain. Full account editor unchanged. Web typecheck, focused lint/format and 31 editor/dialog tests passed. Visual acceptance belongs to owner. CA-7.44 correction implemented; unrelated changes and earlier phase obligations preserved. Next action: owner verifies dropdown placement.

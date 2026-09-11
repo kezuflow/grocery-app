@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Navigation, MapPin, ChevronDown } from "lucide-react";
+import { Search, Navigation, MapPin } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -188,14 +188,8 @@ export function AddressEditor({
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
-  const searchPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!compact || !searchExpanded) return;
-    function dismissSearch(event: PointerEvent) {
-      const target = event.target as Node;
-      if (!searchPanelRef.current?.contains(target) && !searchToggleRef.current?.contains(target))
-        setSearchExpanded(false);
-    }
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -203,10 +197,8 @@ export function AddressEditor({
       setSearchExpanded(false);
       searchToggleRef.current?.focus();
     }
-    document.addEventListener("pointerdown", dismissSearch);
     document.addEventListener("keydown", closeOnEscape, true);
     return () => {
-      document.removeEventListener("pointerdown", dismissSearch);
       document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [compact, searchExpanded]);
@@ -616,9 +608,11 @@ export function AddressEditor({
               editor.
             </p>
           </div>
-          {compact && (
-            <div className="relative flex items-center justify-between gap-3">
-              {compactHeading && <h2 className="text-base font-bold">{compactHeading}</h2>}
+          <div className={compact ? "flex min-w-0 items-center gap-2" : undefined}>
+            {compact && compactHeading && (
+              <h2 className="shrink-0 text-base font-bold">{compactHeading}</h2>
+            )}
+            {compact && (
               <button
                 type="button"
                 ref={searchToggleRef}
@@ -626,59 +620,43 @@ export function AddressEditor({
                 aria-expanded={searchExpanded}
                 aria-controls="address-search-panel"
                 onClick={() => setSearchExpanded((expanded) => !expanded)}
-                className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                className={`flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--fm-hover)] ${searchExpanded ? "" : "ml-auto"}`}
               >
-                <Search aria-hidden="true" className="size-4 shrink-0" />
-                <span>Search</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`size-4 transition-transform motion-reduce:transition-none ${searchExpanded ? "rotate-180" : ""}`}
-                />
+                <Search aria-hidden="true" className="size-4" />
               </button>
-            </div>
-          )}
-          <div
-            id="address-search-panel"
-            ref={searchPanelRef}
-            hidden={compact && !searchExpanded}
-            className={
-              compact
-                ? "absolute left-0 right-0 top-12 z-20 grid gap-3 rounded-lg border border-[var(--fm-border)] bg-white p-3 shadow-lg [&[hidden]]:hidden"
-                : undefined
-            }
-          >
-            {compact ? (
-              <label className="relative block">
-                <span className="sr-only">Search for an address</span>
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
-                />
-                <input
-                  ref={searchInputRef}
+            )}
+            <div
+              id="address-search-panel"
+              hidden={compact && !searchExpanded}
+              className="min-w-0 flex-1 [&[hidden]]:hidden"
+            >
+              {compact ? (
+                <label className="block">
+                  <span className="sr-only">Search for an address</span>
+                  <input
+                    ref={searchInputRef}
+                    id="address-search"
+                    placeholder="Search address"
+                    autoComplete="street-address"
+                    value={query}
+                    onChange={(event) => setQuery(event.currentTarget.value)}
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                  />
+                </label>
+              ) : (
+                <TextField
                   id="address-search"
-                  placeholder="Search for an address"
+                  label="Search for an address"
+                  placeholder="Enter a street or address"
+                  description="Choose a result, then move the map pin to the exact entrance if needed."
                   autoComplete="street-address"
                   value={query}
                   onChange={(event) => setQuery(event.currentTarget.value)}
-                  className="min-h-11 w-full rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-10 pr-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
                 />
-              </label>
-            ) : (
-              <TextField
-                id="address-search"
-                label="Search for an address"
-                placeholder="Enter a street or address"
-                description={
-                  compact
-                    ? undefined
-                    : "Choose a result, then move the map pin to the exact entrance if needed."
-                }
-                autoComplete="street-address"
-                value={query}
-                onChange={(event) => setQuery(event.currentTarget.value)}
-              />
-            )}
+              )}
+            </div>
+          </div>
+          <div hidden={compact && !searchExpanded} className="grid gap-3 [&[hidden]]:hidden">
             {(!compact || searchExpanded) && searchState === "searching" ? (
               <p role="status" aria-live="polite" className="text-sm text-slate-600">
                 Searching for addresses…
