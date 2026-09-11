@@ -25,9 +25,9 @@ import { PageHeader, ListPageSection, StatusBadge } from "../../../components/ad
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
-  PromotionProductTargetsEditor,
+  SaleTargetsPicker,
   type SaleTargetSelection,
-} from "@/components/admin/promotion-product-targets-editor";
+} from "@/components/admin/sale-targets-picker";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -111,6 +111,27 @@ export default function InventorySalesPage() {
 
   useEffect(() => load(pagination.cursor), [load, pagination.cursor]);
 
+  const discountPreview = (() => {
+    const trimmed = discount.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+    if (benefit === "ORDER_PERCENT_DISCOUNT") {
+      const percent = Number(trimmed);
+      return Number.isInteger(percent) && percent >= 1 && percent <= 100
+        ? { mode: "PERCENT" as const, value: percent }
+        : null;
+    }
+    const amount = Number(trimmed);
+    return amount >= 0.01 ? { mode: "FIXED" as const, value: amount } : null;
+  })();
+
+  const activeSaleTargetKeys = new Set(
+    (page?.items ?? [])
+      .filter((promotion) => promotion.status === "ACTIVE")
+      .flatMap((promotion) =>
+        (promotion.productTargets ?? []).map((target) => `${target.skuId}:${target.locationId}`),
+      ),
+  );
+
   async function create(event: React.FormEvent) {
     event.preventDefault();
     if (!productTargets.length) {
@@ -139,11 +160,13 @@ export default function InventorySalesPage() {
     }
     try {
       // Sales are automatic; the code never surfaces to customers, so it is
-      // generated per attempt to satisfy the shared promotion contract.
+      // generated per attempt to satisfy the shared promotion contract. The
+      // contract only accepts uppercase codes.
       const code = `SALE_${crypto
         .randomUUID()
         .replace(/[^A-Z0-9]/gi, "")
-        .slice(0, 8)}`;
+        .slice(0, 8)
+        .toUpperCase()}`;
       const payload = await createIntent
         .submit("/api/admin/promotions", {
           code,
@@ -263,13 +286,12 @@ export default function InventorySalesPage() {
                 value={discount}
                 onChange={(event) => setDiscount(event.target.value)}
               />
-              <PromotionProductTargetsEditor
-                enabled
-                onEnabledChange={() => {}}
-                alwaysOn
+              <SaleTargetsPicker
                 value={productTargets}
                 onChange={setProductTargets}
                 disabled={createIntent.pending || createIntent.uncertain}
+                preview={discountPreview}
+                activeOverlaps={activeSaleTargetKeys}
               />
               <Button type="submit" size="sm" disabled={createIntent.pending}>
                 {createIntent.pending ? "Creating…" : "Create draft"}

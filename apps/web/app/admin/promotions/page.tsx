@@ -45,9 +45,37 @@ export default function PromotionsPage() {
   const [name, setName] = useState("");
   const [benefit, setBenefit] = useState<ManageableBenefitType>("ORDER_FIXED_DISCOUNT");
   const [discount, setDiscount] = useState("");
+  const [minimum, setMinimum] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [globalLimit, setGlobalLimit] = useState("");
+  const [perCustomerLimit, setPerCustomerLimit] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
   const pagination = useAdminPagination();
+
+  function parsePesoMinor(value: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+    const [whole, fraction = ""] = trimmed.split(".");
+    const minor = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+    return Number.isSafeInteger(minor) ? minor : null;
+  }
+
+  function parsePositiveInt(value: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null;
+  }
+
+  function parseLocalDateTime(value: string): string | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const instant = new Date(trimmed);
+    return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
+  }
 
   const load = useCallback((cursor: string | null) => {
     setState({ phase: "loading" });
@@ -103,6 +131,35 @@ export default function PromotionsPage() {
       setNotice("Enter a whole percentage from 1 to 100.");
       return;
     }
+    const minimumMinor = parsePesoMinor(minimum);
+    if (minimumMinor === null) {
+      setNotice("Minimum purchase must be a positive amount with at most two decimal places.");
+      return;
+    }
+    let startInstant: string = new Date().toISOString();
+    if (startsAt.trim()) {
+      const parsed = parseLocalDateTime(startsAt);
+      if (parsed === null) {
+        setNotice("Start date could not be read. Use the date-time picker value.");
+        return;
+      }
+      startInstant = parsed;
+    }
+    const endInstant = parseLocalDateTime(endsAt);
+    if (endsAt.trim() && (endInstant === null || endInstant <= startInstant)) {
+      setNotice("End date must be after the start date.");
+      return;
+    }
+    const globalUsageLimit = parsePositiveInt(globalLimit);
+    const perCustomerUsageLimit = parsePositiveInt(perCustomerLimit);
+    if (globalLimit.trim() && globalUsageLimit === null) {
+      setNotice("Total usage limit must be a positive whole number.");
+      return;
+    }
+    if (perCustomerLimit.trim() && perCustomerUsageLimit === null) {
+      setNotice("Per-customer limit must be a positive whole number.");
+      return;
+    }
     try {
       const payload = await createIntent
         .submit("/api/admin/promotions", {
@@ -115,8 +172,11 @@ export default function PromotionsPage() {
             : benefit.endsWith("PERCENT_DISCOUNT")
               ? { percent: Number(discount) }
               : {}),
-          minimumMinor: 0,
-          startsAt: new Date().toISOString(),
+          minimumMinor,
+          startsAt: startInstant,
+          ...(endInstant ? { endsAt: endInstant } : {}),
+          ...(globalUsageLimit !== null ? { globalUsageLimit } : {}),
+          ...(perCustomerUsageLimit !== null ? { perCustomerUsageLimit } : {}),
         })
         .catch(() => createIntent.retry());
       if (!payload) return;
@@ -125,6 +185,10 @@ export default function PromotionsPage() {
         setCode("");
         setName("");
         setDiscount("");
+        setMinimum("");
+        setEndsAt("");
+        setGlobalLimit("");
+        setPerCustomerLimit("");
         pagination.reset();
         load(null);
       }
@@ -239,6 +303,47 @@ export default function PromotionsPage() {
               <Button type="submit" size="sm" disabled={createIntent.pending}>
                 {createIntent.pending ? "Creating…" : "Create draft"}
               </Button>
+              <fieldset
+                disabled={createIntent.pending || createIntent.uncertain}
+                className="grid gap-3 rounded-lg border p-3 sm:col-span-2 lg:col-span-3 sm:grid-cols-2 lg:grid-cols-5"
+              >
+                <legend className="px-1 text-sm font-semibold">Rules (optional)</legend>
+                <Input
+                  aria-label="Minimum purchase in pesos"
+                  placeholder="Min. purchase PHP"
+                  inputMode="decimal"
+                  value={minimum}
+                  onChange={(event) => setMinimum(event.target.value)}
+                />
+                <Input
+                  aria-label="Start date and time"
+                  type="datetime-local"
+                  title="Start (empty = now)"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
+                <Input
+                  aria-label="End date and time"
+                  type="datetime-local"
+                  title="End (empty = no end)"
+                  value={endsAt}
+                  onChange={(event) => setEndsAt(event.target.value)}
+                />
+                <Input
+                  aria-label="Total usage limit"
+                  placeholder="Total uses"
+                  inputMode="numeric"
+                  value={globalLimit}
+                  onChange={(event) => setGlobalLimit(event.target.value)}
+                />
+                <Input
+                  aria-label="Per-customer usage limit"
+                  placeholder="Uses per customer"
+                  inputMode="numeric"
+                  value={perCustomerLimit}
+                  onChange={(event) => setPerCustomerLimit(event.target.value)}
+                />
+              </fieldset>
             </form>
           </ListPageSection>
 
@@ -255,6 +360,8 @@ export default function PromotionsPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Benefit</TableHead>
+                    <TableHead>Window</TableHead>
+                    <TableHead>Limits</TableHead>
                     <TableHead>
                       <span className="sr-only">Detail link</span>
                     </TableHead>
@@ -284,6 +391,30 @@ export default function PromotionsPage() {
                           : promotion.benefitType === "DELIVERY_FEE_WAIVER"
                             ? "Free delivery"
                             : `PHP ${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                        {promotion.minimumMinor > 0
+                          ? ` · min ₱${(promotion.minimumMinor / 100).toFixed(2)}`
+                          : ""}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--fm-text-muted)]">
+                        {new Date(promotion.startsAt).toLocaleDateString()} →{" "}
+                        {promotion.endsAt
+                          ? new Date(promotion.endsAt).toLocaleDateString()
+                          : "no end"}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--fm-text-muted)]">
+                        {promotion.globalUsageLimit === null &&
+                        promotion.perCustomerUsageLimit === null
+                          ? "Unlimited"
+                          : [
+                              promotion.perCustomerUsageLimit !== null
+                                ? `${promotion.perCustomerUsageLimit}/customer`
+                                : null,
+                              promotion.globalUsageLimit !== null
+                                ? `${promotion.globalUsageLimit} total`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                       </TableCell>
                       <TableCell>
                         <Link
