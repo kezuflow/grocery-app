@@ -8,6 +8,7 @@ import { CartDrawer } from "./marketplace/cart-drawer";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
+import { StorefrontFooter } from "./storefront-footer";
 
 export { CategoryStrip } from "./marketplace/category-strip";
 export { storefrontNavigation } from "./marketplace/storefront-navigation";
@@ -18,7 +19,10 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
       <StorefrontHeader />
       <div className="flex w-full">
         <StorefrontSidebar />
-        <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
+        <div className="flex min-h-[calc(100dvh-4rem)] min-w-0 flex-1 flex-col">
+          <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
+          <StorefrontFooter />
+        </div>
       </div>
       <MobileNavigation />
       <CartDrawer />
