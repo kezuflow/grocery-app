@@ -476,3 +476,7 @@ Migration `0091_delivery_promise_revisions.sql` adds immutable `delivery_promise
 ### Problems records and handling receipts
 
 CA-7 retains order_issue and optional order_issue_line records without rewriting historical states or deleting reports. New handling uses SUBMITTED, CLAIMED and RESOLVED; legacy INVESTIGATING/ESCALATED remain stored and can be resolved. Existing idempotency_records stores new order_issue_receipt JSON results in the same guarded batch as report and audit changes. No schema migration or reset beyond the established disposable acceptance database is required.
+
+### Standalone banner storage (0096, 2026-09-11)
+
+storefront_banner owns name, optional href, DRAFT/ACTIVE/INACTIVE/ARCHIVED status, priority, effective dates and optimistic version. It has no Promotion foreign key. banner_media, banner_media_upload and banner_media_cleanup retain the established media attachment, immutable object identity/digest, durable unknown-upload evidence and bounded leased cleanup pattern with banner_id ownership. A partial unique index permits one active image per banner. Migration 0096 is additive and does not alter retained promotion media or financial facts.

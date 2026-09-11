@@ -53,7 +53,7 @@ async function MarketplaceContents({
       location.then((locationId) =>
         client.getMarketplaceHome({ requestId, itemsPerRail: 12, locationId }),
       ),
-      client.listPublishedPromotionCampaigns({ requestId: crypto.randomUUID() }),
+      client.listPublishedBanners({ requestId: crypto.randomUUID() }),
     ]);
     if (!home.ok) {
       return <CatalogError />;

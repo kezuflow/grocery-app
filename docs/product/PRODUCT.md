@@ -92,3 +92,7 @@ Disclose the missed-delivery condition before payment. No automatic additional c
 On 2026-09-09 the owner confirmed that delivery areas, operating hours and delivery promises are configured by Admin. Local testing uses clearly identified sample configuration; real operating values are launch inputs, not blockers to local implementation. Actual provider/payment activation remains separate acceptance.
 
 The owner requires records to be retained indefinitely. Do not introduce automatic deletion of retained business/customer records. Account closure preserves business history; irreversible erasure or personal-information removal needs separate handling and is not authorized by this decision. This records the owner's retention requirement, not a claim of legal compliance or completed implementation acceptance. Official invoice/tax/seller details remain factual accounting inputs.
+
+## Standalone storefront banners — owner correction, 2026-09-11
+
+Storefront banner images are independent content, not Promotion definitions and do not require promo codes. Admin manages them in a separate Banners gallery. Each banner has an image, accessible description, optional storefront link, publication dates, priority and lifecycle. Publishing a banner never creates or changes a discount or checkout eligibility. Promotions remains the financial offer workspace.

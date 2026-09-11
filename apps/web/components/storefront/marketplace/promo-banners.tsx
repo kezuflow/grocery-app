@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   useCallback,
@@ -11,12 +10,12 @@ import {
   type PointerEvent,
 } from "react";
 
-import type { PublishedPromotionCampaign } from "@freshmarkets/contracts";
+import type { PublishedBanner } from "@freshmarkets/contracts";
 
 /**
  * Image-based promotion cards sized for the marketplace's compact deals rail.
  */
-export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampaign[] }) {
+export function PromoBanners({ campaigns }: { campaigns: PublishedBanner[] }) {
   const galleryRef = useRef<HTMLDivElement>(null);
   const [controlsReady, setControlsReady] = useState(false);
   const pausedRef = useRef(false);
@@ -92,12 +91,12 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampa
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="daily-deals-title" className="text-[32px] leading-[42px] font-semibold">
-          Daily Deals
+          Featured
         </h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            aria-label="Previous deal"
+            aria-label="Previous banner"
             disabled={!controlsReady}
             onClick={() => moveGallery(-1)}
             className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--fm-border)] bg-white shadow-sm hover:bg-[var(--fm-hover)] disabled:cursor-wait disabled:opacity-50"
@@ -106,7 +105,7 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampa
           </button>
           <button
             type="button"
-            aria-label="Next deal"
+            aria-label="Next banner"
             disabled={!controlsReady}
             onClick={() => moveGallery(1)}
             className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--fm-border)] bg-white shadow-sm hover:bg-[var(--fm-hover)] disabled:cursor-wait disabled:opacity-50"
@@ -155,9 +154,9 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampa
           onClickCapture={preventDraggedClick}
         >
           {campaigns.map((promo, index) => (
-            <Link
-              key={promo.promotionId}
-              href="/#catalog"
+            <a
+              key={promo.bannerId}
+              href={promo.href ?? undefined}
               aria-label={promo.name}
               data-promo-card
               className="group block min-w-0 shrink-0 basis-[86%] snap-start overflow-hidden rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] sm:basis-[58%] md:basis-[44%] lg:basis-[36%] xl:basis-[32%]"
@@ -171,19 +170,7 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedPromotionCampa
                 draggable={false}
                 className="pointer-events-none aspect-[20/9] h-auto w-full select-none object-cover transition-transform duration-200 group-hover:scale-[1.01]"
               />
-              <div className="space-y-1 p-4">
-                <h3 className="font-semibold">{promo.name}</h3>
-                <p className="text-sm">{promo.description}</p>
-                <p className="break-all text-sm font-medium">
-                  {promo.productSale
-                    ? "Automatic sale on selected items and locations"
-                    : `Code: ${promo.code}`}
-                </p>
-                <p className="text-xs text-[var(--fm-text-muted)]">
-                  Eligibility and final savings are checked at checkout.
-                </p>
-              </div>
-            </Link>
+            </a>
           ))}
         </div>
       </div>

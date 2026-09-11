@@ -1,49 +1,42 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...props
-  }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children: ReactNode }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
-
+import { describe, expect, it } from "vitest";
 import { PromoBanners } from "./promo-banners";
-
-describe("PromoBanners", () => {
-  it("renders Core campaign images and structured terms without promising eligibility", () => {
+describe("Standalone banners", () => {
+  it("renders image links without promotion codes or checkout terms", () => {
     const html = renderToStaticMarkup(
       <PromoBanners
         campaigns={[
           {
-            promotionId: "p",
-            code: "FRESH",
-            name: "Fresh campaign",
-            description: "Fresh savings",
-            benefitType: "ORDER_FIXED_DISCOUNT",
-            discountMinor: 500,
-            percent: null,
-            minimumMinor: 0,
-            maximumDiscountMinor: null,
-            endsAt: null,
-            image: { src: "/media/promotions/image/1", alt: "Fresh vegetables" },
+            bannerId: "b",
+            name: "Seasonal collection",
+            href: "/#catalog",
+            image: { src: "/media/banners/image/1", alt: "Fresh vegetables" },
           },
         ]}
       />,
     );
-    expect(html).toContain('src="/media/promotions/image/1"');
-    expect(html).toContain("Fresh campaign");
-    expect(html).toContain("FRESH");
-    expect(html).toContain("checked at checkout");
-    expect(html).not.toContain("membership");
+    expect(html).toContain('src="/media/banners/image/1"');
+    expect(html).toContain('href="/#catalog"');
+    expect(html).not.toContain("Code:");
+    expect(html).not.toContain("checkout");
   });
-  it("omits the rail when no campaign is published", () => {
+  it("supports an informational banner without a destination", () => {
+    const html = renderToStaticMarkup(
+      <PromoBanners
+        campaigns={[
+          {
+            bannerId: "b",
+            name: "Announcement",
+            href: null,
+            image: { src: "/media/banners/image/1", alt: "Announcement" },
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toMatch(/<a[^>]*href=/);
+    expect(html).toContain("Announcement");
+  });
+  it("omits the gallery when no banner is published", () => {
     expect(renderToStaticMarkup(<PromoBanners campaigns={[]} />)).toBe("");
   });
 });

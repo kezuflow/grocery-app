@@ -30,6 +30,35 @@ const audit = {
 };
 
 describe("admin navigation mapping", () => {
+  it("shows Banners as a separate Core-authorized workspace", () => {
+    const items = adminNavigationFromContext([
+      {
+        ...overview,
+        code: "banners",
+        label: "Banners",
+        href: "/admin/banners",
+        section: "commerce",
+        scopeKinds: globalScope,
+      },
+      {
+        ...overview,
+        code: "promotions",
+        label: "Promotions",
+        href: "/admin/promotions",
+        section: "commerce",
+        scopeKinds: globalScope,
+      },
+    ]);
+    expect(items.map((item) => item.code)).toEqual(["promotions", "banners"]);
+    expect(mostSpecificActiveNavigation(items, "/admin/banners")?.code).toBe("banners");
+    expect(
+      adminNavigationItemsForScope(items, {
+        kind: "LOCATION",
+        marketId: "market-a",
+        locationId: "location-a",
+      }),
+    ).toEqual([]);
+  });
   it("renders only Core-provided navigation in canonical order", () => {
     expect(adminNavigationFromContext([audit, overview]).map((item) => item.code)).toEqual([
       "overview",

@@ -110,3 +110,7 @@ Owner correction, 2026-09-11: the delivery dropdown uses a compact search field 
 Owner correction, 2026-09-11: clicking a saved address in the delivery dropdown applies that coordinate through existing browsing-location confirmation and closes on current serviceability success. Do not require a second map-confirmation click for saved addresses. Failure or unavailable coverage preserves the current choice and shows an inline error.
 
 Owner correction, 2026-09-11: Account popup and account page Sign out actions open a compact confirmation dialog with Cancel and Sign out. Opening or cancelling does not end the session. Confirmation shows pending/error feedback; successful sign-out returns home.
+
+## Standalone banners — 2026-09-11
+
+Admin Banners (/admin/banners) is a separate image gallery from Promotions. Create a draft, attach its image, then activate it for its dates. Show preview, status and priority; allow an optional storefront path. Dates use the operator browser timezone. Storefront Featured displays the published images without generated promo-code or eligibility captions; images without a destination are not links.

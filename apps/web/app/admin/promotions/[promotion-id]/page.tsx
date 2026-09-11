@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState, use } from "react";
 import type {
   AdminPromotionDetail,
@@ -15,7 +16,6 @@ import {
   adminPromotionPreviewViewSchema,
 } from "@freshmarkets/validation";
 import { CustomerPicker, type CustomerChoice } from "@/components/admin/customer-picker";
-import { PromotionMediaEditor } from "@/components/admin/promotion-media-editor";
 import { PromotionAudienceEditor } from "@/components/admin/promotion-audience-editor";
 import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
 import { Button } from "../../../../components/ui/button";
@@ -271,7 +271,13 @@ export default function PromotionDetailPage({
           </div>
         )}
       </ListPageSection>
-      <PromotionMediaEditor promotionId={promotionId} archived={promotion.status === "ARCHIVED"} />
+      <p className="text-sm">
+        Storefront images are managed in{" "}
+        <Link href="/admin/banners" className="underline">
+          Banners
+        </Link>
+        .
+      </p>
       <ListPageSection
         title="Audience"
         description="Choose the customers who can qualify for this campaign."

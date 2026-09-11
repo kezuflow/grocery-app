@@ -229,6 +229,15 @@ const WORKSPACES: ReadonlyArray<{
   },
 
   {
+    code: "banners",
+    label: "Banners",
+    href: "/admin/banners",
+    section: "commerce",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["promotions.read", "promotions.manage"],
+  },
+  {
     code: "promotions",
     label: "Promotions",
     href: "/admin/promotions",

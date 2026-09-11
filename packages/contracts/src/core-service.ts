@@ -1,3 +1,5 @@
+import type { BannerMediaService } from "./banner-media";
+import type { StorefrontBannerService } from "./storefront-banners";
 import type { AdminScheduledWeekService } from "./admin-scheduled-week";
 import type { ScheduledCountedReceiptsService } from "./scheduled-counted-receipts";
 import type { ScheduledSurplusService } from "./scheduled-surplus";
@@ -89,6 +91,8 @@ export interface ImplementedCoreService
     AdminPrivacyService,
     AdminPromotionsService,
     PromotionMediaService,
+    BannerMediaService,
+    StorefrontBannerService,
     AdminCatalogService,
     AdminInventoryReadService,
     AdminOrdersService,
@@ -192,6 +196,15 @@ export const coreServiceMethodNames = [
   "requestCustomerClosure",
   "listPrivacyRequests",
   "applyPrivacyAction",
+  "getAdminBannerMedia",
+  "uploadAdminBannerMedia",
+  "updateAdminBannerMedia",
+  "removeAdminBannerMedia",
+  "getAdminBannerMediaContent",
+  "getPublishedBannerMedia",
+  "listPublishedBanners",
+  "listAdminBanners",
+  "saveAdminBanner",
   "getAdminPromotionMedia",
   "uploadAdminPromotionMedia",
   "updateAdminPromotionMedia",

@@ -1,3 +1,15 @@
+import {
+  uploadAdminBannerMedia,
+  updateAdminBannerMedia,
+  removeAdminBannerMedia,
+} from "./admin/application/banner-media";
+import {
+  getAdminBannerMedia,
+  getAdminBannerMediaContent,
+  getPublishedBannerMedia,
+  listPublishedBanners,
+} from "./admin/application/banner-media-reads";
+import { listAdminBanners, saveAdminBanner } from "./admin/application/storefront-banners";
 import { bookAutomaticInstantDeliveries } from "./delivery/application/book-automatic-instant-deliveries";
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
 import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
@@ -1675,6 +1687,84 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
+  async getAdminBannerMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").BannerMediaService["getAdminBannerMedia"]
+    >[0],
+  ) {
+    return getAdminBannerMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async uploadAdminBannerMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").BannerMediaService["uploadAdminBannerMedia"]
+    >[0],
+  ) {
+    return uploadAdminBannerMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async updateAdminBannerMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").BannerMediaService["updateAdminBannerMedia"]
+    >[0],
+  ) {
+    return updateAdminBannerMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async removeAdminBannerMedia(
+    input: Parameters<
+      import("@freshmarkets/contracts").BannerMediaService["removeAdminBannerMedia"]
+    >[0],
+  ) {
+    return removeAdminBannerMedia(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async getAdminBannerMediaContent(
+    input: Parameters<
+      import("@freshmarkets/contracts").BannerMediaService["getAdminBannerMediaContent"]
+    >[0],
+  ) {
+    return getAdminBannerMediaContent(
+      {
+        auth: createAuth(this.env as Env & AuthEnvironment),
+        db: this.env.DB,
+        bucket: this.env.PRODUCT_MEDIA,
+      },
+      input,
+    );
+  }
+  async getPublishedBannerMedia(
+    input: import("@freshmarkets/contracts").PublishedBannerMediaRequest,
+  ) {
+    return getPublishedBannerMedia(this.env.DB, this.env.PRODUCT_MEDIA, input);
+  }
+  async listPublishedBanners(input: { requestId: string }) {
+    return listPublishedBanners(this.env.DB, input);
+  }
   async getAdminPromotionMedia(
     input: Parameters<
       import("@freshmarkets/contracts").PromotionMediaService["getAdminPromotionMedia"]
@@ -1752,6 +1842,26 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   }
   async listPublishedPromotionCampaigns(input: { requestId: string }) {
     return listPublishedPromotionCampaigns(this.env.DB, input);
+  }
+  async listAdminBanners(
+    input: Parameters<
+      import("@freshmarkets/contracts").StorefrontBannerService["listAdminBanners"]
+    >[0],
+  ) {
+    return listAdminBanners(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async saveAdminBanner(
+    input: Parameters<
+      import("@freshmarkets/contracts").StorefrontBannerService["saveAdminBanner"]
+    >[0],
+  ) {
+    return saveAdminBanner(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
   }
   async listAdminPromotions(input: import("@freshmarkets/contracts").AdminPromotionListRequest) {
     const validation = promotionListRequestSchema.safeParse(input);
