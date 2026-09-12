@@ -1,5 +1,442 @@
 # Commerce alignment — active checkpoint
 
+## Current owner request — GIT-SLICES-1 commit all changes and push (2026-09-13)
+
+Owner requests all existing changes committed as one cohesive commit per slice or feature, then
+pushed to main with a clean working tree. Full access and commit/push authorization were reiterated.
+Plan context: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. This is Git integration of existing slices, not completion of the remaining commerce phase.
+Acceptance: reviewed feature boundaries, relevant verification, all intended tracked/untracked
+changes recorded, normal push to origin/main, and matching local/remote HEAD with no pending changes.
+
+Starting branch/HEAD: main at `6c5349008f927c5c3fda370cb6360f6eb1e8b65d`; remote main matched.
+The explicit all-changes request supersedes old outside-commit exclusions for the existing
+`.codex/config.toml` deletion and product discussion. Their existing state is preserved in the commits.
+Ignored credentials, local databases, generated builds and provider payloads remain outside Git.
+Published history is preserved; no force push, deployment, provider transaction or outbound message.
+
+Implementation integration is committed through `6f5855e7`, in eight cohesive groups:
+- `2f7b3a89`: agent skills/guidance and existing config removal.
+- `62889c4b`: superseded implementation plans and reports.
+- `25b819f8`: Locations navigation in Global and location scopes (ADMIN-LOCATIONS-NAV-1).
+- `1c92485b`: unified resizable Admin workspaces, Product authoring/preview/pricing and sidebar polish.
+- `55dda3b6`: full-width storefront footer boundary (STOREFRONT-FOOTER-1).
+- `eec557dd`: consistent development client-module identities.
+- `137dd78f`: Google Maps, Places suggestions, shared address/pickup-pin editing and pin assignment
+  (MAPS-GOOGLE-1, MAPS-AUTOCOMPLETE-1, LOCATION-PIN-EDITOR-1, DELIVERY-PIN-ASSIGNMENT-1).
+- `6f5855e7`: guided checkout, saved-address selection and editable order/cart review.
+
+This checkpoint, the existing design changes and the continuation-boundary reconciliation form the
+ninth documentation commit. Shared checkout browser-configuration props were staged with maps;
+the rest of checkout was committed separately without rewriting working files or published commits.
+
+Verification on the integrated source represented by `6f5855e7`:
+- `pnpm.cmd check`: formatting, naming, terminology, 31 harness tests, migrations, commit convention,
+  architecture, readiness, lint and all workspace typechecks passed. Web passed 122 files / 496 tests;
+  contracts passed 19 files / 68 tests; config/domain-shared/validation each passed 1 file / 2 tests.
+  Core completed 202 files / 1,652 tests with 199 files passing and 7 stale expectations failing in
+  three files. The aggregate exited nonzero and was not rerun end-to-end after test-only corrections.
+- `pnpm.cmd --filter @freshmarkets/core test src/customer-address.integration.test.ts src/admin/application/serviceability-administration.integration.test.ts --maxWorkers=1`: 2 files / 50 tests pass after correction.
+- `pnpm.cmd --filter @freshmarkets/core test src/checkout/application/cart-location-carryover.integration.test.ts`: 1 file / 4 tests pass after correction. All three previously failing files have passing rerun evidence; the other 199 Core files were unchanged.
+- `pnpm.cmd --filter @freshmarkets/web test components/admin/admin-accessibility.test.tsx lib/core-client/security-boundary.test.ts`: 2 files / 19 tests pass; the subsequent complete Web run also passed.
+- `pnpm.cmd --filter @freshmarkets/core --filter @freshmarkets/web build`: both pass; Core is a deployment dry run. Existing environment, plugin-timing and chunk-size advisories remain.
+- `pnpm.cmd --filter @freshmarkets/web check:vinext`: passes, 16 supported / 0 issues.
+- `pnpm.cmd --filter @freshmarkets/core exec wrangler types ./src/worker-configuration.d.ts --check` and the Web equivalent using `./worker-configuration.d.ts`: both current.
+- Post-correction Core typecheck, focused oxlint, full formatter check and `git diff --check`: pass.
+  Reviewed local links in eight changed owning guides/runbooks: no missing targets. Pattern scan of
+  changed files found no suspected credentials; this is not an exhaustive secret audit.
+
+Integration corrections: formatter fixes; whitespace-tolerant accessible-label assertion; current
+pin-model runbook/address/Admin-preview/cart expectations; capability fixture restoration so later
+tests do not inherit disabled locations. Rejection/no-Cart/no-success-receipt and readiness checks
+remain asserted. No production business behavior was changed while repairing these tests.
+
+GIT-SLICES-1 has nine commit groups at the Git-integration counting level. The session must finish
+with `git push origin main`, matching remote/local HEAD and clean status; this record is necessarily
+committed before those final checks. No new browser or actual provider acceptance is claimed.
+Earlier commerce/provider/visual acceptance obligations remain open; their historical evidence below
+is preserved, and this Git request does not mark Phase 7 complete or authorize a new deployment.
+
+## Prior records — historical implementation and acceptance evidence
+
+All following uncommitted-state, active-slice and next-action statements describe the time recorded.
+The current request and Git state above supersede them; their prior acceptance limits remain evidence.
+
+## Latest owner request — MAPS-AUTOCOMPLETE-1 Google Places suggestions (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner authorized Google autocomplete for the location pins and asked which application/key
+owns it. Acceptance: Admin pickup and customer address editors suggest while typing, selecting one
+resolves address fields and moves the pin, newer pin/query actions reject stale details, and Core
+keeps the provider credential and final write authority.
+
+Implemented in the dirty `main` working tree at `6c5349008f927c5c3fda370cb6360f6eb1e8b65d`:
+Core exposes typed autocomplete/selected-prediction RPCs, validates input, and calls Places API (New)
+with bounded fetches, safe telemetry, Philippines restriction and soft proximity bias. Predictions
+contain no coordinates; only selection fetches details. An editor UUID groups prediction/detail
+requests and is retired on selection. Details include the place name so a landmark with a broad postal
+address still fills a meaningful address line. Web uses private POST/no-store endpoints, validates
+provider-neutral replies, preserves pin adjustment, and shows Google Maps attribution. Existing
+reverse-geocoding/finalization and saved-address writes remain unchanged. API contracts and maps
+runbook document the new boundary and server-key API restriction.
+
+Actual acceptance: the existing local Core server key returned HTTP 200 for Google Autocomplete and
+Place Details; five suggestions and valid coordinate/address data were observed. Browser acceptance
+on localhost traversed real Web -> Core -> Google in both the customer serviceability editor and
+Admin Locations: type-ahead suggestions appeared, selection moved the map pin, customer nearest-center
+read resolved, and Admin filled the landmark/address/coordinate fields. Closed the Admin draft without
+saving the public-landmark test pin. No customer address was saved and no provider transaction or
+deployment was performed. The local dev server is running at localhost:3000.
+
+Verification on this working tree:
+- `pnpm --filter @freshmarkets/core test src/geography/infrastructure/google-places.test.ts src/geography/infrastructure/provider-telemetry.test.ts`: 2 files / 10 tests pass.
+- `pnpm --filter @freshmarkets/web test components/storefront/address/address-editor.test.tsx components/admin/locations-workspace.test.tsx test/app/google-maps-key-security.test.ts`: 3 files / 26 tests pass, including selected-detail/session behavior and a late-detail/manual-pin race.
+- `pnpm --filter @freshmarkets/contracts test`: 19 files / 68 tests pass.
+- `pnpm --filter @freshmarkets/core --filter @freshmarkets/web --filter @freshmarkets/contracts typecheck`: pass.
+- `pnpm --filter @freshmarkets/web build` and `pnpm --filter @freshmarkets/core build` (dry-run only): pass.
+- Focused oxlint/oxfmt and `git diff --check`: pass (existing CRLF notices only).
+
+Failure/recovery: initial real Worker request returned GEOCODER_UNAVAILABLE despite a successful
+Node/provider probe. Calling runtime fetch through an arrow instead of the adapter method receiver
+fixed the actual Worker request; both browser flows passed afterward. The broader Web selection that
+included `lib/core-client/security-boundary.test.ts` had 29 passing tests and one pre-existing failure:
+it still expects the retired polygon-deployment sentence in the maps runbook. This is recorded, not
+silenced or counted as a passing aggregate. The full commerce aggregate was not rerun.
+
+Preservation/release boundary: this checkout already contains extensive tracked/untracked work,
+including the uncommitted Mapbox-to-Google migration on which these editors depend. No unrelated files
+were staged or committed; extracting a standalone autocomplete commit would omit required migration
+files and would not represent the verified tree. MAPS-AUTOCOMPLETE-1 local implementation and real local
+provider/browser acceptance are complete; release integration remains open. One next action: integrate
+and verify the existing map migration together with this slice before committing/pushing and performing
+any separately authorized deployment. Earlier commerce acceptance obligations remain open.
+
+
+## Latest owner request — ADMIN-LOCATIONS-NAV-1 expose Locations (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner reported that the implemented `/admin/locations` pickup-pin editor was not
+reachable from either Global or Central Cebu navigation. Acceptance: Core-authorized Staff with
+`locations.read` or `locations.manage` see one Locations destination under Administration in Global
+and selected-location scope; the destination uses the existing capability-filtered navigation
+contract and opens `/admin/locations`; Web does not invent access.
+
+Implemented in the current dirty `main` working tree from `6c534900`: Core already published the
+Locations workspace for capable Staff, but Web silently dropped the unknown `locations` code because
+its closed canonical order and icon map omitted it. Web now recognizes the destination, gives it a
+map-pin icon and orders it under Administration. Core now declares the destination applicable to
+both `GLOBAL` and `LOCATION`, so choosing Central Cebu no longer hides it. Existing Core location
+read/manage checks remain authoritative.
+
+Verification in this working tree: focused Web navigation passes 1 file/14 tests; focused Core Admin
+context integration passes 1 file/14 tests; Web and Core typechecks pass; `git diff --check` passes
+apart from pre-existing line-ending warnings in unrelated dirty files. No browser automation was run
+for this correction. Changes remain uncommitted because the navigation files are part of the large
+owner-owned dirty working tree. Next action: refresh the running Admin shell and use Administration →
+Locations in either Global or Central Cebu scope to open the fulfillment-center pickup-pin editor.
+
+## Latest owner request — LOCATION-PIN-EDITOR-1 per-location pickup pins (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asked to set the location pin inside each fulfillment-location record after
+retiring customer geofences. Acceptance: Add/Edit Location exposes one explicit required pickup pin;
+search, map click, drag, current location and manual-coordinate fallback all update the same stored
+latitude/longitude; each Locations row shows its saved pin; the map does not render duplicate static
+and draggable markers; Core remains the write authority and exact active-origin changes remain
+blocked while an in-flight delivery or started payment uses that origin.
+
+Implemented in the current dirty `main` working tree from `6c534900`: the existing Web-to-Core
+location command already persisted exact latitude/longitude on every `fulfillment_location`, with
+provider finalization, optimistic versioning, idempotency, audit and geography revision. The Admin
+editor now presents that fact as a dedicated **Fulfillment location pin** card with clear required/set
+state, address search, stable map, draggable/clickable pickup marker, independent current-location
+action and visible coordinates. Manual fields are renamed Pickup pin latitude/longitude. Each
+Locations row displays its stored pickup pin. Editing renders only the draggable marker; read-only
+rendering uses one static marker, removing the prior two-marker overlap. Copy explains that this pin
+is the Lalamove pickup origin and that customer-fulfillment pins participate in nearest-location
+assignment.
+
+Verification in this working tree: Web typecheck passes; focused Locations workspace and Google map
+suites pass 2 files/11 tests; the focused Locations workspace rerun passes 1 file/3 tests with an
+explicit assertion that an editable pin has one draggable marker and zero duplicate static points;
+focused diff checking passes. Playwright browser acceptance was not run in this slice. Changes remain
+uncommitted because the affected location/map files overlap the large owner-owned dirty working tree.
+Next action: when a clean browser-acceptance window is available, create two fulfillment locations at
+different pins and confirm customer assignment switches to the nearer pin while Lalamove remains the
+route-availability authority.
+
+## Latest owner request — DELIVERY-PIN-ASSIGNMENT-1 retire customer geofences (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner explicitly superseded the per-location polygon/geofence model: every
+customer-fulfillment location owns an exact map pin and courier pickup profile; a confirmed customer
+coordinate selects the nearest active, capable whole-order location; checkout rechecks mode
+readiness; and Lalamove quotation decides route-specific delivery availability and fee. Acceptance:
+no polygon geometry or timed location-link can reject address confirmation, fulfillment readiness,
+checkout option/quote selection or payment; stock cannot reroute/split the order; the Admin polygon
+workspace is retired; retained area/zone records remain only where existing schema/snapshots require
+their identities.
+
+Implemented in the current dirty `main` working tree from `6c534900`: Core serviceability now loads
+the market and active customer-fulfillment pins/capabilities only, ranks them by Haversine distance
+with stable location-ID tie-break and returns null legacy area/zone context. Address selection and
+checkout use confirmed coordinates even when an old saved `serviceable` flag is false. Checkout
+options, Scheduled evaluation and quote revalidation select operational pins; customer copy now
+separates fulfillment assignment from Lalamove route confirmation. Dispatch readiness no longer
+requires an eligible service-area link. Scheduled destination reads/guards no longer require that
+link. The pre-payment transaction no longer joins or checks service-area, zone status or timed
+location-link eligibility, and a focused integration test proves an expiring legacy link during
+provider quotation cannot reject payment creation.
+
+The existing non-null zone identifier remains a compatibility routing bucket for Scheduled cycle,
+checkout-attempt, delivery-job and immutable Order snapshot relations; its polygon geometry, status
+and location-link interval have no assignment authority. The active Admin `/admin/locations` page
+describes pin-based assignment and no longer links the service-area editor;
+`/admin/locations/service-areas` redirects back to Locations, and direct Web reads/publication at
+`/api/admin/serviceability` return the retired-resource result instead of mutating polygons. The
+preserved discussion record, PRODUCT, architecture, contracts, data model, design guide,
+maps/dispatch runbook and continuation
+boundary now record the exact owner supersession without deleting historical polygon evidence.
+
+Verification in this working tree: Contracts, Core and Web typechecks pass. Focused Core pin,
+readiness, Scheduled destination, fulfillment-option and quote suites pass 7 files/66 tests. The
+complete payment-reaction integration file passes 1 file/36 tests, including legacy-link expiry at
+the provider boundary. Focused Web address, checkout and Locations suites pass 6 files/47 tests.
+No interactive browser check or live Lalamove quotation/booking was run in this slice; actual
+provider/account acceptance and typed provider-specific rejection UX remain separate activation
+evidence. DELIVERY-PIN-ASSIGNMENT-1 is implemented and locally verified at contract/Core/Web source
+level. Changes remain uncommitted because these files overlap the large intertwined owner-owned dirty
+working tree. Next action: run clean-process browser acceptance of address selection -> nearest
+location -> real configured Lalamove quotation without logging customer address or provider payload.
+
+## Latest owner request — DELIVERY-ASSIGNMENT-REVIEW-1 polygon versus provider availability (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asked why two Cebu addresses can receive different availability results and
+proposed using the address to select the closest fulfillment location while treating Lalamove as
+the authority for delivery coverage. Acceptance for this diagnostic: trace the current decision,
+distinguish FreshMarkets geography from provider availability, check current official Lalamove
+behavior, and identify the cohesive policy boundary without making an unapproved rule change or
+provider transaction.
+
+Observed in the current dirty `main` working tree from `6c534900`: Core does not use the address's
+city text as proof of delivery availability. It first requires the confirmed coordinate to fall in
+an active service-area polygon and an active nested delivery-zone polygon. It then filters active
+customer-fulfillment locations by zone assignment and Picking/Packing/Dispatch capabilities and
+selects the nearest remaining site by deterministic Haversine distance. The owner-provided northern
+Cebu City result resolves successfully through Google but Core returns `OUTSIDE_SERVICE_AREA`; the
+bootstrap boundary is a small rectangular Cebu City placeholder, not Cebu Islandwide. This failure
+occurs before fulfillment-option loading and before any Lalamove quotation request.
+
+Current official Lalamove documentation lists Cebu Islandwide as a Philippine API city, but its
+quotation endpoint can still reject a particular pickup/drop-off/service-type request with
+`ERR_OUT_OF_SERVICE_AREA`; it publishes no single fixed maximum Cebu distance. A successful quote
+contains provider distance, price and a short-lived quotation ID, but it is not a guarantee that a
+driver has already matched. The existing Core flow already obtains Lalamove pricing after internal
+routing, although its quote helper currently collapses all provider quote failures to a null result
+and the adapter normalizes a provider 422 to `LALAMOVE_HTTP_422`, losing the actionable out-of-area
+distinction at the checkout boundary.
+
+No source, configuration, database, provider, browser, or product-policy change was made for this
+diagnostic. The current approved PRODUCT rule still requires stored per-site polygons, so replacing
+that rule needs explicit owner approval and a cohesive contracts/Core/Web update. Recommended next
+action: approve a two-stage model—use a broad configured Cebu market boundary plus nearest
+operational site for catalog ownership, display courier availability as pending during address
+selection, and make the provider quotation the route-specific delivery gate at checkout while
+preserving typed internal readiness and provider-failure reasons.
+
+## Latest owner request — MAPS-GOOGLE-BROWSER-ACCEPTANCE-1 checkout map error recovery (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner explicitly authorized browser-skill inspection and requested reproduction of the
+storefront delivery chooser with an owner-provided Cebu search query. Acceptance: the search resolves
+through Core; selecting the result renders a usable Google basemap and draggable entrance marker;
+Vinext's generic script-error overlay is absent; the browser console gains no new CSP, Google loader,
+or Advanced Marker warnings; strict production CSP and browser/server credential separation remain
+intact.
+
+Root cause observed in the existing in-app browser: the configured Map ID selected Google's vector
+renderer, whose WebAssembly bootstrap was rejected by FreshMarkets' nonce CSP. Google then displayed
+only a gray surface and Vinext wrapped the cross-origin failure as an unhelpful `Script error` overlay.
+The same browser session also showed deprecated Advanced Marker listener warnings and a development
+HMR warning whose serialized loader options included the public referrer-restricted browser key.
+
+Implemented in the current dirty `main` working tree from `6c534900`: the shared Google adapter now
+explicitly selects raster rendering. Current FreshMarkets interactions—pins, clustering, polygons,
+polylines, click/drag, and area selection—are supported by raster rendering, so production CSP retains
+neither `unsafe-eval` nor `wasm-unsafe-eval`. Advanced Marker activation and drag completion now use
+the current `gmp-` DOM events. Google loader configuration is stored on `globalThis` so Vite HMR does
+not call `setOptions` again or serialize the browser key into its warning. The dependency optimizer
+also excludes `lucide-react` and the Vinext package graph, which removed the separately observed
+Lucide deep-module warning; Vinext beta.8 still reports its own relative internal prefetch-queue file
+as inconsistently optimized despite the package exclusion, so that upstream development-only warning
+remains recorded rather than hidden.
+
+Browser acceptance: after a full reload, `Deliver to` opened, the search control expanded, the
+owner-provided query returned its intended result, and selection rendered labeled Google raster map
+tiles, Google attribution, camera controls, and the confirmed-entrance marker without changing the
+dialog geometry. The result is outside the currently configured delivery polygon, so the explicit
+`Delivery is unavailable` business result is expected and separate from map rendering. Browser logs
+after the corrected replay contained zero warnings or errors; no credential value is stored here.
+
+Verification in the working tree: Web typecheck passed; focused CSP, Google map, and address-editor
+suites passed 3 files/43 tests; focused oxlint and oxfmt passed; `git diff --check` passed for the
+affected source/guidance files; the full Web production build passed. A final `pnpm dev` clean start
+serves localhost:3000 and remains running. Repeated development-server restarts briefly exposed
+remote Cloudflare connection/R2 failures while the live-data tunnel reconnected; a clean start
+recovered and served the storefront, so no local business-write or storage change was made.
+
+MAPS-GOOGLE-BROWSER-ACCEPTANCE-1 is complete at browser, console, typecheck, focused-test, lint,
+format, and production-build level. Changes remain uncommitted because the affected map, security,
+Vite, architecture, runbook, and checkpoint files overlap the existing intertwined owner-owned dirty
+working tree. Next action: keep the current raster renderer for checkout/Admin maps and track the
+Vinext beta.8 optimizer diagnostic separately from this completed Google Maps browser recovery.
+
+## Latest owner request — MAPS-GOOGLE-ACTIVATION-1 local credential/runtime validation (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. After configuring the Web browser key/map ID and Core server key, the owner requested a
+local `pnpm dev` run, diagnosis of its warnings and the recommended Vite dependency-optimizer fix.
+Acceptance: both ignored `.dev.vars` files are loaded without exposing their values; `/checkout`
+responds; the server key can call the exact Geocoding and Routes APIs used by Core; the localhost-
+restricted browser key can retrieve Maps JavaScript without a standard key/API/referrer/billing
+error marker; the inconsistent RSC dependency optimization warning is absent after a cold start;
+focused compatibility and build checks pass.
+
+Implemented in the current dirty `main` working tree from `6c534900`: added both the public
+`next/link` alias and its resolved `vinext/shims/link` target to `optimizeDeps.exclude`. The warning
+identified Vinext's client-marked App Router prefetch queue, not either Google Maps package. Both
+names are required because Vinext/Vite use the alias name while scanning the cold RSC dependency
+graph and the resolved package name in the client shim configuration. Existing `vitest` and
+`jsdom` exclusions remain. No credential value was printed, persisted in source or moved across
+the Web/Core boundary.
+
+Verification in the working tree: a cold `pnpm dev` loaded `apps/web/.dev.vars` and
+`apps/core/.dev.vars`, served localhost:3000 and returned HTTP 200 for `/checkout` without the
+inconsistent-optimization warning. Name/shape-only checks confirmed both API keys and the current
+24-character alphanumeric Map ID shape. One generic-Cebu, non-persisting live provider probe
+returned Geocoding HTTP 200/status `OK` and Routes HTTP 200 with one route. A localhost-referrer
+Maps JavaScript fetch returned HTTP 200 and contained none of Google's standard invalid-key,
+API-disabled, referrer-denied or billing-disabled error identifiers. Web typecheck passed; focused
+Google map and browser-key security suites passed 2 files/9 tests; `vinext check` reported 100%
+compatibility; focused oxlint/oxfmt and `git diff --check` passed; the full Web production build
+passed. The dev server remains running. No browser skill, browser automation, deployment or
+business write was used.
+
+MAPS-GOOGLE-ACTIVATION-1 is complete at configuration, terminal runtime, provider-connectivity,
+typecheck, focused-test and build level. Actual map rendering, Advanced Marker/Map ID behavior and
+the approved nonce-CSP boundary still require owner visual acceptance in a real browser. The
+pre-existing nonfatal Wrangler warning for `INITIAL_GLOBAL_ADMIN_EMAIL` remains: local development
+uses the top-level empty disablement while staging intentionally requires an environment secret,
+and copying the empty value into staging would weaken that setup. Next action: owner refreshes the
+checkout address Location step and confirms map tiles, search, current-location, pin drag/click and
+browser-console CSP behavior.
+
+## Latest owner request — MAPS-GOOGLE-1 replace Mapbox with Google Maps (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner requested a provider-wide removal of Mapbox and replacement with Google Maps.
+Acceptance: all active browser rendering, address search/reverse geocoding, road-distance and route-
+preview paths use Google Maps Platform; browser and Core credentials remain separate; CSP and setup
+guidance match the new provider; missing configuration fails closed; focused adapter, security,
+address and route tests plus Web/Core type checks pass. Historical migrations and archived evidence
+remain unchanged because they record prior persisted-schema facts rather than active provider use.
+
+Implemented in the current dirty `main` working tree from `6c534900`: removed `mapbox-gl`, the
+Mapbox renderer and three Core Mapbox adapters. Added a lazily loaded Google Maps JavaScript
+renderer using an origin-restricted browser key, required vector map ID, Advanced Markers,
+clustering, polygons, polylines, draggable pins, point activation and area selection. All customer
+and Admin map consumers now pass Google browser configuration. Added server-only Google Geocoding
+and Compute Routes adapters for search, temporary/permanent reverse resolution, checkout driving
+distance and Admin route preview. Runtime bindings are `GOOGLE_MAPS_BROWSER_KEY`,
+`GOOGLE_MAPS_MAP_ID`, `GOOGLE_MAPS_SERVER_KEY`, and provider selector `google_maps`; Web never
+receives the server key. CSP permits only the required Google Maps script/image/connect origins.
+The runbook records API activation, billing, referrer/API restrictions, rotation validation,
+storage/attribution limits, and fail-closed behavior.
+
+Verification: Web and Core typecheck pass. Focused Google map wrapper, address editor, Admin
+locations, CSP and browser-key security tests passed (43 tests after correcting the test-only
+`matchMedia` shim). Focused Google Geocoding, Routes distance/preview, runtime selection, PII-safe
+telemetry and permanent browsing-location confirmation tests passed (23 tests after correcting the
+synthetic Google response shape). The complete Web suite passed 122 files/490 tests. The first
+unbounded complete Core run exited on Windows with `3221226505` without an assertion report; the
+established bounded rerun passed 201 files/1,635 tests. Focused oxlint and oxfmt, Web production
+build, Core Wrangler dry-run build and `git diff --check` passed. Builds intentionally warn that the
+new Google bindings are absent from local secret files. Actual Google-provider acceptance is
+blocked by owner-controlled Google Cloud billing/API enablement, restricted keys and map ID; no
+live provider call, browser automation, deployment or business write was performed.
+
+MAPS-GOOGLE-1 is complete at source, unit/integration, typecheck, lint/format and build level.
+Provider and visual acceptance remain pending until the owner supplies the three environment
+bindings. Google's current strict-CSP example also includes `unsafe-eval`, which the approved
+FreshMarkets production policy forbids; this migration did not silently weaken that boundary.
+Activation must prove the configured Maps JavaScript project works under the existing nonce CSP or
+receive an explicit security/renderer decision. Changes remain uncommitted because the affected
+checkout/editor/configuration/docs files overlap the existing intertwined owner-owned dirty working
+tree. Next action: configure the Google Cloud project and restricted bindings, then validate map
+load/CSP, address search/pin confirmation, route distance and route preview in the target
+environment.
+
+## Latest owner correction — STOREFRONT-CHECKOUT-MAP-CONTROLS-1 independent search and location controls (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. The owner requested that checkout Step 1 stop showing search and current location as one combined control surface: search should be a dedicated icon-triggered expand/collapse interaction and current location should remain a separate direct button. Acceptance: both actions are independently discoverable and keyboard accessible over the stable map; search expands without document reflow, focuses the field, closes from its trigger, close control, Escape or result selection and restores focus appropriately; current location operates without opening search.
+
+Implemented in the current dirty `main` working tree from `6c534900`: replaced the always-expanded overlay bar with two persistent 44px circular map controls. The search icon toggles an origin-anchored panel below the controls; the panel stays out of layout, uses an interruptible 180ms opacity/transform transition, respects reduced motion, bounds result scrolling and is inert/hidden from assistive technology while collapsed. The location icon remains a sibling direct action, closes an open search without stealing focus, and preserves existing permission/error handling. Search is suspended while collapsed, selection collapses the panel, and Escape returns focus to the search trigger. Mobbin MCP references were visually inspected: Airbnb's map-anchored address entry and sweetgreen's independent locate control were combined for this interaction. The approved presentation is recorded in `docs/design/DESIGN.md`; Mapbox, Core search/reverse resolution, serviceability, API, contracts, storage, authorization and transactions are unchanged.
+
+Verification in the working tree: the focused address-editor suite passed (1 file, 21 tests), including distinct controls, initial collapsed state, expansion/input focus, Escape collapse/focus return, result-selection collapse and stable map geometry; the complete Web unit suite passed (122 files, 501 tests); Web typecheck, focused oxlint, formatter and `git diff --check` passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's standing instruction, no browser skill, browser automation, screenshot automation or Playwright run was used; Mobbin MCP reference search was used as explicitly requested.
+
+STOREFRONT-CHECKOUT-MAP-CONTROLS-1 is complete at source, unit, typecheck, lint and build level. Visual owner acceptance remains pending. Changes remain uncommitted because the shared editor, tests, design guide and checkpoint overlap the existing intertwined owner-owned dirty working tree. Next action: owner refreshes checkout and checks the two floating buttons, rapid search open/close, Escape/focus behavior, current location and result selection at desktop and mobile widths.
+
+## Latest owner correction — STOREFRONT-CHECKOUT-MAP-1 stable map and overlaid location controls (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. The owner reported that the large Step 1 checkout map collapsed into a smaller two-column presentation after clicking or selecting a location, and requested that address search and current location sit over the map following established Mapbox interaction patterns. Acceptance: the map retains one full-width geometry before and after coordinate selection; search, results and device-location access are available in an accessible high-contrast overlay; map click/drag, reverse resolution, serviceability and step gating remain unchanged.
+
+Root cause and implementation in the current dirty `main` working tree from `6c534900`: Step 1 conditionally added an `lg:grid-cols-[…]` class only after `coordinate` became truthy, so the interaction itself changed the layout and reduced the map to the second column. Replaced that state-dependent grid with one stable 420px mobile / 500px larger-screen full-width map surface. Address search and the existing browser-geolocation action now share a responsive white overlay at the map's top edge; search results expand as a bounded scrolling layer over the map rather than changing document geometry. Compact delivery selection and non-wizard address editing keep their existing layouts. The implementation adapts Mapbox's documented Search Box and Geolocate control placement while retaining the existing FreshMarkets Web-to-Core search, reverse-address and serviceability path instead of introducing a second client-owned provider integration. The approved presentation is recorded in `docs/design/DESIGN.md`; no Core, API, contract, storage, authorization or transaction behavior changed.
+
+Verification in the working tree: the focused address-editor suite passed (1 file, 21 tests), including an invariant that search and current-location controls remain inside the same map surface before and after address selection; the complete Web unit suite passed (122 files, 501 tests); Web typecheck, focused oxlint, formatter and `git diff --check` passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's standing instruction, no browser skill, browser automation, screenshot automation or Playwright run was used.
+
+STOREFRONT-CHECKOUT-MAP-1 is complete at source, unit, typecheck, lint and build level. Visual owner acceptance remains pending. Changes remain uncommitted because the shared editor, tests, design guide and checkpoint overlap the existing intertwined owner-owned dirty working tree. Next action: owner refreshes checkout, clicks the map and selects a search result at desktop and mobile widths, confirming that the map remains full width and the overlaid controls/results do not obstruct pin placement.
+
+## Latest owner correction — STOREFRONT-CHECKOUT-PHONE-1 saved and format-aware delivery phone (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. The owner requested that checkout address details support both selecting an existing phone number and entering a different number, with Philippine mobile formatting while typing. Acceptance: valid account and saved-address phones appear as deduplicated choices; choosing one populates the field; “Use a different number” clears the field for free entry; local `09…`, compact `639…` and international `+639…` entry are grouped legibly without weakening the existing canonical phone validation or saved command.
+
+Implemented in the current dirty `main` working tree from `6c534900`: the shared address editor now derives valid phone choices from the current address, account profile and saved addresses, displays them in canonical `+63 9xx xxx xxxx` form, and retains a separate editable telephone field. The input formats local numbers as `09xx xxx xxxx` and international numbers as `+63 9xx xxx xxxx` during entry, including partially entered values; the existing validator remains authoritative and the address command still persists canonical `+639…`. Checkout and the account address book both provide their saved-address phone set to the shared editor. Invalid legacy values are not offered as saved choices. The approved interaction is recorded in `docs/design/DESIGN.md`; no Core, API, contract, storage, authorization or transaction behavior changed.
+
+Verification in the working tree: the focused address-editor suite passed (1 file, 21 tests), including initial formatting, saved-number order/deduplication, switching to a different number, partial international/local typing and canonical command serialization; the complete Web unit suite passed (122 files, 501 tests); Web typecheck, focused oxlint, formatter and `git diff --check` passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's standing instruction, no browser skill, browser automation, screenshot automation or Playwright run was used.
+
+STOREFRONT-CHECKOUT-PHONE-1 is complete at source, unit, typecheck, lint and build level. Visual owner acceptance remains pending. Changes remain uncommitted because the shared editor, checkout, account address book, design guide, tests and checkpoint overlap the existing intertwined owner-owned dirty working tree. Next action: owner refreshes checkout, advances to address step 2 and checks a saved phone selection plus local and `+63` manual entry on desktop and mobile.
+
+## Latest owner request — STOREFRONT-CHECKOUT-REDESIGN-1 complete guided checkout redesign (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. The owner approved a complete checkout redesign after Mobbin research into DoorDash, Uber Eats and Instacart delivery-checkout patterns. Acceptance: checkout remains one review workspace; adding or correcting an address replaces the full left workspace with the existing exact three-step address task while the rich cart/total summary remains visible; completion returns to a concise selected-address state and exposes delivery choices, promotion entry and payment review without weakening quote invalidation or Core authority.
+
+Implemented in the current dirty `main` working tree from `6c534900`: rebuilt `/checkout` as a full-width two-column review surface with a sticky 420px order summary, responsive header and secure-payment context. The delivery card now presents a concise confirmed-address summary, collapsible saved-address choices and a direct add action. Add/correct opens a dedicated left-hand address workspace instead of nesting another constrained form inside the card. The three-step editor now has persistent Location / Details / Instructions progress, a larger exact-entrance map, confirmed-location context on later steps and one coherent Back / Continue / Save-and-use action footer. Delivery options are selectable arrival cards; promotion and payment review use the same hierarchy. Product media, editable quantity, right-aligned line totals, active-quote release before cart mutation, stale-response guards, payment handoff and Core-owned serviceability/quote decisions are unchanged. The approved presentation is recorded in `docs/design/DESIGN.md`; no Core, API, contract, storage or authorization behavior changed.
+
+Verification in the working tree: focused checkout/address/summary suites passed (8 files, 37 tests); the complete Web unit suite passed (122 files, 500 tests); Web typecheck, focused oxlint, formatter and `git diff --check` passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's standing instruction, no browser skill, browser automation, screenshot automation or Playwright run was used.
+
+STOREFRONT-CHECKOUT-REDESIGN-1 is complete at source, unit, typecheck, lint and build level. Visual owner acceptance remains pending. Changes remain uncommitted because the checkout, shared address/summary components, design guide, tests and checkpoint overlap the existing intertwined owner-owned dirty working tree. Next action: owner refreshes `/checkout` locally and checks the saved-address summary, all three address stages, delivery selection and sticky editable order summary at desktop and mobile widths.
+
+## Latest owner correction — STOREFRONT-CHECKOUT-ADDRESS-GUIDE-1 three-step address guide and rich order summary (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. The owner clarified that the guided multi-step treatment belongs inside checkout address creation/correction, not around the entire checkout page. Acceptance: adding or correcting an address uses exactly three stages—find/search or use current location and confirm the exact pin; complete address and recipient details; add delivery instructions and save—while delivery details, promotions, delivery options and total review remain together in the checkout workspace. The sticky order summary shows image, name, editable quantity and right-aligned price without weakening the existing quote/payment state machine.
+
+Implemented in the current dirty `main` working tree from `6c534900`: removed the mis-scoped outer checkout stepper and restored the complete checkout review workspace. Checkout now enables the existing address editor's `multiStep` mode for both new and corrected addresses. Its first stage contains search, device-location choice, draggable/clickable exact-entrance pin confirmation and coverage feedback; its second validates address and recipient fields; its third captures courier-facing instructions and saves through the existing idempotent address command. The sticky summary renders product media, product/fixed-pack identity, the shared cart mutation path through an inline quantity stepper, sale/unavailable price states and right-aligned line totals. Quantity changes still release an active quote before cart mutation and require delivery/total review again. The approved presentation and transaction ordering are recorded in `docs/design/DESIGN.md`. No Core, API, contract, storage or authorization behavior changed.
+
+Verification in the working tree: focused checkout/address/order-summary suites passed (7 files, 35 tests), including address step gating, exact location/serviceability, retained form values, final-step-only save, idempotent uncertain-write recovery and checkout enabling `multiStep`; the complete Web unit suite passed (122 files, 500 tests); Web typecheck, focused oxlint and formatting passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's explicit instruction no browser skill, screenshot automation or Playwright run was used.
+
+STOREFRONT-CHECKOUT-ADDRESS-GUIDE-1 is complete at source, unit, typecheck, lint and build level. Visual owner acceptance remains pending. Changes remain uncommitted because the checkout, shared summary, design guide, tests and checkpoint overlap the existing intertwined owner-owned working tree. Next action: owner opens `/checkout` locally and verifies all three address stages plus the sticky editable order summary.
+
+## Latest owner correction — STOREFRONT-CART-ROW-1 quantity and price alignment (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested that each item in the FreshMarkets “Your cart” drawer place its quantity control and price on the same line, with price aligned right. Acceptance: product identity remains above; the existing quantity mutation controls remain together on the left; regular/current or unavailable line-total presentation remains on the right without changing authoritative cart totals.
+
+Implemented in the current dirty working tree from `799addf6`: moved the existing line-total presentation into the same flex row as the quantity stepper, kept the stepper non-shrinking, and pinned the tabular line total to the right with right alignment and no wrapping. Sale-price strike-through, unavailable states, button labels, disabled-state policy and cart mutations are unchanged. The presentation rule is recorded in `docs/design/DESIGN.md`. No API, Core, contract, storage, authorization or business behavior changed.
+
+Verification in the working tree: the focused cart-drawer suite passed (4 tests), including the quantity/price row geometry contract; Web typecheck and focused oxlint passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill, screenshot inspection or DOM automation was used.
+
+STOREFRONT-CART-ROW-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the storefront cart, design guide and active checkpoint are part of the existing intertwined owner-owned working tree. Next action: owner opens the cart locally and confirms quantity-left/price-right alignment for ordinary, discounted and unavailable items.
+
 ## Latest owner request — BRAND-LOGO-1 shared FreshMarkets brand mark (2026-09-12)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested an original logo for the Admin dashboard, Storefront and browser `.ico`. Acceptance: one cohesive FreshMarkets mark uses the approved storefront forest/lime palette, remains legible at favicon size, is available as a transparent reusable project asset, replaces the existing Admin and Storefront placeholder marks, and is served as the browser icon without changing business behavior.
@@ -9,6 +446,136 @@ Implemented in the dirty `main` working tree from `799addf6`: generated an origi
 Verification in the working tree: the focused brand/Admin/Storefront suites passed (17 tests); Web typecheck passed; the production Web build passed with only the existing large-chunk advisory; asset inspection confirmed RGBA transparency and only the approved two RGB colors; the `.ico` contains 16/24/32/48/64px entries; localhost returned `/favicon.ico` as `image/x-icon` with HTTP 200; desktop and mobile Storefront screenshots and a 16–128px light/dark scale proof were visually reviewed. Admin integration is source/render-test/build verified; an authenticated Admin browser view was not changed or exercised.
 
 BRAND-LOGO-1 is complete at local asset, source and Storefront-browser level. Deployed acceptance and owner visual approval of the authenticated Admin shell remain pending. Next action: owner refreshes the Admin shell and confirms the shared mark in collapsed, expanded, mobile and dark appearances.
+
+## Latest owner correction — ADMIN-SIDEBAR-COLLAPSE-1 deterministic icon rail (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner reported that labels such as Overview, Products and Orders remained visible after the desktop Admin rail collapsed to icons. Acceptance: the collapsed rail cannot paint its wordmark, group headings or navigation labels; the 200ms rail transition remains interruptible; accessible names and the required right-side hover/focus tooltips remain; tooltip content does not linger when the pointer leaves; reduced-motion removes the layout transition.
+
+Implemented in the current dirty working tree from `799addf6`: collapsed wordmark and navigation labels now combine explicit `visibility`, zero maximum width and zero opacity, are removed from the accessibility tree while their icon controls retain explicit accessible names, and retain the existing 200ms linear expand/collapse transition. Group headings use the same deterministic visibility boundary. The existing collapsed right-side tooltips remain available for icon discovery, but `disableHoverableContent` makes them close when the pointer leaves the icon rather than behaving like persistent navigation text. Reduced-motion makes these label transitions immediate. No navigation destinations, authorization, API, Core, contract, storage or business behavior changed.
+
+Verification in the working tree: `pnpm --filter @freshmarkets/web typecheck` passed; focused oxlint passed; the corrected package-relative Admin accessibility suite passed (15 tests); `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. The first focused test invocation used a repository-relative path after the filtered runner changed directories and therefore found no test files; it was rerun with `components/admin/admin-accessibility.test.tsx`. Per the owner's explicit instruction, no browser skill, screenshot inspection or DOM automation was used.
+
+ADMIN-SIDEBAR-COLLAPSE-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the Admin shell, shared test and checkpoint contain intertwined owner-owned workspace changes. Next action: owner refreshes localhost and checks collapse, rapid reverse, hover/focus tooltips and reduced-motion behavior.
+
+## Latest owner correction — ADMIN-PRODUCT-STATUS-LINE-1 compact preview status (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested removing the bordered Status field in the Product preview and placing the Status label and pill on one line. Implemented the preview section as a compact horizontally aligned label/pill row while retaining the section divider and shared semantic status pill. No API, Core, contract, storage, authorization or business behavior changed.
+
+Verification in the working tree: Product preview and row-selection suites passed (5 tests), including an assertion that the former bordered field wrapper is absent; Web typecheck and focused oxlint passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill or visual automation was used.
+
+ADMIN-PRODUCT-STATUS-LINE-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the Product preview and tests are intertwined with the current owner-approved Admin workspace work. Next action: owner confirms the compact Status row locally.
+
+## Latest owner correction — ADMIN-PRODUCT-ROW-PREVIEW-1 row-wide preview selection (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner clarified that Product preview selection belongs to each complete list row, not only to the Product-name control. Acceptance: clicking a row's informational content opens that Product's right-pane preview and visibly identifies the open row; bulk-selection checkboxes, action menus, links and other nested controls remain independent; keyboard and assistive-technology users retain an explicit controlled preview action.
+
+Implemented in the current dirty working tree from `799addf6`: each Product table row now owns the pointer preview action and open-row accent state. The handler deliberately ignores nested interactive targets, so product selection/deactivation, action menus, edit/detail links and copy commands do not accidentally open the preview. The Product name remains an explicit focusable button, now labelled “Preview [Product name]” and retaining `aria-expanded`/`aria-controls` for the right pane. No API, Core, contract, storage, authorization or business-write semantics changed.
+
+Verification in the working tree: Product list, Product preview and shared Admin accessibility suites passed (20 tests), including row-cell opening, open-row state and checkbox isolation; Web typecheck and focused oxlint passed; the full Web unit suite passed (119 files, 495 tests); the production Web build passed with only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill, screenshot inspection tool or DOM automation was used.
+
+ADMIN-PRODUCT-ROW-PREVIEW-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the Product list route/component/tests, shared Admin workspace, design guide and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner confirms row selection, open-row treatment and nested-control isolation locally.
+
+## Latest owner correction — ADMIN-PRODUCT-WORKFLOW-1 companion Product authoring and pricing layouts (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. After approving the selected-Product preview, the owner supplied companion references for Create Product, Edit Product/images and exact-location pricing and asked that they guide the other Product surfaces. Acceptance: preserve the breadcrumb-free full-width Admin system and real catalog policy while adding an honest live creation preview, a responsive details/images edit workspace with persistent actions, and a right-side master-detail price editor that uses the existing smooth resize/slide behavior.
+
+Implemented in the current dirty working tree from `799addf6`: Create Product now renders a live customer-facing preview from entered Product identity, selected category, main draft image, status and first selling option. The preview explicitly says that exact-location price and availability are configured after creation instead of fabricating the reference's illustrative price. The embedded creator is forced into a single-column container-safe layout, places preview content at the top of its independent scroll area, moves Cancel/Create actions into a persistent footer and adds a dedicated close control; the standalone fallback keeps the preview in its editor aside. UI terminology now presents variants as “Selling options” during creation while preserving contract fields and writes.
+
+Edit Product now uses a responsive two-column details/images workspace, reference-style section links, a real dirty-state warning and a persistent Cancel/Save changes bar. Product image management is a responsive card gallery with visible count while retaining main-image, ordering, alt-text, upload, replace, remove, uncertain-result recovery and Product version rules. Global exact-location price inspection is now a master surface: after the operator selects a selling option and location and Core confirms the current view/can-manage decision, Edit price opens `AdminMasterDetailWorkspace` on the Product detail route. The pane is independently scrolling, animated/resizable, shows only the selected authoritative facts, and retains the exact price command/idempotency identity after an unknown outcome. No API, Core, contract, storage, authorization or business-write semantics changed.
+
+Verification in the working tree: Web typecheck and focused oxlint passed; the full Web unit suite passed (119 files, 494 tests), including Product form/preview, selected-Product preview, price workspace selection, read-only handling and unknown-outcome retry coverage; the production Web build passed with only the existing large-chunk advisory. The updated controlled browser specification records the new Edit price opening step, but per the owner's explicit instruction no browser skill, screenshot inspection tool, DOM automation or live business action was run.
+
+ADMIN-PRODUCT-WORKFLOW-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the affected Product list/detail/create/edit surfaces, shared Admin workspace/tests, design guide and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner reviews Create Product preview and footer, Edit Product details/images and dirty-state actions, then opens/resizes/saves/closes an exact-location price pane locally.
+
+## Latest owner correction — ADMIN-PRODUCT-PREVIEW-1 selected Product preview pane (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner clarified that Products should use the reference's selected-product preview in the right master-detail workspace rather than treating Add Product as the pane's default content. Acceptance: selecting a Product loads its authoritative current-scope detail and presents its image/identity, status, selling options with available price/status facts, honest catalog metadata, and full-detail/edit escape actions; Add Product remains an explicit pane mode and the master list stays visible.
+
+Implemented in the current dirty working tree from `799addf6`: Product row selection now fetches the selected Product detail for the active Global or location scope, validates the response through the shared contract schema, aborts stale selection requests, and renders loading, persistent failure/reference and retry states. The new rich Product preview uses the actual primary media, Product/category identity, status, returned selling options, available exact-location prices, action permissions and catalog facts. It intentionally shows catalog version/latest recorded audit change instead of fabricating a creation date the read model does not provide. View Product, Edit and Add selling option remain dedicated-workflow escape actions; the existing embedded Add Product form opens only from the explicit Add Product action. No API, Core, contract, storage, authorization or business-write semantics changed.
+
+Verification in the working tree: focused Product preview, Product list, Product form and Admin accessibility suites passed (23 tests); Web typecheck and focused oxlint passed; the production Web build passed with only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill, screenshot inspection tool, DOM automation or live business action was used.
+
+ADMIN-PRODUCT-PREVIEW-1 is complete at source/build level. Visual owner acceptance remains pending. Changes remain uncommitted because the Products route, shared Admin tests, design guide and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner selects Products locally and reviews preview/create mode switching, panel resize/scroll and full-detail actions.
+
+## Latest owner correction — ADMIN-CATALOG-AUTHORING-PANELS-1 embedded Product and Category creation (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner identified that Add Product still navigated to a centered standalone page instead of visibly opening the smooth right-side workspace used by Promotions and Inventory sales, and requested the same correction for Add Category. Acceptance: both collection actions remain on their list route, open the animated/resizable right pane, keep the complete existing forms independently scrollable, and preserve command validation, idempotent retry and dedicated deep-link fallbacks.
+
+Implemented in the current dirty working tree from `799addf6`: exported the existing Product and Category authoring flows as embeddable workspaces without duplicating their command logic. Products now toggles an embedded Add Product pane, retains its full product/variant/media validation and safely refreshes the collection after confirmed creation. Categories is now a full-bleed master-detail route; Add Category toggles its embedded form, confirmed creation refreshes the collection, and selected category rows also open the shared summary pane with full-detail/edit escape links. The standalone `/new` routes remain as deep-link/recovery fallbacks but are no longer the list actions. No API, Core, contract, storage, authorization or business-write semantics changed.
+
+Verification in the working tree: focused Admin accessibility, product-list, product-form and category-authoring suites passed (24 tests); Web typecheck and focused oxlint passed; production Web build passed with only the existing large-chunk advisory. Source coverage asserts that Product and Category list actions no longer link to `/new`, both mount their authoring workspace inside the shared panel, and Categories participates in the shell's full-bleed route set. Per the owner's explicit instruction, no browser skill, screenshot inspection tool, DOM automation or live business action was used.
+
+ADMIN-CATALOG-AUTHORING-PANELS-1 is complete at source/build level. Visual owner acceptance and direct pointer/keyboard review remain pending on localhost. Changes remain uncommitted because the affected shell, catalog routes, shared Admin tests, design guide and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner opens Add Product and Add Category locally and verifies the visible slide, resize edge, independent form scrolling, cancel behavior and retained list context.
+
+## Latest owner request — ADMIN-WORKSPACE-UNIFICATION-1 full-width Admin master-detail system (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested that the non-centered, multi-workspace treatment established by Promotions and Inventory sales apply across the Admin dashboard, explicitly naming Products, Orders, Customers and Banners, and requested deletion of Admin breadcrumbs. Acceptance: Admin pages no longer inherit a centered fixed-width canvas or render breadcrumbs; the four named resource lists use a responsive master-detail workspace with continuous desktop column resizing, an independently scrolling detail/editor pane, mobile slide-over behavior and reduced-motion handling; existing dedicated resource URLs and business commands remain available.
+
+Implemented in the current dirty working tree from `799addf6`: removed the shell-wide maximum-width container and the Admin breadcrumb renderer/component, then removed remaining fixed centered wrappers from Admin page roots and shared transfer workspaces. Added `AdminMasterDetailWorkspace`, which centralizes the existing Promotions/Inventory-sales desktop split, animated mobile overlay, 220ms exit lifecycle and accessible pointer/keyboard resize handle. Products now opens selected product summaries in that pane while preserving full-detail/edit URLs; Orders and Customers open selected summaries in the pane while preserving their complete deep-link workflows; customer invitation authoring/history moved into the same pane; Banners moved its complete create/edit/media workflow out of the inline page body and into the independently scrolling pane. Other Admin pages use the complete available canvas without inventing a detail pane where no selected resource or authoring task exists. No API, Core, contract, storage, authorization or business-write semantics changed.
+
+Verification in the working tree: focused Admin accessibility and product-list suites passed (18 tests); Web typecheck and focused oxlint passed; production Web build passed with only the existing large-chunk advisory. Source coverage asserts that all six master-detail routes are full-bleed, the four new pages use the shared workspace, panes expose their controlled relationship, and shared motion/resizing/reduced-motion contracts remain present. Per the owner's explicit instruction, no browser skill, screenshot inspection tool, DOM automation or live business action was used.
+
+ADMIN-WORKSPACE-UNIFICATION-1 is complete at source/build level. Visual owner acceptance and direct keyboard/pointer review remain pending on localhost, and earlier commerce/provider obligations remain open. The change remains uncommitted because the Admin shell, product list, affected pages, design guide, tests and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner refreshes each named Admin workspace locally and verifies list width, panel opening/closing, resizing, independent scrolling and deep-link escape actions.
+
+## Latest owner correction — STOREFRONT-FOOTER-1 full-width shell boundary (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner reported that the desktop storefront navigation rail, its background and divider continued beside the footer. Acceptance: the footer spans the complete shell below both the navigation rail and content, the rail ends before the footer begins, and the existing mobile-navigation clearance remains intact.
+
+Implemented in the current dirty working tree from `533f8888`: moved `StorefrontFooter` out of the content-column wrapper and placed it after the bounded sidebar-and-main row. That row now owns the viewport-filling minimum height, so the sticky desktop navigation stops at the row boundary while the footer occupies the full shell width. Footer content, destinations and mobile clearance remain unchanged. Updated the storefront presentation guidance and added a source-layout regression test. No route, API, Core, storage, authorization or business behavior changed.
+
+Verification in the working tree: the focused StorefrontShell layout regression passed (1 test); Web typecheck, focused oxlint/oxfmt and Web build passed; the build emitted only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill, screenshot inspection tool, DOM automation or live business action was used.
+
+STOREFRONT-FOOTER-1 is complete at source/build level. Visual owner acceptance remains pending on localhost, and earlier commerce/provider obligations remain open. These changes remain uncommitted because the shell, footer, design guide and checkpoint contain intertwined owner-owned uncommitted work. Next action: owner refreshes the storefront locally and verifies that the rail stops above the full-width footer.
+
+## Latest owner request — ADMIN-SALES-SEARCH-1 product-search popup repair (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner reported that the New inventory sale product-search popup and adjacent form layout were wrong and explicitly requested Emil design-engineering guidance. Acceptance: search results behave as an anchored popup rather than expanding the form, remain usable inside the independently scrolling detail workspace, preserve remote search/selection and selling-option loading, and keep the narrow detail layout legible.
+
+Implemented in the existing dirty working tree from `533f8888`: replaced the inline product-result list with the existing Base UI/Shadcn combobox primitive, using its portaled, origin-aware popup so results are not clipped by or added to the form's scroll height. Remote filtering remains authoritative; the popup provides loading, failure/retry, empty, result-count and pagination states, closes on selection, retains the selected product label, and supports the primitive's keyboard/highlight behavior. Location and product search are now stacked, full-width, visibly labeled controls instead of a viewport-triggered two-column row that cramped inside the 380–640px detail pane. List-fetch, detail-fetch and form-validation errors now have separate state so a search request no longer clears or duplicates unrelated errors. Popup motion is a near-imperceptible 150ms origin-aware ease-out and is removed for reduced motion. No API, Core, contract, storage, authorization, or business-write behavior changed.
+
+Verification on the working tree: focused SaleTargetsPicker and Admin accessibility tests passed (18), including remote debounced search, portaled popup ownership, product selection, location-scoped option loading, price/stock preview, quantity validation and overlap warning; Web typecheck, focused oxlint/oxfmt and diff whitespace checks passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. Per the owner's explicit instruction, no browser skill, screenshot, DOM automation, or live sale mutation was used.
+
+ADMIN-SALES-SEARCH-1 is complete at source/build level. Visual owner acceptance remains pending on localhost. These changes remain uncommitted because the affected picker/test and surrounding Admin workspace files contain intertwined owner-owned uncommitted redesign work. Next action: owner searches, keyboard-navigates, selects, clears and retries product search in the New inventory sale workspace locally.
+
+## Latest owner request — ADMIN-WORKSPACE-RESIZE-1 adjustable master-detail divider (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested a “scrollable edge” so the Promotions and Inventory sales detail workspaces can be adjusted. Implemented as the standard desktop resizable split-pane divider. Acceptance: a visible edge affords horizontal resizing, follows pointer movement directly, preserves a usable master/detail minimum, supports keyboard operation and reset, and does not add lag to the open/close motion.
+
+Implemented in the existing dirty working tree from `533f8888`: shared `AdminWorkspaceResizeHandle` appears on the left edge of both detail panes at `xl`. Pointer capture keeps resizing active outside the narrow hit target; the pane tracks the pointer 1:1 between 380px and the smaller of 640px or the width that preserves a 560px master area. Grid easing is disabled only during direct manipulation and resumes for pane open/close. The separator is focusable and exposes orientation/current/min/max values; Arrow Left/Right adjust by 16px, Home/End select bounds, and double-click resets to 460px. The handle receives a larger invisible hit area, visible focus/hover/drag feedback, and reduced-motion-safe feedback. Width remains local UI state; no preference persistence, API, Core, contract, storage, authorization, or business-write behavior was added.
+
+Verification on the working tree: focused Admin accessibility, promotion-status, and sale-target picker tests passed (22); Web typecheck and focused oxlint passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. Compiled CSS contains the grid transition, open-width variable, resize cursor, touch-action suppression, and reduced-motion rule; diff whitespace checks passed. Source-level accessibility contracts cover both page labels, separator semantics, pointer capture, keyboard directions, and reset affordance. Per the owner's explicit instruction, no browser skill or visual automation was used.
+
+ADMIN-WORKSPACE-RESIZE-1 is complete at source/build level. Pointer feel and visual owner acceptance remain pending on localhost. These changes remain uncommitted because the affected page, token, test, and checkpoint files contain intertwined owner-owned uncommitted redesign work. Next action: owner drags, keyboard-resizes, and double-click-resets both desktop workspace dividers locally.
+
+## Latest owner request — ADMIN-WORKSPACE-MOTION-1 pane expansion/collapse motion (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested smooth expand/collapse motion for the full-bleed Promotions and Inventory sales master-detail panes, then clarified that the intended behavior is the visible workspace resize used by the Admin sidebar toggle beside Global—not only a form fade/translation. Acceptance: the desktop master and detail columns resize continuously while the pane is revealed/hidden, narrow screens retain slide-in/slide-out, interrupted toggles retarget cleanly, and reduced-motion users receive a gentler non-spatial transition.
+
+Implemented in the existing dirty working tree from `533f8888`: both desktop workspaces now transition their second grid track from 0 to `clamp(420px, 28vw, 480px)` with the same 200ms linear resize pattern as the Admin sidebar, while a fixed-width inner form is clipped/revealed from the right so its contents do not reflow during the transition. Narrow screens retain the shared 240ms drawer transform/opacity motion and strong `--fm-ease-drawer` curve. A two-frame mounted/closed staging step guarantees the browser paints the initial state before opening, fixing the skipped entrance; reopening during close cancels teardown and retargets the transition. `prefers-reduced-motion` makes the layout change immediate, removes translation, and retains a short opacity transition. No motion dependency, API, Core, contract, storage, authorization, or business-write behavior was added.
+
+Verification on the working tree: focused Admin accessibility, promotion-status, and sale-target picker tests passed (22); Web typecheck and focused oxlint passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. Compiled CSS contains the grid-track transition, panel-width variable/clamp, reduced-motion rule, panel token, and drawer curve; diff whitespace checks passed. The layout contract covers both panes' resizing geometry, duration, curve, and reduced-motion behavior. Per the owner's explicit instruction, no browser skill or visual automation was used.
+
+ADMIN-WORKSPACE-MOTION-1 is complete at source/build level. Feel and visual owner acceptance remain pending on localhost. These changes remain uncommitted because the affected page, token, and test files contain intertwined owner-owned uncommitted redesign work. Next action: owner feel-checks open, interrupted reopen, close, and reduced-motion behavior on both workspaces.
+
+## Latest owner request — ADMIN-SALES-WORKSPACE-1 full-bleed creation pane (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested the same full-bleed master-detail treatment for `/admin/sales` as Promotions, with the top-level Inventory sales breadcrumb removed. Acceptance: the list owns the complete master area below the Admin header; the create-sale form is a flush right workspace section on wide desktops, has independent scrolling with persistent header/footer actions, and becomes a full-screen workspace below the wide-desktop breakpoint.
+
+Implemented in the existing dirty working tree from `533f8888`: the Admin shell now shares an exact-route full-bleed workspace list for Promotions and Inventory sales and derives breadcrumb exclusion from that same list. Inventory sales uses a full-height two-pane grid at `xl`, a 420–480px right detail pane, fixed full-screen presentation below `xl`, independent form scrolling, an accessible close control, pinned footer actions, and bottom-anchored list pagination on sparse results. Loading/error states retain page padding. No sale API, Core, contract, storage, authorization, or business-write behavior changed; unrelated Admin redesign/configuration work remains untouched.
+
+Verification on the working tree: Web typecheck passed; focused Admin accessibility, promotion-status, and sale-target picker tests passed (22); focused oxlint and diff whitespace checks passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. The layout contract test covers the shared exact-route shell behavior plus Inventory sales wide split-pane geometry, full-screen narrow behavior, full-height pane, and close labeling. Per the owner's explicit instruction, no browser skill, screenshots, DOM inspection, or live sale mutation were used.
+
+ADMIN-SALES-WORKSPACE-1 is complete at source/build level. Visual owner acceptance remains pending on localhost. The changes are not committed because the same Inventory sales, Admin shell, and layout-test files already contain intertwined owner-owned uncommitted redesign work; committing this slice independently would absorb unrelated work rather than produce a coherent revision. Next action: owner reviews the Inventory sales split workspace locally.
+
+## Latest owner request — ADMIN-PROMO-WORKSPACE-1 full-bleed creation pane (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested that `/admin/promotions` use the supplied master-detail reference: the create-promo-code surface consumes the complete right workspace section rather than remaining inside centered page constraints, and the top-level Promotions breadcrumb is removed. Acceptance: full-width list/pane ownership below the Admin header, independently scrolling pane with persistent header/footer, and a full-screen pane below the wide-desktop breakpoint.
+
+Implemented in the existing dirty working tree from `533f8888`: the Admin shell gives the exact Promotions list route a full-bleed content mode while other Admin routes retain their centered container; Promotions now uses a full-height two-pane grid at `xl`, a 420–480px flush right pane, fixed full-screen presentation below `xl`, independent form scrolling, a visible close control, and pinned footer actions. Loading/error states retain page padding. The already-approved breadcrumb exclusion is preserved. No promotion API, Core, contract, storage, or business-write behavior changed; unrelated Admin redesign/configuration work remains untouched.
+
+Verification on the working tree: Web typecheck passed; focused Admin accessibility and promotion-status tests passed (19); focused oxlint and diff whitespace checks passed; `pnpm --filter @freshmarkets/web build` passed with only the existing large-chunk advisory. The layout contract test covers shell full-bleed routing, wide split-pane geometry, full-screen narrow behavior, full-height pane, and close labeling. Per the owner's explicit correction, no browser skill, screenshots, DOM inspection, or live promotion mutation were used for this implementation.
+
+ADMIN-PROMO-WORKSPACE-1 is complete at source/build level. Visual owner acceptance remains pending on localhost. The changes are not committed because the same Promotions and Admin shell files already contain intertwined, owner-owned uncommitted redesign work; committing only this slice would not produce a coherent revision without absorbing that unrelated work. Next action: owner reviews the Promotions split workspace locally.
 
 ## Latest owner request — PROMO-REASON-1 remove lifecycle reason entry (2026-09-12)
 
@@ -59,7 +626,6 @@ Verification: Web 482 tests passed; Core 1686 tests passed (one pnpm-filtered ru
 Owner requests shared-storage localhost startup and investigation of pnpm dev. Source: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence; runtime follow-up only. Observed main at c22e336f with pre-existing configuration, documentation and deletion changes; preserved them. pnpm dev delegates to vinext dev; Vite config starts auxiliary Core and remote staging D1/R2. Earlier agent startup initially refused connections and eventually printed localhost readiness; agent restarted it prematurely. At resumed investigation, current vinext PID 11152 (started 15:29:27 local) listens on IPv6 ::1:3000. No source/configuration change or deployment made.
 
 Executed read-only Node fetch probes: localhost and IPv6 /api/catalog?limit=1 returned HTTP 200, ok:true (2.8s and 0.86s); IPv4 127.0.0.1 refused. /api/core-health returned HTTP 200 with status ok and database binding configured. First full homepage response returned HTTP 200 with products and no catalog-error fallback in 30.2s; next measured request completed in 6.2s. In-app browser rendered catalog categories, prices and published banners after its loading state. Startup log has a multi-minute gap but no explicit connection failure; existing INITIAL_GLOBAL_ADMIN_EMAIL staging warning is nonfatal. Exact startup-delay cause and earlier native crash/remote-runtime issue remain unproven; this is successful current read acceptance, not a runtime fix or write/provider acceptance. Current server left running. Concrete next action if slow startup recurs: capture timestamped startup-stage diagnostics with credentials and remote proxy URLs redacted to distinguish remote handshake from Worker initialization.
-
 
 ## Latest owner request — CA-7.45 three-step address creation (2026-09-11)
 
@@ -401,31 +967,31 @@ Final local evidence: 60 focused Core tests/4 files for the geocoder correction;
 
 Counting level: **two major phase blocks (6–7)** still need external acceptance, alongside the earlier retained-environment/identity checks below. Local implementation is complete through CA-7.9; CA-7.10 environment setup/verification is complete with the limits above; CA-7.11 clean deployment is active. Customer self-service closure is owner-deferred.
 
-| ID | Current acceptance and remaining obligation |
-| --- | --- |
-| CA-0-2 | Local setup/scope/recovery evidence remains below. CA-7.10 rehearsed all pending migrations on an isolated remote copy of actual staging records, preserving checked counts and passing foreign-key/per-table integrity checks. Original staging remains at 0055; whole-database quick check, eventual cutover and pre-fix provider-address retention review remain open. Actual owner identity/email/OAuth acceptance remains a release input. |
-| CA-7.9 | Locally complete: final aggregate, connected journeys, current visual acceptance and documentation/preservation verification passed. External acceptance remains assigned to CA-0-2/6/7 below. |
-| CA-7.11 | Active: prepare staging build/config, reset the identified old FreshMarkets data, deploy both Workers and verify the live site. |
-| CA-7.10 | Actual Mapbox temporary/permanent requests passed; email domain/DNS/local sender configured; isolated D1 upgrade through 0095 verified with the limits above. Cloudflare accepted the single authorized email test and the owner confirmed it reached their Inbox. CA-7.10 is complete; deployed auth/reset/OAuth and release acceptance remain under CA-7. |
-| CA-6 | Local preparation/automatic booking, normalized events/recovery, immutable promises/charge, Scheduled-only manual and membership retirement covered. Actual Lalamove sandbox/account operations and provider-event acceptance remain open. |
-| CA-7 | Local customer/operator/support/refund/reorder/report/notification/recovery journeys covered. Actual Mapbox permanent request acceptance is now demonstrated by CA-7.10. Actual PayMongo payment/refund, deployed auth/reset email and OAuth, retained-address review, deployment and a clean setup-to-delivery demonstration on the owner-configured target remain open. |
-| Approved follow-ups | D01/D21: CA-7.2–8; D03/D10: delivery milestones and Instant/Scheduled journeys; D05: CA-3.3; D06–07/D08: CA-3.4 and small-cart checkout; D11/D13: Problems and CA-7.1; D14/D17–18: CA-4/5; D15: CA-7.9 outstanding Scheduled goods after paused Instant changeover. Their actual provider/release limits remain assigned above. |
+| ID                  | Current acceptance and remaining obligation                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CA-0-2              | Local setup/scope/recovery evidence remains below. CA-7.10 rehearsed all pending migrations on an isolated remote copy of actual staging records, preserving checked counts and passing foreign-key/per-table integrity checks. Original staging remains at 0055; whole-database quick check, eventual cutover and pre-fix provider-address retention review remain open. Actual owner identity/email/OAuth acceptance remains a release input. |
+| CA-7.9              | Locally complete: final aggregate, connected journeys, current visual acceptance and documentation/preservation verification passed. External acceptance remains assigned to CA-0-2/6/7 below.                                                                                                                                                                                                                                                  |
+| CA-7.11             | Active: prepare staging build/config, reset the identified old FreshMarkets data, deploy both Workers and verify the live site.                                                                                                                                                                                                                                                                                                                 |
+| CA-7.10             | Actual Mapbox temporary/permanent requests passed; email domain/DNS/local sender configured; isolated D1 upgrade through 0095 verified with the limits above. Cloudflare accepted the single authorized email test and the owner confirmed it reached their Inbox. CA-7.10 is complete; deployed auth/reset/OAuth and release acceptance remain under CA-7.                                                                                     |
+| CA-6                | Local preparation/automatic booking, normalized events/recovery, immutable promises/charge, Scheduled-only manual and membership retirement covered. Actual Lalamove sandbox/account operations and provider-event acceptance remain open.                                                                                                                                                                                                      |
+| CA-7                | Local customer/operator/support/refund/reorder/report/notification/recovery journeys covered. Actual Mapbox permanent request acceptance is now demonstrated by CA-7.10. Actual PayMongo payment/refund, deployed auth/reset email and OAuth, retained-address review, deployment and a clean setup-to-delivery demonstration on the owner-configured target remain open.                                                                       |
+| Approved follow-ups | D01/D21: CA-7.2–8; D03/D10: delivery milestones and Instant/Scheduled journeys; D05: CA-3.3; D06–07/D08: CA-3.4 and small-cart checkout; D11/D13: Problems and CA-7.1; D14/D17–18: CA-4/5; D15: CA-7.9 outstanding Scheduled goods after paused Instant changeover. Their actual provider/release limits remain assigned above.                                                                                                                 |
 
 ### Plan coverage and earlier acceptance gaps
 
 This maps every section of `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`; evidence remains local unless explicitly stated. Prior accepted revisions are retained in the completed-slice table/history, not relabeled as fresh browser runs.
 
-| Section / phase | Concrete local evidence and limits |
-| --- | --- |
-| A / 0–2 setup | Location/service-area/pickup/schedule/cycle Worker suites; prior location, service-area, hours, pickup and cycle browser acceptance; CA-7.9 creates/activates a new site through Admin, configures pickup/hours/polygon/readiness and confirms the customer's exact assigned site. `customer-site-setup.integration.test.ts` additionally connects new-site cycle, confirmed address and explicit staff scope without business SQL. Synthetic operational values only. |
-| B / 3 media/catalog | CA-3.1–3.3: Global catalog/category/variant CRUD, anonymous R2 publication/replacement/removal/deactivation and five-image gallery; permission/invalid-upload/metadata and object-recovery tests. Dedicated product/promotion media browser evidence remains in history. |
-| C / 3 prices/promotions | CA-3.2/a–d and CA-3.4: exact-location Global price authority, local selling/read-only prices, immutable paid terms, sale/code/delivery allocation, overlap/usage/allowance/eligible-cancellation recovery; real local paid-sale browser journey. |
-| D / 4 physical goods | CA-4/4.1–3: 100000 -> 60000/20000/20000 conservation, holds/reservations, concurrent transfer claims, scoped partial receipt, damage/missing/loss/inspected return and actual counts. Worker/D1 and prior transfer/count browser evidence; no new route/forecasting feature. |
+| Section / phase             | Concrete local evidence and limits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A / 0–2 setup               | Location/service-area/pickup/schedule/cycle Worker suites; prior location, service-area, hours, pickup and cycle browser acceptance; CA-7.9 creates/activates a new site through Admin, configures pickup/hours/polygon/readiness and confirms the customer's exact assigned site. `customer-site-setup.integration.test.ts` additionally connects new-site cycle, confirmed address and explicit staff scope without business SQL. Synthetic operational values only.                                                      |
+| B / 3 media/catalog         | CA-3.1–3.3: Global catalog/category/variant CRUD, anonymous R2 publication/replacement/removal/deactivation and five-image gallery; permission/invalid-upload/metadata and object-recovery tests. Dedicated product/promotion media browser evidence remains in history.                                                                                                                                                                                                                                                    |
+| C / 3 prices/promotions     | CA-3.2/a–d and CA-3.4: exact-location Global price authority, local selling/read-only prices, immutable paid terms, sale/code/delivery allocation, overlap/usage/allowance/eligible-cancellation recovery; real local paid-sale browser journey.                                                                                                                                                                                                                                                                            |
+| D / 4 physical goods        | CA-4/4.1–3: 100000 -> 60000/20000/20000 conservation, holds/reservations, concurrent transfer claims, scoped partial receipt, damage/missing/loss/inspected return and actual counts. Worker/D1 and prior transfer/count browser evidence; no new route/forecasting feature.                                                                                                                                                                                                                                                |
 | E / 2,6,7 identity/customer | Prior initial administrator, staff/customer invitation/access/closure Worker/browser acceptance; CA-7.6–8 account/profile/address/access/contact; CA-7.9 customer-support exact retry and actual membership retirement. Valid reset-token/reuse/password behavior executes in Core; browser covers request/error/logout. Deployed auth/reset email, Google OAuth and actual initial-owner setup remain external; CA-7.10 separately verifies direct-provider test inbox receipt. Customer self-service closure is deferred. |
-| F / 1,7 checkout/money | Guarded commitment, full hold sets, distinct ledger identities, canonical event replay/recovery and coordinated refund suites; CA-7.2–4 cart/reorder/paid conversion; actual local Instant/Scheduled signed test-provider journeys, immutable paid Instant items, additions/cutoff, partial cancellation/refunds and provisional summary. No live payment/refund or official invoice acceptance. |
-| G / 5 Scheduled | CA-5.1–9: configured week, exact original/addition paid demand, pending-payment purchase gate, consolidated destination totals, actual receiving/counts, replacement/shortage financial resolution, cycle packing and inspected surplus. CA-7.9 completes outstanding Scheduled goods while new commerce is paused in Instant. |
-| H / 6 delivery | Existing Instant automatic readiness booking, Scheduled future pickup/manual fallback, packed handover, signed local courier observations, rematch/old-event/unknown/cancel recovery, revised promise and inspected-return/customer agreement; missed delivery does not automatically refund. Full-order grams and actual-versus-accepted costs tested. Test adapters are not provider acceptance. |
-| I / 7 operations/release | Durable outbox/Queue/retry/DLQ Worker tests, Problems workflow, CA-7.1 reports/scopes/dates, redacted telemetry and fail-closed environment checks; CA-7.9 current Admin visual archetypes. Actual provider delivery, edge/deployment configuration and real staffed operations remain unaccepted. |
+| F / 1,7 checkout/money      | Guarded commitment, full hold sets, distinct ledger identities, canonical event replay/recovery and coordinated refund suites; CA-7.2–4 cart/reorder/paid conversion; actual local Instant/Scheduled signed test-provider journeys, immutable paid Instant items, additions/cutoff, partial cancellation/refunds and provisional summary. No live payment/refund or official invoice acceptance.                                                                                                                            |
+| G / 5 Scheduled             | CA-5.1–9: configured week, exact original/addition paid demand, pending-payment purchase gate, consolidated destination totals, actual receiving/counts, replacement/shortage financial resolution, cycle packing and inspected surplus. CA-7.9 completes outstanding Scheduled goods while new commerce is paused in Instant.                                                                                                                                                                                              |
+| H / 6 delivery              | Existing Instant automatic readiness booking, Scheduled future pickup/manual fallback, packed handover, signed local courier observations, rematch/old-event/unknown/cancel recovery, revised promise and inspected-return/customer agreement; missed delivery does not automatically refund. Full-order grams and actual-versus-accepted costs tested. Test adapters are not provider acceptance.                                                                                                                          |
+| I / 7 operations/release    | Durable outbox/Queue/retry/DLQ Worker tests, Problems workflow, CA-7.1 reports/scopes/dates, redacted telemetry and fail-closed environment checks; CA-7.9 current Admin visual archetypes. Actual provider delivery, edge/deployment configuration and real staffed operations remain unaccepted.                                                                                                                                                                                                                          |
 
 All 12 original audit findings remain accounted for: (1) multi-pool keys, (2) packing/cancellation/consumption, (4) delivered-work/retired capacity, (5) missing holds and (7) held adjustments/release ledger are covered by `instant-commitment.integration.test.ts` and associated inventory/cancellation suites. (3) courier cancellation, (10) booking prerequisites and (11) searching/webhook/refresh/inbox normalization are covered by delivery application/HTTP/operations suites and signed browser events. (6) rejected receiving, (8) reachable purchasing and (9) cycle-versus-physical goods are covered by procurement/receiving/surplus Worker suites and CA-5.9/CA-7.9 connected journeys. (12) warehouse/readiness, pickup-versus-arrival and full-order shipping constraints are covered by setup/delivery suites and both customer modes. Actual provider constraints remain in the external gate.
 
@@ -435,32 +1001,32 @@ Final journeys 1–2 map to F/G/H, journey 3 to G/H, journey 4 to F/G/H/I, and j
 
 Detailed commands, tested revisions, failures subsequently resolved and evidence limits are preserved in the existing history file. These are implementation/local acceptance claims, not actual provider or release acceptance.
 
-| IDs | Result / commit |
-| --- | --- |
-| CA-7.10 | Actual Mapbox temporary/permanent API acceptance; Cloudflare sending/DNS and owner-confirmed inbox delivery; remote retained-data copy upgraded 0055–0095 with checked counts preserved, foreign-key and 159 per-table checks passed. Whole-database quick check remains limited by provider memory. Setup evidence `ebd248a6`; receipt evidence accompanies this record. |
-| CA-7.9 | Locally complete in the commit accompanying this record; aggregate 1675 Core/199, 418 Web/103, 68 contracts/19, six shared tests and 26 harness tests; 37 browser cases, static/schema/type checks, builds/vinext and preservation checks. Tested base/scope above; exact commands in history. |
-| CA-7.8 | Account recovery/contact/sign-out accepted at dad5de26; auth 5/1, static/types/build, both browser widths. Customer closure deferred by owner. |
-| CA-7.7 | Address create/edit safeguards locally accepted at 4ba6f214; 41 Core/26 Web/68 contracts, runtime checks/builds and both exact-retry browser widths. |
-| CA-7.6 | Account name/phone/default address/removal locally accepted at 99e97b96. Schema/133 Core/25 Web/68 contracts, final 112 Core, runtime checks/builds and both browser widths; older create/edit gap assigned CA-7.7. |
-| CA-7.5 | Permanent browsing confirmation locally accepted at 9decade6; Core 74/5, Web 35/4, contracts 68/19, runtime checks/builds/vinext and both browser widths. Closes local CA-7.3 retention gap; actual provider acceptance remains open. |
-| CA-7.4 | Paid-Cart lifecycle locally accepted at c435d720; aggregate, 64/3 focused Core and four browser journeys passed. |
-| CA-7.3 | First-visit location/guest carryover locally verified at 701b587d; aggregate and six browser journeys passed. Provider-result retention implementation corrected and locally accepted in CA-7.5; actual provider acceptance remains open. |
-| CA-7.2 | Cart names/current-price Buy again locally accepted at 43f7a7e6; Core 8/2, Web typecheck and both real local browser widths passed. |
-| CA-7.1 | Approved commerce reports locally accepted at e54d0cb3; aggregate plus final focused 45/4, three Admin browser tests and two real local desktop/mobile journeys. Exact evidence in history. |
-| CA-3.4 | Selected-item sales/allowance/stacking locally accepted; 9dd13ed1. Aggregate 1639 Core/196, 402 Web/101, 68 contracts/19; final Core 71/4 and both desktop/mobile paid-sale cancellation journeys passed. |
-| CA-3.3 | Five-image Add/Edit/replacement/gallery locally accepted; e3d4180a. Aggregate 1635 Core/196, 402 Web/101, 68 contracts/19; focused Core 31/2 and both desktop/mobile galleries passed. |
-| CA-5, CA-5.9 | Section G local acceptance completed through CA-5.1–5.9; final connected customer journey and aggregate pushed as `9138860b`. Provider/delivery and newer approved product obligations remain open above. |
-| GD-1 | Guidance consolidation and approved decisions; pushed `83854bd`. |
-| CA-3.1, CA-3.2, CA-3.2a, CA-3.2b, CA-3.2c, CA-3.2d | Phase 3 local gate completed; final aggregate and 28-browser matrix at `0d14da0`, evidence `ab276df`. Children include `60f348d`, `092a0ad`, `0d14da0`. New owner-approved product changes above remain separate obligations. |
-| CA-4, CA-4.1, CA-4.2, CA-4.3 | Stock/transfers/discrepancies/counts locally verified; CA-4.2 `406a405`, CA-4.3 `010b8af2`. |
-| CA-5.1 | Delivery-week workspace and exact purchase: `e6afa560`. |
-| CA-5.2 | Shortage/replacement receiving: `2f11e609`. |
-| CA-5.3 | Scheduled receipt weight and actual size counts: `61d1299b`. |
-| CA-5.4 | Inspected surplus: `c0e7ed7c`. |
-| CA-5.5 | Late-payment purchase readiness: `bad66079`. |
-| CA-5.6 | Consolidated destination purchase totals: `49d75d3a`. |
-| CA-5.7 | Shortage-linked Order review/cancellation: `75e2105b`. |
-| CA-5.8 | Audited supplier-exception resolution after cancellation: `19f409a1`. Aggregate **1577 Core/194 files, 403 Web/101, 68 contracts/19**, shared/harness/migrations/static checks/both builds; 2 browser journeys; vinext 15 supported/0 issues. Original browser financial state was synthetic, so it does not close CA-5.9. |
+| IDs                                                | Result / commit                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CA-7.10                                            | Actual Mapbox temporary/permanent API acceptance; Cloudflare sending/DNS and owner-confirmed inbox delivery; remote retained-data copy upgraded 0055–0095 with checked counts preserved, foreign-key and 159 per-table checks passed. Whole-database quick check remains limited by provider memory. Setup evidence `ebd248a6`; receipt evidence accompanies this record. |
+| CA-7.9                                             | Locally complete in the commit accompanying this record; aggregate 1675 Core/199, 418 Web/103, 68 contracts/19, six shared tests and 26 harness tests; 37 browser cases, static/schema/type checks, builds/vinext and preservation checks. Tested base/scope above; exact commands in history.                                                                            |
+| CA-7.8                                             | Account recovery/contact/sign-out accepted at dad5de26; auth 5/1, static/types/build, both browser widths. Customer closure deferred by owner.                                                                                                                                                                                                                            |
+| CA-7.7                                             | Address create/edit safeguards locally accepted at 4ba6f214; 41 Core/26 Web/68 contracts, runtime checks/builds and both exact-retry browser widths.                                                                                                                                                                                                                      |
+| CA-7.6                                             | Account name/phone/default address/removal locally accepted at 99e97b96. Schema/133 Core/25 Web/68 contracts, final 112 Core, runtime checks/builds and both browser widths; older create/edit gap assigned CA-7.7.                                                                                                                                                       |
+| CA-7.5                                             | Permanent browsing confirmation locally accepted at 9decade6; Core 74/5, Web 35/4, contracts 68/19, runtime checks/builds/vinext and both browser widths. Closes local CA-7.3 retention gap; actual provider acceptance remains open.                                                                                                                                     |
+| CA-7.4                                             | Paid-Cart lifecycle locally accepted at c435d720; aggregate, 64/3 focused Core and four browser journeys passed.                                                                                                                                                                                                                                                          |
+| CA-7.3                                             | First-visit location/guest carryover locally verified at 701b587d; aggregate and six browser journeys passed. Provider-result retention implementation corrected and locally accepted in CA-7.5; actual provider acceptance remains open.                                                                                                                                 |
+| CA-7.2                                             | Cart names/current-price Buy again locally accepted at 43f7a7e6; Core 8/2, Web typecheck and both real local browser widths passed.                                                                                                                                                                                                                                       |
+| CA-7.1                                             | Approved commerce reports locally accepted at e54d0cb3; aggregate plus final focused 45/4, three Admin browser tests and two real local desktop/mobile journeys. Exact evidence in history.                                                                                                                                                                               |
+| CA-3.4                                             | Selected-item sales/allowance/stacking locally accepted; 9dd13ed1. Aggregate 1639 Core/196, 402 Web/101, 68 contracts/19; final Core 71/4 and both desktop/mobile paid-sale cancellation journeys passed.                                                                                                                                                                 |
+| CA-3.3                                             | Five-image Add/Edit/replacement/gallery locally accepted; e3d4180a. Aggregate 1635 Core/196, 402 Web/101, 68 contracts/19; focused Core 31/2 and both desktop/mobile galleries passed.                                                                                                                                                                                    |
+| CA-5, CA-5.9                                       | Section G local acceptance completed through CA-5.1–5.9; final connected customer journey and aggregate pushed as `9138860b`. Provider/delivery and newer approved product obligations remain open above.                                                                                                                                                                 |
+| GD-1                                               | Guidance consolidation and approved decisions; pushed `83854bd`.                                                                                                                                                                                                                                                                                                          |
+| CA-3.1, CA-3.2, CA-3.2a, CA-3.2b, CA-3.2c, CA-3.2d | Phase 3 local gate completed; final aggregate and 28-browser matrix at `0d14da0`, evidence `ab276df`. Children include `60f348d`, `092a0ad`, `0d14da0`. New owner-approved product changes above remain separate obligations.                                                                                                                                             |
+| CA-4, CA-4.1, CA-4.2, CA-4.3                       | Stock/transfers/discrepancies/counts locally verified; CA-4.2 `406a405`, CA-4.3 `010b8af2`.                                                                                                                                                                                                                                                                               |
+| CA-5.1                                             | Delivery-week workspace and exact purchase: `e6afa560`.                                                                                                                                                                                                                                                                                                                   |
+| CA-5.2                                             | Shortage/replacement receiving: `2f11e609`.                                                                                                                                                                                                                                                                                                                               |
+| CA-5.3                                             | Scheduled receipt weight and actual size counts: `61d1299b`.                                                                                                                                                                                                                                                                                                              |
+| CA-5.4                                             | Inspected surplus: `c0e7ed7c`.                                                                                                                                                                                                                                                                                                                                            |
+| CA-5.5                                             | Late-payment purchase readiness: `bad66079`.                                                                                                                                                                                                                                                                                                                              |
+| CA-5.6                                             | Consolidated destination purchase totals: `49d75d3a`.                                                                                                                                                                                                                                                                                                                     |
+| CA-5.7                                             | Shortage-linked Order review/cancellation: `75e2105b`.                                                                                                                                                                                                                                                                                                                    |
+| CA-5.8                                             | Audited supplier-exception resolution after cancellation: `19f409a1`. Aggregate **1577 Core/194 files, 403 Web/101, 68 contracts/19**, shared/harness/migrations/static checks/both builds; 2 browser journeys; vinext 15 supported/0 issues. Original browser financial state was synthetic, so it does not close CA-5.9.                                                |
 
 Older implementation anchors `b8e32b2`, `f7f17dc`, `d14de2c`, `762a18e`, `f6f8c88`, `e50ef9a`, `012b5db` and their evidence remain in history. Their absence from active instructions is not permission to rebuild them.
 
