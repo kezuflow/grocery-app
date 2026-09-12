@@ -18,13 +18,11 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
   return (
     <div className="fm-storefront min-h-[100dvh] bg-[var(--fm-background)] text-[var(--fm-text)]">
       <StorefrontHeader />
-      <div className="flex w-full">
+      <div className="flex min-h-[calc(100dvh-4rem)] w-full items-start">
         <StorefrontSidebar />
-        <div className="flex min-h-[calc(100dvh-4rem)] min-w-0 flex-1 flex-col">
-          <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
-          <StorefrontFooter />
-        </div>
+        <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>
       </div>
+      <StorefrontFooter />
       <MobileNavigation />
       <CartDrawer />
       <ToastAnnouncer />
