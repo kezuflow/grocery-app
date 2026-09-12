@@ -1,6 +1,69 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — GIT-SLICES-1 commit all changes and push (2026-09-13)
+## Current owner request — GLOBAL-SERVICE-AREAS-1 and checkout/delivery verification (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner requests the full checkout/payment/nearest-location/Lalamove booking flow reviewed
+against current official provider requirements, plus an active Global Service areas Admin workspace
+where independently named polygons (for example Cebu and Lapu-Lapu) gate customer ordering without
+being assigned to individual fulfillment locations. Acceptance: customers outside every active area
+receive explicit not-yet-serviceable feedback and cannot obtain an eligible fulfillment option or
+reach payment; inside the union selects the nearest capable/mode-ready whole-order pin; area changes
+invalidate unstarted quotes; Admin can list/add/edit/preview named polygons; payment commitment creates
+assigned fulfillment/delivery work and automatic Instant booking occurs only when final packing starts;
+required Lalamove pickup/destination data and unknown-outcome safeguards are verified. Full access and
+commit/push authority were reiterated; no routine approval pause is required.
+
+Starting branch/HEAD: clean `main` at `a2f99629`, matching `origin/main`. No deployment, live payment,
+actual courier booking, destructive data operation or outbound message is part of this implementation.
+The working slice uses the existing market-owned/versioned `service_area` table; delivery-zone and
+location-link rows remain compatibility routing/snapshot structures, so no schema migration or
+per-location association is introduced.
+
+Implemented working-tree behavior: Core gates address resolution and every operational-candidate
+checkout/revalidation path against the active Global-area union before nearest-pin ranking. Admin
+serviceability contracts and UI now expose a numbered named-area list, Add service area, one polygon
+editor and coordinate preview, with no nested zones or location checkboxes. Publishing retires only
+the prior active version of the same market/code, advances geography configuration, supersedes
+unstarted quotes, audits and stores the immutable command result. Customer address/editor and saved
+address selection distinguish outside-area feedback from missing fulfillment capability. A checkout
+regression proves an outside-area address cannot cause a courier quotation request.
+
+Flow/code review confirms: fulfillment options and accepted provider quotation precede payment;
+canonical provider-confirmed payment atomically commits the Order, immutable assigned-location
+snapshot, NOT_STARTED fulfillment record and UNASSIGNED delivery job/stop. It does not book a rider.
+For Instant, START_PACKING after item checks triggers the automatic booking path, which creates a fresh
+short-lived quotation and then places the Lalamove order using the snapshotted selected provider/service.
+Scheduled retains future-pickup booking after accepted goods and credible readiness. Booking requires
+the fulfillment location's sender name, normalized E.164 phone, formatted/structured pickup address
+and exact pin; the customer snapshot supplies recipient name/E.164 phone, formatted address, exact
+destination pin and optional recipient remarks. Internal BAG/BOX, dimensions, unsupported PH item data
+and store pickup instructions are not sent. Provider mutation is preceded by durable intent and an
+ambiguous response cannot be blindly retried.
+
+Verification at the final working-tree scope:
+- Complete Core: 202 files / 1,650 tests pass. An aggregate run had first reached 201 files / 1,649
+  tests with one stale pre-area browsing expectation; its test-only correction passed focused and in
+  the complete rerun. Focused Global-area/checkout coverage also passes 7 files / 83 tests.
+- Complete Web after the map fallback correction: 122 files / 497 tests pass. Contracts pass 19 files
+  / 68 tests and the other shared-package suites pass. Workspace typecheck, lint, formatter and
+  architecture checks pass, as does `git diff --check`.
+- Web production build passes; Core build/deployment dry run passes; vinext compatibility is 100%,
+  16 supported / 0 issues.
+- Browser acceptance against an explicit isolated local Worker/D1 stack with all 96 migrations passes
+  2/2 Chromium journeys: desktop publishes a uniquely named polygon through the real Admin form and
+  reloads the persisted result; mobile verifies the live workspace at 390px without horizontal
+  overflow. The first run exposed a post-load Google marker scene-update exception when localhost was
+  rejected by the configured referrer policy. The map now degrades to the manual-coordinate editor;
+  its regression tests pass 2 files / 11 tests.
+
+Official documentation review is research evidence, not actual Lalamove account acceptance. No live
+payment, provider mutation, deployment or outbound message was performed. Remaining activation evidence
+is a real Lalamove sandbox/account quotation/booking/webhook journey and current enabled PH/Cebu
+service-type confirmation. Concrete next action: commit this verified slice directly to main, push,
+then perform provider acceptance when owner-supplied credentials and transaction authority are in scope.
+
+## Prior owner request — GIT-SLICES-1 commit all changes and push (2026-09-13)
 
 Owner requests all existing changes committed as one cohesive commit per slice or feature, then
 pushed to main with a clean working tree. Full access and commit/push authorization were reiterated.

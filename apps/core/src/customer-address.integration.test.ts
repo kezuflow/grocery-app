@@ -709,7 +709,7 @@ describe("Phase 4B customer addresses", () => {
     expect(stored?.user_confirmed_at).toBeTypeOf("number");
   });
 
-  it("assigns a confirmed structured address beyond legacy polygon coverage", async () => {
+  it("persists a confirmed structured address outside every global service area as unserviceable", async () => {
     const user = await account();
     const created = await core.createCustomerAddress({
       ...user.request(),
@@ -728,8 +728,8 @@ describe("Phase 4B customer addresses", () => {
       ok: true,
       value: {
         status: "active",
-        serviceable: true,
-        serviceabilityReason: null,
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
       },
     });
     if (!created.ok) return;
@@ -760,7 +760,7 @@ describe("Phase 4B customer addresses", () => {
     if (!created.ok) return;
     const listed = await core.listCustomerAddresses(user.request());
     expect(listed).toMatchObject({ ok: true, value: [created.value] });
-    expect(created.value.serviceAreaCode).toBeNull();
+    expect(created.value.serviceAreaCode).toBe("CEBU_CITY");
     expect(created.value.deliveryZoneCode).toBeNull();
     expect(created.value.serviceable).toBe(true);
     expect(created.value.serviceabilityReason).toBeNull();
@@ -774,7 +774,7 @@ describe("Phase 4B customer addresses", () => {
     expect(created).toMatchObject({
       ok: true,
       value: {
-        serviceAreaCode: null,
+        serviceAreaCode: "CEBU_CITY",
         deliveryZoneCode: null,
         serviceable: false,
         serviceabilityReason: "NO_ELIGIBLE_LOCATION",
@@ -782,7 +782,7 @@ describe("Phase 4B customer addresses", () => {
     });
   });
 
-  it("assigns a location outside legacy polygons without retaining polygon labels", async () => {
+  it("does not assign a fulfillment location outside the global service areas", async () => {
     const user = await account();
     const created = await core.createCustomerAddress({
       ...user.request(),
@@ -796,8 +796,8 @@ describe("Phase 4B customer addresses", () => {
     expect(created).toMatchObject({
       ok: true,
       value: {
-        serviceable: true,
-        serviceabilityReason: null,
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
         serviceAreaCode: null,
         deliveryZoneCode: null,
       },
@@ -984,7 +984,7 @@ describe("Phase 4B customer addresses", () => {
         serviceAreaCode: null,
         deliveryZoneCode: null,
         serviceable: false,
-        serviceabilityReason: "NO_ELIGIBLE_LOCATION",
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
       },
     });
     if (!moved.ok) return;
@@ -1002,7 +1002,7 @@ describe("Phase 4B customer addresses", () => {
         deliveryZoneCode: null,
         resolutionVersion: null,
         serviceable: false,
-        serviceabilityReason: "NO_ELIGIBLE_LOCATION",
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
       },
     });
   });
@@ -1059,7 +1059,8 @@ describe("Phase 4B customer addresses", () => {
         longitude: 124,
         components: { addressLine1: "Moved permanent address" },
         confirmationSource: "GEOCODER",
-        serviceable: true,
+        serviceable: false,
+        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
         status: "active",
       },
     });

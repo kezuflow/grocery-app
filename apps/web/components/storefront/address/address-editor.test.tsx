@@ -588,7 +588,7 @@ describe("AddressEditor", () => {
       .filter(([url]) => String(url) === "/api/serviceability")
       .at(-1);
     expect(JSON.parse(String(serviceabilityCall?.[1]?.body))).toMatchObject(moved);
-    expect(container.textContent).toContain("Closest fulfillment location found");
+    expect(container.textContent).toContain("Delivery area confirmed");
     change(input(container, "Address label"), "Home");
     change(input(container, "Recipient name"), "Ana Santos");
     change(input(container, "Phone number"), "+639171234567");
@@ -715,7 +715,7 @@ describe("AddressEditor", () => {
       response({ ok: true, value: serviceable, requestId: "serviceability-current" }),
     );
     await flush();
-    expect(container.textContent).toContain("Closest fulfillment location found");
+    expect(container.textContent).toContain("Delivery area confirmed");
 
     serviceabilityResolvers[0]?.(
       response({
@@ -731,8 +731,8 @@ describe("AddressEditor", () => {
     );
     await flush();
 
-    expect(container.textContent).toContain("Closest fulfillment location found");
-    expect(container.textContent).not.toContain("No fulfillment location available");
+    expect(container.textContent).toContain("Delivery area confirmed");
+    expect(container.textContent).not.toContain("Outside our delivery area");
     act(() => root.unmount());
   });
 
@@ -857,7 +857,7 @@ describe("AddressEditor", () => {
     change(input(container, "Delivery note"), "Call on arrival");
     change(input(container, "Recipient guidance"), "Ask for Ana");
     await flush();
-    expect(container.textContent).toContain("No fulfillment location available");
+    expect(container.textContent).toContain("Outside our delivery area");
 
     const save = Array.from(container.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Save confirmed address"),
@@ -960,7 +960,7 @@ describe("AddressEditor", () => {
 
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
 
-    expect(container.textContent).toContain("Closest fulfillment location found");
+    expect(container.textContent).toContain("Delivery area confirmed");
     expect(container.textContent).toContain("not a saved checkout address");
     expect(container.textContent).not.toContain("Recipient name");
     expect(container.textContent).not.toContain("Save confirmed address");
@@ -1001,7 +1001,7 @@ it("defers the compact map until an address is chosen from the Choose map search
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
     expect(adapter.initializations).toHaveLength(1);
     expect(container.textContent).not.toContain("Move the pin to your entrance");
-    expect(container.textContent).toContain("Closest fulfillment location found");
+    expect(container.textContent).toContain("Delivery area confirmed");
   } finally {
     act(() => root.unmount());
     vi.useRealTimers();

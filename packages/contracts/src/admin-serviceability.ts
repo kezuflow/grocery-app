@@ -2,18 +2,11 @@ import type { AuthenticatedRequest } from "./auth";
 import type { Coordinate } from "./geography";
 import type { RpcResult } from "./common";
 
-export type AdminServiceZoneDefinition = {
-  code: string;
-  name: string;
-  vertices: readonly Coordinate[];
-  locationIds: readonly string[];
-};
 export type AdminServiceAreaDefinition = {
   marketId: string;
   code: string;
   name: string;
   vertices: readonly Coordinate[];
-  zones: readonly AdminServiceZoneDefinition[];
 };
 export type AdminServiceAreaView = AdminServiceAreaDefinition & {
   serviceAreaId: string;
@@ -21,18 +14,10 @@ export type AdminServiceAreaView = AdminServiceAreaDefinition & {
 };
 export type AdminServiceabilityRequest = AuthenticatedRequest & {
   cursor?: string;
-  locationCursor?: string;
 };
 export type AdminServiceabilityView = {
   nextCursor: string | null;
-  locationsNextCursor: string | null;
   areas: readonly AdminServiceAreaView[];
-  locations: readonly {
-    locationId: string;
-    marketId: string;
-    name: string;
-    unavailable?: boolean;
-  }[];
   markets: readonly { marketId: string; name: string }[];
   canManage: boolean;
 };
@@ -48,7 +33,7 @@ export type AdminServiceabilityPreview = {
   serviceable: boolean;
   locationId: string | null;
   locationName: string | null;
-  zoneName: string | null;
+  serviceAreaName: string | null;
   reason: string | null;
 };
 export type AdminServiceabilityService = {

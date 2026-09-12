@@ -2,6 +2,7 @@ import type { Coordinate } from "@freshmarkets/contracts";
 import { z, locationOperatingScheduleSchema } from "@freshmarkets/validation";
 import { operatingInterval, nextOperatingBoundary } from "../operating-schedule";
 import { sortLocationsByDistance } from "../geometry";
+import { matchingServiceAreas } from "../serviceability";
 
 export type OperationalCandidate = {
   id: string;
@@ -37,6 +38,24 @@ export async function operationalCandidates(
   } = {},
 ): Promise<OperationalCandidate[]> {
   const now = input.now ?? Date.now();
+  const areaRows = await database
+    .prepare(`SELECT a.code,a.name,a.polygon_version polygonVersion,a.polygon_geojson polygonGeojson,a.market_id marketId
+      FROM service_area a JOIN market m ON m.id=a.market_id AND m.status='active'
+      WHERE a.status='active' AND a.active_from<=? AND (a.active_to IS NULL OR a.active_to>?)
+        AND (? IS NULL OR a.market_id=?)
+      ORDER BY a.code,a.id`)
+    .bind(now, now, input.marketId ?? null, input.marketId ?? null)
+    .all<{
+      code: string;
+      name: string;
+      polygonVersion: number;
+      polygonGeojson: string;
+      marketId: string;
+    }>();
+  const serviceableMarketIds = [
+    ...new Set(matchingServiceAreas(point, areaRows.results).map((area) => area.marketId)),
+  ];
+  if (!serviceableMarketIds.length) return [];
   const rows = await database
     .prepare(`SELECT l.id,l.id locationId,l.name locationName,l.market_id marketId,m.code marketCode,
     l.latitude,l.longitude,z.id zoneId,z.name zoneName,g.fulfillment_mode mode,g.version modeVersion,
@@ -57,6 +76,7 @@ export async function operationalCandidates(
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
     JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
     WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
+      AND m.id IN (SELECT value FROM json_each(?))
       AND r.dispatch_ready=1
       AND (? IS NULL OR m.id=?) AND (? IS NULL OR g.fulfillment_mode=?)
       AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1
@@ -73,6 +93,7 @@ export async function operationalCandidates(
     .bind(
       now,
       now,
+      JSON.stringify(serviceableMarketIds),
       input.marketId ?? null,
       input.marketId ?? null,
       input.mode ?? null,

@@ -66,7 +66,7 @@ describe("browsing-location confirmation", () => {
     expect(JSON.stringify(result)).not.toContain("private provider error");
   });
 
-  it("rejects invalid coordinates before the provider and assigns the nearest fulfillment pin", async () => {
+  it("rejects invalid coordinates before the provider and reports an outside-area pin", async () => {
     const fetched = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json({ status: "OK", results: [geocodingResult] }));
@@ -87,8 +87,8 @@ describe("browsing-location confirmation", () => {
       value: {
         coordinate: { latitude: 0, longitude: 0 },
         serviceability: {
-          serviceable: true,
-          fulfillmentLocation: { id: "location-cebu-central" },
+          serviceable: false,
+          reason: "OUTSIDE_SERVICE_AREA",
         },
       },
     });

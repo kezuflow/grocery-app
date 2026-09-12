@@ -17,6 +17,25 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
       currency: "PHP",
       timezone: "Asia/Manila",
     },
+    serviceAreas: [
+      {
+        code: "CEBU",
+        name: "Cebu",
+        polygonVersion: 1,
+        polygonGeojson: JSON.stringify({
+          type: "Polygon",
+          coordinates: [
+            [
+              [123, 9],
+              [126, 9],
+              [126, 13],
+              [123, 13],
+              [123, 9],
+            ],
+          ],
+        }),
+      },
+    ],
     candidates: [
       {
         id: "location-secondary",
@@ -44,15 +63,38 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
 }
 
 describe("serviceability resolver", () => {
-  it("assigns the closest fulfillment pin without polygon filtering", () => {
-    const outcome = evaluateServiceability(request(12, 125), dataset());
+  it("admits a global service area before assigning the closest fulfillment pin", () => {
+    const outcome = evaluateServiceability(request(10.5, 123.5), dataset());
     expect(outcome).toMatchObject({
       ok: true,
       value: {
         serviceable: true,
-        serviceArea: null,
+        serviceArea: { code: "CEBU", name: "Cebu", polygonVersion: 1 },
         deliveryZone: null,
         fulfillmentEligibility: { candidateCount: 2 },
+      },
+    });
+  });
+  it("rejects a valid coordinate outside every global service area", () => {
+    const outcome = evaluateServiceability(
+      {
+        ...request(14.6, 121),
+        previousResolution: {
+          serviceAreaCode: "CEBU",
+          serviceAreaPolygonVersion: 1,
+          deliveryZoneCode: null,
+          deliveryZonePolygonVersion: null,
+        },
+      },
+      dataset(),
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: {
+        serviceable: false,
+        reason: "OUTSIDE_SERVICE_AREA",
+        fulfillmentEligibility: { eligible: false, candidateCount: 0 },
+        resolutionChanged: true,
       },
     });
   });
@@ -65,13 +107,13 @@ describe("serviceability resolver", () => {
     const result = evaluateServiceability(request(10.5, 123.5), dataset());
     expect(result.ok && result.value.serviceable).toBe(true);
     if (!result.ok) return;
-    expect(result.value.serviceArea).toBeNull();
+    expect(result.value.serviceArea).toMatchObject({ code: "CEBU", polygonVersion: 1 });
     expect(result.value.deliveryZone).toBeNull();
     expect(result.value.fulfillmentEligibility).toEqual({ eligible: true, candidateCount: 2 });
     expect(result.value.fulfillmentLocation?.id).toBe("location-cebu-central");
   });
 
-  it("ignores retained polygon-version evidence from an older saved address", () => {
+  it("reports when a saved address was evaluated against an older global boundary", () => {
     const result = evaluateServiceability(
       {
         ...request(10.5, 123.5),
@@ -84,7 +126,7 @@ describe("serviceability resolver", () => {
       },
       dataset(),
     );
-    expect(result.ok && result.value.resolutionChanged).toBe(false);
+    expect(result.ok && result.value.resolutionChanged).toBe(true);
   });
 
   it("requires operational location capabilities", () => {

@@ -253,7 +253,9 @@ function AuthenticatedSavedDeliveryAddresses({
         setSelectionError("Couldn’t select this address. Try again.");
       } else if (!result.value.serviceability.serviceable) {
         setSelectionError(
-          "No fulfillment location is currently available. Please try again later.",
+          result.value.serviceability.reason === "OUTSIDE_SERVICE_AREA"
+            ? "FreshMarkets does not deliver to this address yet. Choose an address inside an active service area."
+            : "No fulfillment location is currently available. Please try again later.",
         );
       } else {
         onChoose(result.value);

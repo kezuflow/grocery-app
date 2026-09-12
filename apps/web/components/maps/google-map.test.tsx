@@ -199,4 +199,36 @@ describe("GoogleMap", () => {
     expect(adapter.controllers[0]?.sceneUpdates).toContainEqual(scene);
     act(() => root.unmount());
   });
+
+  it("falls back instead of crashing when the provider rejects a later scene update", async () => {
+    const controller = {
+      updateScene: vi.fn(() => {
+        throw new Error("provider scene failure");
+      }),
+      destroy: vi.fn(),
+    } satisfies MapController;
+    const adapter: MapAdapter = {
+      async initialize() {
+        return controller;
+      },
+    };
+    const { container, root } = mountMap({ adapter, scene: {} });
+    await flushEffects();
+    act(() => {
+      root.render(
+        <GoogleMap
+          browserApiKey="browser-key"
+          mapId="freshmarkets-map"
+          initialView={{ center, zoom: 13 }}
+          scene={{ points: [{ id: "boundary", position: center }] }}
+          adapter={adapter}
+          fallback={<span>Enter coordinates manually</span>}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Google Maps could not be loaded.");
+    expect(container.textContent).toContain("Enter coordinates manually");
+    expect(controller.destroy).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
 });

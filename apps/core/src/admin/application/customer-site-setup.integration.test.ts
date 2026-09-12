@@ -92,9 +92,6 @@ it("routes a confirmed customer address to a new site configured through command
       code: `area-${crypto.randomUUID()}`,
       name: "New site boundary",
       vertices,
-      zones: [
-        { code: "site-zone", name: "New site deliveries", vertices, locationIds: [locationId] },
-      ],
       expectedVersion: 0,
       reason: "Confirm synthetic service area",
     }),

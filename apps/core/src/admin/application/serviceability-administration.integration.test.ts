@@ -20,9 +20,6 @@ function command(headers: Record<string, string>): PublishAdminServiceAreaReques
     code: `area-${crypto.randomUUID()}`,
     name: "Test service area",
     vertices,
-    zones: [
-      { code: "central", name: "Central zone", vertices, locationIds: ["location-cebu-central"] },
-    ],
     expectedVersion: 0,
     reason: "Confirm operating boundary",
   };
@@ -129,28 +126,8 @@ describe("Global service-area publication", () => {
       expect(read.value.areas.find((area) => area.code === request.code)?.name).toBe(
         "Reviewed area",
       );
-    await env.DB.prepare(
-      "UPDATE fulfillment_location SET status='inactive' WHERE id='location-cebu-central'",
-    ).run();
-    try {
-      const inactive = await core.getAdminServiceability({
-        headers: manager.headers,
-        requestId: "inactive-assignment",
-      });
-      expect(inactive.ok).toBe(true);
-      if (inactive.ok)
-        expect(
-          inactive.value.locations.find(
-            (location) => location.locationId === "location-cebu-central",
-          ),
-        ).toMatchObject({ unavailable: true });
-    } finally {
-      await env.DB.prepare(
-        "UPDATE fulfillment_location SET status='active' WHERE id='location-cebu-central'",
-      ).run();
-    }
   });
-  it("rejects invalid shapes, outside zones, missing sites and non-Global callers without effects", async () => {
+  it("rejects invalid shapes and non-Global callers without effects", async () => {
     const manager = await locationManager(),
       local = await locationManager("location");
     const requests = [
@@ -159,21 +136,6 @@ describe("Global service-area publication", () => {
       {
         ...command(manager.headers),
         vertices: [vertices[0], vertices[2], vertices[1], vertices[3]],
-      },
-      {
-        ...command(manager.headers),
-        zones: [
-          {
-            code: "outside",
-            name: "Outside",
-            vertices: vertices.map((point) => ({ ...point, latitude: point.latitude + 1 })),
-            locationIds: ["location-cebu-central"],
-          },
-        ],
-      },
-      {
-        ...command(manager.headers),
-        zones: [{ code: "missing", name: "Missing", vertices, locationIds: ["missing"] }],
       },
     ];
     for (const request of requests) {
@@ -215,7 +177,7 @@ describe("Global service-area publication", () => {
         .first(),
     ).toEqual({ count: 0 });
   });
-  it("previews capable fulfillment pins independently of legacy polygons and links", async () => {
+  it("previews the global area gate before the nearest capable fulfillment pin", async () => {
     const manager = await locationManager();
     await env.DB.batch([
       env.DB.prepare(
@@ -234,11 +196,15 @@ describe("Global service-area publication", () => {
     };
     expect(await core.previewAdminServiceability(preview)).toMatchObject({
       ok: true,
-      value: { serviceable: true, locationId: "location-cebu-central" },
+      value: {
+        serviceable: true,
+        serviceAreaName: "Cebu City",
+        locationId: "location-cebu-central",
+      },
     });
     expect(await core.previewAdminServiceability({ ...preview, latitude: 20 })).toMatchObject({
       ok: true,
-      value: { serviceable: true, locationId: "location-cebu-central" },
+      value: { serviceable: false, serviceAreaName: null, locationId: null },
     });
     await env.DB.prepare("UPDATE location_serviceability SET valid_to=?")
       .bind(Date.now() - 1)
@@ -256,8 +222,6 @@ describe("Global service-area publication", () => {
   it.each([
     "BEFORE INSERT ON idempotency_records",
     "BEFORE INSERT ON service_area",
-    "BEFORE INSERT ON delivery_zone",
-    "BEFORE INSERT ON location_serviceability",
     "BEFORE INSERT ON geography_configuration",
     "BEFORE INSERT ON audit_event",
     "BEFORE UPDATE ON idempotency_records WHEN NEW.status='SUCCEEDED'",
@@ -282,46 +246,43 @@ describe("Global service-area publication", () => {
     expect(result).toMatchObject({ ok: true });
     expect(await core.publishAdminServiceArea(request)).toEqual(result);
   });
-  it.each(["location_serviceability", "delivery_zone", "service_area"])(
-    "retains the old boundary when %s retirement is suppressed",
-    async (table) => {
-      const manager = await locationManager();
-      const original = command(manager.headers);
-      const first = await core.publishAdminServiceArea(original);
-      if (!first.ok) throw new Error("First publication failed");
-      const next = {
-        ...original,
-        name: "Revised boundary",
-        expectedVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-      };
-      const before = await env.DB.prepare(
-        "SELECT version FROM geography_configuration WHERE market_id=?",
-      )
-        .bind(original.marketId)
-        .first();
-      await env.DB.exec(
-        `CREATE TRIGGER ignore_area_retirement BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(IGNORE); END;`,
-      );
-      try {
-        expect(await core.publishAdminServiceArea(next)).toMatchObject({ ok: false });
-        expect(await effects(next.idempotencyKey)).toEqual({ records: 0, audits: 0 });
-        expect(
-          await env.DB.prepare("SELECT status,polygon_version FROM service_area WHERE id=?")
-            .bind(first.value.serviceAreaId)
-            .first(),
-        ).toEqual({ status: "active", polygon_version: 1 });
-        expect(
-          await env.DB.prepare("SELECT version FROM geography_configuration WHERE market_id=?")
-            .bind(original.marketId)
-            .first(),
-        ).toEqual(before);
-      } finally {
-        await env.DB.exec("DROP TRIGGER ignore_area_retirement");
-      }
-      const result = await core.publishAdminServiceArea(next);
-      expect(result).toMatchObject({ ok: true, value: { version: 2 } });
-      expect(await core.publishAdminServiceArea(next)).toEqual(result);
-    },
-  );
+  it("retains the old boundary when its retirement is suppressed", async () => {
+    const manager = await locationManager();
+    const original = command(manager.headers);
+    const first = await core.publishAdminServiceArea(original);
+    if (!first.ok) throw new Error("First publication failed");
+    const next = {
+      ...original,
+      name: "Revised boundary",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const before = await env.DB.prepare(
+      "SELECT version FROM geography_configuration WHERE market_id=?",
+    )
+      .bind(original.marketId)
+      .first();
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_area_retirement BEFORE UPDATE ON service_area BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(await core.publishAdminServiceArea(next)).toMatchObject({ ok: false });
+      expect(await effects(next.idempotencyKey)).toEqual({ records: 0, audits: 0 });
+      expect(
+        await env.DB.prepare("SELECT status,polygon_version FROM service_area WHERE id=?")
+          .bind(first.value.serviceAreaId)
+          .first(),
+      ).toEqual({ status: "active", polygon_version: 1 });
+      expect(
+        await env.DB.prepare("SELECT version FROM geography_configuration WHERE market_id=?")
+          .bind(original.marketId)
+          .first(),
+      ).toEqual(before);
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_area_retirement");
+    }
+    const result = await core.publishAdminServiceArea(next);
+    expect(result).toMatchObject({ ok: true, value: { version: 2 } });
+    expect(await core.publishAdminServiceArea(next)).toEqual(result);
+  });
 });

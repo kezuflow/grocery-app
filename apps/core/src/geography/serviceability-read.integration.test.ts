@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { expect, it, vi } from "vitest";
 import { resolveServiceability } from "./serviceability";
 
-it("resolves current delivery geography with one database batch", async () => {
+it("resolves the global areas and current fulfillment pins with one database batch", async () => {
   const database = drizzle(env.DB);
   const batch = vi.spyOn(database, "batch");
   const result = await resolveServiceability(database, {
@@ -16,7 +16,7 @@ it("resolves current delivery geography with one database batch", async () => {
     value: { serviceable: true, fulfillmentLocation: { id: "location-cebu-central" } },
   });
   expect(batch).toHaveBeenCalledTimes(1);
-  expect(batch.mock.calls[0][0]).toHaveLength(3);
+  expect(batch.mock.calls[0][0]).toHaveLength(4);
 });
 
 it("does not borrow geography from another market when the requested market is missing", async () => {

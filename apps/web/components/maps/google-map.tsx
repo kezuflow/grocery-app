@@ -375,6 +375,16 @@ export function GoogleMap({
   areaSelectRef.current = onAreaSelect;
   areaCancelRef.current = onAreaSelectionCancel;
 
+  const failLoadedController = (controller: MapController): void => {
+    if (controllerRef.current === controller) controllerRef.current = undefined;
+    try {
+      controller.destroy();
+    } catch {
+      // Provider cleanup must not replace the safe map fallback with another render failure.
+    }
+    setError("load");
+  };
+
   useEffect(() => {
     const generation = ++generationRef.current;
     const container = containerRef.current;
@@ -422,7 +432,12 @@ export function GoogleMap({
           return;
         }
         controllerRef.current = controller;
-        if (sceneRef.current !== initialScene) controller.updateScene(sceneRef.current);
+        if (sceneRef.current !== initialScene)
+          try {
+            controller.updateScene(sceneRef.current);
+          } catch {
+            failLoadedController(controller);
+          }
       })
       .catch(() => {
         if (!disposed && generationRef.current === generation) setError("load");
@@ -444,7 +459,13 @@ export function GoogleMap({
   ]);
 
   useEffect(() => {
-    controllerRef.current?.updateScene(scene);
+    const controller = controllerRef.current;
+    if (!controller) return;
+    try {
+      controller.updateScene(scene);
+    } catch {
+      failLoadedController(controller);
+    }
   }, [scene]);
 
   if (error)

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { listFulfillmentOptions } from "./list-fulfillment-options";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
@@ -147,6 +147,61 @@ describe("listFulfillmentOptions", () => {
     ]);
     expect(new Set(result.value.map((option) => option.optionId)).size).toBe(2);
     expect(JSON.stringify(result.value)).not.toMatch(/location-cebu|zone-cebu|quotationId/i);
+  });
+
+  it("blocks checkout outside every global service area before requesting a courier quote", async () => {
+    const suffix = crypto.randomUUID();
+    const customerId = `outside-options-customer-${suffix}`;
+    const addressId = `outside-options-address-${suffix}`;
+    const cartId = `outside-options-cart-${suffix}`;
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='INSTANT',cadence=NULL,version=version+1,updated_at=? WHERE id='global'",
+      ).bind(now),
+      env.DB.prepare(
+        "INSERT INTO customer (id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
+      ).bind(customerId, `auth-${customerId}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO customer_address (id,customer_id,label,recipient,phone,address_json,latitude,longitude,serviceable,status,version,user_confirmed_at,created_at,updated_at) VALUES (?,?,'Manila','Customer','+639171234567','{}',14.5995,120.9842,1,'active',2,?,?,?)",
+      ).bind(addressId, customerId, now, now, now),
+      env.DB.prepare(
+        "INSERT INTO cart (id,customer_id,location_id,status,version,created_at,updated_at) VALUES (?,?,'location-cebu-central','ACTIVE',3,?,?)",
+      ).bind(cartId, customerId, now, now),
+      env.DB.prepare(
+        "INSERT INTO cart_item (cart_id,sku_id,quantity) VALUES (?,'sku-red-onion-500g',1)",
+      ).bind(cartId),
+    ]);
+    const quote = vi.fn(provider.quote.bind(provider));
+    const result = await listFulfillmentOptions(
+      env.DB,
+      buildRouteDistancePort({ ENVIRONMENT: "test", ROUTE_DISTANCE_PROVIDER: "mock" }),
+      {
+        customerId,
+        addressId,
+        addressVersion: 2,
+        cartId,
+        cartVersion: 3,
+        requestId: "outside-service-areas",
+      },
+      {
+        instantDeliveryPartners: [
+          {
+            providerCode: "lalamove",
+            displayName: "Lalamove",
+            serviceType: "MOTORCYCLE",
+            serviceLabel: "Motorcycle",
+            provider: { ...provider, quote },
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: [{ eligible: false, unavailableReason: "MODE_UNAVAILABLE" }],
+    });
+    expect(quote).not.toHaveBeenCalled();
   });
 
   it("fails Instant partner options closed when a non-gram cart line has no shipping weight", async () => {

@@ -1,33 +1,34 @@
 import type {
   AdminServiceAreaView,
-  AdminServiceabilityView,
   AdminServiceabilityPreview,
   AdminServiceabilityRequest,
-  PublishAdminServiceAreaRequest,
-  PreviewAdminServiceabilityRequest,
-  RpcResult,
+  AdminServiceabilityView,
   AppErrorCode,
   Coordinate,
+  PreviewAdminServiceabilityRequest,
+  PublishAdminServiceAreaRequest,
+  RpcResult,
 } from "@freshmarkets/contracts";
 import {
-  z,
-  serviceAreaDefinitionSchema,
-  serviceCoordinateSchema,
   adminServiceAreaViewSchema,
   idempotencyKeySchema,
   identifierSchema,
+  serviceAreaDefinitionSchema,
+  serviceCoordinateSchema,
+  z,
 } from "@freshmarkets/validation";
-import { authenticatedRequestSchema } from "../../validation";
-import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { requestHash } from "../../idempotency";
 import { parsePolygonGeoJson } from "../../geography/geometry";
-import { servicePolygon, polygonWithin } from "../../geography/domain/service-polygon";
 import { operationalCandidates } from "../../geography/application/operational-candidates";
+import { matchingServiceAreas } from "../../geography/serviceability";
+import { servicePolygon } from "../../geography/domain/service-polygon";
+import { authenticatedRequestSchema } from "../../validation";
 import { resolveLocationAdministrationAccess as access } from "./location-administration";
 import type { StaffAdministrationDeps } from "./staff-administration-access";
 
-const requirePublicationEffect = (db: D1Database) =>
-  db.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
+const requirePublicationEffect = (database: D1Database) =>
+  database.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
 
 const publishSchema = authenticatedRequestSchema.extend({
   ...serviceAreaDefinitionSchema.shape,
@@ -44,30 +45,30 @@ const previewSchema = authenticatedRequestSchema.extend({
   ...serviceCoordinateSchema.shape,
   marketId: identifierSchema,
 });
+
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
 }
+
 function vertices(json: string): Coordinate[] | null {
   const polygon = parsePolygonGeoJson(json);
-  // Never silently flatten a retained polygon containing holes into an editable exterior.
+  // The editor owns one simple exterior. Never silently discard retained holes.
   if (!polygon || polygon.length !== 1) return null;
   return polygon[0].slice(0, -1).map(([longitude, latitude]) => ({ latitude, longitude }));
 }
 
 export async function getAdminServiceability(
-  deps: StaffAdministrationDeps,
+  dependencies: StaffAdministrationDeps,
   input: AdminServiceabilityRequest,
 ): Promise<RpcResult<AdminServiceabilityView>> {
   const parsed = authenticatedRequestSchema
-    .extend({
-      cursor: z.string().max(1000).optional(),
-      locationCursor: identifierSchema.optional(),
-    })
+    .extend({ cursor: z.string().max(1000).optional() })
     .safeParse(input);
   if (!parsed.success)
     return failure("VALIDATION_FAILED", "Invalid service-area query", input.requestId);
-  const permitted = await access(deps, parsed.data, "locations.read");
+  const permitted = await access(dependencies, parsed.data, "locations.read");
   if (!permitted.ok) return permitted;
+
   const cursorSchema = z.object({ marketId: identifierSchema, code: identifierSchema });
   let cursor: z.infer<typeof cursorSchema> | null = null;
   if (parsed.data.cursor) {
@@ -77,65 +78,30 @@ export async function getAdminServiceability(
       return failure("VALIDATION_FAILED", "Invalid service-area cursor", input.requestId);
     }
   }
-  const areas = await deps.db
-    .prepare(`SELECT id serviceAreaId,market_id marketId,code,name,polygon_version version,polygon_geojson polygon FROM service_area a
-    WHERE polygon_version=(SELECT MAX(polygon_version) FROM service_area WHERE market_id=a.market_id AND code=a.code)
-      AND (? IS NULL OR (market_id,code)>(?,?)) ORDER BY market_id,code LIMIT 21`)
-    .bind(cursor?.marketId ?? null, cursor?.marketId ?? "", cursor?.code ?? "")
-    .all<{
-      serviceAreaId: string;
-      marketId: string;
-      code: string;
-      name: string;
-      version: number;
-      polygon: string;
-    }>();
-  const page = areas.results.slice(0, 20),
-    last = page.at(-1);
-  const ids = JSON.stringify(page.map((area) => area.serviceAreaId));
-  const [zones, links, locations, markets, manage] = await Promise.all([
-    deps.db
-      .prepare(
-        "SELECT id,service_area_id serviceAreaId,code,name,polygon_geojson polygon FROM delivery_zone WHERE service_area_id IN (SELECT value FROM json_each(?)) ORDER BY code,id",
-      )
-      .bind(ids)
-      .all<{ id: string; serviceAreaId: string; code: string; name: string; polygon: string }>(),
-    deps.db
-      .prepare(
-        "SELECT link.zone_id zoneId,link.location_id locationId FROM location_serviceability link JOIN delivery_zone zone ON zone.id=link.zone_id WHERE zone.service_area_id IN (SELECT value FROM json_each(?)) AND link.eligible=1 AND link.valid_from<=? AND (link.valid_to IS NULL OR link.valid_to>?) ORDER BY location_id",
-      )
-      .bind(ids, Date.now(), Date.now())
-      .all<{ zoneId: string; locationId: string }>(),
-    deps.db
-      .prepare(
-        "SELECT id locationId,market_id marketId,name FROM fulfillment_location WHERE purpose='CUSTOMER_FULFILLMENT' AND status='active' AND (? IS NULL OR id>?) ORDER BY id LIMIT 51",
-      )
-      .bind(parsed.data.locationCursor ?? null, parsed.data.locationCursor ?? "")
-      .all<AdminServiceabilityView["locations"][number]>(),
-    deps.db
+  const now = Date.now();
+  const [areas, markets, manage] = await Promise.all([
+    dependencies.db
+      .prepare(`SELECT id serviceAreaId,market_id marketId,code,name,polygon_version version,polygon_geojson polygon
+        FROM service_area area WHERE status='active' AND active_from<=?
+          AND (active_to IS NULL OR active_to>?)
+          AND (? IS NULL OR (market_id,code)>(?,?)) ORDER BY market_id,code LIMIT 21`)
+      .bind(now, now, cursor?.marketId ?? null, cursor?.marketId ?? "", cursor?.code ?? "")
+      .all<{
+        serviceAreaId: string;
+        marketId: string;
+        code: string;
+        name: string;
+        version: number;
+        polygon: string;
+      }>(),
+    dependencies.db
       .prepare(
         "SELECT id marketId,name FROM market WHERE status='active' ORDER BY name,id LIMIT 100",
       )
-      .all<AdminServiceabilityView["markets"][number]>(),
-    access(deps, parsed.data, "locations.manage"),
+      .all<{ marketId: string; name: string }>(),
+    access(dependencies, parsed.data, "locations.manage"),
   ]);
-  // Keep current assignments reviewable even when a referenced site is inactive or on another picker page.
-  const assigned = await deps.db
-    .prepare(`SELECT DISTINCT l.id locationId,l.market_id marketId,l.name,l.status,l.purpose FROM fulfillment_location l
-    JOIN location_serviceability link ON link.location_id=l.id JOIN delivery_zone zone ON zone.id=link.zone_id
-    WHERE zone.service_area_id IN (SELECT value FROM json_each(?)) AND link.eligible=1 AND (link.valid_to IS NULL OR link.valid_to>?)`)
-    .bind(ids, Date.now())
-    .all<{ locationId: string; marketId: string; name: string; status: string; purpose: string }>();
-  const choices = new Map(
-    locations.results.slice(0, 50).map((location) => [location.locationId, location]),
-  );
-  for (const location of assigned.results)
-    choices.set(location.locationId, {
-      locationId: location.locationId,
-      marketId: location.marketId,
-      name: location.name,
-      unavailable: location.status !== "active" || location.purpose !== "CUSTOMER_FULFILLMENT",
-    });
+  const page = areas.results.slice(0, 20);
   const views: AdminServiceAreaView[] = [];
   for (const area of page) {
     const boundary = vertices(area.polygon);
@@ -145,24 +111,6 @@ export async function getAdminServiceability(
         "A retained service area has complex geometry requiring a reviewed import",
         input.requestId,
       );
-    const definitions: AdminServiceAreaView["zones"][number][] = [];
-    for (const zone of zones.results.filter((zone) => zone.serviceAreaId === area.serviceAreaId)) {
-      const points = vertices(zone.polygon);
-      if (!points)
-        return failure(
-          "CONFIGURATION_ERROR",
-          "A retained delivery zone has complex geometry requiring a reviewed import",
-          input.requestId,
-        );
-      definitions.push({
-        code: zone.code,
-        name: zone.name,
-        vertices: points,
-        locationIds: links.results
-          .filter((link) => link.zoneId === zone.id)
-          .map((link) => link.locationId),
-      });
-    }
     views.push({
       serviceAreaId: area.serviceAreaId,
       marketId: area.marketId,
@@ -170,9 +118,9 @@ export async function getAdminServiceability(
       name: area.name,
       version: area.version,
       vertices: boundary,
-      zones: definitions,
     });
   }
+  const last = page.at(-1);
   return {
     ok: true,
     requestId: input.requestId,
@@ -182,8 +130,6 @@ export async function getAdminServiceability(
         areas.results.length > 20 && last
           ? btoa(JSON.stringify({ marketId: last.marketId, code: last.code }))
           : null,
-      locationsNextCursor: locations.results.length > 50 ? locations.results[49].locationId : null,
-      locations: [...choices.values()],
       markets: markets.results,
       canManage: manage.ok,
     },
@@ -191,16 +137,44 @@ export async function getAdminServiceability(
 }
 
 export async function previewAdminServiceability(
-  deps: StaffAdministrationDeps,
+  dependencies: StaffAdministrationDeps,
   input: PreviewAdminServiceabilityRequest,
 ): Promise<RpcResult<AdminServiceabilityPreview>> {
   const parsed = previewSchema.safeParse(input);
   if (!parsed.success)
     return failure("VALIDATION_FAILED", "Check market and coordinates", input.requestId);
-  const permitted = await access(deps, parsed.data, "locations.read");
+  const permitted = await access(dependencies, parsed.data, "locations.read");
   if (!permitted.ok) return permitted;
+  const now = Date.now();
+  const areas = await dependencies.db
+    .prepare(`SELECT code,name,polygon_version polygonVersion,polygon_geojson polygonGeojson
+      FROM service_area WHERE market_id=? AND status='active' AND active_from<=?
+        AND (active_to IS NULL OR active_to>?) ORDER BY code,id`)
+    .bind(parsed.data.marketId, now, now)
+    .all<{
+      code: string;
+      name: string;
+      polygonVersion: number;
+      polygonGeojson: string;
+    }>();
+  const area = matchingServiceAreas(parsed.data, areas.results)[0] ?? null;
+  if (!area)
+    return {
+      ok: true,
+      requestId: input.requestId,
+      value: {
+        serviceable: false,
+        locationId: null,
+        locationName: null,
+        serviceAreaName: null,
+        reason: "This address is outside every active service area",
+      },
+    };
   const candidate = (
-    await operationalCandidates(deps.db, parsed.data, { marketId: parsed.data.marketId })
+    await operationalCandidates(dependencies.db, parsed.data, {
+      marketId: parsed.data.marketId,
+      now,
+    })
   )[0];
   return {
     ok: true,
@@ -210,39 +184,34 @@ export async function previewAdminServiceability(
           serviceable: true,
           locationId: candidate.locationId,
           locationName: candidate.locationName,
-          zoneName: candidate.zoneName,
+          serviceAreaName: area.name,
           reason: null,
         }
       : {
           serviceable: false,
           locationId: null,
           locationName: null,
-          zoneName: null,
-          reason:
-            "No eligible location and fulfillment promise cover this point in the current mode",
+          serviceAreaName: area.name,
+          reason: "The area is active, but no fulfillment location is ready in the current mode",
         },
   };
 }
 
 export async function publishAdminServiceArea(
-  deps: StaffAdministrationDeps,
+  dependencies: StaffAdministrationDeps,
   input: PublishAdminServiceAreaRequest,
 ): Promise<RpcResult<AdminServiceAreaView>> {
   const parsed = publishSchema.safeParse(input);
   if (!parsed.success)
-    return failure(
-      "VALIDATION_FAILED",
-      "Check area, zones, locations, version and reason",
-      input.requestId,
-    );
+    return failure("VALIDATION_FAILED", "Check area boundary, version and reason", input.requestId);
   const request = parsed.data;
-  const permitted = await access(deps, request, "locations.manage");
+  const permitted = await access(dependencies, request, "locations.manage");
   if (!permitted.ok) return permitted;
   const { headers: _headers, requestId: _requestId, idempotencyKey, ...intent } = request;
-  const hash = await requestHash({ actor: permitted.authUserId, ...intent }),
-    scope = "admin.serviceability.publish";
+  const hash = await requestHash({ actor: permitted.authUserId, ...intent });
+  const scope = "admin.serviceability.publish";
   async function replay(): Promise<RpcResult<AdminServiceAreaView> | null> {
-    const saved = await deps.db
+    const saved = await dependencies.db
       .prepare(
         "SELECT request_hash hash,status,result_reference result FROM idempotency_records WHERE scope=? AND idempotency_key=?",
       )
@@ -265,33 +234,33 @@ export async function publishAdminServiceArea(
   }
   const prior = await replay();
   if (prior) return prior;
-  const area = servicePolygon(request.vertices);
-  const polygons = request.zones.map((zone) => servicePolygon(zone.vertices));
-  if (!area || polygons.some((zone) => !zone || !polygonWithin(zone, area)))
+  const polygon = servicePolygon(request.vertices);
+  if (!polygon)
     return failure(
       "VALIDATION_FAILED",
-      "Draw simple boundaries with every delivery zone inside its service area",
+      "Draw one simple service-area boundary with at least three distinct points",
       request.requestId,
     );
-  const now = Date.now(),
-    serviceAreaId = crypto.randomUUID();
+
+  const now = Date.now();
+  const serviceAreaId = crypto.randomUUID();
   const value: AdminServiceAreaView = {
     marketId: request.marketId,
     code: request.code,
     name: request.name,
     vertices: request.vertices,
-    zones: request.zones,
     serviceAreaId,
     version: request.expectedVersion + 1,
   };
   const statements: D1PreparedStatement[] = [
-    deps.db
+    dependencies.db
       .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
-      SELECT 1 FROM staff_identity s JOIN staff_scope sc ON sc.staff_id=s.id AND sc.scope_kind='global'
-      JOIN staff_role sr ON sr.staff_id=s.id JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
-      WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code='locations.manage')
-      OR NOT EXISTS (SELECT 1 FROM market WHERE id=? AND status='active')
-      OR COALESCE((SELECT MAX(polygon_version) FROM service_area WHERE market_id=? AND code=?),0)<>?`)
+        SELECT 1 FROM staff_identity staff JOIN staff_scope scope ON scope.staff_id=staff.id AND scope.scope_kind='global'
+        JOIN staff_role role ON role.staff_id=staff.id JOIN role_permission grant_row ON grant_row.role_id=role.role_id
+        JOIN permission permission ON permission.id=grant_row.permission_id
+        WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active' AND permission.code='locations.manage')
+        OR NOT EXISTS (SELECT 1 FROM market WHERE id=? AND status='active')
+        OR COALESCE((SELECT MAX(polygon_version) FROM service_area WHERE market_id=? AND code=?),0)<>?`)
       .bind(
         permitted.staffId,
         permitted.authUserId,
@@ -300,53 +269,23 @@ export async function publishAdminServiceArea(
         request.code,
         request.expectedVersion,
       ),
-    deps.db
+    dependencies.db
       .prepare(
         "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES (?,?,?,'PROCESSING','service_area',?,?)",
       )
       .bind(scope, idempotencyKey, hash, now, now),
-    requirePublicationEffect(deps.db),
-  ];
-  for (const locationId of new Set(request.zones.flatMap((zone) => zone.locationIds)))
-    statements.push(
-      deps.db
-        .prepare(
-          "INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE id=? AND market_id=? AND status='active' AND purpose='CUSTOMER_FULFILLMENT')",
-        )
-        .bind(locationId, request.marketId),
-    );
-  statements.push(
-    deps.db
-      .prepare(
-        "UPDATE location_serviceability SET valid_to=? WHERE valid_to IS NULL AND zone_id IN (SELECT z.id FROM delivery_zone z JOIN service_area a ON a.id=z.service_area_id WHERE a.market_id=? AND a.code=?)",
-      )
-      .bind(now, request.marketId, request.code),
-    deps.db
-      .prepare(
-        "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM location_serviceability WHERE valid_to IS NULL AND zone_id IN (SELECT z.id FROM delivery_zone z JOIN service_area a ON a.id=z.service_area_id WHERE a.market_id=? AND a.code=?))",
-      )
-      .bind(request.marketId, request.code),
-    deps.db
-      .prepare(
-        "UPDATE delivery_zone SET status='inactive',updated_at=? WHERE service_area_id IN (SELECT id FROM service_area WHERE market_id=? AND code=?)",
-      )
-      .bind(now, request.marketId, request.code),
-    deps.db
-      .prepare(
-        "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_zone WHERE status!='inactive' AND service_area_id IN (SELECT id FROM service_area WHERE market_id=? AND code=?))",
-      )
-      .bind(request.marketId, request.code),
-    deps.db
+    requirePublicationEffect(dependencies.db),
+    dependencies.db
       .prepare(
         "UPDATE service_area SET status='inactive',active_to=?,updated_at=? WHERE market_id=? AND code=? AND status='active'",
       )
       .bind(now, now, request.marketId, request.code),
-    deps.db
+    dependencies.db
       .prepare(
         "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM service_area WHERE market_id=? AND code=? AND status='active')",
       )
       .bind(request.marketId, request.code),
-    deps.db
+    dependencies.db
       .prepare(
         "INSERT INTO service_area(id,market_id,code,name,polygon_geojson,polygon_version,active_from,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'active',?,?)",
       )
@@ -355,62 +294,35 @@ export async function publishAdminServiceArea(
         request.marketId,
         request.code,
         request.name,
-        JSON.stringify({ type: "Polygon", coordinates: [area] }),
+        JSON.stringify({ type: "Polygon", coordinates: [polygon] }),
         value.version,
         now,
         now,
         now,
       ),
-    requirePublicationEffect(deps.db),
-  );
-  request.zones.forEach((zone, index) => {
-    const zoneId = crypto.randomUUID();
-    statements.push(
-      deps.db
-        .prepare(
-          "INSERT INTO delivery_zone(id,service_area_id,code,name,polygon_geojson,polygon_version,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?)",
-        )
-        .bind(
-          zoneId,
-          serviceAreaId,
-          zone.code,
-          zone.name,
-          JSON.stringify({ type: "Polygon", coordinates: [polygons[index]] }),
-          value.version,
-          now,
-          now,
-        ),
-      requirePublicationEffect(deps.db),
-    );
-    for (const locationId of zone.locationIds)
-      statements.push(
-        deps.db
-          .prepare(
-            "INSERT INTO location_serviceability(zone_id,location_id,priority,eligible,valid_from) VALUES (?,?,0,1,?)",
-          )
-          .bind(zoneId, locationId, now),
-        requirePublicationEffect(deps.db),
-      );
-  });
-  statements.push(
-    deps.db
+    requirePublicationEffect(dependencies.db),
+    dependencies.db
       .prepare(
         "INSERT INTO geography_configuration(market_id,version,updated_at) VALUES (?,2,?) ON CONFLICT(market_id) DO UPDATE SET version=version+1,updated_at=excluded.updated_at",
       )
       .bind(request.marketId, now),
-    requirePublicationEffect(deps.db),
-    deps.db
-      .prepare(`UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=? WHERE status='ACTIVE'
-      AND json_extract(cycle_snapshot_json,'$.locationId') IN (SELECT id FROM fulfillment_location WHERE market_id=?)
-      AND NOT EXISTS (SELECT 1 FROM payment_intent p WHERE p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=checkout_quote.id)`)
+    requirePublicationEffect(dependencies.db),
+    dependencies.db
+      .prepare(`UPDATE checkout_quote SET status='SUPERSEDED',version=version+1,updated_at=?
+        WHERE status='ACTIVE' AND json_extract(cycle_snapshot_json,'$.locationId') IN
+          (SELECT id FROM fulfillment_location WHERE market_id=?)
+        AND NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.purpose='GROCERY_CHECKOUT'
+          AND payment.subject_type='checkout_quote' AND payment.subject_id=checkout_quote.id)`)
       .bind(now, request.marketId),
-    deps.db
+    dependencies.db
       .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
-      SELECT 1 FROM checkout_quote WHERE status='ACTIVE'
-      AND json_extract(cycle_snapshot_json,'$.locationId') IN (SELECT id FROM fulfillment_location WHERE market_id=?)
-      AND NOT EXISTS (SELECT 1 FROM payment_intent p WHERE p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=checkout_quote.id))`)
+        SELECT 1 FROM checkout_quote WHERE status='ACTIVE'
+        AND json_extract(cycle_snapshot_json,'$.locationId') IN
+          (SELECT id FROM fulfillment_location WHERE market_id=?)
+        AND NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.purpose='GROCERY_CHECKOUT'
+          AND payment.subject_type='checkout_quote' AND payment.subject_id=checkout_quote.id))`)
       .bind(request.marketId),
-    auditEventStatement(deps.db, {
+    auditEventStatement(dependencies.db, {
       actorUserId: permitted.authUserId,
       action: "SERVICE_AREA.PUBLISH",
       resourceType: "service_area",
@@ -421,18 +333,18 @@ export async function publishAdminServiceArea(
       correlationId: request.requestId,
       occurredAt: now,
       before: { version: request.expectedVersion },
-      after: { version: value.version, zoneCount: request.zones.length },
+      after: { version: value.version },
     }),
-    requirePublicationEffect(deps.db),
-    deps.db
+    requirePublicationEffect(dependencies.db),
+    dependencies.db
       .prepare(
         "UPDATE idempotency_records SET status='SUCCEEDED',result_reference=?,updated_at=? WHERE scope=? AND idempotency_key=?",
       )
       .bind(JSON.stringify(value), now, scope, idempotencyKey),
-    requirePublicationEffect(deps.db),
-  );
+    requirePublicationEffect(dependencies.db),
+  ];
   try {
-    await deps.db.batch(statements);
+    await dependencies.db.batch(statements);
   } catch (error) {
     const raced = await replay();
     if (raced) return raced;
@@ -442,11 +354,7 @@ export async function publishAdminServiceArea(
         error.message,
       )
     )
-      return failure(
-        "CONFLICT",
-        "Area, location or access changed; refresh and review",
-        request.requestId,
-      );
+      return failure("CONFLICT", "Area or access changed; refresh and review", request.requestId);
     throw error;
   }
   return { ok: true, requestId: request.requestId, value };

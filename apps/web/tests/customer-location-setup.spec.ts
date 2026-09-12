@@ -132,9 +132,7 @@ test("Global creates a ready site and a customer confirms delivery there", async
   const dialog = customer.getByRole("dialog", { name: "Choose delivery address", exact: true });
   await dialog.getByRole("textbox", { name: /^Search for an address/ }).fill("Test new-site");
   await dialog.getByRole("button", { name: candidate.displayAddress, exact: true }).click();
-  await expect(
-    dialog.getByText("Closest fulfillment location found", { exact: true }),
-  ).toBeVisible();
+  await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
   let confirmation: unknown;
   await customer.route("**/api/commerce/browsing-location", async (route) => {
     const response = await route.fetch();

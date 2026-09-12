@@ -1,11 +1,16 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import type {
   RpcResult,
   ServiceabilityFailureReason,
   ServiceabilityRequest,
   ServiceabilityResult,
 } from "@freshmarkets/contracts";
-import { haversineDistanceMeters, validCoordinate } from "./geometry";
+import {
+  haversineDistanceMeters,
+  parsePolygonGeoJson,
+  pointInPolygon,
+  validCoordinate,
+} from "./geometry";
 import { geographySchema } from "./schema";
 
 type Database = ReturnType<typeof import("drizzle-orm/d1").drizzle>;
@@ -27,6 +32,12 @@ export type GeographyDataset = {
     currency: string;
     timezone: string;
   } | null;
+  serviceAreas: ReadonlyArray<{
+    code: string;
+    name: string;
+    polygonVersion: number;
+    polygonGeojson: string;
+  }>;
   candidates: ReadonlyArray<{
     id: string;
     code: string;
@@ -39,9 +50,24 @@ export type GeographyDataset = {
   }>;
 };
 
+export type GlobalServiceArea = GeographyDataset["serviceAreas"][number];
+
+/** Active market-level boundaries are a union; they never select or own a location. */
+export function matchingServiceAreas<T extends GlobalServiceArea>(
+  coordinate: { latitude: number; longitude: number },
+  areas: ReadonlyArray<T>,
+): T[] {
+  return areas.filter((area) => {
+    const polygon = parsePolygonGeoJson(area.polygonGeojson);
+    return polygon ? pointInPolygon([coordinate.longitude, coordinate.latitude], polygon) : false;
+  });
+}
+
 function result(
   request: ServiceabilityRequest,
-  value: Omit<ServiceabilityResult, "coordinate" | "resolutionChanged" | "evaluatedAt">,
+  value: Omit<ServiceabilityResult, "coordinate" | "resolutionChanged" | "evaluatedAt"> & {
+    resolutionChanged?: boolean;
+  },
   now: Date,
 ): RpcResult<ServiceabilityResult> {
   return {
@@ -50,7 +76,7 @@ function result(
       ...value,
       coordinate: { latitude: request.latitude, longitude: request.longitude },
       // Retained for contract compatibility with addresses saved before pin-based assignment.
-      resolutionChanged: false,
+      resolutionChanged: value.resolutionChanged ?? false,
       evaluatedAt: now.toISOString(),
     },
     requestId: request.requestId,
@@ -91,6 +117,23 @@ export function evaluateServiceability(
     currency: dataset.market.currency,
     timezone: dataset.market.timezone,
   };
+  const serviceArea = matchingServiceAreas(request, dataset.serviceAreas)[0] ?? null;
+  if (!serviceArea)
+    return result(
+      request,
+      {
+        serviceable: false,
+        reason: "OUTSIDE_SERVICE_AREA",
+        market,
+        serviceArea: null,
+        deliveryZone: null,
+        fulfillmentEligibility: { eligible: false, candidateCount: 0 },
+        resolutionChanged:
+          request.previousResolution !== undefined &&
+          request.previousResolution.serviceAreaCode.length > 0,
+      },
+      now,
+    );
 
   const locations = dataset.candidates
     .filter((candidate) => candidate.active)
@@ -113,9 +156,17 @@ export function evaluateServiceability(
       fulfillmentLocation: locations[0] ? { id: locations[0].id, name: locations[0].name } : null,
       reason: locations.length ? null : "NO_ELIGIBLE_LOCATION",
       market,
-      serviceArea: null,
+      serviceArea: {
+        code: serviceArea.code,
+        name: serviceArea.name,
+        polygonVersion: serviceArea.polygonVersion,
+      },
       deliveryZone: null,
       fulfillmentEligibility: { eligible: count > 0, candidateCount: count },
+      resolutionChanged:
+        request.previousResolution !== undefined &&
+        (request.previousResolution.serviceAreaCode !== serviceArea.code ||
+          request.previousResolution.serviceAreaPolygonVersion !== serviceArea.polygonVersion),
     },
     now,
   );
@@ -159,6 +210,26 @@ export async function resolveServiceability(
       ),
     )
     .orderBy(asc(geographySchema.fulfillmentLocation.id));
+  const serviceAreasQuery = database
+    .select({
+      code: geographySchema.serviceArea.code,
+      name: geographySchema.serviceArea.name,
+      polygonVersion: geographySchema.serviceArea.polygonVersion,
+      polygonGeojson: geographySchema.serviceArea.polygonGeoJson,
+    })
+    .from(geographySchema.serviceArea)
+    .where(
+      and(
+        inArray(geographySchema.serviceArea.marketId, marketIds),
+        eq(geographySchema.serviceArea.status, "active"),
+        lte(geographySchema.serviceArea.activeFrom, now),
+        or(
+          isNull(geographySchema.serviceArea.activeTo),
+          gt(geographySchema.serviceArea.activeTo, now),
+        ),
+      ),
+    )
+    .orderBy(asc(geographySchema.serviceArea.code), asc(geographySchema.serviceArea.id));
   const assignmentSelection = locationsQuery.as("selected_locations");
   const locationIds = database
     .select({ id: assignmentSelection.locationId })
@@ -173,9 +244,10 @@ export async function resolveServiceability(
       ),
     );
 
-  // Location pins and operating capabilities own assignment; courier quotations own route coverage.
-  const [marketRows, locations, capabilities] = await database.batch([
+  // Global areas gate the market. Pins own assignment; courier quotations own route coverage.
+  const [marketRows, serviceAreas, locations, capabilities] = await database.batch([
     marketQuery,
+    serviceAreasQuery,
     locationsQuery,
     capabilitiesQuery,
   ]);
@@ -184,6 +256,7 @@ export async function resolveServiceability(
     request,
     {
       market,
+      serviceAreas,
       candidates: locations.map((candidate) => ({
         id: candidate.locationId,
         code: candidate.code,

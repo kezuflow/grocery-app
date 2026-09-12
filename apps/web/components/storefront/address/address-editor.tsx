@@ -131,6 +131,25 @@ function safeSaveMessage(error?: AppError): string {
   return "The address could not be saved. Please review it and try again.";
 }
 
+function serviceabilityTitle(value: ServiceabilityResult): string {
+  if (value.serviceable) return "Delivery area confirmed";
+  return value.reason === "OUTSIDE_SERVICE_AREA"
+    ? "Outside our delivery area"
+    : "No fulfillment location available";
+}
+
+function serviceabilityMessage(value: ServiceabilityResult, purpose: "save" | "serviceability") {
+  if (value.serviceable)
+    return `${value.serviceArea?.name ?? "Service area"} · Fulfilled from ${value.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`;
+  if (value.reason === "OUTSIDE_SERVICE_AREA")
+    return purpose === "save"
+      ? "FreshMarkets does not deliver to this address yet. You may save it, but it cannot be used for checkout."
+      : "FreshMarkets does not deliver to this address yet. Choose a pin inside an active service area.";
+  return purpose === "save"
+    ? "You may save this address, but ordering requires a ready fulfillment location."
+    : "No active fulfillment location can currently prepare this order.";
+}
+
 function componentsForServiceability(components: AddressComponents): Record<string, string> {
   return Object.fromEntries(
     Object.entries(components).filter((entry): entry is [string, string] => Boolean(entry[1])),
@@ -614,7 +633,7 @@ export function AddressEditor({
       }
       if (!result.value.serviceability.serviceable) {
         setServiceability(result.value.serviceability);
-        setSaveError("No fulfillment location is currently available. Please try again later.");
+        setSaveError(serviceabilityMessage(result.value.serviceability, "serviceability"));
         return;
       }
       onServiceabilityConfirmed?.(result.value);
@@ -989,16 +1008,8 @@ export function AddressEditor({
                       : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
                   }
                 >
-                  <p className="font-semibold">
-                    {serviceability.serviceable
-                      ? "Closest fulfillment location found"
-                      : "No fulfillment location available"}
-                  </p>
-                  <p>
-                    {serviceability.serviceable
-                      ? `Fulfilled from ${serviceability.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`
-                      : "You may save this address, but ordering requires an active fulfillment location."}
-                  </p>
+                  <p className="font-semibold">{serviceabilityTitle(serviceability)}</p>
+                  <p>{serviceabilityMessage(serviceability, purpose)}</p>
                 </div>
               ) : null}
             </section>
@@ -1237,17 +1248,9 @@ export function AddressEditor({
                         : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
                     }
                   >
-                    <p className="font-semibold">
-                      {serviceability.serviceable
-                        ? "Closest fulfillment location found"
-                        : "No fulfillment location available"}
-                    </p>
+                    <p className="font-semibold">{serviceabilityTitle(serviceability)}</p>
                     <p className={compact && serviceability.serviceable ? "sr-only" : undefined}>
-                      {serviceability.serviceable
-                        ? `Fulfilled from ${serviceability.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`
-                        : purpose === "save"
-                          ? "You may save this address, but ordering requires an active fulfillment location."
-                          : "No active fulfillment location can currently prepare this order."}
+                      {serviceabilityMessage(serviceability, purpose)}
                     </p>
                   </div>
                 ) : null}

@@ -175,8 +175,16 @@ export function LocationsWorkspace({
     <>
       <PageHeader
         title="Locations"
-        description="Set each fulfillment center's confirmed pickup address and exact map pin. Customers are assigned to the closest active center; Lalamove confirms each delivery route."
+        description="Set each fulfillment center's confirmed pickup address and exact map pin. Global service areas admit customer addresses, the closest active center fulfills them, and Lalamove confirms each delivery route."
       />
+      {result.ok && (
+        <Link
+          href="/admin/locations/service-areas"
+          className="mb-4 inline-flex text-sm font-medium underline"
+        >
+          Manage global service areas
+        </Link>
+      )}
       {notice && (
         <p role="status" className="mb-4 text-sm">
           {notice}

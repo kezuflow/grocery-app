@@ -15,9 +15,7 @@ const points = [
 const value: AdminServiceabilityView = {
   canManage: true,
   nextCursor: null,
-  locationsNextCursor: null,
   markets: [{ marketId: "market", name: "Cebu" }],
-  locations: [{ locationId: "location", marketId: "market", name: "Central" }],
   areas: [
     {
       serviceAreaId: "area",
@@ -26,7 +24,6 @@ const value: AdminServiceabilityView = {
       name: "Cebu delivery",
       vertices: points,
       version: 1,
-      zones: [{ code: "central", name: "Central", vertices: points, locationIds: ["location"] }],
     },
   ],
 };
@@ -72,9 +69,9 @@ describe("service-area workspace", () => {
       ),
     );
     expect(container.textContent).toContain("Cebu delivery");
-    expect(container.textContent).not.toContain("New service area");
-    expect(container.textContent).not.toContain("Review Cebu delivery");
-    expect(button("Preview routing")).toBeDefined();
+    expect(container.textContent).not.toContain("Add service area");
+    expect(container.textContent).not.toContain("Edit Cebu delivery");
+    expect(button("Preview serviceability")).toBeDefined();
   });
   it("retains the exact publication body and key when the response is lost", async () => {
     const writes: RequestInit[] = [];
@@ -89,7 +86,7 @@ describe("service-area workspace", () => {
     await act(async () =>
       root.render(<ServiceAreasWorkspace initial={{ ok: true, requestId: "test", value }} />),
     );
-    await act(async () => button("Review Cebu delivery").click());
+    await act(async () => button("Edit Cebu delivery").click());
     const reason = [...container.querySelectorAll("label")]
       .find((label) => label.textContent?.startsWith("Reason"))
       ?.querySelector("input");
