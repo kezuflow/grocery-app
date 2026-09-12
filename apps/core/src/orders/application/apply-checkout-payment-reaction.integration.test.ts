@@ -158,6 +158,14 @@ async function createQuote(
   );
 }
 
+async function requireProviderRefresh(quoteId: string): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE checkout_quote SET delivery_fee_snapshot_json=json_set(delivery_fee_snapshot_json,'$.expiresAt',?) WHERE id=?",
+  )
+    .bind(new Date(Date.now() + 10_000).toISOString(), quoteId)
+    .run();
+}
+
 async function intentWithReaction(quoteId: string, customerId: string, amountMinor = 65000) {
   const intentId = crypto.randomUUID();
   await env.DB.prepare(
@@ -650,6 +658,7 @@ describe("order commitment from canonical payment reactions", () => {
       const fixture = await seededCheckout({ onHand: 0 });
       const quote = await createQuote(fixture);
       if (!quote.ok) throw new Error(quote.error.message);
+      await requireProviderRefresh(quote.value.quoteId);
       const readiness = await env.DB.prepare(
         "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
       ).all<{ location_id: string; dispatch_ready: number }>();
@@ -713,6 +722,7 @@ describe("order commitment from canonical payment reactions", () => {
     const fixture = await seededCheckout({ onHand: 0 });
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(quote.error.message);
+    await requireProviderRefresh(quote.value.quoteId);
     const links = await env.DB.prepare(
       "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
     ).all<{

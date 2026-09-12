@@ -26,7 +26,7 @@ export default function CartPage() {
   async function load() {
     setLoading(true);
     try {
-      const next = await fetchCart();
+      const next = await fetchCart({ fresh: true });
       setCart(next);
       setError(cartLoadError());
     } finally {

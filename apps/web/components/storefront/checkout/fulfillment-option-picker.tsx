@@ -8,7 +8,9 @@ function money(option: FulfillmentOptionView) {
         style: "currency",
         currency: option.feePreview.currency,
       }).format(option.feePreview.totalMinor / 100)
-    : "Fee unavailable";
+    : option.eligible
+      ? "Calculated on review"
+      : "Unavailable";
 }
 export function FulfillmentOptionPicker({
   options,

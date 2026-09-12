@@ -23,13 +23,11 @@ export function CatalogResults({
   initialCursor,
   query = "",
   categorySlug,
-  locationId,
 }: {
   initialItems: ReadonlyArray<PresentationProduct>;
   initialCursor: string | null;
   query?: string;
   categorySlug?: string;
-  locationId?: string;
 }) {
   const [items, setItems] = useState<PresentationProduct[]>([...initialItems]);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
@@ -45,7 +43,6 @@ export function CatalogResults({
       const params = new URLSearchParams();
       if (query.trim() !== "") params.set("q", query.trim());
       if (categorySlug) params.set("category", categorySlug);
-      if (locationId) params.set("locationId", locationId);
       params.set("cursor", cursor);
       params.set("limit", "24");
       const payload = await readJson<{ ok: true; value: CatalogSearchPage } | { ok: false }>(
@@ -69,7 +66,7 @@ export function CatalogResults({
     } finally {
       setLoading(false);
     }
-  }, [cursor, loading, query, categorySlug, locationId, items.length]);
+  }, [cursor, loading, query, categorySlug, items.length]);
 
   return (
     <div>

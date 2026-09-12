@@ -34,6 +34,8 @@ export type ConfirmedBrowsingLocation = {
   displayAddress: string;
   coordinate: Coordinate;
   serviceability: ServiceabilityResult;
+  /** Opaque Core-signed read context. It can scope catalog presentation, never checkout authority. */
+  browsingContextToken: string | null;
 };
 
 export type AddressSearchCandidate = {

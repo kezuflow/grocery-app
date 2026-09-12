@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
   CartView,
+  CheckoutBootstrapView,
   CheckoutQuoteView,
   CustomerAddressView,
   CustomerProfileView,
@@ -95,7 +96,7 @@ export function CheckoutClient({
     };
   }, [cart, addressId, addresses]);
   useEffect(() => {
-    void fetchCart().then((value) => {
+    void fetchCart({ fresh: true }).then((value) => {
       setCart(value ?? null);
       if (value?.id === "guest-cart") {
         setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
@@ -111,27 +112,22 @@ export function CheckoutClient({
     const generation = ++addressLoadGeneration.current;
     setAddressLoadState("loading");
     try {
-      const [response, profileResponse] = await Promise.all(
-        ["/api/commerce/address", "/api/commerce/profile"].map((url) =>
-          fetch(url, { credentials: "same-origin", cache: "no-store" }),
-        ),
-      );
-      if (!response || !profileResponse) throw new Error("Address account reads unavailable");
-      const result = (await response.json()) as RpcResult<ReadonlyArray<CustomerAddressView>>;
-      const profileResult = (await profileResponse.json()) as RpcResult<CustomerProfileView>;
+      const response = await fetch("/api/checkout/bootstrap", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const result = (await response.json()) as RpcResult<CheckoutBootstrapView>;
       if (generation !== addressLoadGeneration.current) return;
       if (!response.ok || !result.ok) {
         setAddressLoadState("error");
         return;
       }
-      setAddresses(result.value);
-      setProfile(profileResult.ok ? profileResult.value : null);
+      setAddresses(result.value.addresses);
+      setProfile(result.value.profile);
       setAddressLoadState("ready");
       const requestedAddressId =
-        preferredAddressId ??
-        (selectedAddressId.current ||
-          (profileResult.ok ? profileResult.value.defaultAddressId : null));
-      const confirmed = result.value.find((address) => address.id === requestedAddressId);
+        preferredAddressId ?? (selectedAddressId.current || result.value.profile.defaultAddressId);
+      const confirmed = result.value.addresses.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.confirmedAt ? confirmed.id : "");
       setShowSavedAddresses(!confirmed?.confirmedAt);
       if (!(await invalidatePendingQuote())) return;

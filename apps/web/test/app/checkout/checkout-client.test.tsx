@@ -102,7 +102,21 @@ function json(value: unknown): Response {
 }
 
 function addressesResponse(addresses: ReadonlyArray<CustomerAddressView>): Response {
-  return json({ ok: true, value: addresses, requestId: crypto.randomUUID() });
+  return json({
+    ok: true,
+    value: {
+      addresses,
+      profile: {
+        customerId: "customer",
+        accountPhone: null,
+        defaultAddressId: null,
+        preferredLanguage: null,
+        promotionalEmails: false,
+        version: 1,
+      },
+    },
+    requestId: crypto.randomUUID(),
+  });
 }
 
 function deferred<T>() {
@@ -194,23 +208,8 @@ function successfulFetch(options?: {
           ],
         }),
       );
-    if (path === "/api/commerce/address")
+    if (path === "/api/checkout/bootstrap")
       return Promise.resolve(addressesResponse(options?.addresses ?? [home, office]));
-    if (path === "/api/commerce/profile")
-      return Promise.resolve(
-        json({
-          ok: true,
-          value: {
-            customerId: "customer",
-            accountPhone: null,
-            defaultAddressId: null,
-            preferredLanguage: null,
-            promotionalEmails: false,
-            version: 1,
-          },
-          requestId: "profile",
-        }),
-      );
     if (path === "/api/commerce/checkout")
       return Promise.resolve(
         json({ ok: true, value: { eligible: true, failures: [] }, requestId: "eligible" }),
@@ -491,7 +490,7 @@ describe("CheckoutClient delivery inputs", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string | URL | Request, init?: RequestInit) => {
-        if (String(url) === "/api/commerce/address")
+        if (String(url) === "/api/checkout/bootstrap")
           return ++addressCalls === 1 ? initial.promise : refreshed.promise;
         return base(url, init);
       }),

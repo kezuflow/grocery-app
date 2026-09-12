@@ -3015,15 +3015,51 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return confirmBrowsingLocation(
-      { db: this.env.DB, geocoder: this.createGeocoderPort() },
+      {
+        db: this.env.DB,
+        geocoder: this.createGeocoderPort(),
+        contextSecret: this.runtimeConfiguration().auth.secret,
+      },
       validation.data,
     );
   }
   async searchCatalog(input: import("@freshmarkets/contracts").CatalogSearchRequest) {
     return this.catalogRpc.searchCatalog(input);
   }
+  async searchMarketplace(input: import("@freshmarkets/contracts").CatalogSearchRequest) {
+    const [page, categories] = await Promise.all([
+      this.catalogRpc.searchCatalog(input),
+      this.catalogRpc.listCategories(input),
+    ]);
+    if (!page.ok) return page;
+    return {
+      ok: true as const,
+      value: {
+        page: page.value,
+        categories: categories.ok ? categories.value.categories : [],
+        categoriesAvailable: categories.ok,
+      },
+      requestId: input.requestId,
+    };
+  }
   async getMarketplaceHome(input: import("@freshmarkets/contracts").MarketplaceHomeRequest) {
     return this.catalogRpc.getMarketplaceHome(input);
+  }
+  async getStorefrontHome(input: import("@freshmarkets/contracts").MarketplaceHomeRequest) {
+    const [marketplace, banners] = await Promise.all([
+      this.catalogRpc.getMarketplaceHome(input),
+      listPublishedBanners(this.env.DB, { requestId: input.requestId }),
+    ]);
+    if (!marketplace.ok) return marketplace;
+    return {
+      ok: true as const,
+      value: {
+        marketplace: marketplace.value,
+        banners: banners.ok ? banners.value.items : [],
+        bannersAvailable: banners.ok,
+      },
+      requestId: input.requestId,
+    };
   }
   async getCatalogProduct(input: import("@freshmarkets/contracts").CatalogProductRequest) {
     return this.catalogRpc.getCatalogProduct(input);
@@ -3062,6 +3098,28 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       customerId: customer.value.customerId,
       requestId: input.requestId,
     });
+  }
+
+  async getCheckoutBootstrap(input: AuthenticatedRequest) {
+    const validation = authenticatedRequestSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.context.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    const [addresses, profile] = await Promise.all([
+      listCustomerAddresses(this.env.DB, {
+        customerId: customer.value.customerId,
+        requestId: input.requestId,
+      }),
+      readCustomerProfile(this.env.DB, customer.value.customerId),
+    ]);
+    return profile
+      ? {
+          ok: true as const,
+          value: { addresses: addresses.value, profile },
+          requestId: input.requestId,
+        }
+      : fail("NOT_FOUND", "Customer profile not found", input.requestId);
   }
 
   async updateCustomerAddress(

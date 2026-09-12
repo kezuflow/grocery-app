@@ -4,7 +4,6 @@ import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { operationalCandidates } from "../../geography/application/operational-candidates";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
-import { quoteProviderDelivery } from "./quote-provider-delivery";
 import { MAX_ORDER_WEIGHT_GRAMS } from "../../fulfillment/domain/delivery-package";
 
 type Query = {
@@ -245,29 +244,9 @@ export async function listFulfillmentOptions(
               ? "DELIVERY_PARTNER_UNAVAILABLE"
               : "FEE_UNAVAILABLE"
             : reason;
-        let fee: FulfillmentOptionView["feePreview"] = null;
-        if (candidate && partner && optionReason === null) {
-          const now = Date.now();
-          const quoted = await quoteProviderDelivery(database, partner.provider, {
-            providerCode: partner.providerCode,
-            serviceType: partner.serviceType,
-            marketId: candidate.marketId,
-            locationId: candidate.locationId,
-            cartId: query.cartId,
-            address,
-            scheduleAt:
-              mode === "SCHEDULED" && cycle ? new Date(cycle.pickupAt).toISOString() : null,
-            now,
-          });
-          if (!quoted) optionReason = "FEE_UNAVAILABLE";
-          else
-            fee = {
-              subtotalMinor: quoted.feeMinor,
-              discountMinor: 0,
-              totalMinor: quoted.feeMinor,
-              currency: quoted.snapshot.currency,
-            };
-        }
+        // Option discovery is intentionally provider-free. The selected option
+        // obtains one authoritative courier quote when the customer reviews the total.
+        const fee: FulfillmentOptionView["feePreview"] = null;
         const evidence = candidate
           ? {
               locationId: candidate.locationId,

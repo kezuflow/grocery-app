@@ -27,9 +27,7 @@ export async function GET(request: Request): Promise<Response> {
     categorySlug: category && category.trim() !== "" ? category.trim() : undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: positiveIntParam(url.searchParams.get("limit"), DEFAULT_LIMIT),
-    locationId:
-      url.searchParams.get("locationId") ??
-      (await readBrowsingLocation(request.headers.get("cookie") ?? "")),
+    ...(await readBrowsingLocation(request.headers.get("cookie") ?? "")),
   });
   return jsonWithRequestId(result, requestId, {
     status: result.ok ? 200 : result.error.code === "VALIDATION_FAILED" ? 400 : 502,

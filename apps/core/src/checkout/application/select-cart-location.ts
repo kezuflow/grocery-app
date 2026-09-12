@@ -8,8 +8,10 @@ import type {
 import { activeMarketCode } from "../../geography/market-defaults";
 import { resolveServiceability } from "../../geography/serviceability";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { getCart } from "./cart";
 
 const SCOPE = "cart.selectLocation";
+type CartLocationReceipt = Omit<CartLocationSelection, "cart">;
 
 /** Select a geographically resolved site without granting checkout eligibility. */
 export async function selectCartLocation(
@@ -20,6 +22,18 @@ export async function selectCartLocation(
     ok: false,
     error: { code, message, requestId: input.requestId },
   });
+  const withCart = async (
+    receipt: CartLocationReceipt,
+  ): Promise<RpcResult<CartLocationSelection>> => {
+    const current = await getCart(database, input);
+    return current.ok
+      ? {
+          ok: true,
+          value: { ...receipt, cart: current.value },
+          requestId: input.requestId,
+        }
+      : current;
+  };
   const hash = await requestHash({
     customerId: input.customerId,
     latitude: input.latitude,
@@ -32,11 +46,7 @@ export async function selectCartLocation(
       return fail("IDEMPOTENCY_CONFLICT", "This key belongs to a different location selection.");
     if (replay.status !== "SUCCEEDED" || !replay.resultReference)
       return fail("CONFLICT", "Location selection is still processing.");
-    return {
-      ok: true,
-      value: JSON.parse(replay.resultReference) as CartLocationSelection,
-      requestId: input.requestId,
-    };
+    return withCart(JSON.parse(replay.resultReference) as CartLocationReceipt);
   }
   const marketCode = await activeMarketCode(database);
   if (!marketCode) return fail("CONFIGURATION_ERROR", "The delivery market is not configured.");
@@ -67,7 +77,7 @@ export async function selectCartLocation(
       "Your cart changed. Review it before changing delivery location.",
     );
   const now = Date.now();
-  const value = {
+  const value: CartLocationReceipt = {
     cartId: cart?.id ?? crypto.randomUUID(),
     version: input.expectedVersion + 1,
     locationId: location.id,
@@ -111,11 +121,7 @@ export async function selectCartLocation(
   } catch (error) {
     const raced = await findIdempotencyRecord(database, SCOPE, input.idempotencyKey);
     if (raced?.status === "SUCCEEDED" && raced.requestHash === hash && raced.resultReference)
-      return {
-        ok: true,
-        value: JSON.parse(raced.resultReference) as CartLocationSelection,
-        requestId: input.requestId,
-      };
+      return withCart(JSON.parse(raced.resultReference) as CartLocationReceipt);
     if (raced && raced.requestHash !== hash)
       return fail("IDEMPOTENCY_CONFLICT", "This key belongs to a different location selection.");
     const latest = await database
@@ -134,5 +140,5 @@ export async function selectCartLocation(
       );
     throw error;
   }
-  return { ok: true, value, requestId: input.requestId };
+  return withCart(value);
 }

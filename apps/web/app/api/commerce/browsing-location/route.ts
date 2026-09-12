@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
+import { BROWSING_CONTEXT_COOKIE } from "@/lib/storefront/browsing-location";
 
 const PRIVATE_NO_STORE_HEADERS = {
   "cache-control": "private, no-store, max-age=0",
@@ -38,8 +39,20 @@ export async function POST(request: Request): Promise<Response> {
     coordinate: parsed.data.coordinate,
   });
   const responseRequestId = result.ok ? result.requestId : result.error.requestId;
-  return Response.json(result, {
+  const token = result.ok ? result.value.browsingContextToken : null;
+  const publicResult = result.ok
+    ? { ...result, value: { ...result.value, browsingContextToken: null } }
+    : result;
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  const contextCookie = token
+    ? `${BROWSING_CONTEXT_COOKIE}=${token}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax${secure}`
+    : `${BROWSING_CONTEXT_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`;
+  return Response.json(publicResult, {
     status: result.ok ? 200 : result.error.code.startsWith("GEOCODER_") ? 503 : 400,
-    headers: { ...PRIVATE_NO_STORE_HEADERS, "x-request-id": responseRequestId },
+    headers: {
+      ...PRIVATE_NO_STORE_HEADERS,
+      "x-request-id": responseRequestId,
+      "set-cookie": contextCookie,
+    },
   });
 }

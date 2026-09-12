@@ -46,27 +46,30 @@ it("requires a selected point and rejects malformed or out-of-range remembered d
 it("resolves coordinates and creates the first Cart through its explicit command", async () => {
   let selected = false;
   const bodies: unknown[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-      if (url === "/api/serviceability") {
-        expect(JSON.parse(String(init?.body))).toEqual(point);
-        return response(resolution);
-      }
-      if (url === "/api/commerce/cart/location") {
-        selected = true;
-        bodies.push(JSON.parse(String(init?.body)));
-        return response({
-          ok: true,
-          value: { cartId: "cart-1", version: 1, locationId: "site-1" },
-        });
-      }
-      return response(
-        selected ? current : { ok: false, error: { code: "DELIVERY_LOCATION_REQUIRED" } },
-      );
-    }),
-  );
+  const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (url === "/api/serviceability") {
+      expect(JSON.parse(String(init?.body))).toEqual(point);
+      return response(resolution);
+    }
+    if (url === "/api/commerce/cart/location") {
+      selected = true;
+      bodies.push(JSON.parse(String(init?.body)));
+      return response({
+        ok: true,
+        value: { cartId: "cart-1", version: 1, locationId: "site-1", cart: current.value },
+      });
+    }
+    return response(
+      selected ? current : { ok: false, error: { code: "DELIVERY_LOCATION_REQUIRED" } },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
   expect(await loadCartForLocation()).toEqual(current);
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    "/api/commerce/cart",
+    "/api/serviceability",
+    "/api/commerce/cart/location",
+  ]);
   expect(bodies).toEqual([
     expect.objectContaining({ ...point, expectedVersion: 0, idempotencyKey: expect.any(String) }),
   ]);
@@ -87,7 +90,7 @@ it("replays an uncertain location command even when the next read already shows 
         }
         return response({
           ok: true,
-          value: { cartId: "cart-1", version: 1, locationId: "site-1" },
+          value: { cartId: "cart-1", version: 1, locationId: "site-1", cart: current.value },
         });
       }
       return response(
@@ -103,14 +106,18 @@ it("replays an uncertain location command even when the next read already shows 
   expect(saved.size).toBe(0);
 });
 it("does not substitute a default site for coordinates outside serviceability", async () => {
-  const fetchMock = vi.fn(async () =>
-    response({ ok: true, value: { serviceable: false, fulfillmentLocation: null } }),
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) =>
+    response(
+      url === "/api/commerce/cart"
+        ? { ok: false, error: { code: "DELIVERY_LOCATION_REQUIRED" } }
+        : { ok: true, value: { serviceable: false, fulfillmentLocation: null } },
+    ),
   );
   vi.stubGlobal("fetch", fetchMock);
   expect(await loadCartForLocation()).toMatchObject({
     ok: false,
     error: { code: "DELIVERY_LOCATION_REQUIRED" },
   });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(saved.size).toBe(0);
 });

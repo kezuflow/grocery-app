@@ -138,7 +138,7 @@ async function selectCandidate(container: HTMLElement, fetchImpl: ReturnType<typ
   );
   if (collapsedSearch) click(collapsedSearch);
   change(input(container, "Search for an address"), "Ayala Cebu");
-  await act(async () => vi.advanceTimersByTimeAsync(300));
+  await act(async () => vi.advanceTimersByTimeAsync(450));
   await flush();
   const option = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes(candidate.displayAddress),
@@ -513,13 +513,13 @@ describe("AddressEditor", () => {
     const search = input(container, "Search for an address");
 
     change(search, "Aya");
-    await act(async () => vi.advanceTimersByTimeAsync(299));
+    await act(async () => vi.advanceTimersByTimeAsync(449));
     expect(fetchImpl).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
 
     change(search, "Ayala Cebu");
-    await act(async () => vi.advanceTimersByTimeAsync(300));
+    await act(async () => vi.advanceTimersByTimeAsync(450));
     await flush();
 
     expect(firstSignal?.aborted).toBe(true);
@@ -929,7 +929,7 @@ describe("AddressEditor", () => {
     const adapter = new FakeMapAdapter({ initializationError: new Error("private map detail") });
     const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
     change(input(container, "Search for an address"), "Ayala Cebu");
-    await act(async () => vi.advanceTimersByTimeAsync(300));
+    await act(async () => vi.advanceTimersByTimeAsync(450));
     await flush();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(

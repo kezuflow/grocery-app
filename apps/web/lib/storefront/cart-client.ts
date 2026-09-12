@@ -71,6 +71,8 @@ export function cartCountFromView(view: CartView): number {
  * hydrate without each firing their own request.
  */
 let cachedCartView: CartView | null = null;
+let cachedCartLoadedAt = 0;
+const CART_READ_CACHE_MILLISECONDS = 30_000;
 
 export function cachedCart(): CartView | null {
   return cachedCartView;
@@ -79,6 +81,7 @@ export function cachedCart(): CartView | null {
 function rememberCart(view: CartView): void {
   if (activeOperationGeneration !== locationGeneration) return;
   cachedCartView = view;
+  cachedCartLoadedAt = Date.now();
   window.dispatchEvent(
     new CustomEvent(CART_CHANGED_EVENT, {
       detail: { count: cartCountFromView(view), view },
@@ -187,7 +190,8 @@ function rememberGuestItem(skuId: string, quantity: number, metadata?: CartItemM
 export function clearGuestCart(): void {
   loadError = "";
   if (typeof window !== "undefined") window.localStorage.removeItem(GUEST_CART_KEY);
-  if (cachedCartView?.id === "guest-cart") cachedCartView = null;
+  cachedCartView = null;
+  cachedCartLoadedAt = 0;
 }
 
 export function quantityForSku(view: CartView, skuId: string): number {
@@ -393,6 +397,7 @@ export function refreshCartForLocation(): Promise<CartView | null> {
   locationGeneration++;
   loadError = "";
   cachedCartView = null;
+  cachedCartLoadedAt = 0;
   window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
   const refresh = runCartOperation(loadCart).finally(() => {
     if (refreshingCart === refresh) refreshingCart = null;
@@ -401,8 +406,15 @@ export function refreshCartForLocation(): Promise<CartView | null> {
   return refresh;
 }
 let loadingCart: Promise<CartView | null> | null = null;
-export function fetchCart(): Promise<CartView | null> {
+export function fetchCart(options: { fresh?: boolean } = {}): Promise<CartView | null> {
   if (refreshingCart) return refreshingCart;
+  if (
+    !options.fresh &&
+    cachedCartView &&
+    cachedCartView.id !== "guest-cart" &&
+    Date.now() - cachedCartLoadedAt < CART_READ_CACHE_MILLISECONDS
+  )
+    return Promise.resolve(cachedCartView);
   if (!loadingCart)
     loadingCart = runCartOperation(loadCart).finally(() => {
       loadingCart = null;
@@ -412,17 +424,16 @@ export function fetchCart(): Promise<CartView | null> {
 async function loadCart(): Promise<CartView | null> {
   loadError = "";
   try {
-    const result = await loadCartForLocation();
+    const guest = guestCartView();
+    const result = await loadCartForLocation({ createIfMissing: Boolean(guest) });
     if (activeOperationGeneration !== locationGeneration) return null;
     if (result.ok && result.value) {
-      const guest = guestCartView();
       const merged = guest ? await mergeGuestCart(result.value, guest) : result.value;
       const next = merged;
       rememberCart(next);
       return activeOperationGeneration === locationGeneration ? next : null;
     }
     if (!result.ok && result.error.code !== "UNAUTHENTICATED") loadError = result.error.message;
-    const guest = guestCartView();
     if (guest) {
       const view = loadError
         ? {

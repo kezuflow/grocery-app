@@ -34,11 +34,11 @@ async function ProductDetails({ slug }: { slug: string }) {
   try {
     const result = await withReadDeadline(
       (async () => {
-        const locationId = await readBrowsingLocation();
+        const catalogLocation = await readBrowsingLocation();
         return coreClient(env.CORE).getCatalogProduct({
           requestId: crypto.randomUUID(),
           slug,
-          locationId,
+          ...catalogLocation,
         });
       })(),
     );

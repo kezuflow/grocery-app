@@ -1,6 +1,7 @@
 import type { RequestMeta, RpcResult } from "./common";
 import type { ServiceabilityRequest, ServiceabilityResult } from "./geography";
 import type { DeliveryCycleState } from "./states";
+import type { PublishedBanner } from "./banner-media";
 
 export type CatalogSellUnitCode = "G" | "KG" | "PC";
 
@@ -75,8 +76,21 @@ export type MarketplaceHomeView = {
   rails: ReadonlyArray<MarketplaceHomeRail>;
 };
 
+export type StorefrontHomeView = {
+  marketplace: MarketplaceHomeView;
+  banners: ReadonlyArray<PublishedBanner>;
+  bannersAvailable: boolean;
+};
+
+export type MarketplaceSearchView = {
+  page: CatalogSearchPage;
+  categories: CategoryNavigationView["categories"];
+  categoriesAvailable: boolean;
+};
+
 export type MarketplaceHomeRequest = RequestMeta & {
   locationId?: string;
+  browsingContextToken?: string;
   itemsPerRail?: number;
 };
 
@@ -92,9 +106,14 @@ export type CatalogSearchRequest = RequestMeta & {
   cursor?: string;
   limit?: number;
   locationId?: string;
+  browsingContextToken?: string;
 };
 
-export type CatalogProductRequest = RequestMeta & { slug: string; locationId?: string };
+export type CatalogProductRequest = RequestMeta & {
+  slug: string;
+  locationId?: string;
+  browsingContextToken?: string;
+};
 export type DeliveryCycleRequest = RequestMeta & { marketCode?: string };
 export type DeliveryCycleView = {
   id: string;
@@ -112,6 +131,8 @@ export type CatalogService = {
   searchCatalog(request: CatalogSearchRequest): Promise<RpcResult<CatalogSearchPage>>;
   /** Bounded home discovery; rails never materialize the whole catalog. */
   getMarketplaceHome(request: MarketplaceHomeRequest): Promise<RpcResult<MarketplaceHomeView>>;
+  getStorefrontHome(request: MarketplaceHomeRequest): Promise<RpcResult<StorefrontHomeView>>;
+  searchMarketplace(request: CatalogSearchRequest): Promise<RpcResult<MarketplaceSearchView>>;
   getCatalogProduct(
     request: CatalogProductRequest,
   ): Promise<RpcResult<MarketplaceProductView | null>>;

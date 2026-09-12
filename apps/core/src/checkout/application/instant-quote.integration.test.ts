@@ -715,9 +715,11 @@ describe("instant checkout quotes", () => {
     ).run();
     const basket = await seedBasket({ onHand: 100_000, member: false });
     let amountMinor = 5_000;
+    let providerQuoteCalls = 0;
     const changingProvider = {
       ...deliveryProvider,
       quote: async (request: Parameters<typeof deliveryProvider.quote>[0]) => {
+        providerQuoteCalls += 1;
         const result = await deliveryProvider.quote(request);
         return result.ok
           ? {
@@ -738,17 +740,43 @@ describe("instant checkout quotes", () => {
     );
     expect(created.ok).toBe(true);
     if (!created.ok) return;
+    expect(providerQuoteCalls).toBe(1);
     amountMinor = 6_500;
     const quote = await createCheckoutRepository(env.DB).findQuoteById(created.value.quoteId);
+    if (
+      !quote ||
+      !quote.deliveryFeeSnapshot ||
+      !("source" in quote.deliveryFeeSnapshot) ||
+      quote.deliveryFeeSnapshot.source !== "EXTERNAL_PROVIDER"
+    )
+      throw new Error("provider quote fixture missing");
     expect(
       await revalidateCheckoutQuote(
         env.DB,
-        quote!,
+        quote,
+        dependencies.routeDistance,
+        Date.now(),
+        dependencies.deliveryProviders,
+      ),
+    ).toEqual({ ok: true });
+    expect(providerQuoteCalls).toBe(1);
+    const nearExpiryQuote = {
+      ...quote,
+      deliveryFeeSnapshot: {
+        ...quote.deliveryFeeSnapshot,
+        expiresAt: new Date(Date.now() + 10_000).toISOString(),
+      },
+    };
+    expect(
+      await revalidateCheckoutQuote(
+        env.DB,
+        nearExpiryQuote,
         dependencies.routeDistance,
         Date.now(),
         dependencies.deliveryProviders,
       ),
     ).toMatchObject({ ok: false, code: "PRICE_CHANGED" });
+    expect(providerQuoteCalls).toBe(2);
   });
 
   it("refuses instant quotes when usable stocked supply is short", async () => {

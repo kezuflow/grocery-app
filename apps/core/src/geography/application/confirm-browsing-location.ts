@@ -7,10 +7,11 @@ import type {
 import type { GeocoderPort } from "../ports/geocoder";
 import { GeocoderError } from "../infrastructure/geocoder-error";
 import { resolveServiceability } from "../serviceability";
+import { issueBrowsingContext } from "./browsing-context";
 
 /** No provider-derived browser data may be retained before this confirmation. */
 export async function confirmBrowsingLocation(
-  dependencies: { db: D1Database; geocoder: GeocoderPort },
+  dependencies: { db: D1Database; geocoder: GeocoderPort; contextSecret: string },
   input: AddressReverseRequest,
 ): Promise<RpcResult<ConfirmedBrowsingLocation>> {
   try {
@@ -21,6 +22,16 @@ export async function confirmBrowsingLocation(
       requestId: input.requestId,
     });
     if (!resolution.ok) return resolution;
+    const location = resolution.value.fulfillmentLocation;
+    const area = resolution.value.serviceArea;
+    const browsingContextToken =
+      resolution.value.serviceable && location && area
+        ? await issueBrowsingContext(dependencies.contextSecret, {
+            locationId: location.id,
+            serviceAreaCode: area.code,
+            serviceAreaVersion: area.polygonVersion,
+          })
+        : null;
     return {
       ok: true,
       requestId: input.requestId,
@@ -28,6 +39,7 @@ export async function confirmBrowsingLocation(
         displayAddress: permanent.displayAddress,
         coordinate: input.coordinate,
         serviceability: resolution.value,
+        browsingContextToken,
       },
     };
   } catch (error) {

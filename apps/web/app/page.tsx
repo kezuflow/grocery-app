@@ -46,20 +46,17 @@ async function MarketplaceContents({
   const browsing = category === "all" && query === "";
   const requestId = crypto.randomUUID();
   const client = coreClient(env.CORE);
-  const location = readBrowsingLocation();
+  const browsingContext = readBrowsingLocation();
 
   if (browsing) {
-    const [home, campaigns] = await Promise.all([
-      location.then((locationId) =>
-        client.getMarketplaceHome({ requestId, itemsPerRail: 12, locationId }),
-      ),
-      client.listPublishedBanners({ requestId: crypto.randomUUID() }),
-    ]);
+    const home = await browsingContext.then((catalogLocation) =>
+      client.getStorefrontHome({ requestId, itemsPerRail: 12, ...catalogLocation }),
+    );
     if (!home.ok) {
       return <CatalogError />;
     }
-    const locationId = await location;
-    const rails = home.value.rails.map((rail) => ({
+    const catalogLocation = await browsingContext;
+    const rails = home.value.marketplace.rails.map((rail) => ({
       slug: rail.categorySlug,
       name: rail.title,
       products: railEligible(toPresentationProducts(rail.items)),
@@ -68,17 +65,20 @@ async function MarketplaceContents({
 
     return (
       <>
-        <QuickViewProvider key={locationId ?? "anonymous"} products={providerProducts}>
+        <QuickViewProvider
+          key={catalogLocation.browsingContextToken ?? catalogLocation.locationId ?? "anonymous"}
+          products={providerProducts}
+        >
           <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
             <CategoryStrip
-              categories={home.value.categories}
+              categories={home.value.marketplace.categories}
               activeCategory={category}
               className="-mx-4 px-4 sm:mx-0 sm:px-0"
             />
 
             <div id="catalog" className="mt-6 space-y-7">
-              {campaigns.ok ? (
-                <PromoBanners campaigns={campaigns.value.items} />
+              {home.value.bannersAvailable ? (
+                <PromoBanners campaigns={[...home.value.banners]} />
               ) : (
                 <p role="status" className="text-sm text-[var(--fm-text-muted)]">
                   Offers are temporarily unavailable.
@@ -100,32 +100,29 @@ async function MarketplaceContents({
     );
   }
 
-  const [results, categories] = await Promise.all([
-    location.then((locationId) =>
-      client.searchCatalog({
-        requestId,
-        query: query || undefined,
-        categorySlug: category === "all" ? undefined : category,
-        limit: PAGE_SIZE,
-        locationId,
-      }),
-    ),
-    client.listCategories({ requestId: crypto.randomUUID() }),
-  ]);
+  const results = await browsingContext.then((catalogLocation) =>
+    client.searchMarketplace({
+      requestId,
+      query: query || undefined,
+      categorySlug: category === "all" ? undefined : category,
+      limit: PAGE_SIZE,
+      ...catalogLocation,
+    }),
+  );
 
   if (!results.ok) {
     return <CatalogError />;
   }
 
-  const locationId = await location;
-  const firstPage = toPresentationProducts(results.value.items);
-  const categoryLinks = categories.ok ? categories.value.categories : [];
+  const catalogLocation = await browsingContext;
+  const firstPage = toPresentationProducts(results.value.page.items);
+  const categoryLinks = results.value.categoriesAvailable ? results.value.categories : [];
   const activeCategory = categoryLinks.find((entry) => entry.slug === category);
 
   return (
     <>
       <QuickViewProvider
-        key={`${query}:${category}:${locationId ?? "anonymous"}`}
+        key={`${query}:${category}:${catalogLocation.browsingContextToken ?? catalogLocation.locationId ?? "anonymous"}`}
         products={firstPage}
       >
         <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
@@ -149,10 +146,9 @@ async function MarketplaceContents({
             {firstPage.length > 0 ? (
               <CatalogResults
                 initialItems={firstPage}
-                initialCursor={results.value.nextCursor}
+                initialCursor={results.value.page.nextCursor}
                 query={query}
                 categorySlug={category === "all" ? undefined : category}
-                locationId={locationId}
               />
             ) : (
               <ProductGridEmpty query={query} />

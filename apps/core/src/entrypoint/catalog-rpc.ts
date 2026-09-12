@@ -18,6 +18,20 @@ import {
 } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { rpcFailure, validationFailure } from "./validation-errors";
+import { locationFromBrowsingContext } from "../geography/application/browsing-context";
+
+async function catalogLocation(
+  context: CoreRpcContext,
+  input: { locationId?: string; browsingContextToken?: string },
+): Promise<string | undefined> {
+  if (!input.browsingContextToken) return input.locationId;
+  return (
+    (await locationFromBrowsingContext(
+      context.runtimeConfiguration().auth.secret,
+      input.browsingContextToken,
+    )) ?? undefined
+  );
+}
 
 export function createCatalogRpc(context: CoreRpcContext) {
   return {
@@ -25,9 +39,10 @@ export function createCatalogRpc(context: CoreRpcContext) {
       const validation = catalogSearchRequestSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       try {
+        const locationId = await catalogLocation(context, input);
         return {
           ok: true as const,
-          value: await searchCatalog(context.env.DB, input),
+          value: await searchCatalog(context.env.DB, { ...input, locationId }),
           requestId: input.requestId,
         };
       } catch (error) {
@@ -41,9 +56,10 @@ export function createCatalogRpc(context: CoreRpcContext) {
       const validation = marketplaceHomeRequestSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       try {
+        const locationId = await catalogLocation(context, input);
         return {
           ok: true as const,
-          value: await getMarketplaceHome(context.env.DB, input),
+          value: await getMarketplaceHome(context.env.DB, { ...input, locationId }),
           requestId: input.requestId,
         };
       } catch (error) {
@@ -56,9 +72,10 @@ export function createCatalogRpc(context: CoreRpcContext) {
     async getCatalogProduct(input: CatalogProductRequest) {
       const validation = catalogProductRequestSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const locationId = await catalogLocation(context, input);
       return {
         ok: true as const,
-        value: await getProduct(context.env.DB, input.slug, input.locationId),
+        value: await getProduct(context.env.DB, input.slug, locationId),
         requestId: input.requestId,
       };
     },

@@ -14,7 +14,7 @@ const coordinateSchema = z.object({
 const sessionToken = z.string().uuid();
 export const autocompleteSchema = z.object({
   requestId: z.string().min(1),
-  query: z.string().trim().min(2).max(200),
+  query: z.string().trim().min(3).max(200),
   proximity: coordinateSchema.optional(),
   sessionToken,
 });

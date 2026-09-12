@@ -108,13 +108,26 @@ for (const width of [1440, 390]) {
       .object({ user: z.object({ email: z.string() }) })
       .parse(await (await account.request.get("/api/auth/get-session")).json());
 
-    // Search is transient. Confirmation runs the real Core application/adapter
-    // through the test-only provider transport, requiring permanent=true.
-    await page.route("**/api/commerce/address-search", (route) =>
+    // Provider predictions/details are transient. Confirmation runs the real
+    // Core application/adapter through the test-only permanent reverse lookup.
+    await page.route("**/api/commerce/address-autocomplete", (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ ok: true, value: [candidate], requestId: "synthetic-geocoder" }),
+        body: JSON.stringify({
+          ok: true,
+          value: [
+            { candidateKey: candidate.candidateKey, displayAddress: candidate.displayAddress },
+          ],
+          requestId: "synthetic-geocoder",
+        }),
+      }),
+    );
+    await page.route("**/api/commerce/address-prediction", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, value: candidate, requestId: "synthetic-geocoder" }),
       }),
     );
     await page.context().addCookies([
@@ -150,9 +163,9 @@ for (const width of [1440, 390]) {
         (cookie) => cookie.name === "freshmarkets_browse_point",
       ),
     ).toBe(false);
-    await locationDialog
-      .getByRole("button", { name: "Skip for now — browse groceries", exact: true })
-      .click();
+    // The compact address popover intentionally has no redundant close row;
+    // dismissing it exercises the same browse-without-location state.
+    await page.keyboard.press("Escape");
     await expect(locationDialog).toHaveCount(0);
     await expect(page.getByRole("article").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /^Add .* to cart$/ })).toHaveCount(0);
@@ -177,13 +190,16 @@ for (const width of [1440, 390]) {
       fullPage: true,
     });
     await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
+    await locationDialog.getByRole("button", { name: "Choose map", exact: true }).click();
     await locationDialog
       .getByRole("textbox", { name: /^Search for an address/ })
       .fill("Test delivery entrance");
     await locationDialog
       .getByRole("button", { name: candidate.displayAddress, exact: true })
       .click();
-    await expect(locationDialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+    await expect(
+      locationDialog.getByText("Delivery area confirmed", { exact: true }),
+    ).toBeVisible();
     await page.route("**/api/commerce/browsing-location", (route) => route.abort(), { times: 1 });
     await locationDialog.getByRole("button", { name: "Deliver here", exact: true }).click();
     await expect(locationDialog.getByRole("alert")).toContainText(
@@ -215,8 +231,14 @@ for (const width of [1440, 390]) {
         displayAddress: "Confirmed delivery entrance, Cebu",
         coordinate: candidate.coordinate,
         serviceability: { serviceable: true },
+        browsingContextToken: null,
       },
     });
+    const browsingContextCookie = (await page.context().cookies()).find(
+      (cookie) => cookie.name === "freshmarkets_browse_context_v1",
+    );
+    expect(browsingContextCookie?.httpOnly).toBe(true);
+    expect(browsingContextCookie?.value.length).toBeGreaterThan(32);
     await expect(
       page.getByRole("button", { name: "Choose delivery address", exact: true }),
     ).toContainText("Confirmed delivery entrance");
@@ -270,7 +292,9 @@ for (const width of [1440, 390]) {
     expect(
       await page.evaluate(() => localStorage.getItem("freshmarkets.guest-cart.v1")),
     ).toBeNull();
-    await expect(page.getByText("Red onion · 500 g", { exact: true })).toBeVisible();
+    await expect(
+      page.getByLabel("Cart items").getByText("Red onion · 500 g", { exact: true }),
+    ).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

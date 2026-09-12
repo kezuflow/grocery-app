@@ -169,11 +169,11 @@ describe("addToCart", () => {
 });
 describe("fetchCart", () => {
   it("returns the authoritative view", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response({ ok: true, value: view() })),
-    );
+    const fetchMock = vi.fn(async () => response({ ok: true, value: view() }));
+    vi.stubGlobal("fetch", fetchMock);
     expect((await fetchCart())?.id).toBe("cart-1");
+    expect((await fetchCart())?.id).toBe("cart-1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it("returns null for anonymous empty carts and exposes a retryable transport error", async () => {
     vi.stubGlobal(

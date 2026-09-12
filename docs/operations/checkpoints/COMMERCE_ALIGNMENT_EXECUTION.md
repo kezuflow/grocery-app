@@ -1,6 +1,64 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — GLOBAL-SERVICE-AREAS-1 and checkout/delivery verification (2026-09-13)
+## Current owner request — API-CALL-EFFICIENCY-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner requests the previously reviewed API-call reductions applied without further
+permission pauses. Acceptance: a newly confirmed browse location must not re-run Global-area and
+nearest-pin resolution on every catalog page; bounded storefront and checkout bootstrap data should
+cross the Web/Core binding once per screen; passive Cart display must not create an empty Cart and
+location selection must not require a trailing Cart read; address suggestions must suppress low-value
+requests; fulfillment-option discovery must not call Lalamove; an accepted safely-valid quotation may
+be reused at payment admission while changed/near-expiry evidence still refreshes and fails closed.
+
+Starting branch/HEAD: clean `main` at `bfa5ffaa5b3249ab865404db4b966ac9c75747fd`, matching
+`origin/main`. The slice adds no schema migration and authorizes no deployment, real payment, live
+courier quotation/booking, destructive data operation or outbound message.
+
+Implemented working-tree behavior: successful inside-area browse confirmation issues a 30-day
+Core-signed, read-only catalog context that Web retains in an HttpOnly same-site cookie and never
+decodes. Catalog RPC verifies it; invalid/expired tokens degrade to location-unaware browsing, and the
+token is not Cart, checkout, stock, payment or delivery authority. A one-release coordinate-cookie
+bridge preserves existing sessions. Home and search each use a composite Core read for their bounded
+secondary data; checkout loads saved addresses and profile through one authenticated bootstrap read.
+
+The browser reads Cart before geography work, skips creation when a passive badge finds no Cart,
+returns the current Cart projection with location-selection success, and shares an authenticated Cart
+read for 30 seconds while Cart and checkout screens explicitly request fresh state. Places suggestions
+start at three characters after a 450 ms debounce. Fulfillment-option discovery now performs only
+internal eligibility and presents fee as calculated on review. Creating the selected checkout Quote
+obtains one Lalamove quotation; payment revalidation reuses its route-bound snapshot only when more
+than 30 seconds remain and all existing Cart/address/routing/configuration checks agree, otherwise it
+refreshes and changed terms require customer acceptance. Final booking remains a fresh, durable and
+separate provider operation.
+
+Verification at final application-source scope:
+- `pnpm.cmd check` passes formatting, naming, terminology, 31 harness tests, fresh/retained migration
+  and schema checks, commit convention, architecture/readiness, lint, all workspace typechecks and
+  package tests: Core 203 files / 1,653 tests; Web 122 / 497; contracts 19 / 68; each other shared
+  package 1 / 2. Core deployment dry-run and the Web production build pass. The first aggregate found
+  three stale payment fixtures that expected the removed second provider call; forcing only those
+  snapshots near expiry preserves their intended mid-refresh transaction-fence coverage. Their focused
+  file passes 36/36 before the complete successful rerun.
+- Focused optimization coverage passes Core 7 files / 42 tests and Web 5 / 50. It proves one normal
+  provider quote, refresh on near expiry, no provider request in option discovery, signed-context
+  validation/tamper rejection, no trailing Cart read, passive Cart caching/bootstrap and suggestion
+  debounce/minimum length. `vinext check` reports 100%, 16 supported / 0 issues.
+- Managed Playwright against a newly migrated isolated local Worker/D1 stack passes both desktop 1440px
+  and mobile 390px first-visit/remembered-location/guest-carryover journeys, 2/2 in 3.0 minutes. It
+  verifies the public confirmation body omits the token while an HttpOnly signed-context cookie is set,
+  then exercises location-aware catalog, Cart carryover, identical lost-response replay and sign-in.
+  Only external prediction/detail reads are synthetic; serviceability, permanent confirmation, catalog,
+  Cart and authentication use the local services. Earlier attempts exposed stale selectors for the
+  already-shipped compact address UI/copy and a globally ambiguous final item locator; test-only fixes
+  align the browser journey without changing application behavior. Final formatter check, Web typecheck
+  and `git diff --check` pass after those test-only corrections.
+
+No actual Google, Lalamove or payment-provider request, deployment or external mutation is claimed.
+Concrete next action: review the intended diff, commit API-CALL-EFFICIENCY-1 directly to `main`, push,
+and confirm local/remote HEAD plus a clean working tree.
+
+## Prior owner request — GLOBAL-SERVICE-AREAS-1 and checkout/delivery verification (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner requests the full checkout/payment/nearest-location/Lalamove booking flow reviewed

@@ -94,6 +94,9 @@ The owner's default `pnpm dev` connects that local Core to freshmarkets.ph's sta
 
 Rules:
 
+- A confirmed browse pin yields an opaque Core-signed, read-only catalog context stored by Web as an HttpOnly same-site cookie. Catalog RPC validates and derives its location; Web never signs it and the token never authorizes Cart, checkout, stock, payment or delivery behavior. Composite storefront/checkout reads reduce Service Binding invocations while keeping each underlying context authoritative.
+- Fulfillment-option discovery is provider-free. The selected checkout option obtains one Lalamove quotation; payment reuses that accepted evidence while safely valid and refreshes only near expiry. Final delivery booking remains a distinct fresh quotation and durable provider mutation.
+
 - Do not add CORS or public API authentication between Web and Core.
 - Do not create one HTTP endpoint per internal operation.
 - Do not return untyped `fetch()` payloads or `any`.

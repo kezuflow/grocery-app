@@ -47,6 +47,7 @@ describe("browsing-location confirmation", () => {
           coordinate: point,
           fulfillmentLocation: { id: "location-cebu-central" },
         },
+        browsingContextToken: expect.any(String),
       },
     });
     expect(JSON.stringify(result)).not.toContain("private-provider-reference");
@@ -90,6 +91,7 @@ describe("browsing-location confirmation", () => {
           serviceable: false,
           reason: "OUTSIDE_SERVICE_AREA",
         },
+        browsingContextToken: null,
       },
     });
   });

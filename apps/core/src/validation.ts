@@ -51,11 +51,13 @@ export const catalogSearchRequestSchema = z.object({
   cursor: z.string().min(1).max(512).optional(),
   limit: z.number().int().safe().min(1).max(50).optional(),
   locationId: identifierSchema.optional(),
+  browsingContextToken: z.string().min(32).max(2048).optional(),
 });
 
 export const marketplaceHomeRequestSchema = z.object({
   requestId: identifierSchema,
   locationId: identifierSchema.optional(),
+  browsingContextToken: z.string().min(32).max(2048).optional(),
   itemsPerRail: z.number().int().safe().min(1).max(12).optional(),
 });
 
@@ -63,6 +65,7 @@ export const catalogProductRequestSchema = z.object({
   requestId: identifierSchema,
   slug: identifierSchema,
   locationId: identifierSchema.optional(),
+  browsingContextToken: z.string().min(32).max(2048).optional(),
 });
 
 const customerPhoneSchema = z

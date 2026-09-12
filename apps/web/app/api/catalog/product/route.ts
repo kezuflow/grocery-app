@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   const result = await coreClient(env.CORE).getCatalogProduct({
     requestId,
     slug,
-    locationId: await readBrowsingLocation(request.headers.get("cookie") ?? ""),
+    ...(await readBrowsingLocation(request.headers.get("cookie") ?? "")),
   });
   return jsonWithRequestId(result, requestId);
 }

@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
 const schema = z.object({
-  query: z.string().trim().min(2).max(200),
+  query: z.string().trim().min(3).max(200),
   proximity: z
     .object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) })
     .optional(),

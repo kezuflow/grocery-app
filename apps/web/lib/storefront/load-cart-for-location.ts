@@ -18,7 +18,9 @@ const commandSchema = z.object({
 type CartResult = RpcResult<CartView>;
 
 /** Keep an uncertain location command for exact replay before accepting a new choice. */
-export async function loadCartForLocation(): Promise<CartResult> {
+export async function loadCartForLocation(
+  options: { createIfMissing?: boolean } = {},
+): Promise<CartResult> {
   const point = typeof document === "undefined" ? null : browsingPointFromCookies(document.cookie);
   const missing: CartResult = {
     ok: false,
@@ -29,6 +31,12 @@ export async function loadCartForLocation(): Promise<CartResult> {
     },
   };
   if (!point) return missing;
+  let cart = await readJson<CartResult>("/api/commerce/cart");
+  if (
+    !cart.ok &&
+    (cart.error.code !== "DELIVERY_LOCATION_REQUIRED" || options.createIfMissing === false)
+  )
+    return cart;
   const resolution = await readJson<RpcResult<ServiceabilityResult>>("/api/serviceability", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -37,8 +45,6 @@ export async function loadCartForLocation(): Promise<CartResult> {
   if (!resolution.ok) return resolution;
   const locationId = resolution.value.fulfillmentLocation?.id;
   if (!resolution.value.serviceable || !locationId) return missing;
-  let cart = await readJson<CartResult>("/api/commerce/cart");
-  if (!cart.ok && cart.error.code !== "DELIVERY_LOCATION_REQUIRED") return cart;
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = window.localStorage.getItem(pendingKey);
     let pending: z.infer<typeof commandSchema> | null = null;
@@ -77,8 +83,7 @@ export async function loadCartForLocation(): Promise<CartResult> {
       return selected;
     }
     window.localStorage.removeItem(pendingKey);
-    cart = await readJson<CartResult>("/api/commerce/cart");
-    if (!cart.ok) return cart;
+    cart = { ok: true, value: selected.value.cart, requestId: selected.requestId };
     if (cart.value.locationId === locationId) return cart;
   }
   return missing;

@@ -107,6 +107,8 @@ describe("listFulfillmentOptions", () => {
       ).bind(cartId),
     ]);
 
+    const quote = vi.fn(provider.quote.bind(provider));
+    const providerWithoutSpeculativeQuote = { ...provider, quote };
     const result = await listFulfillmentOptions(
       env.DB,
       buildRouteDistancePort({ ENVIRONMENT: "test", ROUTE_DISTANCE_PROVIDER: "mock" }),
@@ -125,14 +127,14 @@ describe("listFulfillmentOptions", () => {
             displayName: "Lalamove",
             serviceType: "MOTORCYCLE",
             serviceLabel: "Motorcycle",
-            provider,
+            provider: providerWithoutSpeculativeQuote,
           },
           {
             providerCode: "grab-express",
             displayName: "GrabExpress",
             serviceType: "INSTANT",
             serviceLabel: "Instant",
-            provider,
+            provider: providerWithoutSpeculativeQuote,
           },
         ],
       },
@@ -147,6 +149,7 @@ describe("listFulfillmentOptions", () => {
     ]);
     expect(new Set(result.value.map((option) => option.optionId)).size).toBe(2);
     expect(JSON.stringify(result.value)).not.toMatch(/location-cebu|zone-cebu|quotationId/i);
+    expect(quote).not.toHaveBeenCalled();
   });
 
   it("blocks checkout outside every global service area before requesting a courier quote", async () => {

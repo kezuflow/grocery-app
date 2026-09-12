@@ -43,7 +43,7 @@ import { GoogleMap } from "../../maps/google-map";
 import type { MapAdapter } from "../../maps/map-types";
 
 const CEBU_CENTER = { latitude: 10.3157, longitude: 123.8854 } as const;
-const SEARCH_DEBOUNCE_MILLISECONDS = 300;
+const SEARCH_DEBOUNCE_MILLISECONDS = 450;
 
 const emptyComponents: AddressComponents = {
   addressLine1: "",
@@ -337,7 +337,7 @@ export function AddressEditor({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < 2 || ((compact || wizard) && !searchExpanded) || (wizard && step !== 1)) {
+    if (trimmed.length < 3 || ((compact || wizard) && !searchExpanded) || (wizard && step !== 1)) {
       setCandidates([]);
       setSearchState("idle");
       setSearchError("");

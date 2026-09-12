@@ -202,18 +202,28 @@ export async function revalidateCheckoutQuote(
   const acceptedDelivery = quote.deliveryFeeSnapshot as ProviderDeliveryFeeSnapshot | null;
   if (!acceptedDelivery || acceptedDelivery.source !== "EXTERNAL_PROVIDER")
     return rejected("PRICE_CHANGED", "Provider quotation evidence is unavailable");
-  const provider = deliveryProviders?.get(acceptedDelivery.providerCode);
-  if (!provider) return rejected("CONFIGURATION_ERROR", "Delivery provider is unavailable");
-  const deliveryFee = await quoteProviderDelivery(database, provider, {
-    providerCode: acceptedDelivery.providerCode,
-    serviceType: acceptedDelivery.serviceType,
-    marketId,
-    locationId: snapshot.locationId,
-    cartId: quote.cartId,
-    address,
-    scheduleAt: acceptedDelivery.scheduleAt,
-    now,
-  });
+  const acceptedExpiry = Date.parse(acceptedDelivery.expiresAt);
+  const acceptedQuoteIsReusable = Number.isFinite(acceptedExpiry) && acceptedExpiry > now + 30_000;
+  // A still-valid accepted quotation is provider evidence already bound to this
+  // address, Cart version and routing snapshot. Only a near-expiry quote needs
+  // another external request before payment admission.
+  let deliveryFee;
+  if (acceptedQuoteIsReusable) {
+    deliveryFee = { feeMinor: acceptedDelivery.amountMinor, snapshot: acceptedDelivery };
+  } else {
+    const provider = deliveryProviders?.get(acceptedDelivery.providerCode);
+    if (!provider) return rejected("CONFIGURATION_ERROR", "Delivery provider is unavailable");
+    deliveryFee = await quoteProviderDelivery(database, provider, {
+      providerCode: acceptedDelivery.providerCode,
+      serviceType: acceptedDelivery.serviceType,
+      marketId,
+      locationId: snapshot.locationId,
+      cartId: quote.cartId,
+      address,
+      scheduleAt: acceptedDelivery.scheduleAt,
+      now,
+    });
+  }
   if (!deliveryFee)
     return rejected("PRICE_CHANGED", "Delivery quotation changed; accept a new quote");
   const promotions = await evaluateCheckoutPromotions(database, {

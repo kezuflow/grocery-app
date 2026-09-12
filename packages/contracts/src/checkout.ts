@@ -8,6 +8,7 @@ import type {
   ServiceabilityFailureReason,
 } from "./geography";
 import type { CustomerAddressStatus } from "./states";
+import type { CustomerProfileView } from "./customer-profile";
 
 type CustomerAddressCreateBase = AuthenticatedRequest & {
   idempotencyKey: string;
@@ -72,6 +73,11 @@ export type CustomerAddressView = {
   resolutionVersion: number | null;
   status: CustomerAddressStatus;
   version: number;
+};
+
+export type CheckoutBootstrapView = {
+  addresses: ReadonlyArray<CustomerAddressView>;
+  profile: CustomerProfileView;
 };
 
 export type CheckoutEligibilityRequest = AuthenticatedRequest & {
@@ -237,7 +243,14 @@ export type SelectCartLocationRequest = AuthenticatedRequest & {
   expectedVersion: number;
   idempotencyKey: string;
 };
-export type CartLocationSelection = { cartId: string; version: number; locationId: string };
+export type CartLocationSelection = {
+  /** Immutable command receipt fields. */
+  cartId: string;
+  version: number;
+  locationId: string;
+  /** Current read projection returned in the same Core invocation. */
+  cart: CartView;
+};
 export type MergeGuestCartRequest = AuthenticatedRequest & {
   cartId: string;
   expectedVersion: number;
@@ -256,6 +269,7 @@ export type CheckoutService = {
     request: CheckoutEligibilityRequest,
   ): Promise<RpcResult<CheckoutEligibilityView>>;
   getCart(request: AuthenticatedRequest): Promise<RpcResult<CartView>>;
+  getCheckoutBootstrap(request: AuthenticatedRequest): Promise<RpcResult<CheckoutBootstrapView>>;
   selectCartLocation(request: SelectCartLocationRequest): Promise<RpcResult<CartLocationSelection>>;
   mergeGuestCart(request: MergeGuestCartRequest): Promise<RpcResult<GuestCartMerge>>;
   setCartItem(request: SetCartItemRequest): Promise<RpcResult<CartView>>;
