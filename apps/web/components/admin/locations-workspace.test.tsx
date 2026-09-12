@@ -125,9 +125,13 @@ describe("location workspace", () => {
       return response(view);
     });
     await act(async () =>
-      root.render(<LocationsWorkspace initial={{ ok: true, requestId: "test", value: view }} />),
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
     );
-    await act(async () => button("Review Warehouse").click());
     expect(container.textContent).toContain("Fulfillment location pin");
     expect(container.textContent).toContain("Pin set");
     expect(button("Move test pin").dataset.draggablePin).toBe("true");
@@ -164,13 +168,14 @@ describe("location workspace", () => {
     await act(async () =>
       root.render(
         <LocationsWorkspace
+          detailLocationId="warehouse"
           initial={{ ok: true, requestId: "test", value: { ...view, canManage: false } }}
         />,
       ),
     );
-    expect(button("Add location").disabled).toBe(true);
-    expect(button("Review Warehouse").disabled).toBe(true);
-    expect(container.querySelector("form")).toBeNull();
+    expect(button("Save details").disabled).toBe(true);
+    expect(container.querySelector("fieldset")?.disabled).toBe(true);
+    expect(container.querySelector("form")).not.toBeNull();
   });
   it("retries the identical location intent after an unknown response", async () => {
     const writes: RequestInit[] = [];
@@ -183,9 +188,13 @@ describe("location workspace", () => {
       return response(view);
     });
     await act(async () =>
-      root.render(<LocationsWorkspace initial={{ ok: true, requestId: "test", value: view }} />),
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
     );
-    await act(async () => button("Review Warehouse").click());
     const input = container.querySelector<HTMLInputElement>("#location-reason");
     if (!input) throw new Error("Missing reason");
     await act(async () => {

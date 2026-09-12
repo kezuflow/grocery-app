@@ -150,11 +150,14 @@ export function LocationFulfillmentWorkspace({
               {result.value.blockers.includes("Configure the courier pickup profile") && (
                 <p className="mt-2">
                   Open{" "}
-                  <Link href="/admin/delivery" className="underline">
-                    Delivery
-                  </Link>
-                  , select {result.value.locationName} as the location scope, and complete Store
-                  courier pickup profile. Then return here and refresh settings.
+                  <Link
+                    href={`/admin/locations/${encodeURIComponent(locationId)}/pickup`}
+                    className="underline"
+                  >
+                    Courier pickup
+                  </Link>{" "}
+                  and complete the pickup details for {result.value.locationName}. Then return to
+                  Dispatch readiness.
                 </p>
               )}
             </section>

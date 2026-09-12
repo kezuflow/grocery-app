@@ -51,6 +51,24 @@ async function noEffects(key: string) {
 }
 
 describe("Global location setup", () => {
+  it("loads one explicitly selected location independently of list pagination", async () => {
+    const { headers } = await staff();
+    const result = await core.listAdminLocations({
+      headers,
+      requestId: crypto.randomUUID(),
+      locationId: "location-cebu-central",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.items.map((item) => item.locationId)).toEqual(["location-cebu-central"]);
+    expect(result.value.nextCursor).toBeNull();
+    const missing = await core.listAdminLocations({
+      headers,
+      requestId: crypto.randomUUID(),
+      locationId: "location-does-not-exist",
+    });
+    expect(missing).toMatchObject({ ok: true, value: { items: [] } });
+  });
   it.each([
     ["claim", "BEFORE INSERT ON idempotency_records"],
     ["location", "BEFORE INSERT ON fulfillment_location"],

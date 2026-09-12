@@ -137,7 +137,7 @@ export async function listAdminLocations(
   input: AdminLocationsRequest,
 ): Promise<RpcResult<AdminLocationsView>> {
   const parsed = authenticatedRequestSchema
-    .extend({ cursor: z.string().max(1000).optional() })
+    .extend({ cursor: z.string().max(1000).optional(), locationId: identifierSchema.optional() })
     .safeParse(input);
   if (!parsed.success)
     return failure("VALIDATION_FAILED", "Invalid location query", input.requestId);
@@ -150,9 +150,15 @@ export async function listAdminLocations(
   const [rows, markets, manage] = await Promise.all([
     deps.db
       .prepare(
-        `${locationSelect} WHERE (? IS NULL OR (l.created_at,l.id)>(?,?)) ORDER BY l.created_at,l.id LIMIT 51`,
+        `${locationSelect} WHERE (? IS NULL OR l.id=?) AND (? IS NULL OR (l.created_at,l.id)>(?,?)) ORDER BY l.created_at,l.id LIMIT 51`,
       )
-      .bind(cursor?.id ?? null, cursor?.createdAt ?? 0, cursor?.id ?? "")
+      .bind(
+        request.locationId ?? null,
+        request.locationId ?? null,
+        cursor?.id ?? null,
+        cursor?.createdAt ?? 0,
+        cursor?.id ?? "",
+      )
       .all<LocationRow>(),
     deps.db
       .prepare(

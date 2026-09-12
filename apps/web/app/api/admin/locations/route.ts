@@ -40,6 +40,7 @@ async function GETHandler(request: Request) {
       requestId: webRequestId(request),
       headers: requestHeaders(request),
       cursor: new URL(request.url).searchParams.get("cursor") ?? undefined,
+      locationId: new URL(request.url).searchParams.get("locationId") ?? undefined,
     }),
   );
 }

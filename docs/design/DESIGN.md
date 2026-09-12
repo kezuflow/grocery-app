@@ -43,8 +43,19 @@ destinations, visible in Global and selected-location navigation when Core autho
 Service Areas remains Global configuration; selecting a location does not assign polygons to it.
 Location fulfillment forms distinguish saved readiness from unsaved edits, require a reason when
 saving, show pending/rejected/unconfirmed saves inline, and toast only confirmed success. Dispatch
-readiness applies to both modes; the minutes promise applies only to Instant. Consolidating pickup-profile setup into location
-details remains an investigation recommendation, not an implemented flow.
+readiness applies to both modes; the minutes promise applies only to Instant.
+
+Owner follow-up, 2026-09-13: opening a location uses one location setup navigation: Address and pin,
+Courier pickup, Operating hours, Dispatch readiness. Each destination uses the location in the URL;
+pickup configuration no longer lives above the Delivery queue or depends on the header scope.
+Delivery remains the operational queue. The address editor stays open after a confirmed save;
+view-only access does not enable its writes. Scheduled weeks remain separate from location hours.
+
+Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
+to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.
+At least three points form the shaded draft; the last joins the first. Coordinates are a secondary
+manual-entry option. Only Publish changes the active area, with the existing reason, validation and
+unknown-response safeguards. Map clicks must not depend on an unrelated draggable address pin.
 
 Use ordinary Create/Save actions, named products/locations/people and readable quantities. Keep IDs, expected versions, idempotency identities, storage observation and retry machinery internal. After an uncertain response, preserve the original intent behind the same action and prevent conflicting replacement. Do not optimistically show a financial or operational commitment before Core confirms it. Keep useful payment/refund diagnostics and actual business discrepancies visible.
 

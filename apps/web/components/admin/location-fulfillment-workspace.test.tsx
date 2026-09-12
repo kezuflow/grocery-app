@@ -139,7 +139,9 @@ it.each([
   expect(host.textContent).toContain("Saved dispatch status: Not ready");
   expect(reasonInput().value).toBe("Reviewed site setup");
   expect(toast.success).not.toHaveBeenCalled();
-  expect(host.querySelector('a[href="/admin/delivery"]')).not.toBeNull();
+  expect(
+    host.querySelector('a[href="/admin/locations/location-cebu-central/pickup"]'),
+  ).not.toBeNull();
 });
 
 it("retries an unconfirmed save with the original payload and identity", async () => {

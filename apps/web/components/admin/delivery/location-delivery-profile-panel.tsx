@@ -10,7 +10,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { useAdminCommandIntent } from "../admin-command-state";
-import { useAdminLocation } from "../use-admin-location";
+import { notifyCommandSuccess } from "../admin-feedback";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -42,8 +42,13 @@ async function readResult(response: Response | Promise<Response>) {
   return resultSchema.parse(await (await response).json());
 }
 
-export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?: FetchLike }) {
-  const location = useAdminLocation();
+export function LocationDeliveryProfilePanel({
+  locationId,
+  fetchImpl = fetch,
+}: {
+  locationId: string;
+  fetchImpl?: FetchLike;
+}) {
   const admin = useAdminContext();
   const command = useAdminCommandIntent();
   const [view, setView] = useState<LocationDeliveryProfileView | null>(null);
@@ -51,12 +56,11 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
   const [message, setMessage] = useState<string | null>(null);
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const loadGeneration = useRef(0);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const canManage =
     admin.state.phase === "ready" && admin.state.context.capabilities.includes("delivery.manage");
 
   useEffect(() => {
-    if (pendingPayload) return;
-    const locationId = location.locationId;
     const generation = ++loadGeneration.current;
     setView(null);
     setMessage(null);
@@ -69,7 +73,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
         `/api/admin/delivery-location-profile?locationId=${encodeURIComponent(locationId)}`,
         {
           credentials: "same-origin",
-          signal: controller.signal,
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
         },
       ),
     )
@@ -90,7 +94,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
       loadGeneration.current += 1;
       controller.abort();
     };
-  }, [fetchImpl, location.locationId, pendingPayload]);
+  }, [fetchImpl, locationId, refreshVersion]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,36 +132,45 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
             credentials: "same-origin",
             headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
             body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(15_000),
           }),
         ),
       );
       setPendingPayload(null);
       if (result.ok) {
         setView(result.value);
-        setMessage("Store pickup profile saved.");
+        notifyCommandSuccess("Courier pickup details saved");
       } else {
         setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
       }
     } catch {
-      setMessage("The save result is unknown. Retry to safely reuse the same request key.");
+      setMessage("Save not confirmed. Retry saving to confirm these pickup details.");
     }
   }
 
-  if (!location.locationId && !pendingPayload) return null;
   return (
-    <details className="rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4">
-      <summary className="cursor-pointer font-semibold">Store courier pickup profile</summary>
+    <section className="rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4">
+      <h1 className="text-xl font-semibold">{view?.locationName ?? "Location"} courier pickup</h1>
       <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
-        {view?.locationName ?? location.label}. Coordinates come from the store location record;
-        these fields identify the sender and pickup address sent to the courier.
+        Coordinates come from this location's saved pin; these fields identify the sender and pickup
+        address sent to the courier.
       </p>
       {loading ? <p className="mt-3 text-sm">Loading pickup profile…</p> : null}
       {message ? (
-        <Alert className="mt-3" variant={message.includes("saved") ? "info" : "warning"}>
+        <Alert className="mt-3" variant="warning">
           <AlertTitle>Pickup profile</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-3"
+        disabled={loading || command.pending || pendingPayload !== null}
+        onClick={() => setRefreshVersion((version) => version + 1)}
+      >
+        {loading ? "Refreshing…" : "Refresh pickup details"}
+      </Button>
       {view ? (
         <form
           key={`${view.locationId}:${view.profile?.version ?? 0}`}
@@ -214,7 +227,7 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
                 {command.pending
                   ? "Saving…"
                   : pendingPayload
-                    ? "Retry unconfirmed save"
+                    ? "Retry saving"
                     : view.profile
                       ? "Update pickup profile"
                       : "Save pickup profile"}
@@ -225,6 +238,6 @@ export function LocationDeliveryProfilePanel({ fetchImpl = fetch }: { fetchImpl?
           </div>
         </form>
       ) : null}
-    </details>
+    </section>
   );
 }

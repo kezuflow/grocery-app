@@ -1,6 +1,55 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — LOCATIONS-FLOW-1 (2026-09-13)
+## Current owner request — LOCATION-SETUP-2 / SERVICE-AREA-DRAW-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner authorizes the proposed location consolidation first, then repairing Service Areas
+because map clicks cannot set boundaries. Acceptance: explicit-location setup navigation with address,
+pickup, hours and readiness; pickup no longer follows unrelated header scope; map clicks draw and
+allow edits to an unpublished boundary; existing Core validation, permissions and replay stay intact.
+Start: main at `72a2cb1e`, preserving the existing address-map/autofill, time-input/schedule and related
+test/log changes. No subagents or mobile browser tests; no shared configuration writes or provider calls.
+
+Implemented: /admin/locations/[location-id] opens the saved address/pin form and keeps it open after
+save. One layout links Address and pin, Courier pickup, Operating hours and Dispatch readiness for that
+URL's location. The optional listAdminLocations locationId filter is validated and authorized in Core;
+no client-side pagination search or invented location fallback. The pickup page uses its explicit ID,
+retains draft/identity on unknown writes, offers read retry and confirms success via the existing toast.
+Removed the profile from the operational Delivery queue. Fixed its pendingPayload effect dependency
+which caused unnecessary reloads and could erase save feedback. Read-only location detail controls
+remain disabled; the sidebar's location scope does not replace the detail route identity.
+
+Boundary root cause: the real Google adapter returned early from map clicks when scene.draggablePin
+was absent. Service-area drawing supplies points/polygons, so every click was ignored. Click forwarding
+now works without an address pin, while rectangular area selection and missing coordinates stay guarded.
+Editor supports adding points, selecting/moving a point by click or pin drag, undo, clear, draft count,
+two-point edge and three-point shaded polygon. Viewport initialization is stable while editing; manual
+coordinate entry is secondary. Only existing Publish updates the area; no service boundary was changed.
+
+Verification: full Web suite 130 files / 534 tests passed; Core location-administration integration
+19/19 passed including exact-ID reads and missing-ID behavior. Workspace typecheck, lint and architecture
+guard pass. Web production build passed. Targeted tests cover the actual Google adapter click listener
+with a synthetic Maps runtime, boundary edits without publication, explicit-location pickup reads/writes,
+lost-response retry without duplicate reads, failed-read retry and detail permissions. Initial test
+failures were fixture fixes (read-only detail button label, map matchMedia stub, context mock path),
+then all suites passed. This is local component/Worker evidence, not actual Google/provider or browser
+acceptance. No mobile or other browser test stack was started.
+
+Commands: `pnpm.cmd --filter @freshmarkets/web test`, `pnpm.cmd --filter @freshmarkets/core test
+src/admin/application/location-administration.integration.test.ts --maxWorkers=1`, `pnpm.cmd typecheck`,
+`pnpm.cmd lint`, `pnpm.cmd architecture:check`, `pnpm.cmd --filter @freshmarkets/web build`.
+Final diff checks pass. Selective staging preserves the pre-existing changes in locations-workspace
+and its tests outside this slice. The test file's three-way index merge conflicted with the older
+unfinished tests; its staged version was resolved from HEAD plus only this slice's detail-route changes,
+without changing the owner's working file. Other pre-existing address-map/schedule/time-input/log work
+remains unstaged. This slice's complete working tree was tested; staged tests exclude unrelated additions.
+Real pickup contact and Scheduled pickup/window values remain owner inputs. Earlier Phase 7/provider
+acceptance remains open. Completed IDs: LOCATION-SETUP-2 and SERVICE-AREA-DRAW-1. Counting level:
+zero remaining requested implementation slices. Integration target: commit and push main, with outcome
+reported to the owner. Concrete next action: open Service Areas, add/edit an area, draw and review the
+intended perimeter, then publish with the owner's chosen boundary and reason.
+
+## Prior owner request — LOCATIONS-FLOW-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner reports no feedback from dispatch readiness, then explicitly stops mobile browser

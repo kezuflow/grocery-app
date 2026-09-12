@@ -7,6 +7,34 @@ import { ServiceAreasWorkspace } from "./service-areas-workspace";
 vi.mock("./admin-shell", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
+vi.mock("../maps/google-map", () => ({
+  GoogleMap: ({
+    onMapClick,
+    onPointActivate,
+    onPinMove,
+    scene,
+  }: {
+    onMapClick: (point: { latitude: number; longitude: number }) => void;
+    onPointActivate: (id: string) => void;
+    onPinMove: (point: { latitude: number; longitude: number }) => void;
+    scene: { points: readonly { id: string }[]; polygons: readonly unknown[] };
+  }) => (
+    <div>
+      <button type="button" onClick={() => onMapClick({ latitude: 10.4, longitude: 124.1 })}>
+        Click boundary map
+      </button>
+      <button type="button" onClick={() => onPinMove({ latitude: 10.35, longitude: 124.05 })}>
+        Drag selected point
+      </button>
+      {scene.points.map((point) => (
+        <button type="button" key={point.id} onClick={() => onPointActivate(point.id)}>
+          Select point {Number(point.id) + 1}
+        </button>
+      ))}
+      <span>{scene.polygons.length ? "Draft polygon visible" : "No polygon"}</span>
+    </div>
+  ),
+}));
 const points = [
   { latitude: 10.2, longitude: 123.8 },
   { latitude: 10.2, longitude: 124 },
@@ -60,6 +88,31 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("service-area workspace", () => {
+  it("draws, moves, undoes and clears a draft without publishing map clicks", async () => {
+    await act(async () =>
+      root.render(
+        <ServiceAreasWorkspace
+          initial={{ ok: true, requestId: "test", value }}
+          browserApiKey="test-key"
+          mapId="test-map"
+        />,
+      ),
+    );
+    await act(async () => button("Edit Cebu delivery").click());
+    expect(container.textContent).toContain("Draft polygon visible");
+    await act(async () => button("Click boundary map").click());
+    expect(container.textContent).toContain("4 of 100 points");
+    await act(async () => button("Select point 2").click());
+    await act(async () => button("Drag selected point").click());
+    expect(container.textContent).toContain("2. 10.35, 124.05");
+    await act(async () => button("Add points").click());
+    await act(async () => button("Undo last point").click());
+    expect(container.textContent).toContain("3 of 100 points");
+    await act(async () => button("Clear boundary").click());
+    expect(container.textContent).toContain("0 of 100 points");
+    expect(container.textContent).toContain("No polygon");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("shows read-only areas and preview without publication controls", async () => {
     await act(async () =>
       root.render(

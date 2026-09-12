@@ -80,27 +80,35 @@ export function LocationsWorkspace({
   initial,
   browserApiKey,
   mapId,
+  detailLocationId,
 }: {
   initial: RpcResult<AdminLocationsView>;
   browserApiKey?: string;
   mapId?: string;
+  detailLocationId?: string;
 }) {
   const [result, setResult] = useState(initial);
-  const [editing, setEditing] = useState<AdminLocationView | null | undefined>(undefined);
-  const [draft, setDraft] = useState<Draft>(() => draftFor());
+  const selected = initial.ok
+    ? initial.value.items.find((item) => item.locationId === detailLocationId)
+    : undefined;
+  const [editing, setEditing] = useState<AdminLocationView | null | undefined>(selected);
+  const [draft, setDraft] = useState<Draft>(() => draftFor(selected));
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const intent = useAdminCommandIntent();
   const locked = intent.pending || pendingPayload !== null;
-  async function load(cursor?: string) {
+  async function load(cursor?: string, resetEditor = false) {
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/admin/locations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+        `/api/admin/locations${detailLocationId ? `?locationId=${encodeURIComponent(detailLocationId)}` : cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
       );
-      setResult(listResult.parse(await response.json()));
+      const next = listResult.parse(await response.json());
+      setResult(next);
+      if (resetEditor && detailLocationId && next.ok && next.value.items[0])
+        edit(next.value.items[0]);
     } catch {
       setNotice("Locations could not be loaded. Retry to refresh.");
     } finally {
@@ -127,7 +135,8 @@ export function LocationsWorkspace({
       });
       setPendingPayload(null);
       if (response.ok) {
-        setEditing(undefined);
+        if (detailLocationId) edit(response.value);
+        else setEditing(undefined);
         setNotice("Location saved.");
         await load();
       } else {
@@ -174,10 +183,10 @@ export function LocationsWorkspace({
   return (
     <>
       <PageHeader
-        title="Locations"
+        title={detailLocationId ? `${editing?.name ?? "Location"} address and pin` : "Locations"}
         description="Set each fulfillment center's confirmed pickup address and exact map pin. Global service areas admit customer addresses, the closest active center fulfills them, and Lalamove confirms each delivery route."
       />
-      {result.ok && (
+      {result.ok && !detailLocationId && (
         <Link
           href="/admin/locations/service-areas"
           className="mb-4 inline-flex text-sm font-medium underline"
@@ -200,63 +209,71 @@ export function LocationsWorkspace({
       ) : (
         <>
           <div className="mb-4 flex gap-2">
-            <Button disabled={!result.value.canManage || locked} onClick={() => edit(null)}>
-              Add location
-            </Button>
-            <Button variant="outline" disabled={loading || locked} onClick={() => void load()}>
+            {!detailLocationId && (
+              <Button disabled={!result.value.canManage || locked} onClick={() => edit(null)}>
+                Add location
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              disabled={loading || locked}
+              onClick={() => void load(undefined, true)}
+            >
               Refresh
             </Button>
           </div>
-          <ListPageSection title="Operating locations">
-            <div className="divide-y">
-              {result.value.items.length === 0 && <p className="p-4">No locations configured.</p>}
-              {result.value.items.map((location) => (
-                <div
-                  key={location.locationId}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4"
-                >
-                  <div>
-                    <h2 className="font-medium">{location.name}</h2>
-                    <Link
-                      href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
-                      className="text-sm underline"
-                    >
-                      Operating hours for {location.name}
-                    </Link>
-                    {location.purpose === "CUSTOMER_FULFILLMENT" && (
-                      <Link
-                        href={`/admin/locations/${encodeURIComponent(location.locationId)}/fulfillment`}
-                        className="block text-sm underline"
-                      >
-                        Fulfillment readiness for {location.name}
-                      </Link>
-                    )}
-                    <p className="text-sm">
-                      {location.purpose === "CENTRAL_WAREHOUSE"
-                        ? "Central warehouse"
-                        : "Customer fulfillment"}{" "}
-                      · {location.status} · {location.marketName}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {location.address
-                        ? `${location.address.addressLine1}, ${location.address.city}`
-                        : "Address confirmation needed"}
-                    </p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      Pickup pin · {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    disabled={!result.value.canManage || locked}
-                    onClick={() => edit(location)}
+          {detailLocationId && !editing && <p role="alert">Location not found.</p>}
+          {!detailLocationId && (
+            <ListPageSection title="Operating locations">
+              <div className="divide-y">
+                {result.value.items.length === 0 && <p className="p-4">No locations configured.</p>}
+                {result.value.items.map((location) => (
+                  <div
+                    key={location.locationId}
+                    className="flex flex-wrap items-center justify-between gap-3 p-4"
                   >
-                    Review {location.name}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </ListPageSection>
+                    <div>
+                      <h2 className="font-medium">{location.name}</h2>
+                      <Link
+                        href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
+                        className="text-sm underline"
+                      >
+                        Operating hours for {location.name}
+                      </Link>
+                      {location.purpose === "CUSTOMER_FULFILLMENT" && (
+                        <Link
+                          href={`/admin/locations/${encodeURIComponent(location.locationId)}/fulfillment`}
+                          className="block text-sm underline"
+                        >
+                          Fulfillment readiness for {location.name}
+                        </Link>
+                      )}
+                      <p className="text-sm">
+                        {location.purpose === "CENTRAL_WAREHOUSE"
+                          ? "Central warehouse"
+                          : "Customer fulfillment"}{" "}
+                        · {location.status} · {location.marketName}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {location.address
+                          ? `${location.address.addressLine1}, ${location.address.city}`
+                          : "Address confirmation needed"}
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        Pickup pin · {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                      </p>
+                    </div>
+                    <Link
+                      className="text-sm font-medium underline"
+                      href={`/admin/locations/${encodeURIComponent(location.locationId)}`}
+                    >
+                      Review {location.name}
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </ListPageSection>
+          )}
           {result.value.nextCursor && (
             <Button
               variant="outline"
@@ -275,7 +292,10 @@ export function LocationsWorkspace({
                   save();
                 }}
               >
-                <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
+                <fieldset
+                  disabled={locked || !result.value.canManage}
+                  className="grid gap-4 sm:grid-cols-2"
+                >
                   <LocationAddressMap
                     browserApiKey={browserApiKey}
                     mapId={mapId}
@@ -498,7 +518,7 @@ export function LocationsWorkspace({
                   readiness are configured separately.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="submit" disabled={intent.pending}>
+                  <Button type="submit" disabled={intent.pending || !result.value.canManage}>
                     {pendingPayload
                       ? "Retry saved command"
                       : editing
@@ -509,7 +529,7 @@ export function LocationsWorkspace({
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={locked || !reason.trim()}
+                      disabled={locked || !result.value.canManage || !reason.trim()}
                       onClick={() =>
                         void submit({
                           action: editing.status === "active" ? "DEACTIVATE" : "ACTIVATE",
@@ -522,14 +542,16 @@ export function LocationsWorkspace({
                       {editing.status === "active" ? "Deactivate location" : "Activate location"}
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={locked}
-                    onClick={() => setEditing(undefined)}
-                  >
-                    Close
-                  </Button>
+                  {!detailLocationId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={locked}
+                      onClick={() => setEditing(undefined)}
+                    >
+                      Close
+                    </Button>
+                  )}
                 </div>
               </form>
             </ListPageSection>

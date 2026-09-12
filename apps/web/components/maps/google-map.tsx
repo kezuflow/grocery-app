@@ -295,7 +295,7 @@ function createGoogleMapsAdapter(): MapAdapter {
       };
 
       const mapClickListener = map.addListener("click", (event: google.maps.MapMouseEvent) => {
-        if (scene.areaSelectionActive || !scene.draggablePin || !event.latLng) return;
+        if (scene.areaSelectionActive || !event.latLng) return;
         options.onMapClick(coordinate(event.latLng));
       });
 

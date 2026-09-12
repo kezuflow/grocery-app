@@ -51,7 +51,7 @@ export type AdminLocationsView = {
   canManage: boolean;
   markets: readonly { marketId: string; name: string; currency: string; timezone: string }[];
 };
-export type AdminLocationsRequest = AuthenticatedRequest & { cursor?: string };
+export type AdminLocationsRequest = AuthenticatedRequest & { cursor?: string; locationId?: string };
 type LocationCommand = AuthenticatedRequest & { idempotencyKey: string; reason: string };
 export type CreateAdminLocationRequest = LocationCommand &
   AdminLocationDetails & {

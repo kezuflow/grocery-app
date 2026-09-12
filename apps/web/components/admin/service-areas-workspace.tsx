@@ -62,6 +62,16 @@ function BoundaryEditor({
 }) {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
+  const [initialView] = useState(() => ({
+    center: vertices[0] ?? { latitude: 10.32, longitude: 123.9 },
+    zoom: 11,
+  }));
+  const selected = selectedPoint === null ? undefined : vertices[selectedPoint];
+  const move = (point: Coordinate) => {
+    if (!disabled && selectedPoint !== null)
+      onChange(vertices.map((current, index) => (index === selectedPoint ? point : current)));
+  };
   const add = (point: Coordinate) => {
     if (!disabled && vertices.length < 100) onChange([...vertices, point]);
   };
@@ -69,80 +79,138 @@ function BoundaryEditor({
     <fieldset disabled={disabled} className="space-y-3 rounded-lg border p-4">
       <legend className="px-1 font-medium">Service area boundary</legend>
       <p className="text-sm text-muted-foreground">
-        Click the map in boundary order. The final point automatically connects to the first.
+        Click around the outside edge of the area to add points. Add at least three; the last point
+        connects to the first. Select a numbered point to move it. Publish when the shaded area is
+        correct.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={selected ? "outline" : "default"}
+          onClick={() => setSelectedPoint(null)}
+        >
+          Add points
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || vertices.length === 0}
+          onClick={() => {
+            onChange(vertices.slice(0, -1));
+            setSelectedPoint(null);
+          }}
+        >
+          Undo last point
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || vertices.length === 0}
+          onClick={() => {
+            onChange([]);
+            setSelectedPoint(null);
+          }}
+        >
+          Clear boundary
+        </Button>
+      </div>
+      <p role="status" className="text-sm text-muted-foreground">
+        {selected
+          ? `Moving point ${Number(selectedPoint) + 1}: drag its pin or click its new position. Choose Add points to continue drawing.`
+          : `${vertices.length} of 100 points. ${vertices.length < 3 ? "Add at least 3 points to form an area." : "The shaded area is your draft coverage boundary."}`}
       </p>
       {browserApiKey && mapId ? (
         <GoogleMap
           browserApiKey={browserApiKey}
           mapId={mapId}
-          initialView={{ center: { latitude: 10.32, longitude: 123.9 }, zoom: 11 }}
+          initialView={initialView}
           ariaLabel="Service area boundary map"
-          className="h-80"
+          className="h-[480px]"
           scene={{
-            points: vertices.map((position, index) => ({
-              id: String(index),
-              position,
-              label: String(index + 1),
-            })),
+            points: vertices.flatMap((position, index) =>
+              selected && index === selectedPoint
+                ? []
+                : [
+                    {
+                      id: String(index),
+                      position,
+                      label: String(index + 1),
+                    },
+                  ],
+            ),
+            draggablePin:
+              selected && !disabled
+                ? { position: selected, label: `Boundary point ${Number(selectedPoint) + 1}` }
+                : undefined,
+            lineStrings: vertices.length === 2 ? [{ id: "draft-edge", points: vertices }] : [],
             polygons:
               vertices.length >= 3 ? [{ id: "boundary", rings: [[...vertices, vertices[0]]] }] : [],
           }}
-          onMapClick={add}
+          onMapClick={selected ? move : add}
+          onPinMove={move}
+          onPointActivate={(id) => {
+            if (!disabled) setSelectedPoint(Number(id));
+          }}
         />
       ) : (
         <p className="text-sm text-muted-foreground">
           Map unavailable. Enter verified coordinates below.
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Label className="grid gap-2">
-          Latitude
-          <Input
-            aria-label="Service area latitude"
-            type="number"
-            step="any"
-            min={-90}
-            max={90}
-            value={latitude}
-            onChange={(event) => setLatitude(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-2">
-          Longitude
-          <Input
-            aria-label="Service area longitude"
-            type="number"
-            step="any"
-            min={-180}
-            max={180}
-            value={longitude}
-            onChange={(event) => setLongitude(event.target.value)}
-          />
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          className="self-end"
-          disabled={disabled || vertices.length >= 100}
-          onClick={() => {
-            const point = { latitude: Number(latitude), longitude: Number(longitude) };
-            if (
-              latitude.trim() &&
-              longitude.trim() &&
-              Number.isFinite(point.latitude) &&
-              Number.isFinite(point.longitude) &&
-              Math.abs(point.latitude) <= 90 &&
-              Math.abs(point.longitude) <= 180
-            ) {
-              add(point);
-              setLatitude("");
-              setLongitude("");
-            }
-          }}
-        >
-          Add boundary point
-        </Button>
-      </div>
+      <details>
+        <summary className="cursor-pointer text-sm font-medium">
+          Enter boundary coordinates manually
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <Label className="grid gap-2">
+            Latitude
+            <Input
+              aria-label="Service area latitude"
+              type="number"
+              step="any"
+              min={-90}
+              max={90}
+              value={latitude}
+              onChange={(event) => setLatitude(event.target.value)}
+            />
+          </Label>
+          <Label className="grid gap-2">
+            Longitude
+            <Input
+              aria-label="Service area longitude"
+              type="number"
+              step="any"
+              min={-180}
+              max={180}
+              value={longitude}
+              onChange={(event) => setLongitude(event.target.value)}
+            />
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            className="self-end"
+            disabled={disabled || vertices.length >= 100}
+            onClick={() => {
+              const point = { latitude: Number(latitude), longitude: Number(longitude) };
+              if (
+                latitude.trim() &&
+                longitude.trim() &&
+                Number.isFinite(point.latitude) &&
+                Number.isFinite(point.longitude) &&
+                Math.abs(point.latitude) <= 90 &&
+                Math.abs(point.longitude) <= 180
+              ) {
+                add(point);
+                setLatitude("");
+                setLongitude("");
+              }
+            }}
+          >
+            Add boundary point
+          </Button>
+        </div>
+      </details>
       <ol className="space-y-1 text-sm">
         {vertices.map((point, index) => (
           <li key={`${point.latitude}:${point.longitude}:${index}`} className="flex gap-3">
@@ -153,8 +221,20 @@ function BoundaryEditor({
               type="button"
               variant="ghost"
               size="sm"
+              aria-label={`Move service area point ${index + 1}`}
+              onClick={() => setSelectedPoint(index)}
+            >
+              Move
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               aria-label={`Remove service area point ${index + 1}`}
-              onClick={() => onChange(vertices.filter((_, position) => position !== index))}
+              onClick={() => {
+                onChange(vertices.filter((_, position) => position !== index));
+                setSelectedPoint(null);
+              }}
             >
               Remove
             </Button>
@@ -399,6 +479,7 @@ export function ServiceAreasWorkspace({
                   </Label>
                 </div>
                 <BoundaryEditor
+                  key={draft.expectedVersion > 0 ? draft.code : "new"}
                   vertices={draft.vertices}
                   onChange={(vertices) => setDraft({ ...draft, vertices })}
                   disabled={locked}
