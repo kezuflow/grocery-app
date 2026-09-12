@@ -117,7 +117,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("w-[var(--fm-admin-sidebar-collapsed)]");
     expect(markup).toContain('aria-label="Expand admin navigation"');
     expect(shell).toContain('aria-label="freshmarkets admin home"');
-    expect(markup).toContain("lucide-sprout");
+    expect(markup).toContain('src="/brand/freshmarkets-mark.png"');
     expect(shell).toContain(
       "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
     );
@@ -159,7 +159,7 @@ describe("shared Admin accessibility contract", () => {
     expect(headerSource).toContain('aria-label="freshmarkets admin home"');
     expect(headerSource).toContain("md:hidden");
     expect(sidebarSource).toContain('aria-label="freshmarkets admin home"');
-    expect(sidebarSource).toContain("<Sprout");
+    expect(sidebarSource).toContain("<FreshMarketsMark");
     expect(sidebarSource).not.toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
     );

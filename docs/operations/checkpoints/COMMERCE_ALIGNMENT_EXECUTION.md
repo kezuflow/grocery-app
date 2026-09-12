@@ -1,4 +1,15 @@
 # Commerce alignment — active checkpoint
+
+## Latest owner request — BRAND-LOGO-1 shared FreshMarkets brand mark (2026-09-12)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation evidence. Owner requested an original logo for the Admin dashboard, Storefront and browser `.ico`. Acceptance: one cohesive FreshMarkets mark uses the approved storefront forest/lime palette, remains legible at favicon size, is available as a transparent reusable project asset, replaces the existing Admin and Storefront placeholder marks, and is served as the browser icon without changing business behavior.
+
+Implemented in the dirty `main` working tree from `799addf6`: generated an original leaf-and-market-basket mark with the built-in image generator, normalized it to the exact two-color palette (`#1F3D24` and `#B7F34A`) with a transparent alpha channel, saved the 1024px master under Web public assets, and derived a multi-size 16/24/32/48/64px `favicon.ico`. Added one decorative shared React mark component, replaced the Admin mobile/desktop Sprout placeholders and the Storefront lime square, and retained each link's existing accessible name. No API, Core, contract, storage, authorization or business behavior changed.
+
+Verification in the working tree: the focused brand/Admin/Storefront suites passed (17 tests); Web typecheck passed; the production Web build passed with only the existing large-chunk advisory; asset inspection confirmed RGBA transparency and only the approved two RGB colors; the `.ico` contains 16/24/32/48/64px entries; localhost returned `/favicon.ico` as `image/x-icon` with HTTP 200; desktop and mobile Storefront screenshots and a 16–128px light/dark scale proof were visually reviewed. Admin integration is source/render-test/build verified; an authenticated Admin browser view was not changed or exercised.
+
+BRAND-LOGO-1 is complete at local asset, source and Storefront-browser level. Deployed acceptance and owner visual approval of the authenticated Admin shell remain pending. Next action: owner refreshes the Admin shell and confirms the shared mark in collapsed, expanded, mobile and dark appearances.
+
 ## Latest owner request — PROMO-REASON-1 remove lifecycle reason entry (2026-09-12)
 
 Plan: docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md, Phase 7 — Complete journeys and activation evidence. Owner explicitly requests removing reasons from Promotions and Inventory sales. Acceptance: list confirmations and shared detail lifecycle actions submit without reason; Core accepts omission while preserving authorization, version, transition, replay and audit enforcement.

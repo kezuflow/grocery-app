@@ -12,7 +12,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  Sprout,
   Sun,
 } from "lucide-react";
 import Link from "next/link";
@@ -35,6 +34,7 @@ import {
 } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { FreshMarketsMark } from "../brand/freshmarkets-mark";
 import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 import { AdminCommandPalette } from "./admin-command-palette";
 import { adminStatusPillClassName } from "./admin-status-pill";
@@ -181,8 +181,8 @@ function AdminHeader({
             aria-label="freshmarkets admin home"
             className="flex h-9 select-none items-center gap-2 rounded-lg text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:hidden"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
-              <Sprout className="size-4.5" aria-hidden="true" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-brand-mark-surface)] shadow-sm ring-1 ring-black/5">
+              <FreshMarketsMark className="size-6" />
             </span>
             <span className="hidden truncate pr-1 text-sm font-semibold tracking-[-0.02em] min-[430px]:inline">
               freshmarkets
@@ -629,8 +629,8 @@ function AdminSidebar({
                   collapsed ? "size-8 p-0" : "h-10 w-full px-2",
                 )}
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-admin-accent)] text-white shadow-sm">
-                  <Sprout className="size-4.5" aria-hidden="true" />
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-brand-mark-surface)] shadow-sm ring-1 ring-black/5">
+                  <FreshMarketsMark className="size-6" />
                 </span>
                 <span
                   className={cn(

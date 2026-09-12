@@ -9,6 +9,7 @@ import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
 import { StorefrontFooter } from "./storefront-footer";
+import { FreshMarketsMark } from "../brand/freshmarkets-mark";
 
 export { CategoryStrip } from "./marketplace/category-strip";
 export { storefrontNavigation } from "./marketplace/storefront-navigation";
@@ -39,10 +40,7 @@ export function StorefrontHeader() {
           href="/"
           className="fm-font-display flex shrink-0 items-center gap-2 text-lg font-bold text-[var(--fm-primary-dark)] lg:text-xl"
         >
-          <span
-            aria-hidden="true"
-            className="inline-block size-6 rounded-[6px] bg-[var(--fm-primary-lime)]"
-          />
+          <FreshMarketsMark className="size-7" />
           freshmarkets
         </Link>
         <form action="/" className="ml-auto hidden min-w-0 flex-1 md:block md:max-w-md">
