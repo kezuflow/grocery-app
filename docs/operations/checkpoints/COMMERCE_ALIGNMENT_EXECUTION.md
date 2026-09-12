@@ -1,6 +1,59 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — NOTIFICATION-UI-2 (2026-09-13)
+## Current owner request — CHECKOUT-DELIVERY-RECOVERY-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner reports checkout blocked after saving a confirmed address, then supplies the local
+`LALAMOVE_SERVICE_TYPE_REQUIRED` route error. Acceptance: repair the missing local binding, preserve
+provider authority, expose real delivery loading/error/empty states and retry, verify address-save
+continuation and integrate the intended fix. Start: clean `main` at
+`2e9773cddb7891c273b05fa593e653c3462c26d9`; no unrelated partial work.
+
+Root cause: Core `.dev.vars` already held all six Lalamove settings, but Wrangler's declared-secret
+filter admitted the provider selector and dropped undeclared service/market/language/credential
+bindings. Actual installed Wrangler implementation confirmed the filtering rule. Core default and
+staging configs now declare blank non-secret fields and credential secret names; generated Env types
+and the health test fixture were refreshed. No service key/default activation was invented. A read-only
+local resolution verified all six settings bound, printing only presence indicators. No credentials
+or customer information were copied to evidence. The runbook documents the binding requirement.
+
+Checkout now distinguishes loading, error and successful empty delivery reads beside the confirmed
+address; read deadlines prevent indefinite loading. Retry refreshes cart and address versions together,
+old options clear while loading and late responses remain generation-guarded. A successful address-save
+refresh is tested through total review. No financial/business rule, Core query or contract changed.
+PRODUCT/API_CONTRACTS remain unchanged; the existing interface is repaired. No new motion/delegation.
+
+Verification: all 33 harness tests pass, including two actual Wrangler binding-load regressions
+using synthetic temporary credentials. Full Web: 126 files / 516 tests pass; final input-refresh
+adjustment: checkout component 10/10 pass. Core delivery registry/discovery 2 files / 8 tests and health
+3/3 pass. Workspace typecheck, lint, architecture/readiness guards, formatting and vinext 100% pass.
+Both production Web build and Core dry-run passed before the last input-refresh adjustment. The final
+Web rebuild initially hit Windows locking from the owned test stack; that stack was stopped and the
+build rerun. Generated Env fields initially required updating the health fixture; final typecheck passes.
+Desktop/mobile browser recovery reached total review using intercepted synthetic transport. Initial
+browser navigation hit the pre-existing visually-hidden address radio; corrected to keyboard focus/Space
+without bypassing actionability. Final-source Web build and 1440px/390px browser runs pass, 2/2 without retry (3.1 seconds);
+screenshots inspected. Final Web typecheck and lint pass. Commands: `pnpm.cmd harness:test`,
+`pnpm.cmd --filter @freshmarkets/web test`, focused `pnpm.cmd --filter @freshmarkets/core test
+src/delivery/infrastructure/runtime-delivery-provider.test.ts src/checkout/application/list-fulfillment-options.integration.test.ts --maxWorkers=1`
+and `src/index.test.ts`, `pnpm.cmd typecheck`, `pnpm.cmd lint`, `pnpm.cmd architecture:check`,
+`pnpm.cmd readiness:check`, `pnpm.cmd format:check`, both package builds and Web `check:vinext`.
+Browser command: `E2E_START_STACK=0`, `APP_BASE_URL=http://localhost:3100`,
+`pnpm.cmd --filter @freshmarkets/web exec playwright test customer-fulfillment-selection.spec.ts --workers=1`.
+The isolated stack used the same Wrangler command recorded under NOTIFICATION-UI-1.
+The provider-free binding probe used installed Wrangler `unstable_getVarsForDev` and output only
+bound/missing for the six intended keys.
+
+Environment boundaries: tests use isolated `e2e-notifications-20260913` local Worker/D1 state;
+no shared/live DB mutation, provider call, deployment, real email or payment is performed. The owner's
+running development stack is not stopped. It may require restart to reload the changed bindings.
+Earlier Phase 7/provider and deployed commerce-event → received-email obligations remain open.
+Completed task ID: CHECKOUT-DELIVERY-RECOVERY-1. Counting level: zero remaining implementation
+slices for the reported binding/UI defect. Integration target: main to origin/main; revision/push
+outcome reported in the response. Concrete next action: restart the owner development stack if it
+has not reloaded the bindings, then retry checkout. Real courier acceptance remains separate.
+
+## Prior owner request — NOTIFICATION-UI-2 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner correction: remove the customer X button and subtitles; show short main statuses.

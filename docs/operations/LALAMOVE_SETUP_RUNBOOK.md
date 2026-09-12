@@ -47,6 +47,14 @@ The repository's local `MOTORCYCLE` value is only a development starting point a
 if the authenticated city response differs. The PH integration deliberately omits the optional
 Lalamove `item` object even if sandbox capability discovery happens to expose it.
 
+Core declares market, language and service type as blank configuration variables and the two
+credentials as required secret bindings in both default and staging configuration. Wrangler filters
+`.dev.vars` when `secrets.required` is present: undeclared names are discarded even when the file
+contains them. If checkout throws `LALAMOVE_SERVICE_TYPE_REQUIRED`, verify these declarations as
+well as the ignored local values, then restart the development stack after a binding change.
+Keep delivery disabled until the intended environment is configured; do not supply a fallback
+service key or use a mock outside the isolated test runtime.
+
 ## 3. Configure every store pickup profile
 
 Select each permitted store location in Admin, open **Delivery**, expand **Store courier pickup

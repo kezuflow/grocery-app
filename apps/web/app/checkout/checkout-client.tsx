@@ -28,6 +28,7 @@ import { PromotionEntry } from "../../components/storefront/checkout/promotion-e
 import { CheckoutTotalReview } from "../../components/storefront/checkout/checkout-total-review";
 import { FulfillmentOptionPicker } from "../../components/storefront/checkout/fulfillment-option-picker";
 import { addToCart, fetchCart } from "../../lib/storefront/cart-client";
+import { readJson } from "../../lib/http/read-deadline";
 
 function displayAddress(address: CustomerAddressView): string {
   return [
@@ -52,6 +53,10 @@ export function CheckoutClient({
   const [fulfillmentOptions, setFulfillmentOptions] = useState<readonly FulfillmentOptionView[]>(
     [],
   );
+  const [fulfillmentLoadState, setFulfillmentLoadState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [fulfillmentError, setFulfillmentError] = useState("");
   const [addresses, setAddresses] = useState<ReadonlyArray<CustomerAddressView>>([]);
   const [profile, setProfile] = useState<CustomerProfileView | null>(null);
   const [addressLoadState, setAddressLoadState] = useState<"loading" | "ready" | "error">(
@@ -90,7 +95,10 @@ export function CheckoutClient({
   useEffect(() => {
     const address = addresses.find((entry) => entry.id === addressId && entry.confirmedAt);
     if (address && cart) void loadFulfillmentOptions(address);
-    else setFulfillmentOptions([]);
+    else {
+      setFulfillmentOptions([]);
+      setFulfillmentLoadState("idle");
+    }
     return () => {
       fulfillmentLoadGeneration.current += 1;
     };
@@ -108,7 +116,7 @@ export function CheckoutClient({
     };
   }, []);
 
-  async function loadAddresses(preferredAddressId?: string) {
+  async function loadAddresses(preferredAddressId?: string, refreshedCart?: CartView | null) {
     const generation = ++addressLoadGeneration.current;
     setAddressLoadState("loading");
     try {
@@ -120,9 +128,12 @@ export function CheckoutClient({
       if (generation !== addressLoadGeneration.current) return;
       if (!response.ok || !result.ok) {
         setAddressLoadState("error");
+        setFulfillmentLoadState("error");
+        setFulfillmentError("Delivery details could not be refreshed. Please try again.");
         return;
       }
       setAddresses(result.value.addresses);
+      if (refreshedCart !== undefined) setCart(refreshedCart);
       setProfile(result.value.profile);
       setAddressLoadState("ready");
       const requestedAddressId =
@@ -143,6 +154,8 @@ export function CheckoutClient({
     } catch {
       if (generation !== addressLoadGeneration.current) return;
       setAddressLoadState("error");
+      setFulfillmentLoadState("error");
+      setFulfillmentError("Delivery details could not be refreshed. Please try again.");
     }
   }
 
@@ -201,33 +214,53 @@ export function CheckoutClient({
 
   async function loadFulfillmentOptions(address: CustomerAddressView) {
     const generation = ++fulfillmentLoadGeneration.current;
+    setFulfillmentOptions([]);
+    setFulfillmentError("");
     if (!cart || cart.id === "guest-cart" || !cart.items.length) {
-      setFulfillmentOptions([]);
+      setFulfillmentLoadState("idle");
       return;
     }
+    setFulfillmentLoadState("loading");
     try {
-      const response = await fetch("/api/checkout/fulfillment-options", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          addressId: address.id,
-          addressVersion: address.version,
-          cartId: cart.id,
-          cartVersion: cart.version,
-        }),
-      });
-      const result = (await response.json()) as RpcResult<readonly FulfillmentOptionView[]>;
+      const result = await readJson<RpcResult<readonly FulfillmentOptionView[]>>(
+        "/api/checkout/fulfillment-options",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            addressId: address.id,
+            addressVersion: address.version,
+            cartId: cart.id,
+            cartVersion: cart.version,
+          }),
+        },
+      );
       if (generation !== fulfillmentLoadGeneration.current) return;
       if (result.ok) {
         setFulfillmentOptions(result.value);
+        setFulfillmentLoadState("ready");
         return;
       }
-      setFulfillmentOptions([]);
-      setStatus(result.error.message);
+      setFulfillmentLoadState("error");
+      setFulfillmentError(result.error.message);
     } catch {
       if (generation !== fulfillmentLoadGeneration.current) return;
-      setFulfillmentOptions([]);
-      setStatus("Delivery options could not be loaded. Select the address again to retry.");
+      setFulfillmentLoadState("error");
+      setFulfillmentError("Delivery options could not be loaded. Please try again.");
+    }
+  }
+
+  async function retryDeliveryOptions() {
+    if (!(await invalidatePendingQuote())) return;
+    // Refresh both versioned inputs: retrying a stale cart/address repeats the rejection.
+    setFulfillmentLoadState("loading");
+    setFulfillmentOptions([]);
+    try {
+      const refreshedCart = (await fetchCart({ fresh: true })) ?? null;
+      await loadAddresses(selectedAddressId.current, refreshedCart);
+    } catch {
+      setFulfillmentLoadState("error");
+      setFulfillmentError("Delivery details could not be refreshed. Please try again.");
     }
   }
 
@@ -660,7 +693,32 @@ export function CheckoutClient({
                   ) : (
                     <div className="mt-5 flex items-start gap-3 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-4 text-sm text-[var(--fm-text-muted)]">
                       <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                      <p>Select a confirmed address to load delivery options.</p>
+                      <div role={fulfillmentLoadState === "error" ? "alert" : "status"}>
+                        <p>
+                          {!selectedAddress?.confirmedAt
+                            ? "Select a confirmed address to load delivery options."
+                            : fulfillmentLoadState === "loading"
+                              ? "Loading delivery options…"
+                              : fulfillmentLoadState === "error"
+                                ? fulfillmentError
+                                : guest
+                                  ? "Sign in to load delivery options."
+                                  : !cart?.items.length
+                                    ? "Your cart must be loaded and contain items to check delivery."
+                                    : "No delivery options are available for this address right now."}
+                        </p>
+                        {selectedAddress?.confirmedAt &&
+                          !guest &&
+                          fulfillmentLoadState !== "loading" && (
+                            <button
+                              type="button"
+                              className="mt-2 min-h-11 font-semibold underline"
+                              onClick={() => void retryDeliveryOptions()}
+                            >
+                              Retry delivery options
+                            </button>
+                          )}
+                      </div>
                     </div>
                   )}
                 </section>

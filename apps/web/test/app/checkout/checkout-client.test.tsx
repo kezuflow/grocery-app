@@ -401,6 +401,98 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     expect(container.textContent).toContain("Payment review");
   });
+  it("shows the delivery error beside a confirmed address and retries with fresh input versions", async () => {
+    const base = successfulFetch();
+    let optionCalls = 0;
+    const requests: Array<{ cartVersion: number }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/fulfillment-options") {
+          requests.push(JSON.parse(String(init?.body)));
+          if (++optionCalls === 1)
+            return Promise.resolve(
+              json({
+                ok: false,
+                error: {
+                  code: "STALE_VERSION",
+                  message: "Address or cart changed",
+                  requestId: "test",
+                },
+              }),
+            );
+        }
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Address or cart changed",
+    );
+    expect(container.textContent).not.toContain("Select a confirmed address to load");
+    const cart = await fetchCartMock();
+    fetchCartMock.mockResolvedValue({ ...cart, version: 5 });
+    click(container, "Retry delivery options");
+    await flush();
+    expect(requests.at(-1)?.cartVersion).toBe(5);
+    click(container, "Instant delivery");
+    await flush();
+    expect(container.textContent).toContain("Payment review");
+  });
+
+  it("clears old options while a new address loads and discards the older response", async () => {
+    const base = successfulFetch();
+    const pending = deferred<Response>();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/fulfillment-options" && ++calls === 2)
+          return pending.promise;
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    choose(container, "Office");
+    await flush();
+    expect(container.textContent).toContain("Loading delivery options");
+    expect(container.textContent).not.toContain("Instant delivery");
+    choose(container, "Home");
+    await flush();
+    pending.resolve(json({ ok: true, value: [] }));
+    await flush();
+    expect(container.textContent).toContain("Instant delivery");
+  });
+
+  it("offers recovery for network failure and distinguishes a successful empty result", async () => {
+    const base = successfulFetch();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/fulfillment-options")
+          return ++calls === 1
+            ? Promise.reject(new Error("offline"))
+            : Promise.resolve(json({ ok: true, value: [] }));
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
+    click(container, "Retry delivery options");
+    await flush();
+    expect(container.textContent).toContain("No delivery options are available");
+    expect(container.textContent).not.toContain("Select a confirmed address to load");
+  });
   it("retains a quote after an unknown release response and retries the identical request before replacement", async () => {
     const quotes: string[] = [],
       releases: Array<{ key: string; body: string }> = [];
@@ -510,5 +602,8 @@ describe("CheckoutClient delivery inputs", () => {
 
     expect(container.textContent).toContain("Current");
     expect(container.textContent).not.toContain("Stale");
+    click(container, "Instant delivery");
+    await flush();
+    expect(container.textContent).toContain("Payment review");
   });
 });
