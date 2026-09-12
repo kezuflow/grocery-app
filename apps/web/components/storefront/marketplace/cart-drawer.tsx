@@ -204,42 +204,44 @@ export function CartDrawer() {
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>
                       <p className="mt-1 text-xs text-[var(--fm-text-muted)]">Fixed pack</p>
-                      <p className="mt-1 text-sm font-bold tabular-nums">
-                        {item.regularLineTotalMinor !== undefined ? (
-                          <del
-                            className="mr-2 text-xs font-normal text-muted-foreground"
-                            aria-label="Regular line price"
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="inline-flex h-9 shrink-0 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
+                          <button
+                            type="button"
+                            aria-label={`Decrease ${item.name}`}
+                            onClick={() => void update(item, item.quantity - 1)}
+                            className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
-                            {money(item.regularLineTotalMinor, cart.currency)}
-                          </del>
-                        ) : null}
-                        {item.lineTotalMinor === null
-                          ? item.availability === "PRICE_UNAVAILABLE"
-                            ? "Price unavailable"
-                            : "Unavailable"
-                          : money(item.lineTotalMinor, cart.currency)}
-                      </p>
-                      <div className="mt-2 inline-flex h-9 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
-                        <button
-                          type="button"
-                          aria-label={`Decrease ${item.name}`}
-                          onClick={() => void update(item, item.quantity - 1)}
-                          className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-                        >
-                          <Minus className="size-3.5" aria-hidden="true" />
-                        </button>
-                        <span className="min-w-8 text-center text-xs font-semibold tabular-nums">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Increase ${item.name}`}
-                          onClick={() => void update(item, item.quantity + 1)}
-                          disabled={item.availability !== "AVAILABLE"}
-                          className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-                        >
-                          <Plus className="size-3.5" aria-hidden="true" />
-                        </button>
+                            <Minus className="size-3.5" aria-hidden="true" />
+                          </button>
+                          <span className="min-w-8 text-center text-xs font-semibold tabular-nums">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Increase ${item.name}`}
+                            onClick={() => void update(item, item.quantity + 1)}
+                            disabled={item.availability !== "AVAILABLE"}
+                            className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
+                          >
+                            <Plus className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                        <p className="ml-auto shrink-0 whitespace-nowrap text-right text-sm font-bold tabular-nums">
+                          {item.regularLineTotalMinor !== undefined ? (
+                            <del
+                              className="mr-2 text-xs font-normal text-muted-foreground"
+                              aria-label="Regular line price"
+                            >
+                              {money(item.regularLineTotalMinor, cart.currency)}
+                            </del>
+                          ) : null}
+                          {item.lineTotalMinor === null
+                            ? item.availability === "PRICE_UNAVAILABLE"
+                              ? "Price unavailable"
+                              : "Unavailable"
+                            : money(item.lineTotalMinor, cart.currency)}
+                        </p>
                       </div>
                     </div>
                   </div>

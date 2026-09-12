@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import type { CustomerAddressView } from "@freshmarkets/contracts";
 
-const { fetchCartMock } = vi.hoisted(() => ({ fetchCartMock: vi.fn() }));
+const { addressEditorPropsMock, fetchCartMock } = vi.hoisted(() => ({
+  addressEditorPropsMock: vi.fn(),
+  fetchCartMock: vi.fn(),
+}));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
     createElement("a", { href }, children),
@@ -20,15 +23,20 @@ vi.mock("@/components/storefront/marketplace/order-summary", () => ({
 vi.mock("@/components/storefront/address/address-editor", () => ({
   AddressEditor: ({
     initialAddress,
+    multiStep,
     onConfirmed,
   }: {
     initialAddress?: CustomerAddressView;
+    multiStep?: boolean;
     onConfirmed?: (addressId: string) => void;
-  }) => (
-    <button type="button" onClick={() => onConfirmed?.(initialAddress?.id ?? "address-new")}>
-      Complete checkout address save
-    </button>
-  ),
+  }) => {
+    addressEditorPropsMock({ initialAddress, multiStep });
+    return (
+      <button type="button" onClick={() => onConfirmed?.(initialAddress?.id ?? "address-new")}>
+        Complete checkout address save
+      </button>
+    );
+  },
 }));
 
 import { CheckoutClient } from "@/app/checkout/checkout-client";
@@ -114,9 +122,18 @@ function click(container: HTMLElement, label: string): void {
 }
 
 function choose(container: HTMLElement, label: string): void {
-  const radio = Array.from(container.querySelectorAll('input[type="radio"]')).find((candidate) =>
+  let radio = Array.from(container.querySelectorAll('input[type="radio"]')).find((candidate) =>
     candidate.parentElement?.textContent?.includes(label),
   );
+  if (!radio) {
+    const change = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.getAttribute("aria-label") === "Change saved address",
+    );
+    if (change) act(() => change.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    radio = Array.from(container.querySelectorAll('input[type="radio"]')).find((candidate) =>
+      candidate.parentElement?.textContent?.includes(label),
+    );
+  }
   if (!radio) throw new Error(`Missing address ${label}`);
   act(() => radio.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
@@ -277,6 +294,7 @@ describe("CheckoutClient delivery inputs", () => {
     document.body.replaceChildren();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    addressEditorPropsMock.mockReset();
     fetchCartMock.mockReset();
   });
 
@@ -480,7 +498,10 @@ describe("CheckoutClient delivery inputs", () => {
     );
     act(() => root.render(<CheckoutClient />));
     await flush();
-    click(container, "Add address");
+    click(container, "Add delivery address");
+    expect(addressEditorPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ multiStep: true }),
+    );
     click(container, "Complete checkout address save");
 
     refreshed.resolve(addressesResponse([{ ...home, id: "address-new", label: "Current" }]));

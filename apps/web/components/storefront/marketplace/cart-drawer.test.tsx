@@ -82,6 +82,12 @@ it("uses the mutation response without repeating coverage and cart reads", async
     window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
   });
   expect(fetcher).toHaveBeenCalledTimes(2);
+  const quantityControl = document.querySelector<HTMLButtonElement>(
+    '[aria-label="Increase Test fruit"]',
+  )?.parentElement;
+  const quantityPriceRow = quantityControl?.parentElement;
+  expect(quantityPriceRow?.className).toContain("justify-between");
+  expect(quantityPriceRow?.lastElementChild?.className).toContain("text-right");
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Increase Test fruit"]')?.click(),
   );

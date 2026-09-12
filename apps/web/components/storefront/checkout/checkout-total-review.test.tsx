@@ -57,4 +57,13 @@ describe("CheckoutTotalReview", () => {
     expect(html).toContain("Accept total and continue to payment");
     expect(html).not.toContain("FreshMarkets Service Fee");
   });
+
+  it("can defer the payment action to the persistent order summary", () => {
+    const html = renderToStaticMarkup(
+      <CheckoutTotalReview quote={quote} onAccept={vi.fn()} showAction={false} />,
+    );
+
+    expect(html).toContain("Payment review");
+    expect(html).not.toContain("Accept total and continue to payment");
+  });
 });

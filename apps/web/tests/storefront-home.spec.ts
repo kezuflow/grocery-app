@@ -160,6 +160,7 @@ test("checkout uses Core-routed delivery options and a shared order summary", as
   await expect(page.getByRole("heading", { name: "Delivery option" })).toBeVisible();
   await expect(page.getByText(/Choose Instant or Scheduled when available/)).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Order summary" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Order summary" })).toBeVisible();
 });
 
 test("category results paginate through Core cursors without duplicates", async ({ page }) => {

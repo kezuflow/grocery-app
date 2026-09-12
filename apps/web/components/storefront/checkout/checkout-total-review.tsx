@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import type { CheckoutQuoteView } from "@freshmarkets/contracts";
 
 function money(value: number, currency: string): string {
@@ -29,10 +30,12 @@ export function CheckoutTotalReview({
   quote,
   onAccept,
   accepting = false,
+  showAction = true,
 }: {
   quote: CheckoutQuoteView;
   onAccept: () => void;
   accepting?: boolean;
+  showAction?: boolean;
 }) {
   const merchandisePromotion = quote.promotionApplications.find(
     (application) => application.component === "MERCHANDISE",
@@ -43,13 +46,23 @@ export function CheckoutTotalReview({
 
   return (
     <section
-      className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 sm:p-6"
+      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 shadow-[var(--fm-shadow-card)] sm:p-6"
       aria-label="Order total review"
     >
-      <h2 className="text-lg font-bold">Payment review</h2>
-      <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-        This Core-authoritative price is valid until {new Date(quote.expiresAt).toLocaleString()}.
-      </p>
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-success)] shadow-sm">
+          <ShieldCheck className="size-5" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-success)]">
+            Ready to continue
+          </p>
+          <h2 className="mt-1 text-xl font-bold">Payment review</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+            This confirmed price is valid until {new Date(quote.expiresAt).toLocaleString()}.
+          </p>
+        </div>
+      </div>
       <dl className="mt-5 space-y-2 text-sm">
         <div className="flex justify-between gap-4">
           <dt>Merchandise subtotal</dt>
@@ -115,14 +128,16 @@ export function CheckoutTotalReview({
         FreshMarkets fault. Any extra redelivery charge requires your agreement first. Your rights
         for faulty goods or delivery remain unchanged.
       </p>
-      <button
-        type="button"
-        onClick={onAccept}
-        disabled={accepting}
-        className="mt-5 inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-5 text-sm font-bold text-[var(--fm-primary-dark)] hover:bg-[#c4fa69] disabled:cursor-wait disabled:opacity-60"
-      >
-        {accepting ? "Starting payment…" : "Accept total and continue to payment"}
-      </button>
+      {showAction ? (
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={accepting}
+          className="mt-5 inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-5 text-sm font-bold text-[var(--fm-primary-dark)] hover:bg-[#c4fa69] disabled:cursor-wait disabled:opacity-60"
+        >
+          {accepting ? "Starting payment…" : "Accept total and continue to payment"}
+        </button>
+      ) : null}
     </section>
   );
 }

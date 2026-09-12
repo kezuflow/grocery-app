@@ -1,5 +1,6 @@
 "use client";
 
+import { TicketPercent } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { PromotionCodeFeedback } from "@freshmarkets/contracts";
 import { promotionCodeMaxLength } from "@freshmarkets/validation";
@@ -57,14 +58,24 @@ export function PromotionEntry({
   return (
     <section
       aria-labelledby="promotion-heading"
-      className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
+      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)] sm:p-6"
     >
-      <h2 id="promotion-heading" className="text-lg font-bold">
-        Promotion codes
-      </h2>
-      <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-        Core checks eligibility and chooses at most one merchandise and one delivery benefit.
-      </p>
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+          <TicketPercent className="size-5" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+            Optional
+          </p>
+          <h2 id="promotion-heading" className="mt-1 text-xl font-bold">
+            Add a promotion code
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+            Add a code now. Eligible merchandise and delivery benefits appear in your total.
+          </p>
+        </div>
+      </div>
       <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
         <label className="sr-only" htmlFor="promotion-code">
           Promotion code
@@ -76,13 +87,13 @@ export function PromotionEntry({
           disabled={disabled}
           maxLength={promotionCodeMaxLength}
           autoComplete="off"
-          className="min-h-11 flex-1 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 text-sm uppercase"
-          placeholder="Enter code"
+          className="min-h-12 flex-1 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 text-sm uppercase focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+          placeholder="Enter promotion code"
         />
         <button
           type="submit"
           disabled={disabled || codes.length >= MAX_PROMOTION_CODES}
-          className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-12 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
         >
           Add code
         </button>

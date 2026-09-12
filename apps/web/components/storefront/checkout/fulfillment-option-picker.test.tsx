@@ -6,6 +6,7 @@ describe("FulfillmentOptionPicker", () => {
     const html = renderToStaticMarkup(
       <FulfillmentOptionPicker
         disabled={false}
+        selectedOptionId="opaque"
         onSelect={() => undefined}
         options={[
           {
@@ -50,6 +51,7 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Scheduled delivery");
     expect(html).toContain("cycle unavailable");
+    expect(html).toContain('aria-pressed="true"');
     expect(html).not.toMatch(/hub|location-cebu/i);
   });
 });

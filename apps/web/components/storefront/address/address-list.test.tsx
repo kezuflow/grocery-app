@@ -40,7 +40,7 @@ const baseAddress: CustomerAddressView = {
 };
 
 describe("AddressList", () => {
-  it("renders serviceable addresses as labelled radio choices and unavailable addresses with correction", () => {
+  it("keeps confirmed addresses selectable until the courier check runs at checkout", () => {
     const markup = renderToStaticMarkup(
       <AddressList
         addresses={[
@@ -64,10 +64,10 @@ describe("AddressList", () => {
     expect(markup).toContain('type="radio"');
     expect(markup).toContain("Home");
     expect(markup).toContain("Ayala Center Cebu");
-    expect(markup).toContain("Delivery unavailable");
+    expect(markup).toContain("Courier checked at checkout");
     expect(markup).toContain("Edit Home address");
-    expect(markup).toContain("Correct Parents address");
-    expect(markup).toMatch(/address-2[\s\S]*disabled/);
+    expect(markup).toContain("Edit Parents address");
+    expect(markup).not.toMatch(/address-2[\s\S]*disabled/);
   });
 
   it("announces an empty address book with a useful next action", () => {
