@@ -1,6 +1,53 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — CHECKOUT-DELIVERY-RECOVERY-1 (2026-09-13)
+## Current owner request — LOCATIONS-FLOW-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner reports no feedback from dispatch readiness, then explicitly stops mobile browser
+testing and requests Locations sidebar children (Locations, Service Areas) plus investigation of the
+fragmented setup flow. Acceptance: Core-authorized submenu, accurate active destination, saved/draft
+readiness distinction and honest save feedback, documented actual blockers and recommended flow.
+Start: `main` at `c05d1a00915bff1ab1451e555651fbba396026af`. Preserve pre-existing location address/map,
+operating-hours/time-input, locations workspace/tests, address-predictions, schedule browser test and
+local log changes. No delegation, mobile browser tests, shared-data writes, deployment or provider calls.
+
+Observed shared staging data through read-only Wrangler queries: dispatch readiness false, incomplete
+courier pickup profile, no completed fulfillment-setting receipts, open delivery cycle with no pickup
+schedule or delivery windows. Localhost uses shared staging bindings by default. The checkbox only
+edited React state; Save silently stayed disabled without a reason. The page never invoked Sonner.
+No assertion that the owner submitted a save can be made from this evidence.
+
+Implemented: Locations parent now publishes Locations/Service Areas children through Core's existing
+capability/scope rules and Web's existing grouped navigation. Fulfillment form distinguishes saved
+status from unsaved selection, validates required reason with ordinary form submission, exposes pending
+and persistent error/conflict/unknown feedback, and invokes the established success toast only after a
+typed Core success. Retry stays behind the save action with frozen payload/key; 15-second browser
+deadlines retain unknown outcomes. Incomplete pickup setup links to the current Delivery workspace
+with its location-scope requirement explained. No business rule or shared DTO shape changes.
+
+Investigation: setup is fragmented across Locations (address/pin, hours, readiness), location-scoped
+Delivery (pickup profile) and Settings (Scheduled cycles). The pickup profile is a prerequisite to
+readiness but cannot be completed on the location page. Suggested next cohesive flow: location detail
+owns address/pin, pickup contact/profile, operating hours and readiness together; Service Areas remains
+a separate Global child; Scheduled weeks retain their own opening/cutoff/pickup/delivery-window setup.
+That consolidation is not implemented by this slice. Missing real pickup/schedule values remain inputs.
+
+Verification on intended working-tree scope: Web fulfillment 6/6 tests and navigation 14/14 tests pass;
+Core fulfillment readiness 13/13 integration tests pass. Workspace typecheck, lint and architecture
+guard pass. Web production build passed for fulfillment feedback before the later submenu addition.
+Core admin-context integration tests pass 14/14; intended-file formatting and diff checks pass. Commands:
+`pnpm.cmd --filter @freshmarkets/web test components/admin/admin-navigation.test.ts components/admin/location-fulfillment-workspace.test.tsx`,
+`pnpm.cmd --filter @freshmarkets/core test src/admin/application/location-fulfillment-readiness.integration.test.ts --maxWorkers=1`,
+`pnpm.cmd --filter @freshmarkets/core test src/admin/application/admin-context.integration.test.ts --maxWorkers=1`,
+`pnpm.cmd typecheck`, `pnpm.cmd lint`, `pnpm.cmd architecture:check`, `pnpm.cmd --filter @freshmarkets/web build`.
+No browser acceptance claimed; mobile work stopped as requested before any test stack was started.
+Earlier Phase 7/provider obligations remain open. Completed task ID: LOCATIONS-FLOW-1. Counting level:
+zero remaining requested submenu/feedback implementation slices; one recommended location-detail
+consolidation remains unimplemented. Integration target: commit and push intended files to main;
+outcome reported in the response. Concrete next product action: consolidate location setup around the
+explicit location detail, removing the pickup-profile detour and its header-scope dependency.
+
+## Prior owner request — CHECKOUT-DELIVERY-RECOVERY-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner reports checkout blocked after saving a confirmed address, then supplies the local

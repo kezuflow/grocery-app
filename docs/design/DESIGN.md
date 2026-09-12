@@ -38,6 +38,14 @@ Follow [PRODUCT.md](../product/PRODUCT.md) and the protected discussion it index
 
 ## Ordinary Admin work
 
+Owner correction, 2026-09-13: Locations is a sidebar parent with Locations and Service Areas
+destinations, visible in Global and selected-location navigation when Core authorizes Locations.
+Service Areas remains Global configuration; selecting a location does not assign polygons to it.
+Location fulfillment forms distinguish saved readiness from unsaved edits, require a reason when
+saving, show pending/rejected/unconfirmed saves inline, and toast only confirmed success. Dispatch
+readiness applies to both modes; the minutes promise applies only to Instant. Consolidating pickup-profile setup into location
+details remains an investigation recommendation, not an implemented flow.
+
 Use ordinary Create/Save actions, named products/locations/people and readable quantities. Keep IDs, expected versions, idempotency identities, storage observation and retry machinery internal. After an uncertain response, preserve the original intent behind the same action and prevent conflicting replacement. Do not optimistically show a financial or operational commitment before Core confirms it. Keep useful payment/refund diagnostics and actual business discrepancies visible.
 
 Administrator work covers the agreed products/images/selling sizes/exact-location prices, promotions, customers, Orders/reports/refunds, fulfillment locations, Global service areas and explicit selling/mode/schedule controls, staff access and business-wide reporting. The Core-authorized Locations workspace stays visible in both Global and selected-location navigation so administrators can find the fulfillment-center pin editor without changing scope; its Global Service areas link opens a simple numbered list with Add service area, one named polygon editor and a customer-pin preview. Do not show per-location polygon assignment or nested delivery zones. The underlying location capability and resource scope still govern reads and writes. Operations staff sees only assigned-location Orders, stock, preparation/packing, delivery/handover and approved reports. Core supplies authorized navigation, scope options and legal actions; changing a filter never adds access. The current Admin selector offers Global and authorized locations; Market remains an internal scope layer. Global price writes require `prices.manage`; local prices are read-only.

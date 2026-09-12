@@ -262,6 +262,20 @@ describe("scoped admin context", () => {
       parentCode: null,
       kind: "workspace",
     });
+    for (const [code, label, href] of [
+      ["locations-list", "Locations", "/admin/locations"],
+      ["locations-service-areas", "Service Areas", "/admin/locations/service-areas"],
+    ]) {
+      expect(context.value.navigation).toContainEqual({
+        code,
+        label,
+        href,
+        section: "administration",
+        scopeKinds: ["GLOBAL", "LOCATION"],
+        parentCode: "locations",
+        kind: "destination",
+      });
+    }
   });
 
   it("publishes location Products only when both Catalog and Inventory reads are held", async () => {

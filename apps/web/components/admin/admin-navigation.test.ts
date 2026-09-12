@@ -126,7 +126,18 @@ describe("admin navigation mapping", () => {
       parentCode: null,
       kind: "workspace" as const,
     };
-    const items = adminNavigationFromContext([locations]);
+    const items = adminNavigationFromContext([
+      locations,
+      { ...locations, code: "locations-list", parentCode: "locations", kind: "destination" },
+      {
+        ...locations,
+        code: "locations-service-areas",
+        label: "Service Areas",
+        href: "/admin/locations/service-areas",
+        parentCode: "locations",
+        kind: "destination",
+      },
+    ]);
 
     expect(items[0]).toMatchObject({
       code: "locations",
@@ -134,14 +145,28 @@ describe("admin navigation mapping", () => {
       href: "/admin/locations",
     });
     expect(items[0]?.icon).toBeTruthy();
-    expect(adminNavigationItemsForScope(items, { kind: "GLOBAL" })).toHaveLength(1);
+    expect(adminNavigationItemsForScope(items, { kind: "GLOBAL" })).toHaveLength(3);
     expect(
       adminNavigationItemsForScope(items, {
         kind: "LOCATION",
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(3);
+    expect(groupAdminNavigation(items)[0]?.items[0]?.children.map((child) => child.label)).toEqual([
+      "Locations",
+      "Service Areas",
+    ]);
+    for (const path of ["/admin/locations", "/admin/locations/location-cebu-central/fulfillment"]) {
+      expect(mostSpecificActiveNavigation(items, path)).toEqual({
+        code: "locations-list",
+        parentCode: "locations",
+      });
+    }
+    expect(mostSpecificActiveNavigation(items, "/admin/locations/service-areas")).toEqual({
+      code: "locations-service-areas",
+      parentCode: "locations",
+    });
   });
 
   it("groups only Core-provided entries under their canonical sections and parents", () => {

@@ -56,6 +56,24 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["locations.read", "locations.manage"],
   },
   {
+    code: "locations-list",
+    label: "Locations",
+    href: "/admin/locations",
+    section: "administration",
+    parentCode: "locations",
+    kind: "destination",
+    capabilities: ["locations.read", "locations.manage"],
+  },
+  {
+    code: "locations-service-areas",
+    label: "Service Areas",
+    href: "/admin/locations/service-areas",
+    section: "administration",
+    parentCode: "locations",
+    kind: "destination",
+    capabilities: ["locations.read", "locations.manage"],
+  },
+  {
     code: "orders",
     label: "Orders",
     href: "/admin/orders",
@@ -346,6 +364,8 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 
 const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "locations",
+  "locations-list",
+  "locations-service-areas",
   "settings",
   "transfers",
 ]);

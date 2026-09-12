@@ -12,6 +12,7 @@ import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 const responseSchema = z.union([
   z.object({
     ok: z.literal(true),
@@ -48,6 +49,10 @@ export function LocationFulfillmentWorkspace({
   const [loading, setLoading] = useState(false);
   const intent = useAdminCommandIntent();
   const locked = pending !== null || intent.pending || loading;
+  const changed =
+    result.ok &&
+    (ready !== result.value.dispatchReady ||
+      minutes !== String(result.value.instantPromiseMinutes ?? ""));
   function accept(next: RpcResult<AdminLocationFulfillmentView>) {
     setResult(next);
     if (next.ok) {
@@ -63,6 +68,7 @@ export function LocationFulfillmentWorkspace({
           await (
             await fetch(
               `/api/admin/location-fulfillment?locationId=${encodeURIComponent(locationId)}`,
+              { signal: AbortSignal.timeout(15_000) },
             )
           ).json(),
         ),
@@ -75,7 +81,7 @@ export function LocationFulfillmentWorkspace({
     }
   }
   async function save() {
-    if (!result.ok || intent.pending) return;
+    if (!result.ok || intent.pending || loading || !result.value.canManage) return;
     const payload = pending ?? {
       locationId,
       expectedVersion: result.value.version,
@@ -84,6 +90,7 @@ export function LocationFulfillmentWorkspace({
       reason,
     };
     setPending(payload);
+    setNotice("");
     try {
       const next = await intent.submit(async (key) =>
         responseSchema.parse(
@@ -92,6 +99,7 @@ export function LocationFulfillmentWorkspace({
               method: "POST",
               headers: { "content-type": "application/json", "idempotency-key": key },
               body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(15_000),
             })
           ).json(),
         ),
@@ -99,10 +107,16 @@ export function LocationFulfillmentWorkspace({
       setPending(null);
       if (next.ok) {
         accept(next);
-        setNotice("Fulfillment settings saved. Existing orders keep their accepted promises.");
-      } else setNotice(next.error.message);
+        setReason("");
+        notifyCommandSuccess("Fulfillment settings saved");
+      } else
+        setNotice(
+          next.error.code === "STALE_VERSION"
+            ? `${next.error.message} Refresh settings, review your changes and save again.`
+            : next.error.message,
+        );
     } catch {
-      setNotice("Response not confirmed. Retry the same fulfillment request.");
+      setNotice("Save not confirmed. Retry saving to confirm these settings.");
     }
   }
   return (
@@ -114,68 +128,115 @@ export function LocationFulfillmentWorkspace({
         title={
           result.ok ? `${result.value.locationName} fulfillment readiness` : "Fulfillment readiness"
         }
-        description="Confirm operational readiness and set the promise for new Instant orders."
+        description="Dispatch readiness applies to Instant and Scheduled orders. The delivery promise below applies only to Instant."
       />
-      <p role="status">{notice || (!result.ok ? result.error.message : "")}</p>
+      {!result.ok && <p role="alert">{notice || result.error.message}</p>}
       <Button variant="outline" disabled={locked} onClick={() => void refresh()}>
-        Refresh settings
+        {loading ? "Refreshing…" : "Refresh settings"}
       </Button>
-      {pending && (
-        <Button disabled={intent.pending} onClick={() => void save()}>
-          Retry unconfirmed settings
-        </Button>
-      )}
       {result.ok && (
         <>
+          <p className="font-medium">
+            Saved dispatch status: {result.value.dispatchReady ? "Ready" : "Not ready"}
+          </p>
           {result.value.blockers.length > 0 && (
-            <ul className="list-disc pl-5">
-              {result.value.blockers.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+            <section className="rounded border p-3 text-sm" aria-label="Fulfillment setup">
+              <h2 className="font-semibold">Setup requirements</h2>
+              <ul className="mt-2 list-disc pl-5">
+                {result.value.blockers.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              {result.value.blockers.includes("Configure the courier pickup profile") && (
+                <p className="mt-2">
+                  Open{" "}
+                  <Link href="/admin/delivery" className="underline">
+                    Delivery
+                  </Link>
+                  , select {result.value.locationName} as the location scope, and complete Store
+                  courier pickup profile. Then return here and refresh settings.
+                </p>
+              )}
+            </section>
           )}
           {!result.value.canManage && (
             <p>Global location management access is required to change these settings.</p>
           )}
-          <fieldset disabled={locked || !result.value.canManage} className="max-w-xl space-y-4">
-            <legend className="font-semibold">Location fulfillment</legend>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={ready}
-                disabled={locked || !result.value.canManage}
-                onCheckedChange={(checked) => setReady(checked === true)}
-              />
-              Ready to dispatch customer orders
-            </label>
-            <label className="block">
-              Instant delivery promise (minutes)
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={minutes}
-                onChange={(event) => setMinutes(event.target.value)}
-              />
-            </label>
-            <p className="text-sm text-muted-foreground">
-              An Instant promise is required before opening Instant commerce. Scheduled orders use
-              their accepted delivery window.
+          <form
+            className="max-w-xl space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          >
+            <fieldset disabled={locked || !result.value.canManage} className="space-y-4">
+              <legend className="font-semibold">Location fulfillment</legend>
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={ready}
+                  disabled={locked || !result.value.canManage}
+                  aria-describedby="fulfillment-save-help"
+                  onCheckedChange={(checked) => {
+                    setReady(checked === true);
+                    setNotice("");
+                  }}
+                />
+                Ready to dispatch customer orders
+              </label>
+              <p id="fulfillment-save-help" className="text-sm text-muted-foreground">
+                Changes take effect after you save. Checking this box does not enable dispatch yet.
+              </p>
+              <label className="block">
+                Instant delivery promise (minutes)
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={minutes}
+                  onChange={(event) => {
+                    setMinutes(event.target.value);
+                    setNotice("");
+                  }}
+                />
+              </label>
+              <p className="text-sm text-muted-foreground">
+                An Instant promise is required before opening Instant commerce. Scheduled orders use
+                their accepted delivery window.
+              </p>
+              <label className="block">
+                Reason for change (required)
+                <Input
+                  required
+                  pattern=".*\S.*"
+                  value={reason}
+                  maxLength={500}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </label>
+            </fieldset>
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+              {intent.pending
+                ? "Saving fulfillment settings…"
+                : pending
+                  ? "Save awaiting confirmation."
+                  : changed
+                    ? "Unsaved changes. Enter a reason and save to apply them."
+                    : "No unsaved changes."}
             </p>
-            <label className="block">
-              Reason
-              <Input
-                value={reason}
-                maxLength={500}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </label>
+            {notice && (
+              <p role="alert" className="rounded border border-destructive p-3 text-sm">
+                {notice}
+              </p>
+            )}
             <Button
-              disabled={locked || !result.value.canManage || !reason.trim()}
-              onClick={() => void save()}
+              type="submit"
+              disabled={
+                intent.pending || loading || !result.value.canManage || (!pending && !changed)
+              }
             >
-              Save fulfillment settings
+              {intent.pending ? "Saving…" : pending ? "Retry saving" : "Save fulfillment settings"}
             </Button>
-          </fieldset>
+          </form>
         </>
       )}
     </div>

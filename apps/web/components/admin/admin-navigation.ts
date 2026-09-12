@@ -48,6 +48,8 @@ const CANONICAL_ORDER: ReadonlyArray<string> = [
   "commerce-configuration",
   "analytics",
   "locations",
+  "locations-list",
+  "locations-service-areas",
   "staff",
   "staff-list",
   "staff-roles",
