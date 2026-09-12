@@ -56,7 +56,7 @@ export async function selectCartLocation(
   if (!resolved.ok) return resolved;
   const location = resolved.value.fulfillmentLocation;
   if (!resolved.value.serviceable || !location)
-    return fail("ADDRESS_UNSERVICEABLE", "Choose an address inside our delivery area.");
+    return fail("ADDRESS_UNSERVICEABLE", "No fulfillment location is currently available.");
   const cart = await database
     .prepare("SELECT id,version FROM cart WHERE customer_id=? AND status='ACTIVE'")
     .bind(input.customerId)
@@ -84,22 +84,11 @@ export async function selectCartLocation(
         .prepare(`INSERT INTO commitment_abort(id) SELECT -6 WHERE NOT EXISTS (
         SELECT 1 FROM geography_configuration g JOIN market m ON m.id=g.market_id AND m.status='active'
         JOIN fulfillment_location l ON l.market_id=g.market_id
-        JOIN location_serviceability link ON link.location_id=l.id
-        JOIN delivery_zone z ON z.id=link.zone_id JOIN service_area a ON a.id=z.service_area_id
         WHERE g.market_id=? AND g.version=? AND l.id=? AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
-        AND z.code=? AND z.status='active' AND a.status='active' AND link.eligible=1
-        AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
-        AND a.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (a.active_to IS NULL OR a.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
         AND EXISTS (SELECT 1 FROM customer c WHERE c.id=? AND c.status='active'
           AND NOT EXISTS (SELECT 1 FROM customer_principal principal WHERE principal.auth_user_id=c.auth_user_id AND principal.status!='active')))`)
-        .bind(
-          revision.market_id,
-          revision.version,
-          location.id,
-          resolved.value.deliveryZone!.code,
-          input.customerId,
-        ),
+        .bind(revision.market_id, revision.version, location.id, input.customerId),
       cart
         ? database
             .prepare(

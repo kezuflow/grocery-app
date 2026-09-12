@@ -83,7 +83,8 @@ function mount(
   act(() => {
     root.render(
       <AddressEditor
-        publicAccessToken="public-token"
+        browserApiKey="browser-key"
+        mapId="test-map-id"
         onConfirmed={vi.fn()}
         mapAdapter={new FakeMapAdapter()}
         {...properties}
@@ -132,6 +133,10 @@ function response(value: unknown, status = 200): Response {
 }
 
 async function selectCandidate(container: HTMLElement, fetchImpl: ReturnType<typeof vi.fn>) {
+  const collapsedSearch = container.querySelector(
+    'button[aria-controls="address-search-panel"][aria-expanded="false"]',
+  );
+  if (collapsedSearch) click(collapsedSearch);
   change(input(container, "Search for an address"), "Ayala Cebu");
   await act(async () => vi.advanceTimersByTimeAsync(300));
   await flush();
@@ -169,12 +174,48 @@ describe("AddressEditor", () => {
     vi.restoreAllMocks();
   });
 
+  it("ignores selected-place details after a newer manual pin and reuses the search session", async () => {
+    let finish: ((value: Response) => void) | undefined;
+    const moved = { latitude: 10.32, longitude: 123.92 };
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      if (url === "/api/commerce/address-autocomplete")
+        return response({
+          ok: true,
+          value: [
+            { candidateKey: candidate.candidateKey, displayAddress: candidate.displayAddress },
+          ],
+        });
+      if (url === "/api/commerce/address-prediction")
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      if (url === "/api/commerce/address-reverse")
+        return response({ ok: true, value: { ...candidate, coordinate: moved } });
+      if (url === "/api/serviceability")
+        return response({ ok: true, value: { ...serviceable, coordinate: moved } });
+      throw new Error("Unexpected test request");
+    });
+    const adapter = new FakeMapAdapter();
+    const { container, root } = mount({ fetchImpl: fetcher, mapAdapter: adapter });
+    await selectCandidate(container, fetcher);
+    const search = fetcher.mock.calls.find(([url]) => url === "/api/commerce/address-autocomplete");
+    const detail = fetcher.mock.calls.find(([url]) => url === "/api/commerce/address-prediction");
+    expect(JSON.parse(String(detail?.[1]?.body)).sessionToken).toBe(
+      JSON.parse(String(search?.[1]?.body)).sessionToken,
+    );
+    act(() => adapter.emitPinMove(moved));
+    await flush();
+    finish?.(response({ ok: true, value: candidate }));
+    await flush();
+    expect(currentPinPosition(adapter)).toEqual(moved);
+    act(() => root.unmount());
+  });
   it("validates each wizard step, retains entries on Back and only saves on the final step", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) =>
+    const fetchImpl = vi.fn(async (url: string | URL | Request, _init?: RequestInit) =>
       response({
         ok: true,
         value:
-          url === "/api/commerce/address-search"
+          url === "/api/commerce/address-autocomplete"
             ? [candidate]
             : url === "/api/serviceability"
               ? serviceable
@@ -196,6 +237,31 @@ describe("AddressEditor", () => {
     const writes = () => fetchImpl.mock.calls.filter(([url]) => url === "/api/commerce/address");
     try {
       expect(container.textContent).toContain("Step 1 of 3");
+      const locationLayout = container.querySelector(
+        '[data-address-location-layout="map-overlay"]',
+      );
+      const mapSurface = container.querySelector("[data-address-map-surface]");
+      const searchToggle = container.querySelector('button[aria-controls="address-search-panel"]');
+      const searchPanel = container.querySelector("#address-search-panel");
+      const currentLocation = [...container.querySelectorAll("button")].find(
+        (button) => button.getAttribute("aria-label") === "Use current location",
+      );
+      expect(locationLayout).not.toBeNull();
+      expect(locationLayout?.className).not.toContain("grid-cols");
+      expect(mapSurface?.contains(input(container, "Search for an address"))).toBe(true);
+      expect(currentLocation && mapSurface?.contains(currentLocation)).toBe(true);
+      expect(searchToggle).not.toBe(currentLocation);
+      expect(searchToggle?.getAttribute("aria-expanded")).toBe("false");
+      expect(searchPanel?.getAttribute("aria-hidden")).toBe("true");
+      click(searchToggle!);
+      expect(searchToggle?.getAttribute("aria-expanded")).toBe("true");
+      expect(searchPanel?.getAttribute("aria-hidden")).toBe("false");
+      expect(document.activeElement).toBe(input(container, "Search for an address"));
+      act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+      expect(searchToggle?.getAttribute("aria-expanded")).toBe("false");
+      expect(searchPanel?.getAttribute("aria-hidden")).toBe("true");
+      expect(document.activeElement).toBe(searchToggle);
+      click(searchToggle!);
       expect(container.querySelector("#address-details-heading")!.closest("section")!.hidden).toBe(
         true,
       );
@@ -205,6 +271,10 @@ describe("AddressEditor", () => {
       await submit();
       expect(container.textContent).toContain("Step 1 of 3");
       await selectCandidate(container, fetchImpl);
+      expect(container.querySelector('[data-address-location-layout="map-overlay"]')).toBe(
+        locationLayout,
+      );
+      expect(searchToggle?.getAttribute("aria-expanded")).toBe("false");
       await submit();
       expect(container.textContent).toContain("Step 2 of 3");
       await submit();
@@ -220,7 +290,54 @@ describe("AddressEditor", () => {
       await submit();
       await submit();
       expect(writes()).toHaveLength(1);
+      expect(JSON.parse(String(writes()[0]?.[1]?.body))).toMatchObject({
+        phone: "+639171234567",
+      });
       expect(confirmed).toHaveBeenCalledExactlyOnceWith(savedAddress.id);
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
+  it("formats Philippine mobile input and lets the customer choose a saved or different number", () => {
+    const { container, root } = mount({
+      initialAddress: savedAddress,
+      defaultPhone: "+639181234567",
+      savedPhoneNumbers: ["09191234567", "+63 917 123 4567"],
+      fetchImpl: vi.fn(),
+    });
+    try {
+      const phone = input(container, "Phone number");
+      const savedPhoneSelect = container.querySelector(
+        'select[aria-label="Choose a saved phone number"]',
+      );
+      if (!(savedPhoneSelect instanceof HTMLSelectElement))
+        throw new Error("Saved phone selector was not rendered");
+
+      expect(phone.value).toBe("+63 917 123 4567");
+      expect(Array.from(savedPhoneSelect.options, (option) => option.textContent)).toEqual([
+        "+63 917 123 4567",
+        "+63 918 123 4567",
+        "+63 919 123 4567",
+        "Use a different number",
+      ]);
+
+      act(() => {
+        savedPhoneSelect.value = "+639181234567";
+        savedPhoneSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(phone.value).toBe("+63 918 123 4567");
+
+      act(() => {
+        savedPhoneSelect.value = "new";
+        savedPhoneSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(phone.value).toBe("");
+
+      change(phone, "+63917123 123");
+      expect(phone.value).toBe("+63 917 123 123");
+      change(phone, "09171234567");
+      expect(phone.value).toBe("0917 123 4567");
     } finally {
       act(() => root.unmount());
     }
@@ -264,7 +381,10 @@ describe("AddressEditor", () => {
     const confirmed = vi.fn();
     let attempts = 0;
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      if (url === "/api/commerce/address-search") return response({ ok: true, value: [candidate] });
+      if (url === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (url === "/api/commerce/address-autocomplete")
+        return response({ ok: true, value: [candidate] });
       if (url === "/api/serviceability") return response({ ok: true, value: serviceable });
       expect(url).toBe("/api/commerce/browsing-location");
       expect(JSON.parse(String(init?.body))).toEqual({ coordinate: candidate.coordinate });
@@ -320,7 +440,7 @@ describe("AddressEditor", () => {
           response({
             ok: true,
             value:
-              url === "/api/commerce/address-search"
+              url === "/api/commerce/address-autocomplete"
                 ? [candidate]
                 : url === "/api/serviceability"
                   ? serviceable
@@ -404,10 +524,12 @@ describe("AddressEditor", () => {
 
     expect(firstSignal?.aborted).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/commerce/address-search");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/commerce/address-autocomplete");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "POST", cache: "no-store" });
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
       query: "Ayala Cebu",
+      sessionToken: expect.any(String),
+      proximity: expect.any(Object),
     });
     expect(container.textContent).toContain(candidate.displayAddress);
 
@@ -429,7 +551,9 @@ describe("AddressEditor", () => {
     let savedBody: Record<string, unknown> | undefined;
     const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);
-      if (path.startsWith("/api/commerce/address-search"))
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path.startsWith("/api/commerce/address-autocomplete"))
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/commerce/address-reverse")
         return Promise.resolve(
@@ -464,7 +588,7 @@ describe("AddressEditor", () => {
       .filter(([url]) => String(url) === "/api/serviceability")
       .at(-1);
     expect(JSON.parse(String(serviceabilityCall?.[1]?.body))).toMatchObject(moved);
-    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).toContain("Closest fulfillment location found");
     change(input(container, "Address label"), "Home");
     change(input(container, "Recipient name"), "Ana Santos");
     change(input(container, "Phone number"), "+639171234567");
@@ -494,7 +618,9 @@ describe("AddressEditor", () => {
     const deviceCoordinate = { latitude: 10.34, longitude: 123.91 };
     const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);
-      if (path === "/api/commerce/address-search")
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path === "/api/commerce/address-autocomplete")
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return Promise.resolve(
@@ -544,7 +670,9 @@ describe("AddressEditor", () => {
   it("distinguishes provider-resolved address fields from editable delivery details", async () => {
     const fetchImpl = vi.fn((url: string | URL | Request) => {
       const path = String(url);
-      if (path === "/api/commerce/address-search")
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path === "/api/commerce/address-autocomplete")
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
@@ -570,7 +698,9 @@ describe("AddressEditor", () => {
     const serviceabilityResolvers: Array<(response: Response) => void> = [];
     const fetchImpl = vi.fn((url: string | URL | Request) => {
       const path = String(url);
-      if (path === "/api/commerce/address-search")
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path === "/api/commerce/address-autocomplete")
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return new Promise<Response>((resolve) => serviceabilityResolvers.push(resolve));
@@ -585,7 +715,7 @@ describe("AddressEditor", () => {
       response({ ok: true, value: serviceable, requestId: "serviceability-current" }),
     );
     await flush();
-    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).toContain("Closest fulfillment location found");
 
     serviceabilityResolvers[0]?.(
       response({
@@ -601,8 +731,8 @@ describe("AddressEditor", () => {
     );
     await flush();
 
-    expect(container.textContent).toContain("Delivery is available");
-    expect(container.textContent).not.toContain("Delivery is unavailable");
+    expect(container.textContent).toContain("Closest fulfillment location found");
+    expect(container.textContent).not.toContain("No fulfillment location available");
     act(() => root.unmount());
   });
 
@@ -656,7 +786,9 @@ describe("AddressEditor", () => {
     } as unknown as Geolocation;
     const fetchImpl = vi.fn((url: string | URL | Request) => {
       const path = String(url);
-      if (path === "/api/commerce/address-search")
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path === "/api/commerce/address-autocomplete")
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
@@ -698,7 +830,9 @@ describe("AddressEditor", () => {
     let savedBody: Record<string, unknown> | undefined;
     const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);
-      if (path.startsWith("/api/commerce/address-search"))
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path.startsWith("/api/commerce/address-autocomplete"))
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return Promise.resolve(response({ ok: true, value: unavailable, requestId: "svc" }));
@@ -723,10 +857,10 @@ describe("AddressEditor", () => {
     change(input(container, "Delivery note"), "Call on arrival");
     change(input(container, "Recipient guidance"), "Ask for Ana");
     await flush();
-    expect(container.textContent).toContain("Delivery is unavailable");
+    expect(container.textContent).toContain("No fulfillment location available");
 
     const save = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Save unavailable address"),
+      button.textContent?.includes("Save confirmed address"),
     );
     if (!save) throw new Error("Missing unavailable save action");
     click(save);
@@ -814,7 +948,9 @@ describe("AddressEditor", () => {
   it("checks public serviceability without rendering customer address persistence controls", async () => {
     const fetchImpl = vi.fn((url: string | URL | Request) => {
       const path = String(url);
-      if (path === "/api/commerce/address-search")
+      if (path === "/api/commerce/address-prediction")
+        return response({ ok: true, value: candidate });
+      if (path === "/api/commerce/address-autocomplete")
         return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
       if (path === "/api/serviceability")
         return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
@@ -824,7 +960,7 @@ describe("AddressEditor", () => {
 
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
 
-    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).toContain("Closest fulfillment location found");
     expect(container.textContent).toContain("not a saved checkout address");
     expect(container.textContent).not.toContain("Recipient name");
     expect(container.textContent).not.toContain("Save confirmed address");
@@ -838,7 +974,9 @@ it("defers the compact map until an address is chosen from the Choose map search
   const adapter = new FakeMapAdapter();
   const fetchImpl = vi.fn((url: string | URL | Request) => {
     const path = String(url);
-    if (path === "/api/commerce/address-search")
+    if (path === "/api/commerce/address-prediction")
+      return response({ ok: true, value: candidate });
+    if (path === "/api/commerce/address-autocomplete")
       return Promise.resolve(response({ ok: true, value: [candidate], requestId: "search" }));
     if (path === "/api/serviceability")
       return Promise.resolve(response({ ok: true, value: serviceable, requestId: "svc" }));
@@ -863,7 +1001,7 @@ it("defers the compact map until an address is chosen from the Choose map search
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
     expect(adapter.initializations).toHaveLength(1);
     expect(container.textContent).not.toContain("Move the pin to your entrance");
-    expect(container.textContent).toContain("Delivery is available");
+    expect(container.textContent).toContain("Closest fulfillment location found");
   } finally {
     act(() => root.unmount());
     vi.useRealTimers();

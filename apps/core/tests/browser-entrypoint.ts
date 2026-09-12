@@ -1,6 +1,6 @@
 import { CoreEntrypoint as ProductionCoreEntrypoint } from "../src/index";
 import { handleLalamoveWebhook } from "../src/delivery/http/lalamove-webhook";
-import { MapboxGeocoder } from "../src/geography/infrastructure/mapbox-geocoder";
+import { GoogleMapsGeocoder } from "../src/geography/infrastructure/google-maps-geocoder";
 import type { GeocoderPort } from "../src/geography/ports/geocoder";
 
 export { BrowserEntrypoint as CoreEntrypoint };
@@ -11,35 +11,26 @@ export default class BrowserEntrypoint extends ProductionCoreEntrypoint {
   protected override createGeocoderPort = (): GeocoderPort => {
     if (String(this.env.ENVIRONMENT) !== "test")
       throw new Error("Test provider requires test mode");
-    return new MapboxGeocoder("synthetic-geocoder-token", async (input) => {
+    return new GoogleMapsGeocoder("synthetic-geocoder-key", async (input) => {
       const url = new URL(String(input));
-      if (
-        url.pathname !== "/search/geocode/v6/reverse" ||
-        url.searchParams.get("permanent") !== "true"
-      )
-        throw new Error("Browsing confirmation requires permanent reverse geocoding");
+      if (url.pathname !== "/maps/api/geocode/json" || !url.searchParams.has("latlng"))
+        throw new Error("Browsing confirmation requires reverse geocoding");
+      const [latitude, longitude] = url.searchParams.get("latlng")!.split(",").map(Number);
       return Response.json({
-        features: [
+        status: "OK",
+        results: [
           {
-            type: "Feature",
-            id: "synthetic-confirmed-address",
+            place_id: "synthetic-confirmed-address",
+            formatted_address: "Confirmed delivery entrance, Cebu",
             geometry: {
-              type: "Point",
-              coordinates: [
-                Number(url.searchParams.get("longitude")),
-                Number(url.searchParams.get("latitude")),
-              ],
+              location: { lat: latitude, lng: longitude },
+              location_type: "ROOFTOP",
             },
-            properties: {
-              mapbox_id: "synthetic-confirmed-address",
-              feature_type: "address",
-              name: "Confirmed delivery entrance",
-              full_address: "Confirmed delivery entrance, Cebu",
-              context: {
-                place: { name: "Cebu" },
-                country: { name: "Philippines", country_code: "PH" },
-              },
-            },
+            address_components: [
+              { long_name: "Confirmed delivery entrance", types: ["premise"] },
+              { long_name: "Cebu", types: ["locality"] },
+              { long_name: "Philippines", short_name: "PH", types: ["country"] },
+            ],
           },
         ],
       });

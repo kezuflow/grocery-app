@@ -31,14 +31,14 @@ describe("runtime route-distance selection", () => {
     },
   );
 
-  it("builds Mapbox only from explicit selection plus secret", async () => {
+  it("builds Google Routes only from explicit selection plus server key", async () => {
     const port = buildRouteDistancePort(
       {
         ENVIRONMENT: "production",
-        ROUTE_DISTANCE_PROVIDER: "mapbox",
-        MAPBOX_ACCESS_TOKEN: "secret-token",
+        ROUTE_DISTANCE_PROVIDER: "google_maps",
+        GOOGLE_MAPS_SERVER_KEY: "secret-key",
       },
-      async () => Response.json({ code: "Ok", routes: [{ distance: 900 }] }),
+      async () => Response.json({ routes: [{ distanceMeters: 900 }] }),
     );
     await expect(port.routeDistance(input)).resolves.toMatchObject({ distanceMeters: 900 });
   });

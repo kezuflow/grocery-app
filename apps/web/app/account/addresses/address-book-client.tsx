@@ -13,7 +13,13 @@ import { StorefrontShell } from "../../../components/storefront/storefront-shell
 import { AddressEditor } from "../../../components/storefront/address/address-editor";
 import { AddressList } from "../../../components/storefront/address/address-list";
 
-export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: string }) {
+export function AddressBookClient({
+  browserApiKey,
+  mapId,
+}: {
+  browserApiKey?: string;
+  mapId?: string;
+}) {
   const [addresses, setAddresses] = useState<ReadonlyArray<CustomerAddressView>>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [selectedAddressId, setSelectedAddressId] = useState<string>();
@@ -186,10 +192,12 @@ export function AddressBookClient({ publicAccessToken }: { publicAccessToken?: s
               {loadState === "ready" ? (
                 <AddressEditor
                   key={editingAddress?.id ?? "new-address"}
-                  publicAccessToken={publicAccessToken}
+                  browserApiKey={browserApiKey}
+                  mapId={mapId}
                   multiStep={!editingAddress}
                   initialAddress={editingAddress}
                   defaultPhone={profile?.accountPhone ?? undefined}
+                  savedPhoneNumbers={addresses.map((address) => address.phone)}
                   onConfirmed={(addressId) => void loadAddresses(addressId)}
                 />
               ) : null}

@@ -10,13 +10,20 @@ vi.mock("./admin-shell", () => ({
     <section aria-label={title}>{children}</section>
   ),
 }));
-vi.mock("../maps/mapbox-map", () => ({
-  MapboxMap: ({
+vi.mock("../maps/google-map", () => ({
+  GoogleMap: ({
     onPinMove,
+    scene,
   }: {
     onPinMove: (point: { latitude: number; longitude: number }) => void;
+    scene: { draggablePin?: unknown; points?: readonly unknown[] };
   }) => (
-    <button type="button" onClick={() => onPinMove({ latitude: 10.35, longitude: 123.92 })}>
+    <button
+      type="button"
+      data-draggable-pin={scene.draggablePin ? "true" : "false"}
+      data-static-points={String(scene.points?.length ?? 0)}
+      onClick={() => onPinMove({ latitude: 10.35, longitude: 123.92 })}
+    >
       Move test pin
     </button>
   ),
@@ -93,7 +100,15 @@ describe("location workspace", () => {
   it("keeps temporary provider provenance when an operator moves the search-result pin", async () => {
     const writes: RequestInit[] = [];
     fetchMock.mockImplementation(async (url, options) => {
-      if (String(url).includes("address-search"))
+      if (String(url).includes("address-prediction"))
+        return response({
+          candidateKey: "candidate",
+          displayAddress: "Search result",
+          coordinate: { latitude: 10.3, longitude: 123.9 },
+          accuracy: null,
+          components: view.items[0].address,
+        });
+      if (String(url).includes("address-autocomplete"))
         return response([
           {
             candidateKey: "candidate",
@@ -113,6 +128,10 @@ describe("location workspace", () => {
       root.render(<LocationsWorkspace initial={{ ok: true, requestId: "test", value: view }} />),
     );
     await act(async () => button("Review Warehouse").click());
+    expect(container.textContent).toContain("Fulfillment location pin");
+    expect(container.textContent).toContain("Pin set");
+    expect(button("Move test pin").dataset.draggablePin).toBe("true");
+    expect(button("Move test pin").dataset.staticPoints).toBe("0");
     async function fill(selector: string, value: string) {
       const input = container.querySelector<HTMLInputElement>(selector);
       if (!input) throw new Error("Missing input");

@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { CheckoutClient } from "./checkout-client";
+import { googleMapsBrowserConfiguration } from "@/lib/maps/google-maps-runtime";
 
 export default function CheckoutPage() {
-  return <CheckoutClient publicAccessToken={env.MAPBOX_BROWSER_TOKEN || undefined} />;
+  const googleMaps = googleMapsBrowserConfiguration(env);
+  return <CheckoutClient browserApiKey={googleMaps.browserApiKey} mapId={googleMaps.mapId} />;
 }

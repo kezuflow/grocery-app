@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "mapbox-gl/dist/mapbox-gl.css";
 
 @font-face {
   font-family: "Outfit";

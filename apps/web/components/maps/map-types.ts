@@ -42,7 +42,8 @@ export type MapScene = Readonly<{
 
 export type MapAdapterInitialization = Readonly<{
   container: HTMLElement;
-  publicAccessToken: string;
+  browserApiKey: string;
+  mapId: string;
   initialView: MapInitialView;
   scene: MapScene;
   reducedMotion: boolean;

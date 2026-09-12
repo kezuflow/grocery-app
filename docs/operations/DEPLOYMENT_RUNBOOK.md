@@ -82,8 +82,9 @@ hostname.
 Before changing the staging public origin, update the same release's
 `PUBLIC_APP_ORIGIN`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` values together.
 Register `https://freshmarkets.ph/api/auth/callback/google` as an authorized
-Google OAuth redirect URI and allow `https://freshmarkets.ph/*` in any Mapbox
-public-token URL restrictions before accepting traffic.
+Google OAuth redirect URI and allow the exact production Web origins in the
+`GOOGLE_MAPS_BROWSER_KEY` HTTP-referrer restrictions before accepting traffic. Keep the separate
+`GOOGLE_MAPS_SERVER_KEY` restricted to Core's Geocoding API and Routes API calls.
 
 1. Build Web with `CLOUDFLARE_ENV=staging`, then review the generated Worker
    configuration under `apps/web/dist/server`; do not edit generated output.

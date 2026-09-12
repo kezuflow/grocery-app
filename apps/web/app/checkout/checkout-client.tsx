@@ -18,7 +18,13 @@ import { PromotionEntry } from "../../components/storefront/checkout/promotion-e
 import { CheckoutTotalReview } from "../../components/storefront/checkout/checkout-total-review";
 import { FulfillmentOptionPicker } from "../../components/storefront/checkout/fulfillment-option-picker";
 import { fetchCart } from "../../lib/storefront/cart-client";
-export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: string }) {
+export function CheckoutClient({
+  browserApiKey,
+  mapId,
+}: {
+  browserApiKey?: string;
+  mapId?: string;
+}) {
   const [cart, setCart] = useState<CartView | null>(null);
   const [fulfillmentOptions, setFulfillmentOptions] = useState<readonly FulfillmentOptionView[]>(
     [],
@@ -443,7 +449,8 @@ export function CheckoutClient({ publicAccessToken }: { publicAccessToken?: stri
                   <div className="mt-6 border-t border-[var(--fm-border)] pt-6">
                     <AddressEditor
                       key={editingAddress?.id ?? "checkout-new-address"}
-                      publicAccessToken={publicAccessToken}
+                      browserApiKey={browserApiKey}
+                      mapId={mapId}
                       initialAddress={editingAddress}
                       defaultPhone={profile?.accountPhone ?? undefined}
                       onConfirmed={async (confirmedAddressId) => {

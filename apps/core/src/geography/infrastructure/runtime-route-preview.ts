@@ -1,9 +1,9 @@
 import type { RoutePreviewPort } from "../ports/route-preview";
-import { MapboxRoutePreview } from "./mapbox-route-preview";
+import { GoogleRoutesPreview } from "./google-routes-preview";
 
 export function buildRoutePreviewPort(
-  environment: { MAPBOX_ACCESS_TOKEN?: string },
+  environment: { GOOGLE_MAPS_SERVER_KEY?: string },
   fetchImpl: typeof fetch = fetch,
 ): RoutePreviewPort {
-  return new MapboxRoutePreview(environment.MAPBOX_ACCESS_TOKEN ?? "", fetchImpl);
+  return new GoogleRoutesPreview(environment.GOOGLE_MAPS_SERVER_KEY ?? "", fetchImpl);
 }

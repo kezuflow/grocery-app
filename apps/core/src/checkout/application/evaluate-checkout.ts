@@ -4,7 +4,7 @@ import { resolveServiceability } from "../../geography/serviceability";
 import { defaultCurrency } from "../../geography/market-defaults";
 import { checkoutEligibility } from "../../commerce/service";
 import { resolveCheckoutDecision } from "./resolve-checkout-decision";
-import { closestLocation } from "../../geography/geometry";
+import { operationalCandidates } from "../../geography/application/operational-candidates";
 
 export type CheckoutEvaluation = {
   eligible: boolean;
@@ -15,7 +15,7 @@ export type CheckoutEvaluation = {
 
 /**
  * Central checkout eligibility orchestration for a Scheduled cycle: resolves
- * address ownership/serviceability, zone routing,
+ * address ownership, nearest-location routing,
  * live cart total under the authoritative price context and zone fee. Core
  * repeats this validation at quote and commitment; the browser
  * result here is advisory.
@@ -29,10 +29,10 @@ export async function evaluateCheckout(
   const [address, cycle, policy] = await Promise.all([
     database
       .prepare(
-        "SELECT latitude, longitude, delivery_zone_code FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
+        "SELECT latitude, longitude FROM customer_address WHERE id=? AND customer_id=? AND status='active'",
       )
       .bind(command.addressId, command.customerId)
-      .first<{ latitude: number; longitude: number; delivery_zone_code: string | null }>(),
+      .first<{ latitude: number; longitude: number }>(),
     database
       .prepare("SELECT id, market_id, status, cutoff_at FROM delivery_cycle WHERE id=?")
       .bind(command.cycleId)
@@ -49,32 +49,18 @@ export async function evaluateCheckout(
       .bind(command.cycleId)
       .first<{ currency: string }>(),
   ]);
-  const routingCandidates = address?.delivery_zone_code
-    ? await database
-        .prepare(
-          `SELECT dz.id zone_id,fl.id,fl.id location_id,fl.latitude,fl.longitude
-             FROM delivery_zone dz
-             JOIN service_area sa ON sa.id=dz.service_area_id
-             JOIN delivery_cycle dc ON dc.market_id=sa.market_id
-             JOIN location_serviceability ls ON ls.zone_id=dz.id AND ls.eligible=1
-             JOIN fulfillment_location fl ON fl.id=ls.location_id AND fl.market_id=dc.market_id AND fl.status='active' AND fl.purpose='CUSTOMER_FULFILLMENT'
-             JOIN delivery_cycle_zone dcz ON dcz.cycle_id=dc.id AND dcz.zone_id=dz.id
-               AND dcz.location_id=fl.id AND dcz.status='ACTIVE'
-             JOIN global_commerce_configuration mode ON mode.id='global'
-              AND mode.selling_state='OPEN' AND mode.fulfillment_mode='SCHEDULED'
-            WHERE dz.code=? AND dz.status='active' AND dc.id=?
-            ORDER BY fl.id`,
-        )
-        .bind(address.delivery_zone_code, command.cycleId)
-        .all<{
-          id: string;
-          zone_id: string;
-          location_id: string;
-          latitude: number;
-          longitude: number;
-        }>()
-    : { results: [] };
-  const routing = address ? closestLocation(address, routingCandidates.results) : null;
+  const selected =
+    address && cycle
+      ? (
+          await operationalCandidates(database, address, {
+            mode: "SCHEDULED",
+            marketId: cycle.market_id,
+            cycleId: cycle.id,
+            now,
+          })
+        )[0]
+      : null;
+  const routing = selected ? { zone_id: selected.zoneId, location_id: selected.locationId } : null;
   const [cart, fee, unavailableItem] = await Promise.all([
     database
       .prepare(

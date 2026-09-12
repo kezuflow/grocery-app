@@ -171,9 +171,6 @@ export async function createPayment(
       JOIN fulfillment_location l ON l.id=json_extract(q.cycle_snapshot_json,'$.locationId')
       JOIN geography_configuration geography ON geography.market_id=l.market_id
       JOIN market market ON market.id=l.market_id AND market.status='active'
-      JOIN delivery_zone zone ON zone.id=json_extract(q.cycle_snapshot_json,'$.zoneId') AND zone.status='active'
-      JOIN service_area area ON area.id=zone.service_area_id AND area.market_id=market.id AND area.status='active'
-      JOIN location_serviceability link ON link.location_id=l.id AND link.zone_id=zone.id AND link.eligible=1
       JOIN global_commerce_configuration mode ON mode.id='global'
       JOIN customer customer ON customer.id=q.customer_id AND customer.status='active'
       WHERE q.id=? AND q.customer_id=? AND q.version=? AND q.status='ACTIVE' AND q.expires_at>?
@@ -188,8 +185,6 @@ export async function createPayment(
         AND (CASE WHEN q.delivery_cycle_id IS NULL THEN CAST(unixepoch('subsec')*1000 AS INTEGER)
           ELSE CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER) END)
           <json_extract(q.cycle_snapshot_json,'$.operatingInterval.endsAt')
-        AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
-        AND area.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (area.active_to IS NULL OR area.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
         AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
           AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version))
@@ -206,7 +201,7 @@ export async function createPayment(
                   AND window.ends_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.endsAt'),'subsec')*1000 AS INTEGER)
                   AND schedule.pickup_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER))
               AND cycle.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.cycleVersion'),cycle.version)
-              AND participation.zone_id=zone.id AND participation.location_id=l.id AND participation.status='ACTIVE')))
+              AND participation.zone_id=json_extract(q.cycle_snapshot_json,'$.zoneId') AND participation.location_id=l.id AND participation.status='ACTIVE')))
     )`)
           .bind(
             command.subjectId,

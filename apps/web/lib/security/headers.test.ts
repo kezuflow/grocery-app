@@ -17,11 +17,13 @@ function headerValue(
 }
 
 describe("Web security headers", () => {
-  it("locks the production policy and preserves the required Mapbox sources", () => {
+  it("locks the production policy and preserves the required Google Maps sources", () => {
     const policy = headerValue("production", "Content-Security-Policy", "request-nonce");
 
     expect(policy).toContain("default-src 'self'");
-    expect(policy).toContain("script-src 'self' 'nonce-request-nonce'");
+    expect(policy).toContain(
+      "script-src 'self' 'nonce-request-nonce' https://maps.googleapis.com https://maps.gstatic.com",
+    );
     expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).toContain("object-src 'none'");
@@ -29,9 +31,9 @@ describe("Web security headers", () => {
     expect(policy).toContain("frame-ancestors 'none'");
     expect(policy).toContain("form-action 'self'");
     expect(policy).toContain("worker-src 'self' blob:");
-    expect(policy).toContain("img-src 'self' data: blob:");
+    expect(policy).toContain("img-src 'self' data: blob: https://maps.gstatic.com");
     expect(policy).toContain(
-      "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://api.paymongo.com",
+      "connect-src 'self' https://maps.googleapis.com https://*.googleapis.com https://api.paymongo.com",
     );
   });
 
@@ -68,7 +70,7 @@ describe("Web security headers", () => {
     (environment) => {
       expect(headerValue(environment, "Strict-Transport-Security")).toBeUndefined();
       expect(headerValue(environment, "Content-Security-Policy")).toContain(
-        "script-src 'self' 'nonce-test-nonce'",
+        "script-src 'self' 'nonce-test-nonce' https://maps.googleapis.com https://maps.gstatic.com",
       );
     },
   );

@@ -26,7 +26,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
 vi.mock("../storefront-runtime", () => ({
-  useStorefrontRuntime: () => ({ mapboxPublicAccessToken: "" }),
+  useStorefrontRuntime: () => ({ googleMapsBrowserApiKey: "", googleMapsMapId: "" }),
 }));
 vi.mock("../../../lib/storefront/cart-client", () => ({ refreshCartForLocation: mocks.cart }));
 // This boundary receives an already-confirmed selection. Provider confirmation

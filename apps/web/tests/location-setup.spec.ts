@@ -21,8 +21,8 @@ for (const width of [1440, 390]) {
       ["Address line 1", "Test receiving road"],
       ["City", "Cebu"],
       ["Region", "Cebu"],
-      ["Confirmed latitude", "10.32"],
-      ["Confirmed longitude", "123.91"],
+      ["Pickup pin latitude", "10.32"],
+      ["Pickup pin longitude", "123.91"],
       ["Reason for this change", "Set up receiving warehouse"],
     ]) {
       await page.getByLabel(field, { exact: true }).fill(value);
@@ -40,6 +40,7 @@ for (const width of [1440, 390]) {
     await page.reload();
     const row = page.getByRole("heading", { name, exact: true }).locator("../..");
     await expect(row).toContainText("Central warehouse · active");
+    await expect(row).toContainText("Pickup pin · 10.320000, 123.910000");
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);

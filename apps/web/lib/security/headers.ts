@@ -2,10 +2,10 @@ import type { WebRuntimeEnvironment } from "../runtime/runtime-configuration";
 
 export type WebSecurityHeader = Readonly<{ key: string; value: string }>;
 
-const MAPBOX_CONTENT_SECURITY_DIRECTIVES = [
+const GOOGLE_MAPS_CONTENT_SECURITY_DIRECTIVES = [
   "worker-src 'self' blob:",
-  "img-src 'self' data: blob:",
-  "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://api.paymongo.com",
+  "img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://*.googleapis.com https://*.gstatic.com",
+  "connect-src 'self' https://maps.googleapis.com https://*.googleapis.com https://api.paymongo.com",
 ] as const;
 
 const DEPLOYED_ENVIRONMENTS = new Set<WebRuntimeEnvironment>(["preview", "staging", "production"]);
@@ -20,10 +20,10 @@ export function webContentSecurityPolicy(
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${scriptNonce}'`,
+    `script-src 'self' 'nonce-${scriptNonce}' https://maps.googleapis.com https://maps.gstatic.com`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    ...MAPBOX_CONTENT_SECURITY_DIRECTIVES,
+    ...GOOGLE_MAPS_CONTENT_SECURITY_DIRECTIVES,
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

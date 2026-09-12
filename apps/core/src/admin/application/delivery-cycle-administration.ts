@@ -163,27 +163,19 @@ export async function listAdminCycleDestinations(
     if (cursor[0] !== input.marketId)
       return failure("VALIDATION_FAILED", "Cursor belongs to another market", input.requestId);
   }
-  const now = deps.now?.() ?? Date.now();
   const rows = await deps.db
     .prepare(`SELECT DISTINCT z.id zoneId,z.name zoneName,l.id locationId,l.name locationName
-    FROM delivery_zone z JOIN service_area a ON a.id=z.service_area_id
-    JOIN location_serviceability link ON link.zone_id=z.id AND link.eligible=1
-    JOIN fulfillment_location l ON l.id=link.location_id JOIN market m ON m.id=a.market_id
-    WHERE m.id=? AND m.status='active' AND l.market_id=m.id AND a.status='active' AND z.status='active'
+    FROM fulfillment_location l JOIN market m ON m.id=l.market_id
+    JOIN delivery_zone z ON z.id=(
+      SELECT candidate_zone.id FROM delivery_zone candidate_zone
+      JOIN service_area candidate_area ON candidate_area.id=candidate_zone.service_area_id
+      WHERE candidate_area.market_id=m.id
+      ORDER BY candidate_area.polygon_version DESC,candidate_zone.id LIMIT 1)
+    WHERE m.id=? AND m.status='active'
       AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
-      AND a.active_from<=? AND (a.active_to IS NULL OR a.active_to>?) AND link.valid_from<=? AND (link.valid_to IS NULL OR link.valid_to>?)
       AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
       AND (? IS NULL OR (z.id,l.id)>(?,?)) ORDER BY z.id,l.id LIMIT 51`)
-    .bind(
-      input.marketId,
-      now,
-      now,
-      now,
-      now,
-      cursor?.[1] ?? null,
-      cursor?.[1] ?? "",
-      cursor?.[2] ?? "",
-    )
+    .bind(input.marketId, cursor?.[1] ?? null, cursor?.[1] ?? "", cursor?.[2] ?? "")
     .all<AdminCycleDestinations["items"][number]>();
   const items = rows.results.slice(0, 50),
     last = items.at(-1);
@@ -207,22 +199,18 @@ function participationGuard(
   participation:
     | AdminDeliveryCycleView["participation"]
     | SaveAdminDeliveryCycleRequest["participation"],
-  now: number,
 ) {
   return db
     .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
     SELECT 1 FROM json_each(?) requested WHERE NOT EXISTS (
       SELECT 1 FROM delivery_zone z JOIN service_area a ON a.id=z.service_area_id
-      JOIN location_serviceability link ON link.zone_id=z.id AND link.eligible=1
-      JOIN fulfillment_location l ON l.id=link.location_id
+      JOIN fulfillment_location l ON l.id=json_extract(requested.value,'$.locationId')
       WHERE z.id=json_extract(requested.value,'$.zoneId') AND l.id=json_extract(requested.value,'$.locationId')
-        AND a.market_id=? AND l.market_id=a.market_id AND a.status='active' AND z.status='active'
+        AND a.market_id=? AND l.market_id=a.market_id
         AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
-        AND a.active_from<=? AND (a.active_to IS NULL OR a.active_to>?)
-        AND link.valid_from<=? AND (link.valid_to IS NULL OR link.valid_to>?)
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
     ))`)
-    .bind(JSON.stringify(participation), marketId, now, now, now, now);
+    .bind(JSON.stringify(participation), marketId);
 }
 
 type Mutation =
@@ -376,7 +364,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       ),
     ...(mutation.kind === "CANCEL"
       ? []
-      : [participationGuard(deps.db, marketId, next.participation, now)]),
+      : [participationGuard(deps.db, marketId, next.participation)]),
     deps.db
       .prepare(
         "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES (?,?,?,'PROCESSING','delivery_cycle',?,?)",

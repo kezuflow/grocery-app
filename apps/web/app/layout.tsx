@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { env } from "cloudflare:workers";
 import { StorefrontRuntimeProvider } from "../components/storefront/storefront-runtime";
+import { googleMapsBrowserConfiguration } from "../lib/maps/google-maps-runtime";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,10 +10,14 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const googleMaps = googleMapsBrowserConfiguration(env);
   return (
     <html lang="en">
       <body>
-        <StorefrontRuntimeProvider mapboxPublicAccessToken={env.MAPBOX_BROWSER_TOKEN || undefined}>
+        <StorefrontRuntimeProvider
+          googleMapsBrowserApiKey={googleMaps.browserApiKey}
+          googleMapsMapId={googleMaps.mapId}
+        >
           {children}
         </StorefrontRuntimeProvider>
       </body>

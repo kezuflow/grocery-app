@@ -26,7 +26,7 @@ describe("Core readiness", () => {
       },
     });
     expect(response).not.toHaveProperty("error");
-    expect(JSON.stringify(response)).not.toContain("MAPBOX_ACCESS_TOKEN");
+    expect(JSON.stringify(response)).not.toContain("GOOGLE_MAPS_SERVER_KEY");
     expect(JSON.stringify(response)).not.toContain("BETTER_AUTH_SECRET");
   });
 

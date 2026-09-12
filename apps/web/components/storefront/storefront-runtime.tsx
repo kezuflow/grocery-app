@@ -4,19 +4,22 @@ import { createContext, useContext, type ReactNode } from "react";
 
 const StorefrontRuntimeContext = createContext<
   Readonly<{
-    mapboxPublicAccessToken?: string;
+    googleMapsBrowserApiKey?: string;
+    googleMapsMapId?: string;
   }>
 >({});
 
 export function StorefrontRuntimeProvider({
   children,
-  mapboxPublicAccessToken,
+  googleMapsBrowserApiKey,
+  googleMapsMapId,
 }: Readonly<{
   children: ReactNode;
-  mapboxPublicAccessToken?: string;
+  googleMapsBrowserApiKey?: string;
+  googleMapsMapId?: string;
 }>) {
   return (
-    <StorefrontRuntimeContext.Provider value={{ mapboxPublicAccessToken }}>
+    <StorefrontRuntimeContext.Provider value={{ googleMapsBrowserApiKey, googleMapsMapId }}>
       {children}
     </StorefrontRuntimeContext.Provider>
   );

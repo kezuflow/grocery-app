@@ -1,16 +1,11 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type {
   RpcResult,
   ServiceabilityFailureReason,
   ServiceabilityRequest,
   ServiceabilityResult,
 } from "@freshmarkets/contracts";
-import {
-  haversineDistanceMeters,
-  parsePolygonGeoJson,
-  pointInPolygon,
-  validCoordinate,
-} from "./geometry";
+import { haversineDistanceMeters, validCoordinate } from "./geometry";
 import { geographySchema } from "./schema";
 
 type Database = ReturnType<typeof import("drizzle-orm/d1").drizzle>;
@@ -32,26 +27,8 @@ export type GeographyDataset = {
     currency: string;
     timezone: string;
   } | null;
-  serviceAreas: ReadonlyArray<{
-    id: string;
-    code: string;
-    name: string;
-    polygonGeoJson: string;
-    polygonVersion: number;
-    active: boolean;
-  }>;
-  deliveryZones: ReadonlyArray<{
-    id: string;
-    serviceAreaId: string;
-    code: string;
-    name: string;
-    polygonGeoJson: string;
-    polygonVersion: number;
-    active: boolean;
-  }>;
   candidates: ReadonlyArray<{
     id: string;
-    zoneId: string;
     code: string;
     name: string;
     type: LocationType;
@@ -67,20 +44,13 @@ function result(
   value: Omit<ServiceabilityResult, "coordinate" | "resolutionChanged" | "evaluatedAt">,
   now: Date,
 ): RpcResult<ServiceabilityResult> {
-  const previous = request.previousResolution;
-  const resolutionChanged = Boolean(
-    previous &&
-    (previous.serviceAreaCode !== value.serviceArea?.code ||
-      previous.serviceAreaPolygonVersion !== value.serviceArea?.polygonVersion ||
-      previous.deliveryZoneCode !== value.deliveryZone?.code ||
-      previous.deliveryZonePolygonVersion !== value.deliveryZone?.polygonVersion),
-  );
   return {
     ok: true,
     value: {
       ...value,
       coordinate: { latitude: request.latitude, longitude: request.longitude },
-      resolutionChanged,
+      // Retained for contract compatibility with addresses saved before pin-based assignment.
+      resolutionChanged: false,
       evaluatedAt: now.toISOString(),
     },
     requestId: request.requestId,
@@ -113,7 +83,7 @@ export function evaluateServiceability(
 ): RpcResult<ServiceabilityResult> {
   if (!validCoordinate(request.latitude, request.longitude))
     return unavailable(request, "INVALID_COORDINATES", now);
-  if (!dataset.market) return unavailable(request, "OUTSIDE_SERVICE_AREA", now);
+  if (!dataset.market) return unavailable(request, "NO_ELIGIBLE_LOCATION", now);
 
   const market = {
     code: dataset.market.code,
@@ -122,55 +92,8 @@ export function evaluateServiceability(
     timezone: dataset.market.timezone,
   };
 
-  const point = [request.longitude, request.latitude] as const;
-  const areas = dataset.serviceAreas.filter((candidate) => {
-    if (!candidate.active) return false;
-    const polygon = parsePolygonGeoJson(candidate.polygonGeoJson);
-    return polygon ? pointInPolygon(point, polygon) : false;
-  });
-  const area = areas[0];
-  if (!area)
-    return result(
-      request,
-      {
-        serviceable: false,
-        reason: "OUTSIDE_SERVICE_AREA",
-        market,
-        serviceArea: null,
-        deliveryZone: null,
-        fulfillmentEligibility: { eligible: false, candidateCount: 0 },
-      },
-      now,
-    );
-  const serviceArea = {
-    code: area.code,
-    name: area.name,
-    polygonVersion: area.polygonVersion,
-  };
-  const zones = dataset.deliveryZones.filter((candidate) => {
-    if (!candidate.active || !areas.some((area) => area.id === candidate.serviceAreaId))
-      return false;
-    const polygon = parsePolygonGeoJson(candidate.polygonGeoJson);
-    return polygon ? pointInPolygon(point, polygon) : false;
-  });
-  const zone = zones[0];
-  if (!zone) {
-    return result(
-      request,
-      {
-        serviceable: false,
-        reason: "OUTSIDE_DELIVERY_ZONE",
-        market,
-        serviceArea,
-        deliveryZone: null,
-        fulfillmentEligibility: { eligible: false, candidateCount: 0 },
-      },
-      now,
-    );
-  }
-
   const locations = dataset.candidates
-    .filter((candidate) => candidate.active && zones.some((zone) => zone.id === candidate.zoneId))
+    .filter((candidate) => candidate.active)
     .filter((candidate) =>
       REQUIRED_FULFILLMENT_CAPABILITIES.every((capability) =>
         candidate.capabilities.includes(capability),
@@ -181,8 +104,6 @@ export function evaluateServiceability(
         haversineDistanceMeters(request, left) - haversineDistanceMeters(request, right);
       return distance !== 0 ? distance : left.id.localeCompare(right.id);
     });
-  const chosenZone = zones.find((zone) => zone.id === locations[0]?.zoneId) ?? zone;
-  const chosenArea = areas.find((area) => area.id === chosenZone.serviceAreaId) ?? area;
   const count = new Set(locations.map((location) => location.id)).size;
 
   return result(
@@ -192,16 +113,8 @@ export function evaluateServiceability(
       fulfillmentLocation: locations[0] ? { id: locations[0].id, name: locations[0].name } : null,
       reason: locations.length ? null : "NO_ELIGIBLE_LOCATION",
       market,
-      serviceArea: {
-        code: chosenArea.code,
-        name: chosenArea.name,
-        polygonVersion: chosenArea.polygonVersion,
-      },
-      deliveryZone: {
-        code: chosenZone.code,
-        name: chosenZone.name,
-        polygonVersion: chosenZone.polygonVersion,
-      },
+      serviceArea: null,
+      deliveryZone: null,
       fulfillmentEligibility: { eligible: count > 0, candidateCount: count },
     },
     now,
@@ -228,38 +141,8 @@ export async function resolveServiceability(
     .limit(1);
   const marketSelection = marketQuery.as("selected_market");
   const marketIds = database.select({ id: marketSelection.id }).from(marketSelection);
-  const areasQuery = database
-    .select()
-    .from(geographySchema.serviceArea)
-    .where(
-      and(
-        inArray(geographySchema.serviceArea.marketId, marketIds),
-        eq(geographySchema.serviceArea.status, "active"),
-        lte(geographySchema.serviceArea.activeFrom, now),
-        or(
-          isNull(geographySchema.serviceArea.activeTo),
-          gt(geographySchema.serviceArea.activeTo, now),
-        ),
-      ),
-    )
-    .orderBy(desc(geographySchema.serviceArea.polygonVersion));
-  const areaSelection = areasQuery.as("selected_areas");
-  const areaIds = database.select({ id: areaSelection.id }).from(areaSelection);
-  const zonesQuery = database
-    .select()
-    .from(geographySchema.deliveryZone)
-    .where(
-      and(
-        inArray(geographySchema.deliveryZone.serviceAreaId, areaIds),
-        eq(geographySchema.deliveryZone.status, "active"),
-      ),
-    )
-    .orderBy(desc(geographySchema.deliveryZone.polygonVersion));
-  const zoneSelection = zonesQuery.as("selected_zones");
-  const zoneIds = database.select({ id: zoneSelection.id }).from(zoneSelection);
-  const assignmentsQuery = database
+  const locationsQuery = database
     .select({
-      zoneId: geographySchema.locationServiceability.zoneId,
       locationId: geographySchema.fulfillmentLocation.id,
       code: geographySchema.fulfillmentLocation.code,
       name: geographySchema.fulfillmentLocation.name,
@@ -267,27 +150,16 @@ export async function resolveServiceability(
       latitude: geographySchema.fulfillmentLocation.latitude,
       longitude: geographySchema.fulfillmentLocation.longitude,
     })
-    .from(geographySchema.locationServiceability)
-    .innerJoin(
-      geographySchema.fulfillmentLocation,
-      eq(geographySchema.fulfillmentLocation.id, geographySchema.locationServiceability.locationId),
-    )
+    .from(geographySchema.fulfillmentLocation)
     .where(
       and(
-        inArray(geographySchema.locationServiceability.zoneId, zoneIds),
-        eq(geographySchema.locationServiceability.eligible, true),
         inArray(geographySchema.fulfillmentLocation.marketId, marketIds),
         eq(geographySchema.fulfillmentLocation.status, "active"),
         eq(geographySchema.fulfillmentLocation.purpose, "CUSTOMER_FULFILLMENT"),
-        lte(geographySchema.locationServiceability.validFrom, now),
-        or(
-          isNull(geographySchema.locationServiceability.validTo),
-          gt(geographySchema.locationServiceability.validTo, now),
-        ),
       ),
     )
     .orderBy(asc(geographySchema.fulfillmentLocation.id));
-  const assignmentSelection = assignmentsQuery.as("selected_assignments");
+  const assignmentSelection = locationsQuery.as("selected_locations");
   const locationIds = database
     .select({ id: assignmentSelection.locationId })
     .from(assignmentSelection);
@@ -301,20 +173,19 @@ export async function resolveServiceability(
       ),
     );
 
-  // Keep current geography authoritative without five serial D1 round trips.
-  const [marketRows, serviceAreas, deliveryZones, assignments, capabilities] = await database.batch(
-    [marketQuery, areasQuery, zonesQuery, assignmentsQuery, capabilitiesQuery],
-  );
+  // Location pins and operating capabilities own assignment; courier quotations own route coverage.
+  const [marketRows, locations, capabilities] = await database.batch([
+    marketQuery,
+    locationsQuery,
+    capabilitiesQuery,
+  ]);
   const market = marketRows[0] ?? null;
   return evaluateServiceability(
     request,
     {
       market,
-      serviceAreas: serviceAreas.map((area) => ({ ...area, active: true })),
-      deliveryZones: deliveryZones.map((zone) => ({ ...zone, active: true })),
-      candidates: assignments.map((candidate) => ({
+      candidates: locations.map((candidate) => ({
         id: candidate.locationId,
-        zoneId: candidate.zoneId,
         code: candidate.code,
         name: candidate.name,
         type: candidate.type,

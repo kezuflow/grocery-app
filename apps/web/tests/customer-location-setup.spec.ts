@@ -22,8 +22,8 @@ test("Global creates a ready site and a customer confirms delivery there", async
     ["Address line 1", "Test dispatch road"],
     ["City", "Cebu"],
     ["Region", "Cebu"],
-    ["Confirmed latitude", String(coordinate.latitude)],
-    ["Confirmed longitude", String(coordinate.longitude)],
+    ["Pickup pin latitude", String(coordinate.latitude)],
+    ["Pickup pin longitude", String(coordinate.longitude)],
     ["Reason for this change", "Set up customer dispatch site"],
   ]) {
     await page.getByLabel(field, { exact: true }).fill(value);
@@ -82,35 +82,6 @@ test("Global creates a ready site and a customer confirms delivery there", async
     page.getByRole("button", { name: "Update pickup profile", exact: true }),
   ).toBeVisible();
   await page.goto("/admin/locations");
-  await page.getByRole("link", { name: "Service areas and routing preview" }).click();
-  await page.getByRole("button", { name: "New service area", exact: true }).click();
-  await page.getByLabel("Area code", { exact: true }).fill(`site-area-${crypto.randomUUID()}`);
-  await page.getByLabel("Area name", { exact: true }).fill(`${name} service area`);
-  for (const label of ["Service area boundary", "Zone 1 boundary"]) {
-    const boundary = page.getByRole("group", { name: label, exact: true });
-    for (const [latitude, longitude] of [
-      [10.44, 123.97],
-      [10.44, 123.99],
-      [10.46, 123.99],
-      [10.46, 123.97],
-    ]) {
-      await page.getByLabel(`${label} latitude`, { exact: true }).fill(String(latitude));
-      await page.getByLabel(`${label} longitude`, { exact: true }).fill(String(longitude));
-      await boundary.getByRole("button", { name: "Add boundary point", exact: true }).click();
-    }
-  }
-  await page.getByLabel("Zone 1 code", { exact: true }).fill("customer-zone");
-  await page.getByLabel("Zone 1 name", { exact: true }).fill("Customer delivery zone");
-  await page
-    .getByRole("group", { name: "Eligible locations", exact: true })
-    .getByRole("checkbox", { name, exact: true })
-    .check();
-  await page
-    .getByLabel("Reason", { exact: true })
-    .fill("Synthetic browser acceptance service boundary");
-  await page.getByRole("button", { name: "Publish service area", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Service area published");
-  await page.goto("/admin/locations");
   await page.getByRole("link", { name: `Fulfillment readiness for ${name}`, exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/locations\/[^/]+\/fulfillment$/);
   const locationId = new URL(page.url()).pathname.split("/")[3];
@@ -133,12 +104,6 @@ test("Global creates a ready site and a customer confirms delivery there", async
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
   await page.screenshot({ path: testInfo.outputPath("customer-site-ready.png"), fullPage: true });
-
-  await page.goto("/admin/locations/service-areas");
-  await page.getByLabel("Preview latitude", { exact: true }).fill(String(coordinate.latitude));
-  await page.getByLabel("Preview longitude", { exact: true }).fill(String(coordinate.longitude));
-  await page.getByRole("button", { name: "Preview routing", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(name);
 
   // Only transient search is synthetic. Confirmation and routing use the actual
   // Core commands with the test-only permanent geocoder transport.
@@ -167,7 +132,9 @@ test("Global creates a ready site and a customer confirms delivery there", async
   const dialog = customer.getByRole("dialog", { name: "Choose delivery address", exact: true });
   await dialog.getByRole("textbox", { name: /^Search for an address/ }).fill("Test new-site");
   await dialog.getByRole("button", { name: candidate.displayAddress, exact: true }).click();
-  await expect(dialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText("Closest fulfillment location found", { exact: true }),
+  ).toBeVisible();
   let confirmation: unknown;
   await customer.route("**/api/commerce/browsing-location", async (route) => {
     const response = await route.fetch();

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, onTestFinished } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { configureAdminLocationFulfillment } from "./location-fulfillment-readiness";
@@ -238,5 +238,33 @@ describe("Global location fulfillment readiness", () => {
         .bind(locationId)
         .run();
     }
+  });
+  it("does not require a legacy service-area link to activate a fulfillment-center pin", async () => {
+    const { request } = await command();
+    const links = await env.DB.prepare(
+      "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
+    ).all<{
+      zone_id: string;
+      location_id: string;
+      valid_from: number;
+      valid_to: number | null;
+    }>();
+    onTestFinished(async () => {
+      await env.DB.batch(
+        links.results.map((row) =>
+          env.DB.prepare(
+            "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
+          ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
+        ),
+      );
+    });
+    await env.DB.prepare("UPDATE location_serviceability SET valid_to=1").run();
+    expect(
+      await exports.default.configureAdminLocationFulfillment({
+        ...request,
+        dispatchReady: true,
+        instantPromiseMinutes: null,
+      }),
+    ).toMatchObject({ ok: true, value: { dispatchReady: true } });
   });
 });

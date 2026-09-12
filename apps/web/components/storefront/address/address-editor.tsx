@@ -1,6 +1,18 @@
 "use client";
 
-import { Navigation, Map, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  LocateFixed,
+  Map,
+  MapPin,
+  Navigation,
+  NotebookPen,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -13,6 +25,7 @@ import type {
   AddressComponents,
   AddressComponentsSource,
   AddressSearchCandidate,
+  AddressPrediction,
   AppError,
   Coordinate,
   CoordinateConfirmationSource,
@@ -22,7 +35,11 @@ import type {
   RpcResult,
   ServiceabilityResult,
 } from "@freshmarkets/contracts";
-import { MapboxMap } from "../../maps/mapbox-map";
+import {
+  addressPredictionsSchema,
+  resolveAddressPrediction,
+} from "../../../lib/maps/address-predictions";
+import { GoogleMap } from "../../maps/google-map";
 import type { MapAdapter } from "../../maps/map-types";
 
 const CEBU_CENTER = { latitude: 10.3157, longitude: 123.8854 } as const;
@@ -58,7 +75,9 @@ export type AddressEditorProps = Readonly<{
   compactHeading?: string;
   initialAddress?: CustomerAddressView;
   defaultPhone?: string;
-  publicAccessToken?: string;
+  savedPhoneNumbers?: readonly string[];
+  browserApiKey?: string;
+  mapId?: string;
   mapAdapter?: MapAdapter;
   fetchImpl?: typeof fetch;
   geolocation?: Geolocation;
@@ -79,6 +98,22 @@ function normalizePhilippineMobile(value: string): string | null {
       ? `+${compact}`
       : compact;
   return /^\+639\d{9}$/.test(normalized) ? normalized : null;
+}
+
+function formatPhilippineMobileInput(value: string): string {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (trimmed.startsWith("+") && !digits.startsWith("63")) return `+${digits.slice(0, 12)}`;
+  const international = trimmed.startsWith("+") || digits.startsWith("63");
+  if (international) {
+    const subscriber = (digits.startsWith("63") ? digits.slice(2) : digits).slice(0, 10);
+    return ["+63", subscriber.slice(0, 3), subscriber.slice(3, 6), subscriber.slice(6, 10)]
+      .filter(Boolean)
+      .join(" ");
+  }
+  const local = digits.slice(0, 11);
+  if (!local) return "";
+  return [local.slice(0, 4), local.slice(4, 7), local.slice(7, 11)].filter(Boolean).join(" ");
 }
 
 function safeSearchMessage(code?: string): string {
@@ -181,7 +216,9 @@ export function AddressEditor({
   compactHeading,
   initialAddress,
   defaultPhone,
-  publicAccessToken,
+  savedPhoneNumbers = [],
+  browserApiKey,
+  mapId,
   mapAdapter,
   fetchImpl = fetch,
   geolocation = typeof navigator === "undefined" ? undefined : navigator.geolocation,
@@ -196,7 +233,7 @@ export function AddressEditor({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (!compact || !searchExpanded) return;
+    if ((!compact && !wizard) || !searchExpanded) return;
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -207,10 +244,11 @@ export function AddressEditor({
     return () => {
       document.removeEventListener("keydown", closeOnEscape, true);
     };
-  }, [compact, searchExpanded]);
+  }, [compact, wizard, searchExpanded]);
   const searchWasExpanded = useRef(false);
+  const restoreSearchFocus = useRef(true);
   useEffect(() => {
-    if (!compact) return;
+    if (!compact && !wizard) return;
     if (searchExpanded) {
       searchWasExpanded.current = true;
       searchInputRef.current?.focus();
@@ -218,16 +256,26 @@ export function AddressEditor({
     }
     if (searchWasExpanded.current) {
       searchWasExpanded.current = false;
-      searchToggleRef.current?.focus();
+      if (restoreSearchFocus.current) searchToggleRef.current?.focus();
+      restoreSearchFocus.current = true;
     }
-  }, [compact, searchExpanded]);
+  }, [compact, wizard, searchExpanded]);
   const [query, setQuery] = useState("");
-  const [candidates, setCandidates] = useState<ReadonlyArray<AddressSearchCandidate>>([]);
+  const [candidates, setCandidates] = useState<ReadonlyArray<AddressPrediction>>([]);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "error">("idle");
   const [searchError, setSearchError] = useState("");
   const [label, setLabel] = useState(initialAddress?.label ?? "");
   const [recipient, setRecipient] = useState(initialAddress?.recipient ?? "");
-  const [phone, setPhone] = useState(initialAddress?.phone ?? defaultPhone ?? "");
+  const [phone, setPhone] = useState(() =>
+    formatPhilippineMobileInput(initialAddress?.phone ?? defaultPhone ?? ""),
+  );
+  const savedPhones = Array.from(
+    new Set(
+      [initialAddress?.phone, defaultPhone, ...savedPhoneNumbers]
+        .map((value) => (value ? normalizePhilippineMobile(value) : null))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
   const [components, setComponents] = useState(initialAddress?.components ?? emptyComponents);
   const [componentsSource, setComponentsSource] = useState<AddressComponentsSource>(
     initialAddress ? "SAVED_ADDRESS" : "FIRST_PARTY",
@@ -265,41 +313,46 @@ export function AddressEditor({
   const serviceabilityGenerationRef = useRef(0);
   const coordinateActionGenerationRef = useRef(0);
   const initialMapCenterRef = useRef<Coordinate>(coordinate ?? CEBU_CENTER);
+  const placesSession = useRef<string | null>(null);
   const providerResolvedComponents = confirmationSource === "GEOCODER";
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed || (compact && !searchExpanded) || (wizard && step !== 1)) {
+    if (trimmed.length < 2 || ((compact || wizard) && !searchExpanded) || (wizard && step !== 1)) {
       setCandidates([]);
       setSearchState("idle");
       setSearchError("");
       return;
     }
+    setCandidates([]);
+    placesSession.current ??= crypto.randomUUID();
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       setSearchState("searching");
       setSearchError("");
-      void fetchImpl("/api/commerce/address-search", {
+      void fetchImpl("/api/commerce/address-autocomplete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: trimmed }),
+        body: JSON.stringify({
+          query: trimmed,
+          sessionToken: placesSession.current,
+          proximity: initialMapCenterRef.current,
+        }),
         cache: "no-store",
         signal: controller.signal,
         credentials: "same-origin",
       })
         .then(async (response) => {
-          const result = (await response.json()) as RpcResult<
-            ReadonlyArray<AddressSearchCandidate>
-          >;
+          const result = addressPredictionsSchema.safeParse(await response.json());
           if (controller.signal.aborted) return;
-          if (!response.ok || !result.ok) {
-            const code = result.ok ? undefined : result.error.code;
+          if (!response.ok || !result.success) {
+            const code = undefined;
             setCandidates([]);
             setSearchState("error");
             setSearchError(safeSearchMessage(code));
             return;
           }
-          setCandidates(result.value);
+          setCandidates(result.data.value);
           setSearchState("idle");
         })
         .catch((error: unknown) => {
@@ -369,7 +422,35 @@ export function AddressEditor({
     }
   }
 
-  function chooseCandidate(candidate: AddressSearchCandidate): void {
+  async function chooseCandidate(prediction: AddressPrediction): Promise<void> {
+    const generation = ++coordinateActionGenerationRef.current;
+    reverseAbortRef.current?.abort();
+    const controller = new AbortController();
+    reverseAbortRef.current = controller;
+    setCandidates([]);
+    setSearchError("");
+    setSearchState("searching");
+    const token = placesSession.current ?? crypto.randomUUID();
+    placesSession.current = null;
+    let candidate: AddressSearchCandidate;
+    try {
+      candidate = await resolveAddressPrediction(
+        prediction.candidateKey,
+        token,
+        controller.signal,
+        fetchImpl,
+      );
+    } catch {
+      if (!controller.signal.aborted && generation === coordinateActionGenerationRef.current) {
+        setSearchState("error");
+        setSearchError(
+          "Address details could not be loaded. Search again or place the pin manually.",
+        );
+      }
+      return;
+    }
+    if (controller.signal.aborted || generation !== coordinateActionGenerationRef.current) return;
+    setSearchState("idle");
     setSearchExpanded(false);
     coordinateActionGenerationRef.current += 1;
     reverseAbortRef.current?.abort();
@@ -456,6 +537,8 @@ export function AddressEditor({
 
   function useCurrentLocation(): void {
     const generation = ++coordinateActionGenerationRef.current;
+    if (searchExpanded) restoreSearchFocus.current = false;
+    setSearchExpanded(false);
     setLocationError("");
     if (!geolocation) {
       setLocationError(
@@ -531,7 +614,7 @@ export function AddressEditor({
       }
       if (!result.value.serviceability.serviceable) {
         setServiceability(result.value.serviceability);
-        setSaveError("Delivery coverage changed. Choose another address to continue.");
+        setSaveError("No fulfillment location is currently available. Please try again later.");
         return;
       }
       onServiceabilityConfirmed?.(result.value);
@@ -546,7 +629,7 @@ export function AddressEditor({
   function continueStep() {
     setSaveError("");
     if (step === 1 && (!coordinate || !confirmationSource || serviceabilityState !== "ready")) {
-      setSaveError("Choose an address and wait for the delivery coverage check.");
+      setSaveError("Choose an address and wait for fulfillment-location assignment.");
       return;
     }
     if (step === 2) {
@@ -627,17 +710,19 @@ export function AddressEditor({
   return (
     <form
       onSubmit={save}
-      className={compact ? "grid gap-3" : "grid gap-6"}
+      className={compact ? "grid gap-3" : wizard ? "grid gap-0" : "grid gap-6"}
       aria-label="Delivery address editor"
       noValidate
     >
       {wizard && (
-        <div>
-          <p className="text-sm text-slate-600">Step {step} of 3</p>
+        <div className="border-b border-[var(--fm-border)] pb-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-primary-dark)]">
+            Step {step} of 3
+          </p>
           <h2
             ref={stepHeadingRef}
             tabIndex={-1}
-            className="text-lg font-semibold focus:outline-none"
+            className="mt-1 text-2xl font-bold tracking-[-0.025em] text-[var(--fm-text)] focus:outline-none"
           >
             {step === 1
               ? "Find a delivery address"
@@ -645,191 +730,236 @@ export function AddressEditor({
                 ? "Address and recipient details"
                 : "Delivery instructions"}
           </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--fm-text-muted)]">
+            {step === 1
+              ? "Search or use your current location, then place the pin at the exact delivery entrance."
+              : step === 2
+                ? "Tell us how to identify the destination and who will receive the delivery."
+                : "Add the practical details that help the courier complete the handoff."}
+          </p>
+          <ol aria-label="Address progress" className="mt-6 grid grid-cols-3 gap-2">
+            {[
+              { label: "Location", icon: LocateFixed },
+              { label: "Details", icon: UserRound },
+              { label: "Instructions", icon: NotebookPen },
+            ].map((item, index) => {
+              const number = index + 1;
+              const current = number === step;
+              const complete = number < step;
+              const Icon = item.icon;
+              return (
+                <li
+                  key={item.label}
+                  aria-current={current ? "step" : undefined}
+                  className="min-w-0"
+                >
+                  <div
+                    className={`h-1 rounded-full transition-colors duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      number <= step ? "bg-[var(--fm-primary-dark)]" : "bg-[var(--fm-border)]"
+                    }`}
+                  />
+                  <span
+                    className={`mt-2 flex items-center gap-1.5 text-xs font-semibold ${
+                      number <= step ? "text-[var(--fm-text)]" : "text-[var(--fm-text-muted)]"
+                    }`}
+                  >
+                    <span
+                      className={`grid size-6 shrink-0 place-items-center rounded-full ${
+                        complete
+                          ? "bg-[var(--fm-primary-dark)] text-white"
+                          : current
+                            ? "bg-[var(--fm-primary-lime)] text-[var(--fm-primary-dark)]"
+                            : "bg-[var(--fm-surface-soft)]"
+                      }`}
+                    >
+                      {complete ? (
+                        <Check className="size-3" aria-hidden="true" />
+                      ) : (
+                        <Icon className="size-3" aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
       <fieldset
         className="contents"
         disabled={purpose === "save" && (saveState === "saving" || saveUncertain)}
       >
-        <div hidden={wizard && step !== 1} className="grid gap-6 [&[hidden]]:hidden">
-          <section aria-labelledby="address-search-heading" className="relative grid gap-3">
-            <div className={compact ? "sr-only" : undefined}>
-              <h2 id="address-search-heading" className="text-lg font-semibold text-slate-950">
-                Find the delivery address
-              </h2>
-              <p id="address-search-help" className="mt-1 text-sm text-slate-600">
-                Search within the Philippines. Results are biased toward Cebu and stay only in this
-                editor.
-              </p>
-            </div>
-            {compact && compactHeading && <h2 className="text-base font-bold">{compactHeading}</h2>}
-            {compact && !searchExpanded && (
-              <button
-                type="button"
-                ref={searchToggleRef}
-                aria-expanded={searchExpanded}
-                aria-controls="address-search-panel"
-                onClick={() => setSearchExpanded(true)}
-                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
-              >
-                <Map aria-hidden="true" className="size-4 shrink-0" />
-                Choose map
-              </button>
-            )}
-            <div
-              id="address-search-panel"
-              hidden={compact && !searchExpanded}
-              className="min-w-0 [&[hidden]]:hidden"
-            >
-              {compact ? (
-                <div className="relative">
-                  <label htmlFor="address-search" className="sr-only">
-                    Search for an address
-                  </label>
-                  <input
-                    ref={searchInputRef}
-                    id="address-search"
-                    placeholder="Search address"
-                    autoComplete="street-address"
-                    value={query}
-                    onChange={(event) => setQuery(event.currentTarget.value)}
-                    className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-3 pr-11 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
-                  />
-                  <button
-                    type="button"
-                    ref={searchToggleRef}
-                    aria-label="Close address search"
-                    onClick={() => setSearchExpanded(false)}
-                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
-                  >
-                    <X aria-hidden="true" className="size-4" />
-                  </button>
-                </div>
-              ) : (
-                <TextField
-                  id="address-search"
-                  label="Search for an address"
-                  placeholder="Enter a street or address"
-                  description="Choose a result, then move the map pin to the exact entrance if needed."
-                  autoComplete="street-address"
-                  value={query}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
+        {wizard ? (
+          <div
+            hidden={step !== 1}
+            data-address-location-layout="map-overlay"
+            className="pt-6 [&[hidden]]:hidden"
+          >
+            <section aria-labelledby="pin-confirmation-heading" className="grid gap-3">
+              <div>
+                <h3 id="pin-confirmation-heading" className="text-lg font-semibold text-slate-950">
+                  Confirm the exact entrance
+                </h3>
+                <p className="mt-1 text-sm leading-5 text-slate-600">
+                  Search, use your current location, or click the map. Drag the pin when the
+                  suggested point is not exact.
+                </p>
+              </div>
+              <div data-address-map-surface className="relative min-w-0">
+                <GoogleMap
+                  browserApiKey={browserApiKey}
+                  mapId={mapId}
+                  adapter={mapAdapter}
+                  initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
+                  scene={{
+                    draggablePin: {
+                      position: coordinate ?? CEBU_CENTER,
+                      label: coordinate
+                        ? "Confirmed delivery entrance"
+                        : "Move pin to delivery entrance",
+                    },
+                  }}
+                  onPinMove={movePin}
+                  onMapClick={movePin}
+                  ariaLabel="Delivery address pin confirmation map"
+                  className="h-[420px] w-full rounded-[var(--fm-radius-surface)] border shadow-[var(--fm-shadow-card)] sm:h-[500px]"
+                  fallback={
+                    <p className="text-sm text-slate-700">
+                      You can still search or use your current location, then confirm the selected
+                      address below.
+                    </p>
+                  }
                 />
-              )}
-            </div>
-            <div hidden={compact && !searchExpanded} className="grid gap-3 [&[hidden]]:hidden">
-              {(!compact || searchExpanded) && searchState === "searching" ? (
-                <p role="status" aria-live="polite" className="text-sm text-slate-600">
-                  Searching for addresses…
-                </p>
-              ) : null}
-              {(!compact || searchExpanded) && searchError ? (
-                <p role="alert" className="text-sm text-red-700">
-                  {searchError}
-                </p>
-              ) : null}
-              {compact && candidates.length > 0 ? (
-                <ul
-                  aria-label="Address search results"
-                  className="overflow-hidden rounded-lg border border-[var(--fm-border)]"
-                >
-                  {candidates.map((candidate) => (
-                    <li key={candidate.candidateKey}>
-                      <button
-                        type="button"
-                        onClick={() => chooseCandidate(candidate)}
-                        className="w-full border-b border-[var(--fm-border)] px-4 py-3 text-left text-sm hover:bg-[var(--fm-hover)] focus-visible:outline-2"
-                      >
-                        {candidate.displayAddress}
-                      </button>
-                    </li>
-                  ))}
-                  <li>
+                <div className="absolute left-3 top-3 z-10 sm:left-4 sm:top-4">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={useCurrentLocation}
-                      className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                      ref={searchToggleRef}
+                      aria-label={
+                        searchExpanded ? "Collapse address search" : "Search for an address"
+                      }
+                      aria-expanded={searchExpanded}
+                      aria-controls="address-search-panel"
+                      title={searchExpanded ? "Collapse address search" : "Search for an address"}
+                      onClick={() => setSearchExpanded((current) => !current)}
+                      className={`inline-flex size-11 shrink-0 items-center justify-center rounded-full border shadow-md transition-[transform,background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
+                        searchExpanded
+                          ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
+                          : "border-white/80 bg-white/95 text-[var(--fm-text)] backdrop-blur-sm"
+                      }`}
                     >
-                      <Navigation aria-hidden="true" className="size-4 shrink-0" />
-                      Use current location
+                      <Search className="size-4" aria-hidden="true" />
                     </button>
-                  </li>
-                </ul>
-              ) : candidates.length > 0 ? (
-                <ul aria-label="Address search results" className="divide-y rounded-lg border">
-                  {candidates.map((candidate) => (
-                    <li key={candidate.candidateKey}>
+                    <button
+                      type="button"
+                      aria-label="Use current location"
+                      title="Use current location"
+                      onClick={useCurrentLocation}
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white/95 text-[var(--fm-text)] shadow-md backdrop-blur-sm transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                    >
+                      <Navigation className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div
+                    id="address-search-panel"
+                    aria-hidden={!searchExpanded}
+                    inert={!searchExpanded}
+                    className={`mt-2 w-[min(34rem,calc(100vw-8rem))] origin-top-left rounded-[var(--fm-radius-surface)] border border-white/80 bg-white/95 p-2 shadow-lg backdrop-blur-sm transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+                      searchExpanded
+                        ? "pointer-events-auto translate-y-0 opacity-100"
+                        : "pointer-events-none -translate-y-1 opacity-0"
+                    }`}
+                  >
+                    <div className="relative min-w-0">
+                      <Search
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                      />
+                      <label htmlFor="address-search" className="sr-only">
+                        Search for an address
+                      </label>
+                      <input
+                        ref={searchInputRef}
+                        id="address-search"
+                        aria-describedby="address-search-help"
+                        placeholder="Search for a delivery address"
+                        autoComplete="off"
+                        value={query}
+                        onChange={(event) => {
+                          coordinateActionGenerationRef.current += 1;
+                          reverseAbortRef.current?.abort();
+                          setQuery(event.currentTarget.value);
+                        }}
+                        className="min-h-11 w-full min-w-0 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white py-2 pl-10 pr-11 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                      />
                       <button
                         type="button"
-                        onClick={() => chooseCandidate(candidate)}
-                        className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
+                        aria-label="Collapse address search"
+                        onClick={() => setSearchExpanded(false)}
+                        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-[var(--fm-radius-control)] text-[var(--fm-text-muted)] transition-colors hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
                       >
-                        {candidate.displayAddress}
+                        <X className="size-4" aria-hidden="true" />
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            {!compact && (
-              <button
-                type="button"
-                onClick={useCurrentLocation}
-                className="w-fit rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-              >
-                Use current location
-              </button>
-            )}
-            {locationError ? (
-              <p role="alert" className="text-sm text-red-700">
-                {locationError}
-              </p>
-            ) : null}
-          </section>
-
-          {(!compact || coordinate) && (
-            <section
-              aria-labelledby={compact ? undefined : "pin-confirmation-heading"}
-              aria-label={compact ? "Confirm the delivery pin" : undefined}
-              className="grid gap-3"
-            >
-              {!compact && (
-                <div>
-                  <h2
-                    id="pin-confirmation-heading"
-                    className="text-lg font-semibold text-slate-950"
-                  >
-                    Confirm the exact entrance
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    The confirmed pin determines delivery coverage. Drag it when the suggested point
-                    is not exact.
-                  </p>
+                    </div>
+                    <p id="address-search-help" className="sr-only">
+                      Search within the Philippines. Results are biased toward Cebu. Choose a
+                      result, then move the pin to the exact entrance if needed.
+                    </p>
+                    {searchState === "searching" ? (
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        className="px-2 pb-1 pt-2 text-xs text-slate-600"
+                      >
+                        Searching for addresses…
+                      </p>
+                    ) : null}
+                    {searchError ? (
+                      <p role="alert" className="px-2 pb-1 pt-2 text-xs text-red-700">
+                        {searchError}
+                      </p>
+                    ) : null}
+                    {locationError ? (
+                      <p role="alert" className="px-2 pb-1 pt-2 text-xs text-red-700">
+                        {locationError}
+                      </p>
+                    ) : null}
+                    {candidates.length > 0 ? (
+                      <ul
+                        aria-label="Address search results"
+                        className="mt-2 max-h-56 divide-y overflow-y-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white shadow-lg"
+                      >
+                        <li
+                          className="px-3 py-2 text-xs font-normal not-italic tracking-normal text-[#5e5e5e] whitespace-nowrap"
+                          translate="no"
+                        >
+                          Google Maps
+                        </li>
+                        {candidates.map((candidate) => (
+                          <li key={candidate.candidateKey}>
+                            <button
+                              type="button"
+                              onClick={() => void chooseCandidate(candidate)}
+                              className="w-full px-4 py-3 text-left text-sm hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                            >
+                              {candidate.displayAddress}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                  {!searchExpanded && locationError ? (
+                    <p
+                      role="alert"
+                      className="mt-2 w-[min(24rem,calc(100vw-5rem))] rounded-[var(--fm-radius-control)] border border-red-200 bg-white/95 p-3 text-xs text-red-700 shadow-lg backdrop-blur-sm"
+                    >
+                      {locationError}
+                    </p>
+                  ) : null}
                 </div>
-              )}
-              <MapboxMap
-                publicAccessToken={publicAccessToken}
-                adapter={mapAdapter}
-                initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
-                scene={{
-                  draggablePin: {
-                    position: coordinate ?? CEBU_CENTER,
-                    label: coordinate
-                      ? "Confirmed delivery entrance"
-                      : "Move pin to delivery entrance",
-                  },
-                }}
-                onPinMove={movePin}
-                onMapClick={movePin}
-                ariaLabel="Delivery address pin confirmation map"
-                className={compact ? "h-52 rounded-lg border" : "min-h-72 rounded-xl border"}
-                fallback={
-                  <p className="text-sm text-slate-700">
-                    You can still choose a search result or use your current location, then confirm
-                    the selected address below.
-                  </p>
-                }
-              />
+              </div>
               {selectedDisplayAddress ? (
                 <p className="text-sm text-slate-700">
                   <span className="font-semibold">Selected address:</span> {selectedDisplayAddress}
@@ -840,12 +970,12 @@ export function AddressEditor({
               </p>
               {serviceabilityState === "checking" ? (
                 <p role="status" aria-live="polite" className="text-sm text-slate-600">
-                  Checking delivery coverage…
+                  Finding the closest fulfillment location…
                 </p>
               ) : null}
               {serviceabilityState === "error" ? (
                 <p role="alert" className="text-sm text-red-700">
-                  Delivery coverage could not be checked. You can retry by selecting the address or
+                  A fulfillment location could not be assigned. Retry by selecting the address or
                   pin again.
                 </p>
               ) : null}
@@ -861,21 +991,270 @@ export function AddressEditor({
                 >
                   <p className="font-semibold">
                     {serviceability.serviceable
-                      ? "Delivery is available"
-                      : "Delivery is unavailable"}
+                      ? "Closest fulfillment location found"
+                      : "No fulfillment location available"}
                   </p>
-                  <p className={compact && serviceability.serviceable ? "sr-only" : undefined}>
+                  <p>
                     {serviceability.serviceable
-                      ? "This address is inside our current delivery area."
-                      : purpose === "save"
-                        ? "You may save this address, but it cannot be used at checkout until corrected."
-                        : "Try another address or adjust the pin to check a different entrance."}
+                      ? `Fulfilled from ${serviceability.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`
+                      : "You may save this address, but ordering requires an active fulfillment location."}
                   </p>
                 </div>
               ) : null}
             </section>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            <section aria-labelledby="address-search-heading" className="relative grid gap-3">
+              <div className={compact ? "sr-only" : undefined}>
+                <h3 id="address-search-heading" className="text-lg font-semibold text-slate-950">
+                  Find the delivery address
+                </h3>
+                <p id="address-search-help" className="mt-1 text-sm text-slate-600">
+                  Search within the Philippines. Results are biased toward Cebu and stay only in
+                  this editor.
+                </p>
+              </div>
+              {compact && compactHeading && (
+                <h2 className="text-base font-bold">{compactHeading}</h2>
+              )}
+              {compact && !searchExpanded && (
+                <button
+                  type="button"
+                  ref={searchToggleRef}
+                  aria-expanded={searchExpanded}
+                  aria-controls="address-search-panel"
+                  onClick={() => setSearchExpanded(true)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                >
+                  <Map aria-hidden="true" className="size-4 shrink-0" />
+                  Choose map
+                </button>
+              )}
+              <div
+                id="address-search-panel"
+                hidden={compact && !searchExpanded}
+                className="min-w-0 [&[hidden]]:hidden"
+              >
+                {compact ? (
+                  <div className="relative">
+                    <label htmlFor="address-search" className="sr-only">
+                      Search for an address
+                    </label>
+                    <input
+                      ref={searchInputRef}
+                      id="address-search"
+                      placeholder="Search address"
+                      autoComplete="off"
+                      value={query}
+                      onChange={(event) => {
+                        coordinateActionGenerationRef.current += 1;
+                        reverseAbortRef.current?.abort();
+                        setQuery(event.currentTarget.value);
+                      }}
+                      className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--fm-border)] bg-white py-2 pl-3 pr-11 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                    />
+                    <button
+                      type="button"
+                      ref={searchToggleRef}
+                      aria-label="Close address search"
+                      onClick={() => setSearchExpanded(false)}
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                    >
+                      <X aria-hidden="true" className="size-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <TextField
+                    id="address-search"
+                    label="Search for an address"
+                    placeholder="Enter a street or address"
+                    description="Choose a result, then move the map pin to the exact entrance if needed."
+                    autoComplete="off"
+                    value={query}
+                    onChange={(event) => {
+                      coordinateActionGenerationRef.current += 1;
+                      reverseAbortRef.current?.abort();
+                      setQuery(event.currentTarget.value);
+                    }}
+                  />
+                )}
+              </div>
+              <div hidden={compact && !searchExpanded} className="grid gap-3 [&[hidden]]:hidden">
+                {(!compact || searchExpanded) && searchState === "searching" ? (
+                  <p role="status" aria-live="polite" className="text-sm text-slate-600">
+                    Searching for addresses…
+                  </p>
+                ) : null}
+                {(!compact || searchExpanded) && searchError ? (
+                  <p role="alert" className="text-sm text-red-700">
+                    {searchError}
+                  </p>
+                ) : null}
+                {compact && candidates.length > 0 ? (
+                  <ul
+                    aria-label="Address search results"
+                    className="overflow-hidden rounded-lg border border-[var(--fm-border)]"
+                  >
+                    <li
+                      className="px-3 py-2 text-xs font-normal not-italic tracking-normal text-[#5e5e5e] whitespace-nowrap"
+                      translate="no"
+                    >
+                      Google Maps
+                    </li>
+                    {candidates.map((candidate) => (
+                      <li key={candidate.candidateKey}>
+                        <button
+                          type="button"
+                          onClick={() => chooseCandidate(candidate)}
+                          className="w-full border-b border-[var(--fm-border)] px-4 py-3 text-left text-sm hover:bg-[var(--fm-hover)] focus-visible:outline-2"
+                        >
+                          {candidate.displayAddress}
+                        </button>
+                      </li>
+                    ))}
+                    <li>
+                      <button
+                        type="button"
+                        onClick={useCurrentLocation}
+                        className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
+                      >
+                        <Navigation aria-hidden="true" className="size-4 shrink-0" />
+                        Use current location
+                      </button>
+                    </li>
+                  </ul>
+                ) : candidates.length > 0 ? (
+                  <ul aria-label="Address search results" className="divide-y rounded-lg border">
+                    <li
+                      className="px-3 py-2 text-xs font-normal not-italic tracking-normal text-[#5e5e5e] whitespace-nowrap"
+                      translate="no"
+                    >
+                      Google Maps
+                    </li>
+                    {candidates.map((candidate) => (
+                      <li key={candidate.candidateKey}>
+                        <button
+                          type="button"
+                          onClick={() => chooseCandidate(candidate)}
+                          className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50 focus-visible:outline-2"
+                        >
+                          {candidate.displayAddress}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              {!compact && (
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  className="inline-flex min-h-11 w-fit items-center gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-4 text-sm font-semibold transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                >
+                  <Navigation className="size-4" aria-hidden="true" />
+                  Use current location
+                </button>
+              )}
+              {locationError ? (
+                <p role="alert" className="text-sm text-red-700">
+                  {locationError}
+                </p>
+              ) : null}
+            </section>
+
+            {(!compact || coordinate) && (
+              <section
+                aria-labelledby={compact ? undefined : "pin-confirmation-heading"}
+                aria-label={compact ? "Confirm the delivery pin" : undefined}
+                className="grid gap-3"
+              >
+                {!compact && (
+                  <div>
+                    <h2
+                      id="pin-confirmation-heading"
+                      className="text-lg font-semibold text-slate-950"
+                    >
+                      Confirm the exact entrance
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      The confirmed pin determines the closest fulfillment location. Drag it when
+                      the suggested point is not exact.
+                    </p>
+                  </div>
+                )}
+                <GoogleMap
+                  browserApiKey={browserApiKey}
+                  mapId={mapId}
+                  adapter={mapAdapter}
+                  initialView={{ center: initialMapCenterRef.current, zoom: 14 }}
+                  scene={{
+                    draggablePin: {
+                      position: coordinate ?? CEBU_CENTER,
+                      label: coordinate
+                        ? "Confirmed delivery entrance"
+                        : "Move pin to delivery entrance",
+                    },
+                  }}
+                  onPinMove={movePin}
+                  onMapClick={movePin}
+                  ariaLabel="Delivery address pin confirmation map"
+                  className={compact ? "h-52 rounded-lg border" : "min-h-72 rounded-xl border"}
+                  fallback={
+                    <p className="text-sm text-slate-700">
+                      You can still choose a search result or use your current location, then
+                      confirm the selected address below.
+                    </p>
+                  }
+                />
+                {selectedDisplayAddress ? (
+                  <p className="text-sm text-slate-700">
+                    <span className="font-semibold">Selected address:</span>{" "}
+                    {selectedDisplayAddress}
+                  </p>
+                ) : null}
+                <p role="status" aria-live="polite" className="text-sm text-slate-600">
+                  {coordinateAnnouncement}
+                </p>
+                {serviceabilityState === "checking" ? (
+                  <p role="status" aria-live="polite" className="text-sm text-slate-600">
+                    Finding the closest fulfillment location…
+                  </p>
+                ) : null}
+                {serviceabilityState === "error" ? (
+                  <p role="alert" className="text-sm text-red-700">
+                    A fulfillment location could not be assigned. Retry by selecting the address or
+                    pin again.
+                  </p>
+                ) : null}
+                {serviceabilityState === "ready" && serviceability ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={
+                      serviceability.serviceable
+                        ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                        : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
+                    }
+                  >
+                    <p className="font-semibold">
+                      {serviceability.serviceable
+                        ? "Closest fulfillment location found"
+                        : "No fulfillment location available"}
+                    </p>
+                    <p className={compact && serviceability.serviceable ? "sr-only" : undefined}>
+                      {serviceability.serviceable
+                        ? `Fulfilled from ${serviceability.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`
+                        : purpose === "save"
+                          ? "You may save this address, but ordering requires an active fulfillment location."
+                          : "No active fulfillment location can currently prepare this order."}
+                    </p>
+                  </div>
+                ) : null}
+              </section>
+            )}
+          </div>
+        )}
         {purpose === "serviceability" ? (
           <div className="grid gap-3">
             {compact ? (
@@ -914,11 +1293,26 @@ export function AddressEditor({
             <section
               hidden={wizard && step !== 2}
               aria-labelledby="address-details-heading"
-              className="grid gap-4 [&[hidden]]:hidden"
+              className={`grid gap-4 [&[hidden]]:hidden ${wizard ? "pt-6" : ""}`}
             >
-              <h2 id="address-details-heading" className="text-lg font-semibold text-slate-950">
-                Address and recipient details
-              </h2>
+              {wizard && selectedDisplayAddress ? (
+                <div className="flex items-start gap-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+                    <MapPin className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                      Confirmed entrance
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[var(--fm-text)]">
+                      {selectedDisplayAddress}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <h3 id="address-details-heading" className="text-lg font-semibold text-slate-950">
+                Contact and address
+              </h3>
               {providerResolvedComponents ? (
                 <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                   Search-result address fields are provider-resolved when saved. Move the pin to
@@ -942,18 +1336,53 @@ export function AddressEditor({
                   error={fieldErrors.recipient}
                   onChange={(event) => setRecipient(event.currentTarget.value)}
                 />
-                <TextField
-                  id="address-phone"
-                  label="Phone number"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="0917 123 4567"
-                  description="Shared with the external courier so they can reach the recipient."
-                  value={phone}
-                  error={fieldErrors.phone}
-                  onChange={(event) => setPhone(event.currentTarget.value)}
-                />
+                <div className="grid gap-3">
+                  {savedPhones.length ? (
+                    <label className="grid gap-1.5 text-sm font-medium text-slate-950">
+                      Use a saved phone number
+                      <select
+                        aria-label="Choose a saved phone number"
+                        value={
+                          savedPhones.includes(normalizePhilippineMobile(phone) ?? "")
+                            ? (normalizePhilippineMobile(phone) ?? "")
+                            : "new"
+                        }
+                        onChange={(event) =>
+                          setPhone(
+                            event.currentTarget.value === "new"
+                              ? ""
+                              : formatPhilippineMobileInput(event.currentTarget.value),
+                          )
+                        }
+                        className="min-h-11 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                      >
+                        {savedPhones.map((savedPhone) => (
+                          <option key={savedPhone} value={savedPhone}>
+                            {formatPhilippineMobileInput(savedPhone)}
+                          </option>
+                        ))}
+                        <option value="new">Use a different number</option>
+                      </select>
+                    </label>
+                  ) : null}
+                  <TextField
+                    id="address-phone"
+                    label="Phone number"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="+63 917 123 4567"
+                    description="Philippine mobile format. Shared with the courier for this delivery."
+                    value={phone}
+                    error={fieldErrors.phone}
+                    onChange={(event) =>
+                      setPhone(formatPhilippineMobileInput(event.currentTarget.value))
+                    }
+                    onBlur={(event) =>
+                      setPhone(formatPhilippineMobileInput(event.currentTarget.value))
+                    }
+                  />
+                </div>
                 <TextField
                   id="address-line-1"
                   label="Street, building, or place"
@@ -1023,15 +1452,33 @@ export function AddressEditor({
             <section
               hidden={wizard && step !== 3}
               aria-labelledby="delivery-instructions-heading"
-              className="grid gap-4 [&[hidden]]:hidden"
+              className={`grid gap-4 [&[hidden]]:hidden ${wizard ? "pt-6" : ""}`}
             >
+              {wizard && selectedDisplayAddress ? (
+                <div className="flex items-start gap-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+                    <MapPin className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                      Delivering to
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[var(--fm-text)]">
+                      {selectedDisplayAddress}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                      {recipient || "Recipient"} · {phone || "Phone number"}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
               <div>
-                <h2
+                <h3
                   id="delivery-instructions-heading"
                   className="text-lg font-semibold text-slate-950"
                 >
-                  Delivery instructions
-                </h2>
+                  Help the courier find you
+                </h3>
                 <p className="mt-1 text-sm text-slate-600">
                   Add only details the external courier needs for this destination.
                 </p>
@@ -1104,7 +1551,7 @@ export function AddressEditor({
               </p>
             ) : null}
             {wizard && (
-              <div className="flex gap-3">
+              <div className="mt-6 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] pt-5">
                 {step > 1 && (
                   <button
                     type="button"
@@ -1112,36 +1559,51 @@ export function AddressEditor({
                       setSaveError("");
                       setStep(step - 1);
                     }}
-                    className="rounded-lg border px-5 py-3 font-semibold"
+                    className="inline-flex min-h-12 items-center gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-5 text-sm font-semibold transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
                   >
+                    <ArrowLeft className="size-4" aria-hidden="true" />
                     Back
                   </button>
                 )}
                 {step < 3 && (
                   <button
                     type="submit"
-                    className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white"
+                    className="ml-auto inline-flex min-h-12 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
                   >
                     Continue
+                    <ArrowRight className="size-4" aria-hidden="true" />
                   </button>
                 )}
+                {step === 3 && !saveUncertain ? (
+                  <button
+                    type="submit"
+                    disabled={saveState === "saving" || !coordinate || !confirmationSource}
+                    className="ml-auto inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+                  >
+                    {saveState === "saving"
+                      ? "Saving address…"
+                      : serviceability?.serviceable === false
+                        ? "Save address"
+                        : initialAddress
+                          ? "Update confirmed address"
+                          : "Save and use this address"}
+                  </button>
+                ) : null}
               </div>
             )}
-            {!saveUncertain && (!wizard || step === 3) ? (
+            {!saveUncertain && !wizard ? (
               <button
                 type="submit"
                 disabled={saveState === "saving" || !coordinate || !confirmationSource}
-                className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
               >
                 {saveState === "saving"
                   ? "Saving address…"
                   : serviceability?.serviceable === false
-                    ? "Save unavailable address"
+                    ? "Save confirmed address"
                     : initialAddress
                       ? "Update confirmed address"
-                      : wizard
-                        ? "Save address"
-                        : "Save confirmed address"}
+                      : "Save confirmed address"}
               </button>
             ) : null}
           </>

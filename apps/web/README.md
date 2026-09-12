@@ -22,10 +22,11 @@ The Web Worker has no D1 binding. Its `CORE` Service Binding targets `freshmarke
 Local Vite development loads Core as an auxiliary Worker so RPC bindings survive vinext reloads;
 the deployed architecture remains two independently deployed Workers.
 
-`MAPBOX_BROWSER_TOKEN` is the only Mapbox token exposed to browser map components. It
-must be a read-only public token restricted in Mapbox to the exact local, preview, and production
-Web origins. The server-side `MAPBOX_ACCESS_TOKEN` remains a Core secret and must never be copied
-into Web configuration, client bundles, logs, or rendered error content.
+`GOOGLE_MAPS_BROWSER_KEY` and `GOOGLE_MAPS_MAP_ID` configure browser map rendering. Restrict the
+browser key to Maps JavaScript API and the exact local, preview, staging, and production Web
+origins. The map ID and browser key are browser-visible by design. The separate
+`GOOGLE_MAPS_SERVER_KEY` remains a Core-only secret restricted to Geocoding API and Routes API and
+must never be copied into Web configuration, client bundles, logs, or rendered error content.
 
 Browser auth requests use `http://localhost:3000/api/auth/*` in local development;
 the proxy forwards the configured public URL/origin/host and reproduces all Core

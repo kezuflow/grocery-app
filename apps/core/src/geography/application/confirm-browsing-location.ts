@@ -5,7 +5,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import type { GeocoderPort } from "../ports/geocoder";
-import { GeocoderError } from "../infrastructure/mapbox-geocoder";
+import { GeocoderError } from "../infrastructure/geocoder-error";
 import { resolveServiceability } from "../serviceability";
 
 /** No provider-derived browser data may be retained before this confirmation. */

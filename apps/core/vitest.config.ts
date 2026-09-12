@@ -11,7 +11,7 @@ const produceAssetKeys = readdirSync(
 )
   .filter((name) => name.endsWith(".webp"))
   .sort();
-process.env.MAPBOX_ACCESS_TOKEN ??= "test-placeholder";
+process.env.GOOGLE_MAPS_SERVER_KEY ??= "test-placeholder";
 
 export default defineConfig({
   plugins: [
@@ -36,7 +36,7 @@ export default defineConfig({
           LALAMOVE_API_KEY: "pk_test_fixture",
           LALAMOVE_API_SECRET: "sk_test_fixture",
           ROUTE_DISTANCE_PROVIDER: "mock",
-          MAPBOX_ACCESS_TOKEN: "test-placeholder",
+          GOOGLE_MAPS_SERVER_KEY: "test-placeholder",
         },
       },
     }),

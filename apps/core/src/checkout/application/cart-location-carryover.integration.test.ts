@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { getCart, setCartItem } from "./cart";
 import { selectCartLocation } from "./select-cart-location";
 import { mergeGuestCart } from "./merge-guest-cart";
@@ -64,7 +64,22 @@ describe("explicit Cart location and guest carryover", () => {
       error: { code: "IDEMPOTENCY_CONFLICT" },
     });
   });
-  it("rejects an unserviceable choice without Cart or success receipt", async () => {
+  it("rejects selection without a capable fulfillment pin and leaves no Cart or success receipt", async () => {
+    const capable = await env.DB.prepare(
+      "SELECT location_id FROM location_capability WHERE capability='DISPATCH' AND enabled=1",
+    ).all<{ location_id: string }>();
+    onTestFinished(async () => {
+      await env.DB.batch(
+        capable.results.map((row) =>
+          env.DB.prepare(
+            "UPDATE location_capability SET enabled=1 WHERE location_id=? AND capability='DISPATCH'",
+          ).bind(row.location_id),
+        ),
+      );
+    });
+    await env.DB.prepare(
+      "UPDATE location_capability SET enabled=0 WHERE capability='DISPATCH'",
+    ).run();
     const principal = await customer(),
       idempotencyKey = crypto.randomUUID();
     expect(

@@ -249,19 +249,11 @@ describe("instant checkout quotes", () => {
       ),
     ).toMatchObject({ ok: false, error: { code: "INSTANT_MODE_UNAVAILABLE" } });
   });
-  it.each(["revision", "expiry", "readiness", "hours"])(
+  it.each(["revision", "readiness", "hours"])(
     "rejects %s changes during courier quotation with no quote, attempt or holds",
     async (change) => {
       await configureInstant();
       const basket = await seedBasket({ onHand: 100_000, member: false });
-      const links = await env.DB.prepare(
-        "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
-      ).all<{
-        zone_id: string;
-        location_id: string;
-        valid_from: number;
-        valid_to: number | null;
-      }>();
       const readiness = await env.DB.prepare(
         "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
       ).all<{ location_id: string; dispatch_ready: number }>();
@@ -279,11 +271,6 @@ describe("instant checkout quotes", () => {
             env.DB.prepare(
               "UPDATE location_operating_schedule SET definition_json=? WHERE location_id=?",
             ).bind(row.definition_json, row.location_id),
-          ),
-          ...links.results.map((row) =>
-            env.DB.prepare(
-              "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
-            ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
           ),
           ...readiness.results.map((row) =>
             env.DB.prepare(
@@ -307,11 +294,9 @@ describe("instant checkout quotes", () => {
           const sql =
             change === "revision"
               ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
-              : change === "expiry"
-                ? "UPDATE location_serviceability SET valid_to=1"
-                : change === "hours"
-                  ? "UPDATE location_operating_schedule SET definition_json=json_set(definition_json,'$.weekly',json('[]'))"
-                  : "UPDATE fulfillment_location_readiness SET dispatch_ready=0";
+              : change === "hours"
+                ? "UPDATE location_operating_schedule SET definition_json=json_set(definition_json,'$.weekly',json('[]'))"
+                : "UPDATE fulfillment_location_readiness SET dispatch_ready=0";
           await env.DB.prepare(sql).run();
           return deliveryProvider.quote(...args);
         },

@@ -644,20 +644,12 @@ describe("order commitment from canonical payment reactions", () => {
         .run(),
     ).rejects.toThrow();
   });
-  it.each(["revision", "expiry", "cutoff"])(
+  it.each(["revision", "cutoff"])(
     "rejects %s changes during provider revalidation before creating a payment intent",
     async (change) => {
       const fixture = await seededCheckout({ onHand: 0 });
       const quote = await createQuote(fixture);
       if (!quote.ok) throw new Error(quote.error.message);
-      const links = await env.DB.prepare(
-        "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
-      ).all<{
-        zone_id: string;
-        location_id: string;
-        valid_from: number;
-        valid_to: number | null;
-      }>();
       const readiness = await env.DB.prepare(
         "SELECT location_id,dispatch_ready FROM fulfillment_location_readiness",
       ).all<{ location_id: string; dispatch_ready: number }>();
@@ -668,11 +660,6 @@ describe("order commitment from canonical payment reactions", () => {
       }>();
       onTestFinished(async () => {
         await env.DB.batch([
-          ...links.results.map((row) =>
-            env.DB.prepare(
-              "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
-            ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
-          ),
           ...readiness.results.map((row) =>
             env.DB.prepare(
               "UPDATE fulfillment_location_readiness SET dispatch_ready=? WHERE location_id=?",
@@ -695,9 +682,7 @@ describe("order commitment from canonical payment reactions", () => {
           const sql =
             change === "revision"
               ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
-              : change === "expiry"
-                ? "UPDATE location_serviceability SET valid_to=1"
-                : "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE status='OPEN'";
+              : "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE status='OPEN'";
           await env.DB.prepare(sql).run();
           return deliveryProvider.quote(...args);
         },
@@ -724,6 +709,47 @@ describe("order commitment from canonical payment reactions", () => {
       ).toEqual({ count: 0 });
     },
   );
+  it("does not let a legacy polygon-link expiry reject a provider-quoted payment", async () => {
+    const fixture = await seededCheckout({ onHand: 0 });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(quote.error.message);
+    const links = await env.DB.prepare(
+      "SELECT zone_id,location_id,valid_from,valid_to FROM location_serviceability",
+    ).all<{
+      zone_id: string;
+      location_id: string;
+      valid_from: number;
+      valid_to: number | null;
+    }>();
+    onTestFinished(async () => {
+      await env.DB.batch(
+        links.results.map((row) =>
+          env.DB.prepare(
+            "UPDATE location_serviceability SET valid_to=? WHERE zone_id=? AND location_id=? AND valid_from=?",
+          ).bind(row.valid_to, row.zone_id, row.location_id, row.valid_from),
+        ),
+      );
+    });
+    let reachedProvider = false;
+    const changedProvider = {
+      ...deliveryProvider,
+      quote: async (...args: Parameters<typeof deliveryProvider.quote>) => {
+        reachedProvider = true;
+        await env.DB.prepare("UPDATE location_serviceability SET valid_to=1").run();
+        return deliveryProvider.quote(...args);
+      },
+    };
+    const result = await createCheckoutPaymentIntent(
+      env.DB,
+      new ProviderRegistry("test", [createMockPaymentProvider()]),
+      "mock",
+      quoteDependencies.routeDistance,
+      paymentCommandForQuote(fixture.customerId, quote.value),
+      new Map([["lalamove", changedProvider]]),
+    );
+    expect(reachedProvider).toBe(true);
+    expect(result).toMatchObject({ ok: true });
+  });
   it("keeps one benefit per component in Core even though storage can represent a larger stack", async () => {
     const fixture = await seededCheckout();
     const ids = [crypto.randomUUID(), crypto.randomUUID()];

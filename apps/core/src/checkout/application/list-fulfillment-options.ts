@@ -46,8 +46,7 @@ export async function listFulfillmentOptions(
   const address = await database
     .prepare(
       `SELECT recipient,phone,address_json,address_components_json,delivery_instructions_json,
-              barangay,city,postal_code,latitude,longitude,version,delivery_zone_code,
-              user_confirmed_at,serviceable,status
+              barangay,city,postal_code,latitude,longitude,version,user_confirmed_at,status
      FROM customer_address WHERE id=? AND customer_id=?`,
     )
     .bind(query.addressId, query.customerId)
@@ -55,9 +54,7 @@ export async function listFulfillmentOptions(
       latitude: number;
       longitude: number;
       version: number;
-      delivery_zone_code: string | null;
       user_confirmed_at: number | null;
-      serviceable: number | null;
       status: string;
       recipient: string;
       phone: string;
@@ -112,17 +109,12 @@ export async function listFulfillmentOptions(
         requestId: query.requestId,
       },
     };
-  if (
-    address.status !== "active" ||
-    !address.user_confirmed_at ||
-    address.serviceable !== 1 ||
-    !address.delivery_zone_code
-  )
+  if (address.status !== "active" || !address.user_confirmed_at)
     return {
       ok: false,
       error: {
         code: "ADDRESS_NOT_SERVICEABLE",
-        message: "Confirm a serviceable address first",
+        message: "Confirm the delivery address first",
         requestId: query.requestId,
       },
     };

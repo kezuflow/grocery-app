@@ -1,4 +1,9 @@
 import {
+  GooglePlaces,
+  autocompleteSchema,
+  predictionSchema,
+} from "./geography/infrastructure/google-places";
+import {
   uploadAdminBannerMedia,
   updateAdminBannerMedia,
   removeAdminBannerMedia,
@@ -132,7 +137,7 @@ import { resolveServiceability } from "./geography/serviceability";
 import { buildGeocoderPort } from "./geography/infrastructure/runtime-geocoder";
 import { confirmBrowsingLocation } from "./geography/application/confirm-browsing-location";
 import type { GeocoderPort } from "./geography/ports/geocoder";
-import { GeocoderError } from "./geography/infrastructure/mapbox-geocoder";
+import { GeocoderError } from "./geography/infrastructure/geocoder-error";
 import {
   createCustomerAddress,
   listCustomerAddresses,
@@ -2922,6 +2927,36 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return resolveServiceability(drizzle(this.env.DB), input);
+  }
+  async autocompleteAddress(input: import("@freshmarkets/contracts").AddressAutocompleteRequest) {
+    const parsed = autocompleteSchema.safeParse(input);
+    if (!parsed.success)
+      return fail("VALIDATION_FAILED", "Enter an address to search.", input.requestId);
+    try {
+      const value = await new GooglePlaces(this.env.GOOGLE_MAPS_SERVER_KEY ?? "").autocomplete(
+        parsed.data,
+      );
+      return { ok: true as const, value, requestId: input.requestId };
+    } catch (error) {
+      if (!(error instanceof GeocoderError)) throw error;
+      return fail(error.code, "Address suggestions are temporarily unavailable.", input.requestId);
+    }
+  }
+  async resolveAddressPrediction(
+    input: import("@freshmarkets/contracts").AddressPredictionRequest,
+  ) {
+    const parsed = predictionSchema.safeParse(input);
+    if (!parsed.success)
+      return fail("VALIDATION_FAILED", "Choose an address suggestion.", input.requestId);
+    try {
+      const value = await new GooglePlaces(this.env.GOOGLE_MAPS_SERVER_KEY ?? "").resolve(
+        parsed.data,
+      );
+      return { ok: true as const, value, requestId: input.requestId };
+    } catch (error) {
+      if (!(error instanceof GeocoderError)) throw error;
+      return fail(error.code, "Address details are temporarily unavailable.", input.requestId);
+    }
   }
   async searchAddressCandidates(input: import("@freshmarkets/contracts").AddressSearchRequest) {
     const validation = addressSearchRequestSchema.safeParse(input);

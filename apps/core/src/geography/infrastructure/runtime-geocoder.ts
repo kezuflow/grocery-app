@@ -1,12 +1,13 @@
 import type { GeocoderPort } from "../ports/geocoder";
-import { GeocoderError, MapboxGeocoder } from "./mapbox-geocoder";
+import { GeocoderError } from "./geocoder-error";
+import { GoogleMapsGeocoder } from "./google-maps-geocoder";
 
 export function buildGeocoderPort(
-  environment: { MAPBOX_ACCESS_TOKEN?: string },
+  environment: { GOOGLE_MAPS_SERVER_KEY?: string },
   fetchImpl: typeof fetch = (input, init) => globalThis.fetch(input, init),
 ): GeocoderPort {
-  if (environment.MAPBOX_ACCESS_TOKEN)
-    return new MapboxGeocoder(environment.MAPBOX_ACCESS_TOKEN, fetchImpl);
+  if (environment.GOOGLE_MAPS_SERVER_KEY)
+    return new GoogleMapsGeocoder(environment.GOOGLE_MAPS_SERVER_KEY, fetchImpl);
   return {
     async search() {
       throw new GeocoderError("GEOCODER_UNCONFIGURED");

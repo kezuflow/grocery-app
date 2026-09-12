@@ -54,7 +54,9 @@ export type DeliveryInstructions = {
 
 export type ServiceabilityFailureReason =
   | "INVALID_COORDINATES"
+  /** Retained for historical saved-address compatibility; new pin assignment does not emit it. */
   | "OUTSIDE_SERVICE_AREA"
+  /** Retained for historical saved-address compatibility; new pin assignment does not emit it. */
   | "OUTSIDE_DELIVERY_ZONE"
   | "NO_ELIGIBLE_LOCATION";
 
@@ -90,13 +92,16 @@ export type ServiceabilityZone = {
 };
 
 export type ServiceabilityResult = {
-  /** Nearest geographically eligible site for browsing; checkout revalidates operations. */
+  /** Nearest active, capable fulfillment-center pin; checkout revalidates operations and courier. */
   fulfillmentLocation?: { id: string; name: string } | null;
+  /** Compatibility name: true means a fulfillment location was assigned, not courier coverage. */
   serviceable: boolean;
   reason: ServiceabilityFailureReason | null;
   coordinate: Coordinate;
   market: ServiceabilityMarket | null;
+  /** Legacy snapshot field. Pin-based resolutions return null. */
   serviceArea: ServiceabilityArea | null;
+  /** Legacy snapshot field. Pin-based resolutions return null. */
   deliveryZone: ServiceabilityZone | null;
   fulfillmentEligibility: {
     eligible: boolean;

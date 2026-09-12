@@ -9,7 +9,7 @@ import {
   updateAdminLocation,
 } from "./location-administration";
 import type { GeocoderPort } from "../../geography/ports/geocoder";
-import { GeocoderError } from "../../geography/infrastructure/mapbox-geocoder";
+import { GeocoderError } from "../../geography/infrastructure/geocoder-error";
 import { getGlobalCommerceConfiguration } from "../../commerce/application/global-commerce-configuration";
 
 const core = exports.default;

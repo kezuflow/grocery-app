@@ -134,7 +134,7 @@ export async function revalidateCheckoutQuote(
   )
     return rejected(
       "PRICE_CHANGED",
-      "Service area or fulfillment location changed; accept a new quote",
+      "Fulfillment location or readiness changed; accept a new quote",
     );
   const marketId = selected.marketId;
   if (quote.fulfillmentMode !== "INSTANT") {

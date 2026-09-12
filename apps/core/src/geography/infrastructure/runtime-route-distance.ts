@@ -1,11 +1,11 @@
 import type { RouteDistancePort } from "../ports/route-distance";
-import { MapboxRouteDistance, RouteDistanceError } from "./mapbox-route-distance";
+import { GoogleRoutesDistance, RouteDistanceError } from "./google-routes-distance";
 
 export function buildRouteDistancePort(
   environment: {
     ENVIRONMENT?: string;
     ROUTE_DISTANCE_PROVIDER?: string;
-    MAPBOX_ACCESS_TOKEN?: string;
+    GOOGLE_MAPS_SERVER_KEY?: string;
   },
   fetchImpl: typeof fetch = fetch,
 ): RouteDistancePort {
@@ -18,8 +18,8 @@ export function buildRouteDistancePort(
         };
       },
     };
-  if (environment.ROUTE_DISTANCE_PROVIDER === "mapbox" && environment.MAPBOX_ACCESS_TOKEN)
-    return new MapboxRouteDistance(environment.MAPBOX_ACCESS_TOKEN, fetchImpl);
+  if (environment.ROUTE_DISTANCE_PROVIDER === "google_maps" && environment.GOOGLE_MAPS_SERVER_KEY)
+    return new GoogleRoutesDistance(environment.GOOGLE_MAPS_SERVER_KEY, fetchImpl);
   return {
     async routeDistance() {
       throw new RouteDistanceError("ROUTE_DISTANCE_UNCONFIGURED");

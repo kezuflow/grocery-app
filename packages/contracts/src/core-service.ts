@@ -1,3 +1,4 @@
+import type { AddressAutocompleteService } from "./address-autocomplete";
 import type { BannerMediaService } from "./banner-media";
 import type { StorefrontBannerService } from "./storefront-banners";
 import type { AdminScheduledWeekService } from "./admin-scheduled-week";
@@ -64,6 +65,7 @@ import type {
  */
 export interface ImplementedCoreService
   extends
+    AddressAutocompleteService,
     HealthService,
     ReadinessService,
     Pick<AuthService, "auth" | "getApplicationContext">,
@@ -309,6 +311,8 @@ export const coreServiceMethodNames = [
   "getAdminOrderIssue",
   "applyAdminOrderIssueAction",
   "resolveServiceability",
+  "autocompleteAddress",
+  "resolveAddressPrediction",
   "searchAddressCandidates",
   "reverseAddressCandidate",
   "confirmBrowsingLocation",

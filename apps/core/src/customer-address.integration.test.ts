@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type {
@@ -106,6 +106,21 @@ function geocoder(overrides: Partial<GeocoderPort> = {}): GeocoderPort {
     },
     ...overrides,
   };
+}
+
+async function preserveLocationCapabilities() {
+  const rows = await env.DB.prepare(
+    "SELECT location_id, capability, enabled FROM location_capability",
+  ).all<{ location_id: string; capability: string; enabled: number }>();
+  onTestFinished(async () => {
+    await env.DB.batch(
+      rows.results.map((row) =>
+        env.DB.prepare(
+          "UPDATE location_capability SET enabled=? WHERE location_id=? AND capability=?",
+        ).bind(row.enabled, row.location_id, row.capability),
+      ),
+    );
+  });
 }
 
 describe("Phase 4B customer addresses", () => {
@@ -694,7 +709,7 @@ describe("Phase 4B customer addresses", () => {
     expect(stored?.user_confirmed_at).toBeTypeOf("number");
   });
 
-  it("persists an unserviceable structured address as unavailable", async () => {
+  it("assigns a confirmed structured address beyond legacy polygon coverage", async () => {
     const user = await account();
     const created = await core.createCustomerAddress({
       ...user.request(),
@@ -713,8 +728,8 @@ describe("Phase 4B customer addresses", () => {
       ok: true,
       value: {
         status: "active",
-        serviceable: false,
-        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+        serviceable: true,
+        serviceabilityReason: null,
       },
     });
     if (!created.ok) return;
@@ -745,28 +760,29 @@ describe("Phase 4B customer addresses", () => {
     if (!created.ok) return;
     const listed = await core.listCustomerAddresses(user.request());
     expect(listed).toMatchObject({ ok: true, value: [created.value] });
-    expect(created.value.serviceAreaCode).toBe("CEBU_CITY");
-    expect(created.value.deliveryZoneCode).toBe("CEBU_CITY_CORE");
+    expect(created.value.serviceAreaCode).toBeNull();
+    expect(created.value.deliveryZoneCode).toBeNull();
     expect(created.value.serviceable).toBe(true);
     expect(created.value.serviceabilityReason).toBeNull();
   });
 
-  it("persists NO_ELIGIBLE_LOCATION even when area and zone codes resolve", async () => {
+  it("persists NO_ELIGIBLE_LOCATION when no fulfillment pin has the required capabilities", async () => {
+    await preserveLocationCapabilities();
     await env.DB.prepare("UPDATE location_capability SET enabled=0").run();
     const user = await account();
     const created = await createAddress(user.request());
     expect(created).toMatchObject({
       ok: true,
       value: {
-        serviceAreaCode: "CEBU_CITY",
-        deliveryZoneCode: "CEBU_CITY_CORE",
+        serviceAreaCode: null,
+        deliveryZoneCode: null,
         serviceable: false,
         serviceabilityReason: "NO_ELIGIBLE_LOCATION",
       },
     });
   });
 
-  it("persists an explicit out-of-area resolution", async () => {
+  it("assigns a location outside legacy polygons without retaining polygon labels", async () => {
     const user = await account();
     const created = await core.createCustomerAddress({
       ...user.request(),
@@ -780,8 +796,8 @@ describe("Phase 4B customer addresses", () => {
     expect(created).toMatchObject({
       ok: true,
       value: {
-        serviceable: false,
-        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+        serviceable: true,
+        serviceabilityReason: null,
         serviceAreaCode: null,
         deliveryZoneCode: null,
       },
@@ -950,6 +966,8 @@ describe("Phase 4B customer addresses", () => {
     const created = await createAddress(user.request());
     expect(created.ok).toBe(true);
     if (!created.ok) return;
+    await preserveLocationCapabilities();
+    await env.DB.prepare("UPDATE location_capability SET enabled=0").run();
     const moved = await core.updateCustomerAddress({
       ...user.request(),
       addressId: created.value.id,
@@ -966,10 +984,11 @@ describe("Phase 4B customer addresses", () => {
         serviceAreaCode: null,
         deliveryZoneCode: null,
         serviceable: false,
-        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+        serviceabilityReason: "NO_ELIGIBLE_LOCATION",
       },
     });
     if (!moved.ok) return;
+    await env.DB.prepare("UPDATE location_capability SET enabled=1").run();
     const renamed = await core.updateCustomerAddress({
       ...user.request(),
       addressId: moved.value.id,
@@ -983,7 +1002,7 @@ describe("Phase 4B customer addresses", () => {
         deliveryZoneCode: null,
         resolutionVersion: null,
         serviceable: false,
-        serviceabilityReason: "OUTSIDE_SERVICE_AREA",
+        serviceabilityReason: "NO_ELIGIBLE_LOCATION",
       },
     });
   });
@@ -1040,7 +1059,7 @@ describe("Phase 4B customer addresses", () => {
         longitude: 124,
         components: { addressLine1: "Moved permanent address" },
         confirmationSource: "GEOCODER",
-        serviceable: false,
+        serviceable: true,
         status: "active",
       },
     });
@@ -1051,25 +1070,23 @@ describe("Phase 4B customer addresses", () => {
     const sensitiveDisplay = "Unit 4B, Private Family Home, Cebu City";
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({
-        features: [
+        status: "OK",
+        results: [
           {
-            id: "mapbox.address.private",
-            geometry: { type: "Point", coordinates: [123.9058, 10.3173] },
-            properties: {
-              mapbox_id: "mapbox.address.private",
-              feature_type: "address",
-              full_address: sensitiveDisplay,
-              name: "Private Family Home",
-              coordinates: { accuracy: "rooftop" },
-              context: {
-                address: { name: "Private Family Home" },
-                neighborhood: { name: "Luz" },
-                place: { name: "Cebu City" },
-                region: { name: "Central Visayas" },
-                postcode: { name: "6000" },
-                country: { name: "Philippines", country_code: "ph" },
-              },
+            place_id: "google.place.private",
+            formatted_address: sensitiveDisplay,
+            geometry: {
+              location: { lat: 10.3173, lng: 123.9058 },
+              location_type: "ROOFTOP",
             },
+            address_components: [
+              { long_name: "Private Family Home", types: ["premise"] },
+              { long_name: "Luz", types: ["sublocality_level_1"] },
+              { long_name: "Cebu City", types: ["locality"] },
+              { long_name: "Central Visayas", types: ["administrative_area_level_1"] },
+              { long_name: "6000", types: ["postal_code"] },
+              { long_name: "Philippines", short_name: "PH", types: ["country"] },
+            ],
           },
         ],
       }),
@@ -1085,7 +1102,7 @@ describe("Phase 4B customer addresses", () => {
           TRUSTED_ORIGINS: "https://core.example.invalid",
           PAYMENT_PROVIDER: "mock",
           ROUTE_DISTANCE_PROVIDER: "mock",
-          MAPBOX_ACCESS_TOKEN: "test-secret-token",
+          GOOGLE_MAPS_SERVER_KEY: "test-secret-key",
         } as never,
       );
       const result = await entrypoint.searchAddressCandidates({
@@ -1094,7 +1111,7 @@ describe("Phase 4B customer addresses", () => {
       });
       expect(result).toMatchObject({
         ok: true,
-        value: [{ displayAddress: sensitiveDisplay, candidateKey: "mapbox.address.private" }],
+        value: [{ displayAddress: sensitiveDisplay, candidateKey: "google.place.private" }],
       });
       expect(fetchSpy).toHaveBeenCalledOnce();
       const logs = logSpy.mock.calls.flat().join(" ");
@@ -1102,7 +1119,7 @@ describe("Phase 4B customer addresses", () => {
       expect(logs).not.toContain(sensitiveDisplay);
       expect(logs).not.toContain("10.3173");
       expect(logs).not.toContain("123.9058");
-      expect(logs).not.toContain("test-secret-token");
+      expect(logs).not.toContain("test-secret-key");
     } finally {
       fetchSpy.mockRestore();
       logSpy.mockRestore();
@@ -1125,7 +1142,7 @@ describe("Phase 4B customer addresses", () => {
           TRUSTED_ORIGINS: "https://core.example.invalid",
           PAYMENT_PROVIDER: "mock",
           ROUTE_DISTANCE_PROVIDER: "mock",
-          MAPBOX_ACCESS_TOKEN: "test-secret-token",
+          GOOGLE_MAPS_SERVER_KEY: "test-secret-key",
         } as never,
       );
       const result = await entrypoint.searchAddressCandidates({
@@ -1136,7 +1153,7 @@ describe("Phase 4B customer addresses", () => {
       const logs = warnSpy.mock.calls.flat().join(" ");
       expect(logs).toContain("GEOCODER_RATE_LIMITED");
       expect(logs).not.toContain(sensitiveQuery);
-      expect(logs).not.toContain("test-secret-token");
+      expect(logs).not.toContain("test-secret-key");
     } finally {
       fetchSpy.mockRestore();
       warnSpy.mockRestore();

@@ -40,7 +40,7 @@
     // evidence have been supplied outside source control.
     "DELIVERY_PROVIDER": "disabled",
     "DELIVERY_PROVIDERS": "disabled",
-    "ROUTE_DISTANCE_PROVIDER": "mapbox",
+    "ROUTE_DISTANCE_PROVIDER": "google_maps",
   },
   "secrets": {
     // Wrangler only loads declared secret names from .dev.vars.
@@ -49,7 +49,7 @@
       "AUTH_EMAIL_FROM",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
-      "MAPBOX_ACCESS_TOKEN",
+      "GOOGLE_MAPS_SERVER_KEY",
       "PAYMONGO_SECRET_KEY",
       "PAYMONGO_WEBHOOK_SECRET",
     ],
@@ -91,20 +91,21 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
-        "INITIAL_GLOBAL_ADMIN_EMAIL": "",
         "BETTER_AUTH_URL": "https://freshmarkets.ph",
         "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-staging.ilyreggie.workers.dev",
         "PAYMENT_PROVIDER": "paymongo",
         "DELIVERY_PROVIDER": "disabled",
         "DELIVERY_PROVIDERS": "disabled",
-        "ROUTE_DISTANCE_PROVIDER": "mapbox",
+        "ROUTE_DISTANCE_PROVIDER": "google_maps",
       },
       "secrets": {
         "required": [
           "BETTER_AUTH_SECRET",
+          "INITIAL_GLOBAL_ADMIN_EMAIL",
+          "AUTH_EMAIL_FROM",
           "GOOGLE_CLIENT_ID",
           "GOOGLE_CLIENT_SECRET",
-          "MAPBOX_ACCESS_TOKEN",
+          "GOOGLE_MAPS_SERVER_KEY",
           "PAYMONGO_SECRET_KEY",
           "PAYMONGO_WEBHOOK_SECRET",
         ],

@@ -215,7 +215,7 @@ describe("Global service-area publication", () => {
         .first(),
     ).toEqual({ count: 0 });
   });
-  it("previews the closest current-mode site only inside its assigned active polygons", async () => {
+  it("previews capable fulfillment pins independently of legacy polygons and links", async () => {
     const manager = await locationManager();
     await env.DB.batch([
       env.DB.prepare(
@@ -238,14 +238,19 @@ describe("Global service-area publication", () => {
     });
     expect(await core.previewAdminServiceability({ ...preview, latitude: 20 })).toMatchObject({
       ok: true,
-      value: { serviceable: false, locationId: null },
+      value: { serviceable: true, locationId: "location-cebu-central" },
     });
     await env.DB.prepare("UPDATE location_serviceability SET valid_to=?")
       .bind(Date.now() - 1)
       .run();
     expect(await core.previewAdminServiceability(preview)).toMatchObject({
       ok: true,
-      value: { serviceable: false },
+      value: { serviceable: true, locationId: "location-cebu-central" },
+    });
+    await env.DB.prepare("UPDATE fulfillment_location_readiness SET dispatch_ready=0").run();
+    expect(await core.previewAdminServiceability(preview)).toMatchObject({
+      ok: true,
+      value: { serviceable: false, locationId: null },
     });
   });
   it.each([

@@ -1,3 +1,4 @@
+export * from "./address-autocomplete";
 export * from "./common";
 export * from "./notifications";
 export * from "./customer-profile";

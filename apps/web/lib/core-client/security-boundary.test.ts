@@ -18,8 +18,8 @@ describe("Core client request boundary", () => {
         accept: "application/json",
         "content-type": "application/json",
         authorization: "Bearer must-not-forward",
-        "x-mapbox-access-token": "server-token-must-not-forward",
-        "x-mapbox-public-access-token": "public-token-must-not-forward",
+        "x-google-maps-server-key": "server-key-must-not-forward",
+        "x-google-maps-browser-key": "browser-key-must-not-forward",
         "x-forwarded-for": "192.0.2.1",
         "x-browser-random": "must-not-forward",
       },
@@ -46,8 +46,8 @@ describe("Core client request boundary", () => {
     expect(headers.authorization).toBeUndefined();
     expect(headers["x-forwarded-for"]).toBeUndefined();
     expect(headers["x-browser-random"]).toBeUndefined();
-    expect(headers["x-mapbox-access-token"]).toBeUndefined();
-    expect(headers["x-mapbox-public-access-token"]).toBeUndefined();
+    expect(headers["x-google-maps-server-key"]).toBeUndefined();
+    expect(headers["x-google-maps-browser-key"]).toBeUndefined();
     expect(JSON.stringify(headers)).not.toContain("password");
   });
 
@@ -56,7 +56,7 @@ describe("Core client request boundary", () => {
     expect(core.getAdminContext).toBeDefined();
   });
 
-  it("matches the runbook to the implemented CSP and absent polygon release tooling", async () => {
+  it("matches the runbook to the implemented CSP and pin-based delivery model", async () => {
     const runbookUrl = new URL("../../../../docs/runbooks/MAPS_AND_DISPATCH.md", import.meta.url);
     const runbook = existsSync(runbookUrl) ? readFileSync(runbookUrl, "utf8") : "";
     const configuredHeaders = await nextConfig.headers?.();
@@ -83,9 +83,9 @@ describe("Core client request boundary", () => {
     );
     expect(polygonReleaseScripts).toEqual([]);
     expect(runbook).toContain(
-      "Production polygon deployment, activation, validation, and rollback tooling is not implemented.",
+      "FreshMarkets does not operate customer service-area polygons or geofences.",
     );
     expect(runbook).toContain("worker-src 'self' blob:");
-    expect(runbook).toContain("wrangler versions secret put MAPBOX_ACCESS_TOKEN");
+    expect(runbook).toContain("wrangler versions secret put GOOGLE_MAPS_SERVER_KEY");
   });
 });

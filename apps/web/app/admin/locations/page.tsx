@@ -3,8 +3,10 @@ import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
 import { LocationsWorkspace } from "@/components/admin/locations-workspace";
+import { googleMapsBrowserConfiguration } from "@/lib/maps/google-maps-runtime";
 
 export default async function LocationsPage() {
+  const googleMaps = googleMapsBrowserConfiguration(env);
   const result = await coreClient(env.CORE).listAdminLocations({
     headers: coreRequestHeaders(await headers()),
     requestId: crypto.randomUUID(),
@@ -12,7 +14,8 @@ export default async function LocationsPage() {
   return (
     <LocationsWorkspace
       initial={result}
-      publicAccessToken={env.MAPBOX_BROWSER_TOKEN || undefined}
+      browserApiKey={googleMaps.browserApiKey}
+      mapId={googleMaps.mapId}
     />
   );
 }

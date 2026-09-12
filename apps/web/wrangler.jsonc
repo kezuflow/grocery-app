@@ -28,7 +28,7 @@
   "secrets": {
     // Browser-delivered but kept out of source control so GitHub push protection
     // and origin restrictions remain the only token-distribution authorities.
-    "required": ["MAPBOX_BROWSER_TOKEN"],
+    "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID"],
   },
   "observability": {
     "enabled": true,
@@ -64,7 +64,7 @@
         "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
       },
       "secrets": {
-        "required": ["MAPBOX_BROWSER_TOKEN"],
+        "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID"],
       },
     },
   },

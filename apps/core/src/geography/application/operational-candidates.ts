@@ -1,7 +1,7 @@
 import type { Coordinate } from "@freshmarkets/contracts";
 import { z, locationOperatingScheduleSchema } from "@freshmarkets/validation";
 import { operatingInterval, nextOperatingBoundary } from "../operating-schedule";
-import { parsePolygonGeoJson, pointInPolygon, sortLocationsByDistance } from "../geometry";
+import { sortLocationsByDistance } from "../geometry";
 
 export type OperationalCandidate = {
   id: string;
@@ -25,7 +25,7 @@ export type OperationalCandidate = {
   openInterval: { startsAt: number; endsAt: number } | null;
 };
 
-/** Common geofence and operational eligibility for preview, options and quote routing. No stock reads. */
+/** Pin-based operational eligibility for preview, options and quote routing. No stock reads. */
 export async function operationalCandidates(
   database: D1Database,
   point: Coordinate,
@@ -41,7 +41,6 @@ export async function operationalCandidates(
     .prepare(`SELECT l.id,l.id locationId,l.name locationName,l.market_id marketId,m.code marketCode,
     l.latitude,l.longitude,z.id zoneId,z.name zoneName,g.fulfillment_mode mode,g.version modeVersion,
     revision.version geographyVersion,l.version locationVersion,r.version readinessVersion,r.instant_promise_minutes promiseMinutes,
-    a.polygon_geojson areaPolygon,z.polygon_geojson zonePolygon,
     hours.definition_json scheduleJson,hours.timezone scheduleTimezone,
     (SELECT json_group_array(json_object('id',cycle.id,'pickupAt',plan.pickup_at)) FROM delivery_cycle cycle
       JOIN delivery_cycle_schedule plan ON plan.cycle_id=cycle.id JOIN delivery_cycle_zone p ON p.cycle_id=cycle.id
@@ -49,11 +48,11 @@ export async function operationalCandidates(
         AND cycle.order_opens_at<=? AND cycle.cutoff_at>?) cyclesJson
     FROM fulfillment_location l JOIN market m ON m.id=l.market_id AND m.status='active'
     JOIN geography_configuration revision ON revision.market_id=m.id
-    JOIN location_serviceability link ON link.location_id=l.id AND link.eligible=1
-      AND link.valid_from<=? AND (link.valid_to IS NULL OR link.valid_to>?)
-    JOIN delivery_zone z ON z.id=link.zone_id AND z.status='active'
-    JOIN service_area a ON a.id=z.service_area_id AND a.market_id=m.id AND a.status='active'
-      AND a.active_from<=? AND (a.active_to IS NULL OR a.active_to>?)
+    JOIN delivery_zone z ON z.id=(
+      SELECT candidate_zone.id FROM delivery_zone candidate_zone
+      JOIN service_area candidate_area ON candidate_area.id=candidate_zone.service_area_id
+      WHERE candidate_area.market_id=m.id
+      ORDER BY candidate_area.polygon_version DESC,candidate_zone.id LIMIT 1)
     JOIN global_commerce_configuration g ON g.id='global'
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
     JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
@@ -74,10 +73,6 @@ export async function operationalCandidates(
     .bind(
       now,
       now,
-      now,
-      now,
-      now,
-      now,
       input.marketId ?? null,
       input.marketId ?? null,
       input.mode ?? null,
@@ -88,42 +83,27 @@ export async function operationalCandidates(
       input.cycleId ?? null,
     )
     .all<
-      Omit<OperationalCandidate, "eligibleCycleIds" | "openInterval"> & {
-        areaPolygon: string;
-        zonePolygon: string;
-        cyclesJson: string;
-      }
+      Omit<OperationalCandidate, "eligibleCycleIds" | "openInterval"> & { cyclesJson: string }
     >();
-  const evaluated = rows.results
-    .filter((row) => {
-      const area = parsePolygonGeoJson(row.areaPolygon),
-        zone = parsePolygonGeoJson(row.zonePolygon);
-      return (
-        area !== null &&
-        zone !== null &&
-        pointInPolygon([point.longitude, point.latitude], area) &&
-        pointInPolygon([point.longitude, point.latitude], zone)
-      );
-    })
-    .map(({ areaPolygon: _area, zonePolygon: _zone, cyclesJson, ...candidate }) => {
-      const schedule = locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson));
-      const cycles = z
-        .array(z.object({ id: z.string(), pickupAt: z.number() }))
-        .parse(JSON.parse(cyclesJson));
-      const eligibleCycleIds = cycles
-        .filter(
-          (cycle) =>
-            (!input.cycleId || cycle.id === input.cycleId) &&
-            operatingInterval(schedule, candidate.scheduleTimezone, cycle.pickupAt) !== null,
-        )
-        .map((cycle) => cycle.id);
-      return {
-        ...candidate,
-        eligibleCycleIds,
-        openInterval: operatingInterval(schedule, candidate.scheduleTimezone, now),
-        nextBoundary: nextOperatingBoundary(schedule, candidate.scheduleTimezone, now),
-      };
-    });
+  const evaluated = rows.results.map(({ cyclesJson, ...candidate }) => {
+    const schedule = locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson));
+    const cycles = z
+      .array(z.object({ id: z.string(), pickupAt: z.number() }))
+      .parse(JSON.parse(cyclesJson));
+    const eligibleCycleIds = cycles
+      .filter(
+        (cycle) =>
+          (!input.cycleId || cycle.id === input.cycleId) &&
+          operatingInterval(schedule, candidate.scheduleTimezone, cycle.pickupAt) !== null,
+      )
+      .map((cycle) => cycle.id);
+    return {
+      ...candidate,
+      eligibleCycleIds,
+      openInterval: operatingInterval(schedule, candidate.scheduleTimezone, now),
+      nextBoundary: nextOperatingBoundary(schedule, candidate.scheduleTimezone, now),
+    };
+  });
   // A nearer closed site may open without a configuration write. Fence that clock transition too.
   const routingValidUntil = Math.min(...evaluated.map((candidate) => candidate.nextBoundary));
   const candidates = evaluated
@@ -142,7 +122,12 @@ export async function operationalCandidates(
             }
           : candidate.openInterval,
     }));
-  return sortLocationsByDistance(point, candidates);
+  const seen = new Set<string>();
+  return sortLocationsByDistance(point, candidates).filter((candidate) => {
+    if (seen.has(candidate.locationId)) return false;
+    seen.add(candidate.locationId);
+    return true;
+  });
 }
 
 export function geographyQuoteGuard(
@@ -154,25 +139,19 @@ export function geographyQuoteGuard(
     .prepare(`INSERT INTO commitment_abort(id) SELECT -26 WHERE NOT EXISTS (
       SELECT 1 FROM geography_configuration geography JOIN market m ON m.id=geography.market_id AND m.status='active'
       JOIN fulfillment_location l ON l.market_id=m.id AND l.id=? AND l.version=? AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
-      JOIN location_serviceability link ON link.location_id=l.id AND link.zone_id=? AND link.eligible=1
-      JOIN delivery_zone z ON z.id=link.zone_id AND z.status='active'
-      JOIN service_area a ON a.id=z.service_area_id AND a.market_id=m.id AND a.status='active'
       JOIN global_commerce_configuration g ON g.id='global' AND g.version=? AND g.selling_state='OPEN'
       WHERE geography.market_id=? AND geography.version=?
-        AND link.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (link.valid_to IS NULL OR link.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
-        AND a.active_from<=CAST(unixepoch('subsec')*1000 AS INTEGER) AND (a.active_to IS NULL OR a.active_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
         AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1)
         AND ((g.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness WHERE location_id=l.id AND version=? AND dispatch_ready=1 AND instant_promise_minutes IS NOT NULL))
           OR (g.fulfillment_mode='SCHEDULED' AND g.cadence='WEEKLY' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
             WHERE cycle.id=? AND cycle.version=? AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
               AND cycle.order_opens_at<=CAST(unixepoch('subsec')*1000 AS INTEGER)
-              AND participation.zone_id=z.id AND participation.location_id=l.id AND participation.status='ACTIVE')))
+              AND participation.zone_id=? AND participation.location_id=l.id AND participation.status='ACTIVE')))
     )`)
     .bind(
       candidate.locationId,
       candidate.locationVersion,
-      candidate.zoneId,
       candidate.modeVersion,
       candidate.marketId,
       candidate.geographyVersion,
@@ -180,5 +159,6 @@ export function geographyQuoteGuard(
       candidate.readinessVersion,
       cycle?.id ?? null,
       cycle?.version ?? null,
+      candidate.zoneId,
     );
 }

@@ -8,20 +8,6 @@ const request = (latitude: number, longitude: number): ServiceabilityRequest => 
   longitude,
 });
 
-const polygon = (west: number, south: number, east: number, north: number) =>
-  JSON.stringify({
-    type: "Polygon",
-    coordinates: [
-      [
-        [west, south],
-        [east, south],
-        [east, north],
-        [west, north],
-        [west, south],
-      ],
-    ],
-  });
-
 function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
   return {
     market: {
@@ -31,30 +17,8 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
       currency: "PHP",
       timezone: "Asia/Manila",
     },
-    serviceAreas: [
-      {
-        id: "area",
-        code: "CEBU_CITY",
-        name: "Cebu City",
-        polygonGeoJson: polygon(123, 10, 124, 11),
-        polygonVersion: 2,
-        active: true,
-      },
-    ],
-    deliveryZones: [
-      {
-        id: "zone",
-        serviceAreaId: "area",
-        code: "CORE",
-        name: "Core",
-        polygonGeoJson: polygon(123.1, 10.1, 123.9, 10.9),
-        polygonVersion: 3,
-        active: true,
-      },
-    ],
     candidates: [
       {
-        zoneId: "zone",
         id: "location-secondary",
         code: "SECONDARY",
         name: "Secondary",
@@ -65,7 +29,6 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
         active: true,
       },
       {
-        zoneId: "zone",
         id: "location-cebu-central",
         code: "CEBU_CENTRAL",
         name: "Central Cebu",
@@ -81,33 +44,16 @@ function dataset(overrides: Partial<GeographyDataset> = {}): GeographyDataset {
 }
 
 describe("serviceability resolver", () => {
-  it("does not borrow a location assigned to a different delivery zone", () => {
-    const data = dataset();
-    const outcome = evaluateServiceability(request(10.5, 123.5), {
-      ...data,
-      candidates: data.candidates.map((candidate) => ({ ...candidate, zoneId: "outside-zone" })),
-    });
+  it("assigns the closest fulfillment pin without polygon filtering", () => {
+    const outcome = evaluateServiceability(request(12, 125), dataset());
     expect(outcome).toMatchObject({
       ok: true,
-      value: { serviceable: false, reason: "NO_ELIGIBLE_LOCATION" },
-    });
-  });
-  it("resolves overlapping eligible zones using the closest location rather than polygon ordering", () => {
-    const data = dataset();
-    const outcome = evaluateServiceability(request(10.5, 123.5), {
-      ...data,
-      deliveryZones: [
-        ...data.deliveryZones,
-        { ...data.deliveryZones[0], id: "near-zone", code: "NEAR" },
-      ],
-      candidates: data.candidates.map((candidate) => ({
-        ...candidate,
-        zoneId: candidate.id === "location-cebu-central" ? "near-zone" : "zone",
-      })),
-    });
-    expect(outcome).toMatchObject({
-      ok: true,
-      value: { deliveryZone: { code: "NEAR" }, fulfillmentEligibility: { candidateCount: 2 } },
+      value: {
+        serviceable: true,
+        serviceArea: null,
+        deliveryZone: null,
+        fulfillmentEligibility: { candidateCount: 2 },
+      },
     });
   });
   it("rejects malformed coordinates", () => {
@@ -115,17 +61,17 @@ describe("serviceability resolver", () => {
     expect(result.ok && result.value.reason).toBe("INVALID_COORDINATES");
   });
 
-  it("resolves an inside point, zone versions, and preferred location priority", () => {
+  it("resolves an address to its nearest capable location", () => {
     const result = evaluateServiceability(request(10.5, 123.5), dataset());
     expect(result.ok && result.value.serviceable).toBe(true);
     if (!result.ok) return;
-    expect(result.value.serviceArea?.polygonVersion).toBe(2);
-    expect(result.value.deliveryZone?.polygonVersion).toBe(3);
+    expect(result.value.serviceArea).toBeNull();
+    expect(result.value.deliveryZone).toBeNull();
     expect(result.value.fulfillmentEligibility).toEqual({ eligible: true, candidateCount: 2 });
     expect(result.value.fulfillmentLocation?.id).toBe("location-cebu-central");
   });
 
-  it("reports a stale prior polygon resolution", () => {
+  it("ignores retained polygon-version evidence from an older saved address", () => {
     const result = evaluateServiceability(
       {
         ...request(10.5, 123.5),
@@ -138,14 +84,7 @@ describe("serviceability resolver", () => {
       },
       dataset(),
     );
-    expect(result.ok && result.value.resolutionChanged).toBe(true);
-  });
-
-  it("distinguishes outside service area from outside delivery zone", () => {
-    const outsideArea = evaluateServiceability(request(12, 125), dataset());
-    const outsideZone = evaluateServiceability(request(10.05, 123.05), dataset());
-    expect(outsideArea.ok && outsideArea.value.reason).toBe("OUTSIDE_SERVICE_AREA");
-    expect(outsideZone.ok && outsideZone.value.reason).toBe("OUTSIDE_DELIVERY_ZONE");
+    expect(result.ok && result.value.resolutionChanged).toBe(false);
   });
 
   it("requires operational location capabilities", () => {
@@ -154,7 +93,6 @@ describe("serviceability resolver", () => {
       dataset({
         candidates: [
           {
-            zoneId: "zone",
             id: "location-no-dispatch",
             code: "NO_DISPATCH",
             name: "No Dispatch",
@@ -171,19 +109,13 @@ describe("serviceability resolver", () => {
   });
 
   it("treats missing active geography as unavailable", () => {
-    const result = evaluateServiceability(
-      request(10.5, 123.5),
-      dataset({ market: null, serviceAreas: [] }),
-    );
-    expect(result.ok && result.value.reason).toBe("OUTSIDE_SERVICE_AREA");
+    const result = evaluateServiceability(request(10.5, 123.5), dataset({ market: null }));
+    expect(result.ok && result.value.reason).toBe("NO_ELIGIBLE_LOCATION");
   });
 
-  it("ignores an inactive service area", () => {
-    const inactiveArea = dataset().serviceAreas.map((area) => ({ ...area, active: false }));
-    const result = evaluateServiceability(
-      request(10.5, 123.5),
-      dataset({ serviceAreas: inactiveArea }),
-    );
-    expect(result.ok && result.value.reason).toBe("OUTSIDE_SERVICE_AREA");
+  it("ignores an inactive fulfillment location", () => {
+    const inactive = dataset().candidates.map((candidate) => ({ ...candidate, active: false }));
+    const result = evaluateServiceability(request(10.5, 123.5), dataset({ candidates: inactive }));
+    expect(result.ok && result.value.reason).toBe("NO_ELIGIBLE_LOCATION");
   });
 });

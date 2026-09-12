@@ -44,7 +44,7 @@ function compactAddress(value: string): string {
 export function DeliveryAddressDialog() {
   const pathname = usePathname();
   const router = useRouter();
-  const { mapboxPublicAccessToken } = useStorefrontRuntime();
+  const { googleMapsBrowserApiKey, googleMapsMapId } = useStorefrontRuntime();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState({ top: 72, left: 12 });
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -173,7 +173,8 @@ export function DeliveryAddressDialog() {
                 compact
                 compactHeading="Deliver to"
                 purpose="serviceability"
-                publicAccessToken={mapboxPublicAccessToken}
+                browserApiKey={googleMapsBrowserApiKey}
+                mapId={googleMapsMapId}
                 onServiceabilityConfirmed={chooseAddress}
               />
               <SavedDeliveryAddresses onChoose={chooseAddress} />
@@ -251,7 +252,9 @@ function AuthenticatedSavedDeliveryAddresses({
       if (!response.ok || !result.ok) {
         setSelectionError("Couldn’t select this address. Try again.");
       } else if (!result.value.serviceability.serviceable) {
-        setSelectionError("Delivery is unavailable here. Choose another address.");
+        setSelectionError(
+          "No fulfillment location is currently available. Please try again later.",
+        );
       } else {
         onChoose(result.value);
       }

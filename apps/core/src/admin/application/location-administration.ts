@@ -26,7 +26,7 @@ import { iamSchema } from "../../iam/schema";
 import { requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { finalizeAddressConfirmation } from "../../geography/application/finalize-address-confirmation";
-import { GeocoderError } from "../../geography/infrastructure/mapbox-geocoder";
+import { GeocoderError } from "../../geography/infrastructure/geocoder-error";
 import type { GeocoderPort } from "../../geography/ports/geocoder";
 import {
   decodeStaffCursor,

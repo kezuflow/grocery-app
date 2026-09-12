@@ -22,7 +22,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { MapboxMap } from "../maps/mapbox-map";
+import { GoogleMap } from "../maps/google-map";
 import { useAdminCommandIntent } from "./admin-command-state";
 const failed = z.object({
   ok: z.literal(false),
@@ -58,13 +58,15 @@ function BoundaryEditor({
   vertices,
   onChange,
   disabled,
-  publicAccessToken,
+  browserApiKey,
+  mapId,
 }: {
   label: string;
   vertices: readonly Coordinate[];
   onChange: (vertices: readonly Coordinate[]) => void;
   disabled: boolean;
-  publicAccessToken?: string;
+  browserApiKey?: string;
+  mapId?: string;
 }) {
   const [latitude, setLatitude] = useState(""),
     [longitude, setLongitude] = useState("");
@@ -78,9 +80,10 @@ function BoundaryEditor({
         Add boundary points in order by clicking the map or entering coordinates. The last point
         connects to the first.
       </p>
-      {publicAccessToken ? (
-        <MapboxMap
-          publicAccessToken={publicAccessToken}
+      {browserApiKey && mapId ? (
+        <GoogleMap
+          browserApiKey={browserApiKey}
+          mapId={mapId}
           initialView={{ center: { latitude: 10.32, longitude: 123.9 }, zoom: 11 }}
           ariaLabel={`${label} map`}
           className="h-64"
@@ -173,10 +176,12 @@ function BoundaryEditor({
 
 export function ServiceAreasWorkspace({
   initial,
-  publicAccessToken,
+  browserApiKey,
+  mapId,
 }: {
   initial: RpcResult<AdminServiceabilityView>;
-  publicAccessToken?: string;
+  browserApiKey?: string;
+  mapId?: string;
 }) {
   const [result, setResult] = useState(initial),
     [draft, setDraft] = useState<Draft | null>(null),
@@ -438,7 +443,8 @@ export function ServiceAreasWorkspace({
                   vertices={draft.vertices}
                   onChange={(vertices) => setDraft({ ...draft, vertices })}
                   disabled={locked}
-                  publicAccessToken={publicAccessToken}
+                  browserApiKey={browserApiKey}
+                  mapId={mapId}
                 />
                 {draft.zones.map((zone, index) => {
                   const update = (patch: Partial<typeof zone>) =>
@@ -476,7 +482,8 @@ export function ServiceAreasWorkspace({
                         vertices={zone.vertices}
                         onChange={(vertices) => update({ vertices })}
                         disabled={locked}
-                        publicAccessToken={publicAccessToken}
+                        browserApiKey={browserApiKey}
+                        mapId={mapId}
                       />
                       <fieldset className="space-y-2">
                         <legend className="font-medium">Eligible locations</legend>

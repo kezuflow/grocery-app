@@ -16,7 +16,7 @@ it("resolves current delivery geography with one database batch", async () => {
     value: { serviceable: true, fulfillmentLocation: { id: "location-cebu-central" } },
   });
   expect(batch).toHaveBeenCalledTimes(1);
-  expect(batch.mock.calls[0][0]).toHaveLength(5);
+  expect(batch.mock.calls[0][0]).toHaveLength(3);
 });
 
 it("does not borrow geography from another market when the requested market is missing", async () => {

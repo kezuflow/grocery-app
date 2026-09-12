@@ -188,7 +188,7 @@ export async function createCheckoutQuote(
     }>();
   if (cartItems.results.length === 0)
     return failure("VALIDATION_FAILED", "Cart is empty", command.requestId);
-  // Address serviceability evidence shared by both fulfillment modes.
+  // Confirmed destination shared by both fulfillment modes; assignment is resolved below.
   const address = await database
     .prepare("SELECT * FROM customer_address WHERE id=? AND customer_id=? AND status='active'")
     .bind(command.addressId, command.customerId)
@@ -269,7 +269,7 @@ async function createScheduledQuote(
       command.requestId,
     );
 
-  // Zone routing for this cycle's market (address already resolved).
+  // Select the nearest operational fulfillment-center pin participating in this cycle.
   const selected = (
     await operationalCandidates(database, address, {
       mode: "SCHEDULED",

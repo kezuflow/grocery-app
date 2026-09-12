@@ -78,10 +78,12 @@ function draftFor(location?: AdminLocationView): Draft {
 
 export function LocationsWorkspace({
   initial,
-  publicAccessToken,
+  browserApiKey,
+  mapId,
 }: {
   initial: RpcResult<AdminLocationsView>;
-  publicAccessToken?: string;
+  browserApiKey?: string;
+  mapId?: string;
 }) {
   const [result, setResult] = useState(initial);
   const [editing, setEditing] = useState<AdminLocationView | null | undefined>(undefined);
@@ -147,7 +149,7 @@ export function LocationsWorkspace({
       longitude: draft.longitude.trim() ? Number(draft.longitude) : NaN,
     });
     if (!parsed.success || !reason.trim()) {
-      setNotice("Complete the address, coordinates, capabilities and reason.");
+      setNotice("Set the pickup pin and complete the address, capabilities and reason.");
       return;
     }
     void submit(
@@ -173,11 +175,8 @@ export function LocationsWorkspace({
     <>
       <PageHeader
         title="Locations"
-        description="Set up warehouses and customer fulfillment sites. New locations start inactive."
+        description="Set each fulfillment center's confirmed pickup address and exact map pin. Customers are assigned to the closest active center; Lalamove confirms each delivery route."
       />
-      <Link href="/admin/locations/service-areas" className="mb-4 inline-block text-sm underline">
-        Service areas and routing preview
-      </Link>
       {notice && (
         <p role="status" className="mb-4 text-sm">
           {notice}
@@ -235,6 +234,9 @@ export function LocationsWorkspace({
                         ? `${location.address.addressLine1}, ${location.address.city}`
                         : "Address confirmation needed"}
                     </p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      Pickup pin · {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    </p>
                   </div>
                   <Button
                     variant="outline"
@@ -267,7 +269,8 @@ export function LocationsWorkspace({
               >
                 <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
                   <LocationAddressMap
-                    publicAccessToken={publicAccessToken}
+                    browserApiKey={browserApiKey}
+                    mapId={mapId}
                     disabled={locked}
                     coordinate={
                       draft.latitude.trim() &&
@@ -411,7 +414,7 @@ export function LocationsWorkspace({
                     </div>
                   ))}
                   <div>
-                    <Label htmlFor="location-latitude">Confirmed latitude</Label>
+                    <Label htmlFor="location-latitude">Pickup pin latitude</Label>
                     <Input
                       id="location-latitude"
                       required
@@ -427,7 +430,7 @@ export function LocationsWorkspace({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="location-longitude">Confirmed longitude</Label>
+                    <Label htmlFor="location-longitude">Pickup pin longitude</Label>
                     <Input
                       id="location-longitude"
                       required

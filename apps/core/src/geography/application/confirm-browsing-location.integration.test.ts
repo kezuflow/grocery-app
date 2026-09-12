@@ -9,22 +9,20 @@ const core = () =>
     {
       DB: env.DB,
       ENVIRONMENT: "test",
-      MAPBOX_ACCESS_TOKEN: "test-secret-token",
+      GOOGLE_MAPS_SERVER_KEY: "test-secret-key",
       BETTER_AUTH_URL: "https://core.example.invalid",
       TRUSTED_ORIGINS: "https://core.example.invalid",
     } as never,
   );
-const feature = {
-  type: "Feature",
-  id: "private-provider-reference",
-  geometry: { type: "Point", coordinates: [123.901, 10.321] },
-  properties: {
-    mapbox_id: "private-provider-reference",
-    feature_type: "address",
-    name: "Permanent entrance",
-    full_address: "Permanent entrance, Cebu",
-    context: { place: { name: "Cebu" }, country: { country_code: "PH" } },
-  },
+const geocodingResult = {
+  place_id: "private-provider-reference",
+  formatted_address: "Permanent entrance, Cebu",
+  geometry: { location: { lat: point.latitude, lng: point.longitude }, location_type: "ROOFTOP" },
+  address_components: [
+    { long_name: "Permanent entrance", types: ["premise"] },
+    { long_name: "Cebu", types: ["locality"] },
+    { long_name: "Philippines", short_name: "PH", types: ["country"] },
+  ],
 };
 afterEach(() => vi.restoreAllMocks());
 
@@ -32,14 +30,13 @@ describe("browsing-location confirmation", () => {
   it("permanently finalizes anonymous coordinates and returns only current browsing information", async () => {
     const fetched = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json({ features: [feature] }));
+      .mockResolvedValue(Response.json({ status: "OK", results: [geocodingResult] }));
     const result = await core().confirmBrowsingLocation({
       requestId: "confirm-browser",
       coordinate: point,
     });
     const url = new URL(String(fetched.mock.calls[0]?.[0]));
-    expect(url.searchParams.get("permanent")).toBe("true");
-    expect(url.searchParams.get("latitude")).toBe(String(point.latitude));
+    expect(url.searchParams.get("latlng")).toBe(`${point.latitude},${point.longitude}`);
     expect(result).toMatchObject({
       ok: true,
       value: {
@@ -53,7 +50,7 @@ describe("browsing-location confirmation", () => {
       },
     });
     expect(JSON.stringify(result)).not.toContain("private-provider-reference");
-    expect(JSON.stringify(result)).not.toContain("test-secret-token");
+    expect(JSON.stringify(result)).not.toContain("test-secret-key");
   });
 
   it("does not turn provider denial into successful confirmation", async () => {
@@ -69,10 +66,10 @@ describe("browsing-location confirmation", () => {
     expect(JSON.stringify(result)).not.toContain("private provider error");
   });
 
-  it("rejects invalid coordinates before the provider and rechecks coverage at the selected entrance", async () => {
+  it("rejects invalid coordinates before the provider and assigns the nearest fulfillment pin", async () => {
     const fetched = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json({ features: [feature] }));
+      .mockResolvedValue(Response.json({ status: "OK", results: [geocodingResult] }));
     expect(
       await core().confirmBrowsingLocation({
         requestId: "bad-point",
@@ -87,7 +84,13 @@ describe("browsing-location confirmation", () => {
       }),
     ).toMatchObject({
       ok: true,
-      value: { coordinate: { latitude: 0, longitude: 0 }, serviceability: { serviceable: false } },
+      value: {
+        coordinate: { latitude: 0, longitude: 0 },
+        serviceability: {
+          serviceable: true,
+          fulfillmentLocation: { id: "location-cebu-central" },
+        },
+      },
     });
   });
 });
