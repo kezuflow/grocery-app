@@ -1,6 +1,41 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — NOTIFICATION-UI-1 (2026-09-13)
+## Current owner request — NOTIFICATION-UI-2 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner correction: remove the customer X button and subtitles; show short main statuses.
+Acceptance: title-only customer rows, simple empty/signed-out states, preserved safe links and
+keyboard/outside dismissal, desktop/mobile verification, documentation and verified Git integration.
+Starting state: clean `main` at `65ca3f6ecf99674fc596a255b2012d55099f8133`; no unrelated work.
+
+Implemented: customer panel has no X or subtitle; rows show only their existing status label.
+Order context remains in accessible link names. Initial focus moves to the panel heading; Escape,
+bell toggle, outside click and selection retain dismissal/focus behavior, including rapid reopen.
+Admin presentation and the typed read/business facts remain unchanged. DESIGN records the correction;
+PRODUCT/API_CONTRACTS require no change because this slice changes presentation only. Existing
+emil-design-eng guidance applies; no new motion or delegation was introduced.
+
+Verification on this working-tree slice:
+- `pnpm.cmd --filter @freshmarkets/web test components/storefront/marketplace/customer-notifications.test.tsx components/admin/admin-notifications.test.tsx`: 2 files / 11 tests pass.
+- `pnpm.cmd --filter @freshmarkets/web typecheck`, `pnpm.cmd lint`, focused `pnpm.cmd exec oxfmt --check` and `git diff --check`: pass.
+- `pnpm.cmd --filter @freshmarkets/web build`: passes.
+- With `E2E_START_STACK=0`, `APP_BASE_URL=http://localhost:3100`,
+  `E2E_STATE_NAME=e2e-notifications-20260913`, `E2E_AUTHENTICATED=1`,
+  `pnpm.cmd --filter @freshmarkets/web exec playwright test notifications.spec.ts admin-bootstrap.spec.ts --workers=1`:
+  7/7 pass without retry (27.2 seconds). Reused the prior isolated test-owned local Worker/D1 stack.
+  Verified customer/Admin 1440px and 390px, customer 320px long-label bounded list/error retry,
+  anonymous rejection, safe navigation, keyboard/Tab/Escape, initial/return focus and outside click.
+  Customer desktop/mobile/long-list screenshots inspected. Local fixtures only; no live data mutation,
+  deployment or outbound messages. A script encoding error during test/doc editing was corrected
+  before formatting and browser execution; no runtime failure remained.
+
+Completed task ID: NOTIFICATION-UI-2. Counting level: zero remaining requested customer polish
+slices. Earlier commerce obligations, including the one deployed commerce-event → received-email
+acceptance obligation, remain open. This does not complete Phase 7. Git target: `main` → `origin/main`;
+commit/push evidence is reported in the task response. Next external action remains the email journey
+only after separate deployment/provider/message authorization.
+
+## Prior owner request — NOTIFICATION-UI-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Acceptance: implement the two authorized notification UI surfaces, a minimal authenticated

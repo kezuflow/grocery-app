@@ -38,7 +38,7 @@ it("shows a signed-out entry without requesting private data and restores focus 
   await open();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(document.querySelector('a[href="/auth/login?returnTo=/orders"]')).not.toBeNull();
-  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close notifications");
+  expect(document.activeElement).toBe(document.querySelector("h2"));
   await act(async () =>
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
@@ -60,14 +60,14 @@ it("does not confuse failed authentication with a signed-out account", async () 
 it("keeps focus inside a rapidly reopened panel", async () => {
   await open();
   await act(async () =>
-    document.querySelector<HTMLButtonElement>('[aria-label="Close notifications"]')?.click(),
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
   );
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Open notifications"]')?.click(),
   );
-  await vi.waitFor(() =>
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Close notifications"),
-  );
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector("h2")));
 });
 it("announces loading and empty state without fake unread semantics", async () => {
   session.data = { user: { id: "shopper" } };
@@ -84,7 +84,7 @@ it("announces loading and empty state without fake unread semantics", async () =
   expect(document.querySelector('[role="status"]')?.textContent).toContain("No updates yet");
   expect(document.body.textContent).not.toMatch(/unread|mark.*read/i);
 });
-it("renders safe destinations and times, retries failures, and closes after selection", async () => {
+it("renders title-only safe destinations, retries failures, and closes after selection", async () => {
   session.data = { user: { id: "shopper" } };
   fetchMock.mockRejectedValueOnce(new Error("network"));
   await open();
@@ -104,10 +104,17 @@ it("renders safe destinations and times, retries failures, and closes after sele
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[role="alert"] button')?.click(),
   );
-  expect(document.querySelector("time")?.dateTime).toBe("2026-09-13T00:00:00.000Z");
+  expect(document.querySelector("time")).toBeNull();
+  expect(document.querySelector('[aria-label="Close notifications"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Recent order and payment updates");
+  expect(document.body.textContent).not.toContain("FM-1");
   expect(document.querySelector('a[href="mailto:support@freshmarkets.ph"]')?.textContent).toContain(
-    "Contact support",
+    "Refund needs support",
   );
+  expect(document.body.textContent).not.toContain("Contact support");
+  expect(
+    document.querySelector('a[href="mailto:support@freshmarkets.ph"]')?.getAttribute("aria-label"),
+  ).toContain("FM-1");
   await act(async () => document.querySelector<HTMLAnchorElement>('a[href="/orders"]')?.click());
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
@@ -122,7 +129,9 @@ it("discards late results after dismissal and fetches again on reopening", async
   );
   await open();
   await act(async () =>
-    document.querySelector<HTMLButtonElement>('[aria-label="Close notifications"]')?.click(),
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
   );
   await act(async () => finish?.(success()));
   expect(document.querySelector('[role="dialog"]')).toBeNull();

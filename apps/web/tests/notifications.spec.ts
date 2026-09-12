@@ -1,13 +1,19 @@
 import { expect, test, executeAdminE2eSql } from "./admin-authenticated-fixture";
 import type { Page } from "@playwright/test";
 
-async function checkPanel(page: Page) {
+async function checkPanel(page: Page, customer = false) {
   const bell = page.getByRole("button", { name: "Open notifications", exact: true });
   await bell.focus();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("dialog", { name: "Notifications", exact: true });
   await expect(panel).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close notifications" })).toBeFocused();
+  if (customer) {
+    await expect(panel.getByRole("heading", { name: "Notifications" })).toBeFocused();
+    await expect(panel.getByRole("button", { name: "Close notifications" })).toHaveCount(0);
+    await expect(panel.locator("time")).toHaveCount(0);
+  } else {
+    await expect(page.getByRole("button", { name: "Close notifications" })).toBeFocused();
+  }
   const box = await panel.boundingBox();
   expect(box).not.toBeNull();
   if (!box) throw new Error("Missing panel bounds");
@@ -63,7 +69,7 @@ for (const width of [1440, 390]) {
       fullPage: false,
     });
     await page.keyboard.press("Escape");
-    await checkPanel(page);
+    await checkPanel(page, true);
     await page.getByRole("button", { name: "Open notifications", exact: true }).click();
     await panel.locator(`a[href="/orders/${order}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/orders/${order}$`));
@@ -120,7 +126,7 @@ test("mobile customer handles failed reads and a long bounded list", async ({
                 hasMore: true,
                 items: Array.from({ length: 24 }, (_, index) => ({
                   type: "DELIVERY_FAILED",
-                  label: "Delivery failed",
+                  label: "Delivery failed  -  please contact support about your order",
                   reference: `FM-${"long-reference".repeat(8)}-${index}`,
                   occurredAt: "2026-09-13T00:00:00.000Z",
                   href: "/orders",
@@ -139,7 +145,7 @@ test("mobile customer handles failed reads and a long bounded list", async ({
   await panel.getByRole("button", { name: "Try again" }).click();
   await expect(panel.getByRole("listitem")).toHaveCount(24);
   await panel.getByRole("link", { name: "View all orders" }).scrollIntoViewIfNeeded();
-  await expect(panel.getByText("Showing your latest 24 updates.")).toBeVisible();
+  await expect(panel.getByRole("link", { name: "View all orders" })).toBeVisible();
   expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/customer-notifications-320-long.png" });

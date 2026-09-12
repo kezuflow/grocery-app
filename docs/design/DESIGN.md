@@ -5,12 +5,14 @@
 Storefront places its bell immediately left of Cart; Admin replaces its Overview anchor with a
 compact panel while retaining Recent notifications. Both use the established shadcn Popover,
 their separate token/font scopes, 44px controls, a viewport-clamped width and bounded scrolling.
-Rows contain a wrapping label/context, explicit date/time and an existing safe destination.
-Customer payment/support actions use an explicit next-step label. Admin panel and Overview share
+Customer rows show only a short wrapping status title linked to the existing safe destination;
+Order context remains in the accessible link name. The customer panel has no subtitle or X button,
+and its empty state is one short line (owner simplification 2026-09-13). Admin rows retain context,
+explicit date/time and action details. Admin panel and Overview share
 the same scoped data/list representation and reporting timezone. No read counts, dots or dismiss-row
 semantics are implied. Loading, empty, signed-out/denied, unavailable and retry states remain distinct.
-Opening focuses Close; Tab reaches links; Escape, Close and outside click dismiss with focus returned
-to the bell. Navigation closes the panel. No entry/exit motion or decorative notification animation
+Customer opening focuses the panel heading; Admin opening focuses Close. Tab reaches links;
+Escape, the bell and outside click dismiss with focus returned to the bell. Admin also retains Close. Navigation closes the panel. No entry/exit motion or decorative notification animation
 is added, including for keyboard and reduced-motion users.
 
 Mobbin MCP research inspected DoorDash's [home bell](https://mobbin.com/screens/746c0aa0-aec7-443e-b502-9f3903e5b1c2),
@@ -27,8 +29,8 @@ status hierarchy; no Instacart bell/inbox or Uber Eats inbox was found.
 Shopify's [alert panel](https://mobbin.com/screens/668a7524-57c0-476a-8ce1-6f9cb05f85da) supports the
 Admin anchored list, while Faire's [action-required row](https://mobbin.com/screens/2af5769e-ba38-4609-a166-ca1221de2d2c)
 supports explanatory next steps. Fiverr's [Order notifications](https://mobbin.com/flows/bf5a190c-6a58-492e-aedf-55f2e9a59e19)
-uses day grouping/relative times; this bounded FreshMarkets list uses explicit dates without redundant
-group headings. Reference read-state workflows and proprietary assets/wording are excluded.
+uses day grouping/relative times; the bounded Admin list uses explicit dates without redundant
+group headings, while customer rows follow the owner title-only presentation. Reference read-state workflows and proprietary assets/wording are excluded.
 Static images cannot verify focus, keyboard, outside dismissal, breakpoints or reduced motion;
 those require executed FreshMarkets interaction/browser evidence.
 

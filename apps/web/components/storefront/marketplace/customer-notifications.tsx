@@ -4,11 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CustomerNotificationsView, RpcResult } from "@freshmarkets/contracts";
 import { authClient } from "../../../lib/auth/auth-client";
-import {
-  NotificationPanel,
-  NotificationTimestamp,
-  notificationRowClassName,
-} from "../../notification-panel";
+import { NotificationPanel, notificationRowClassName } from "../../notification-panel";
 
 export function CustomerNotifications() {
   return (
@@ -70,8 +66,7 @@ function CustomerNotificationContents({ close }: { close: () => void }) {
   if (!userId || (current && !current.ok && current.error.code === "UNAUTHENTICATED"))
     return (
       <div className="p-4 text-sm">
-        <p className="font-semibold">Your order updates, in one place</p>
-        <p className="mt-1 text-[var(--fm-text-muted)]">Sign in to see your notifications.</p>
+        <p>Sign in to see your notifications.</p>
         <Link
           className="mt-2 inline-flex min-h-11 items-center font-semibold underline"
           href="/auth/login?returnTo=/orders"
@@ -118,15 +113,9 @@ function CustomerNotificationContents({ close }: { close: () => void }) {
                 prefetch={false}
                 onClick={close}
                 className={notificationRowClassName}
+                aria-label={`${notice.label}, ${notice.reference}`}
               >
                 <span className="block break-words font-semibold">{notice.label}</span>
-                <span className="mt-0.5 block break-words text-[var(--fm-text-muted)]">
-                  {notice.reference}
-                </span>
-                <NotificationTimestamp value={notice.occurredAt} />
-                <span className="mt-2 block text-xs font-semibold text-[var(--fm-primary-dark)]">
-                  {notice.actionLabel}
-                </span>
               </Link>
             </li>
           ))}
@@ -134,17 +123,10 @@ function CustomerNotificationContents({ close }: { close: () => void }) {
       ) : (
         <div className="p-4 text-sm" role="status">
           <p className="font-semibold">No updates yet</p>
-          <p className="mt-1 text-[var(--fm-text-muted)]">
-            Order and payment updates will appear here.
-          </p>
         </div>
       )}
       <div className="border-t border-[var(--fm-border)] p-4 text-sm">
-        {current.value.hasMore && (
-          <p className="mb-2 text-xs text-[var(--fm-text-muted)]">
-            Showing your latest 24 updates.
-          </p>
-        )}
+        {current.value.hasMore && <p className="sr-only">Showing your latest 24 updates.</p>}
         <Link
           href="/orders"
           onClick={close}

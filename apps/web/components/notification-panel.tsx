@@ -21,12 +21,13 @@ export function NotificationPanel({
   const titleId = useId();
   const descriptionId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     // A rapid reopen can retain Radix's focus scope instead of mounting it
     // again, so mount autofocus alone does not cover every open transition.
-    if (open) closeRef.current?.focus();
-  }, [open]);
+    if (open) (storefront ? titleRef.current : closeRef.current)?.focus();
+  }, [open, storefront]);
   return (
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger
@@ -41,10 +42,10 @@ export function NotificationPanel({
         sideOffset={8}
         collisionPadding={12}
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={storefront ? undefined : descriptionId}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          closeRef.current?.focus();
+          (storefront ? titleRef.current : closeRef.current)?.focus();
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -57,24 +58,31 @@ export function NotificationPanel({
       >
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--fm-border)] py-2 pl-4 pr-2">
           <div className="py-2">
-            <h2 id={titleId} className="text-base font-semibold">
+            <h2
+              ref={titleRef}
+              tabIndex={-1}
+              id={titleId}
+              className="text-base font-semibold outline-none"
+            >
               Notifications
             </h2>
-            <p id={descriptionId} className="mt-1 text-xs text-[var(--fm-text-muted)]">
-              {storefront
-                ? "Recent order and payment updates"
-                : "Recent updates in your selected scope"}
-            </p>
+            {!storefront && (
+              <p id={descriptionId} className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                Recent updates in your selected scope
+              </p>
+            )}
           </div>
-          <button
-            ref={closeRef}
-            type="button"
-            aria-label="Close notifications"
-            onClick={() => changeOpen(false)}
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-[var(--fm-hover)] focus-visible:outline-2"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
+          {!storefront && (
+            <button
+              ref={closeRef}
+              type="button"
+              aria-label="Close notifications"
+              onClick={() => changeOpen(false)}
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-[var(--fm-hover)] focus-visible:outline-2"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
         <div className="min-h-0 overflow-y-auto overscroll-contain">
           {open && children(() => changeOpen(false))}
