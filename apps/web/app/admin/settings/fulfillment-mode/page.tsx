@@ -142,7 +142,7 @@ export default function FulfillmentModePage() {
   }
 
   return (
-    <div className="mx-auto max-w-[900px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Fulfillment mode"
         description="Pause selling, switch the one global fulfillment mode, verify readiness, and reopen new commerce."

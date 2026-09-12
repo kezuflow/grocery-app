@@ -68,7 +68,7 @@ export default function MembershipDetailPage({
     }
   }
   return (
-    <div className="mx-auto max-w-[960px] space-y-6">
+    <div className="w-full space-y-6">
       <Link href="/admin/memberships" className="text-sm underline">
         ← Memberships
       </Link>

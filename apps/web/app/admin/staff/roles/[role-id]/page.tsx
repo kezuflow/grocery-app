@@ -109,7 +109,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
   const assigned = new Set(role.capabilityCodes);
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title={role.name}
         description={`${role.code} · v${role.version}`}

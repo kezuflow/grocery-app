@@ -174,7 +174,7 @@ export default function PromotionDetailPage({
   const { promotion, grants, redemptions } = state;
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title={promotion.name}
         description={promotion.code}

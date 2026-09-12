@@ -46,7 +46,7 @@ export default function PaymentTransactionsPage() {
     void load(pagination.cursor, appliedStatus);
   }, [appliedStatus, load, pagination.cursor]);
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Payment transactions"
         description="Search canonical intent outcomes and open a transaction workspace."

@@ -262,7 +262,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Inventory"
         description="Add or remove stock for the selected location. Every change records its date, reason, and staff actor."

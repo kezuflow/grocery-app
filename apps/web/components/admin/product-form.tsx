@@ -8,6 +8,7 @@ import type {
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
 import { adminProductMediaMaxCount } from "@freshmarkets/contracts";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,8 @@ export type ProductFormValue = {
 export function ProductForm({
   formId,
   hideSubmit = false,
+  compact = false,
+  preview,
   value,
   categories,
   currentCategoryName,
@@ -74,6 +77,8 @@ export function ProductForm({
 }: {
   formId?: string;
   hideSubmit?: boolean;
+  compact?: boolean;
+  preview?: ReactNode;
   value: ProductFormValue;
   categories: ReadonlyArray<AdminCategorySummary>;
   currentCategoryName?: string;
@@ -114,7 +119,8 @@ export function ProductForm({
   return (
     <form id={formId} onSubmit={onSubmit}>
       <EditorLayout
-        asideLabel="Product organization"
+        compact={compact}
+        asideLabel="Product preview and organization"
         editor={
           <div className="space-y-4">
             <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
@@ -273,7 +279,7 @@ export function ProductForm({
             {value.variants ? (
               <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
                 <CardHeader className="border-b px-4 py-4 sm:px-5">
-                  <CardTitle>Variants</CardTitle>
+                  <CardTitle>Selling options</CardTitle>
                   <CardDescription>Configure the sizes or packs customers can buy.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 px-4 py-5 sm:px-5">
@@ -283,12 +289,12 @@ export function ProductForm({
                       className="space-y-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">Variant {index + 1}</p>
+                        <p className="text-sm font-semibold">Selling option {index + 1}</p>
                         <Button
                           type="button"
                           size="icon"
                           variant="ghost"
-                          aria-label={`Remove variant ${index + 1}`}
+                          aria-label={`Remove selling option ${index + 1}`}
                           onClick={() =>
                             onChange({
                               ...value,
@@ -448,7 +454,7 @@ export function ProductForm({
                     }
                   >
                     <Plus aria-hidden="true" className="size-4" />
-                    Add variant
+                    Add option
                   </Button>
                 </CardContent>
               </Card>
@@ -520,6 +526,7 @@ export function ProductForm({
         }
         aside={
           <div className="space-y-4">
+            {preview}
             <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
               <CardHeader className="border-b px-4 py-4">
                 <CardTitle>Product classification</CardTitle>

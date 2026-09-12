@@ -219,7 +219,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
   const assignedRoleIds = new Set(staff.roleIds);
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title={staff.displayName}
         description={`${staff.email} · v${staff.version}`}

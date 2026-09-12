@@ -213,7 +213,7 @@ export default function ReceivingPage() {
     );
   }
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Receiving"
         description={`Record accepted and rejected base-unit quantities for ${label}.`}

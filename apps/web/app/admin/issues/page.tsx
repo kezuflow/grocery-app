@@ -178,7 +178,7 @@ export default function IssuesPage() {
   const selectedPresentation = pendingAction ? actionPresentation[pendingAction.action] : null;
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader title="Problems" />
       <AdminLiveRegion message={notice} />
 

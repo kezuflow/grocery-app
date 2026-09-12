@@ -35,7 +35,6 @@ import {
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { FreshMarketsMark } from "../brand/freshmarkets-mark";
-import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 import { AdminCommandPalette } from "./admin-command-palette";
 import { adminStatusPillClassName } from "./admin-status-pill";
 import { useAdminTheme } from "./admin-theme-provider";
@@ -49,6 +48,15 @@ import {
 } from "./admin-navigation";
 
 const SIDEBAR_PREFERENCE_KEY = "fm-admin-sidebar-collapsed";
+const FULL_BLEED_WORKSPACE_PATHS = [
+  "/admin/promotions",
+  "/admin/sales",
+  "/admin/catalog/products",
+  "/admin/catalog/categories",
+  "/admin/orders",
+  "/admin/customers",
+  "/admin/banners",
+] as const;
 
 function scopeSummary(scopes: ReadonlyArray<{ kind: string }>): string {
   if (scopes.some((scope) => scope.kind === "global")) return "Scope: Global";
@@ -74,31 +82,12 @@ export function AdminShell({
   const [collapsed, setCollapsed] = useState(true);
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
-  const active = mostSpecificActiveNavigation(items, pathname);
-  const activeItem = active ? items.find((item) => item.code === active.code) : undefined;
-  const parentItem = activeItem?.parentCode
-    ? items.find((item) => item.code === activeItem.parentCode)
-    : undefined;
-  const breadcrumbs = activeItem
-    ? [
-        ...(activeItem.href === "/admin" ? [] : [{ label: "Admin", href: "/admin" }]),
-        ...(parentItem ? [{ label: parentItem.label, href: parentItem.href }] : []),
-        { label: activeItem.label },
-      ]
-    : [{ label: "Admin" }];
-  const showBreadcrumbs =
-    ![
-      "/admin/catalog/products",
-      "/admin/catalog/products/new",
-      "/admin/catalog/categories",
-      "/admin/catalog/categories/new",
-      "/admin/orders",
-      "/admin/issues",
-      "/admin/customers",
-      "/admin/memberships",
-    ].includes(pathname) &&
-    !pathname.startsWith("/admin/orders/") &&
-    !pathname.startsWith("/admin/issues/");
+  const productDetailWorkspace =
+    pathname.startsWith("/admin/catalog/products/") &&
+    pathname !== "/admin/catalog/products/new" &&
+    !pathname.endsWith("/edit");
+  const fullBleedWorkspace =
+    productDetailWorkspace || FULL_BLEED_WORKSPACE_PATHS.some((path) => path === pathname);
 
   useEffect(() => {
     const savedPreference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
@@ -143,10 +132,12 @@ export function AdminShell({
           id="main-content"
           aria-labelledby="admin-page-title"
           tabIndex={-1}
-          className="min-w-0 flex-1 bg-[var(--fm-admin-content)] px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] sm:px-6 lg:px-8"
+          className={cn(
+            "min-w-0 flex-1 bg-[var(--fm-admin-content)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+            fullBleedWorkspace ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8",
+          )}
         >
-          <div className="mx-auto w-full max-w-[var(--fm-container-admin)] space-y-4">
-            {showBreadcrumbs ? <AdminBreadcrumbs items={breadcrumbs} /> : null}
+          <div className={cn("w-full", fullBleedWorkspace ? "max-w-none" : "space-y-4")}>
             {children}
           </div>
         </main>
@@ -171,7 +162,10 @@ function AdminHeader({
   onOpenSearch: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl">
+    <header
+      data-admin-environment={environment}
+      className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl"
+    >
       <div className="flex h-14 items-center justify-between gap-1 px-2 min-[430px]:gap-4 min-[430px]:px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           <AdminMobileMenu items={items} />
@@ -206,11 +200,6 @@ function AdminHeader({
           <AdminSearchTrigger onOpen={onOpenSearch} />
         </div>
         <div className="flex items-center gap-1.5 text-xs text-[var(--fm-text-muted)]">
-          {environment !== "production" ? (
-            <span className="hidden rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] px-2 py-1 font-semibold uppercase tracking-wide text-[var(--fm-warning)] sm:inline-flex">
-              {environment}
-            </span>
-          ) : null}
           <Link
             href="/"
             prefetch={false}
@@ -603,7 +592,7 @@ function AdminSidebar({
   }, [active?.code, active?.parentCode]);
 
   return (
-    <TooltipProvider>
+    <TooltipProvider disableHoverableContent>
       <aside
         className={cn(
           "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
@@ -633,9 +622,12 @@ function AdminSidebar({
                   <FreshMarketsMark className="size-6" />
                 </span>
                 <span
+                  aria-hidden={collapsed}
                   className={cn(
-                    "overflow-hidden whitespace-nowrap text-sm transition-[max-width,margin,opacity] duration-200 ease-linear",
-                    collapsed ? "ml-0 max-w-0 opacity-0" : "ml-2 max-w-40 opacity-100",
+                    "block overflow-hidden whitespace-nowrap text-sm transition-[max-width,margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
+                    collapsed
+                      ? "invisible ml-0 max-w-0 opacity-0"
+                      : "visible ml-2 max-w-40 opacity-100",
                   )}
                 >
                   freshmarkets
@@ -685,8 +677,8 @@ function AdminSidebar({
                   {group.code !== "overview" ? (
                     <p
                       className={cn(
-                        "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity] duration-200 ease-linear",
-                        collapsed ? "-mt-8 opacity-0" : "mt-0 opacity-100",
+                        "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
+                        collapsed ? "invisible -mt-8 opacity-0" : "visible mt-0 opacity-100",
                       )}
                     >
                       {group.label}
@@ -754,9 +746,10 @@ function DesktopNavigationParent({
   );
   const label = (
     <span
+      aria-hidden={collapsed}
       className={cn(
-        "min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,margin,opacity] duration-200 ease-linear",
-        collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
+        "block min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
+        collapsed ? "invisible max-w-0 opacity-0" : "visible max-w-40 opacity-100",
       )}
     >
       {item.label}

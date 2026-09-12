@@ -110,15 +110,20 @@ export function EditorLayout({
   editor,
   aside,
   asideLabel,
+  compact = false,
 }: {
   editor: ReactNode;
   aside: ReactNode;
   asideLabel: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className={cn("grid min-w-0 gap-4", !compact && "xl:grid-cols-[minmax(0,1fr)_20rem]")}>
       <div className="min-w-0">{editor}</div>
-      <aside aria-label={asideLabel} className="self-start xl:sticky xl:top-20">
+      <aside
+        aria-label={asideLabel}
+        className={cn("self-start", !compact && "xl:sticky xl:top-20")}
+      >
         {aside}
       </aside>
     </div>

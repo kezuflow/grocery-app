@@ -62,16 +62,6 @@ function switchControl(): HTMLButtonElement {
   return document.querySelector<HTMLButtonElement>('button[role="switch"]')!;
 }
 
-function reasonInput(): HTMLInputElement {
-  return document.querySelector<HTMLInputElement>('[aria-label^="Reason to"]')!;
-}
-
-function confirmButton(): HTMLButtonElement {
-  return [...document.querySelectorAll("button")].find(
-    (button) => button.textContent === "Activate" || button.textContent === "Deactivate",
-  )!;
-}
-
 function clickControl(control: Element): void {
   act(() => {
     control.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -104,9 +94,10 @@ afterEach(() => {
   host.remove();
 });
 
-it("renders a labelled switch pill and keeps archived promotions as a plain pill", () => {
+it("renders an on/off switch pill and keeps archived promotions as a plain pill", () => {
   render(draftSummary);
-  expect(host.textContent).toContain("Draft");
+  expect(host.textContent).not.toContain("On");
+  expect(host.textContent).not.toContain("Off");
   expect(switchControl()).not.toBeNull();
   expect(switchControl().getAttribute("aria-checked")).toBe("false");
 
@@ -115,21 +106,11 @@ it("renders a labelled switch pill and keeps archived promotions as a plain pill
   expect(switchControl()).toBeNull();
 });
 
-it("opens confirmation without a reason field or sending a command", () => {
-  render(draftSummary);
-  clickControl(switchControl());
-  expect(reasonInput()).toBeNull();
-
-  expect(fetchMock).not.toHaveBeenCalled();
-});
-
-it("sends the Core status command without a reason, with version and idempotency key, then reports the confirmed status", async () => {
+it("sends the Core status command directly, with version and idempotency key, then reports the confirmed status", async () => {
   fetchMock.mockResolvedValue(ok(activeSummary));
   render(draftSummary);
-  clickControl(switchControl());
-
   await act(async () => {
-    clickControl(confirmButton());
+    clickControl(switchControl());
   });
 
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -142,17 +123,38 @@ it("sends the Core status command without a reason, with version and idempotency
     expectedVersion: 3,
   });
   expect(onApplied).toHaveBeenCalledWith(activeSummary);
-  expect(toast.success).toHaveBeenCalledWith("Spring merch activated", expect.anything());
-  expect(reasonInput()).toBeNull();
+  expect(toast.success).toHaveBeenCalledWith("Spring merch turned on", expect.anything());
+});
+
+it("replaces the switch with a loading state while the status command is pending", async () => {
+  let resolveResponse!: (response: Response) => void;
+  fetchMock.mockReturnValue(
+    new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    }),
+  );
+  render(draftSummary);
+
+  act(() => {
+    clickControl(switchControl());
+  });
+
+  expect(switchControl()).toBeNull();
+  expect(document.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe(
+    "Updating promotion status",
+  );
+
+  await act(async () => {
+    resolveResponse(ok(activeSummary));
+  });
+  expect(switchControl()).not.toBeNull();
 });
 
 it("keeps the switch unchanged and shows the safe error when Core rejects", async () => {
   fetchMock.mockResolvedValue(fail());
   render({ ...draftSummary, status: "ACTIVE" });
-  clickControl(switchControl());
-
   await act(async () => {
-    clickControl(confirmButton());
+    clickControl(switchControl());
   });
 
   expect(onApplied).not.toHaveBeenCalled();

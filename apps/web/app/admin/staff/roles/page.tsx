@@ -84,7 +84,7 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Roles"
         description="Capability sets over the closed canonical vocabulary."

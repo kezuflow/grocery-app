@@ -48,7 +48,7 @@ function formatInstant(iso: string): string {
 
 export default function AuditPage() {
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Audit log"
         description="Immutable material operations, scoped to your assigned market and locations."
@@ -163,10 +163,7 @@ function AuditWorkspace() {
 
   return (
     <>
-      <FilterBar
-        variant="card"
-        onSubmit={() => applyFilters(draft)}
-      >
+      <FilterBar variant="card" onSubmit={() => applyFilters(draft)}>
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Input
             aria-label="Filter by action"

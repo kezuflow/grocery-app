@@ -23,6 +23,8 @@ import { ProductForm, type ProductFormValue } from "@/components/admin/product-f
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
+import { ProductDraftPreview } from "@/components/admin/product-draft-preview";
+import { X } from "lucide-react";
 
 const CREATE_PRODUCT_FORM_ID = "create-product-form";
 
@@ -69,7 +71,15 @@ async function jsonCommand<T>(
   return catalogResultSchema(schema).parse(await response.json());
 }
 
-export default function NewProductPage() {
+export function NewProductWorkspace({
+  onCreated,
+  onCancel,
+  embedded = false,
+}: {
+  onCreated?: (product: AdminProductSummary) => void;
+  onCancel?: () => void;
+  embedded?: boolean;
+} = {}) {
   const router = useRouter();
   const intent = useAdminCommandIntent();
   const savedSetup = useRef<ProductFormValue | null>(null);
@@ -286,7 +296,8 @@ export default function NewProductPage() {
         setError(`${result.error.message} Request reference: ${result.error.requestId}`);
         return;
       }
-      router.push(`/admin/catalog/products/${result.value.productId}?created=1`);
+      if (onCreated) onCreated(result.value);
+      else router.push(`/admin/catalog/products/${result.value.productId}?created=1`);
     } catch (caught) {
       setError(
         caught instanceof ProductSetupError
@@ -295,55 +306,111 @@ export default function NewProductPage() {
       );
     }
   }
-  return (
-    <div className="mx-auto max-w-[1280px] space-y-5">
-      <PageHeader
-        title="Add product"
-        action={
-          <div className="flex items-center gap-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href="/admin/catalog/products" prefetch={false}>
-                Discard
-              </Link>
-            </Button>
-            <Button
-              type="submit"
-              form={CREATE_PRODUCT_FORM_ID}
-              size="sm"
-              className="fm-admin-reference-primary"
-              disabled={intent.pending || unitsLoading || !!unitsError}
-            >
-              {intent.pending ? "Saving…" : recovering ? "Retry saved setup" : "Create product"}
-            </Button>
-          </div>
-        }
-      />
-      {error || categories.error || unitsError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error ?? categories.error ?? unitsError}</AlertDescription>
-        </Alert>
-      ) : null}
-      {unitsError ? (
-        <Button onClick={() => setUnitsAttempt((attempt) => attempt + 1)}>Retry units</Button>
-      ) : null}
-      {categories.hasMore || categories.error ? (
-        <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
-          {categories.error ? "Retry categories" : "More categories"}
+  const actions = (
+    <div className="flex items-center gap-2">
+      {onCancel ? (
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancel
         </Button>
-      ) : null}
-      <fieldset disabled={intent.pending || recovering || unitsLoading}>
-        <ProductForm
-          formId={CREATE_PRODUCT_FORM_ID}
-          hideSubmit
-          value={value}
-          categories={categories.items}
-          units={units}
-          pending={intent.pending || recovering}
-          submitLabel="Create product"
-          onChange={setValue}
-          onSubmit={submit}
-        />
-      </fieldset>
+      ) : (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/admin/catalog/products" prefetch={false}>
+            Cancel
+          </Link>
+        </Button>
+      )}
+      <Button
+        type="submit"
+        form={CREATE_PRODUCT_FORM_ID}
+        size="sm"
+        className="fm-admin-reference-primary"
+        disabled={intent.pending || unitsLoading || !!unitsError}
+      >
+        {intent.pending ? "Saving…" : recovering ? "Retry saved setup" : "Create product"}
+      </Button>
     </div>
   );
+  const selectedCategory = categories.items.find(
+    (category) => category.categoryId === value.categoryId,
+  );
+  return (
+    <div className={embedded ? "flex h-full min-h-0 flex-col" : "w-full space-y-5"}>
+      {embedded ? (
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+          <div>
+            <h2 id="create-product-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+              Add product
+            </h2>
+            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              Create the product, selling options, and initial images.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close product creation"
+            onClick={onCancel}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      ) : (
+        <PageHeader
+          title="Add product"
+          description="Create the Product, its selling options, and initial images."
+        />
+      )}
+      <div className={embedded ? "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4" : "contents"}>
+        {error || categories.error || unitsError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error ?? categories.error ?? unitsError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {unitsError ? (
+          <Button onClick={() => setUnitsAttempt((attempt) => attempt + 1)}>Retry units</Button>
+        ) : null}
+        {categories.hasMore || categories.error ? (
+          <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+            {categories.error ? "Retry categories" : "More categories"}
+          </Button>
+        ) : null}
+        {embedded ? (
+          <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
+        ) : null}
+        <fieldset disabled={intent.pending || recovering || unitsLoading}>
+          <ProductForm
+            formId={CREATE_PRODUCT_FORM_ID}
+            hideSubmit
+            compact={embedded}
+            preview={
+              embedded ? null : (
+                <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
+              )
+            }
+            value={value}
+            categories={categories.items}
+            units={units}
+            pending={intent.pending || recovering}
+            submitLabel="Create product"
+            onChange={setValue}
+            onSubmit={submit}
+          />
+        </fieldset>
+      </div>
+      <div
+        className={
+          embedded
+            ? "flex shrink-0 justify-end border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4"
+            : "sticky bottom-0 z-20 -mx-4 flex justify-end border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+        }
+      >
+        {actions}
+      </div>
+    </div>
+  );
+}
+
+export default function NewProductPage() {
+  return <NewProductWorkspace />;
 }

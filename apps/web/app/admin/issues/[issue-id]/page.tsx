@@ -110,7 +110,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
   const selectedPresentation = pendingAction ? actionPresentation[pendingAction] : null;
 
   return (
-    <div className="mx-auto max-w-[1000px] space-y-6">
+    <div className="w-full space-y-6">
       <Link
         href="/admin/issues"
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"

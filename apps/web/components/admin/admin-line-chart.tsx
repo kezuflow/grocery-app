@@ -27,10 +27,7 @@ export default function AdminLineChart({
         <CartesianGrid vertical={false} stroke="var(--fm-border)" />
         <XAxis dataKey={categoryKey} tickLine={false} axisLine={false} fontSize={11} />
         <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
-        <Tooltip
-          cursor={{ stroke: "var(--fm-border)" }}
-          content={<AdminChartTooltipContent />}
-        />
+        <Tooltip cursor={{ stroke: "var(--fm-border)" }} content={<AdminChartTooltipContent />} />
         <Line
           connectNulls={false}
           dataKey={valueKey}

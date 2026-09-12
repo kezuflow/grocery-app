@@ -138,7 +138,7 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Catalog"
         description="Global Products, Categories, controlled units, and Sell variant definitions. Prices are versioned; selling status is location-specific."

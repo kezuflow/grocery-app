@@ -75,7 +75,7 @@ export default function PaymentReconciliationPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Payment reconciliation"
         description="Review completed financial recovery before closing an exception."

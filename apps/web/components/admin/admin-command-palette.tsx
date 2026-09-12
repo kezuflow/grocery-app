@@ -31,9 +31,7 @@ export function AdminCommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
-        />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
         <DialogPrimitive.Content
           aria-label="Admin command palette"
           className="fixed left-1/2 top-[20%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-background)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] duration-(--fm-motion-base) ease-out focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
@@ -58,17 +56,22 @@ export function AdminCommandPalette({
                   heading={group.label}
                   className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-[var(--fm-text-muted)]"
                 >
-                  {group.items.flatMap((item) => [item, ...item.children]).map((entry) => (
-                    <CommandPrimitive.Item
-                      key={entry.code}
-                      value={entry.label}
-                      onSelect={() => select(entry.href)}
-                      className="flex min-h-9 cursor-default items-center gap-2.5 rounded-[var(--fm-radius-control)] px-2.5 text-sm text-[var(--fm-text)] data-[selected=true]:bg-[var(--fm-hover)] data-[selected=true]:outline-none"
-                    >
-                      <entry.icon className="size-4 shrink-0 text-[var(--fm-text-muted)]" aria-hidden="true" />
-                      {entry.label}
-                    </CommandPrimitive.Item>
-                  ))}
+                  {group.items
+                    .flatMap((item) => [item, ...item.children])
+                    .map((entry) => (
+                      <CommandPrimitive.Item
+                        key={entry.code}
+                        value={entry.label}
+                        onSelect={() => select(entry.href)}
+                        className="flex min-h-9 cursor-default items-center gap-2.5 rounded-[var(--fm-radius-control)] px-2.5 text-sm text-[var(--fm-text)] data-[selected=true]:bg-[var(--fm-hover)] data-[selected=true]:outline-none"
+                      >
+                        <entry.icon
+                          className="size-4 shrink-0 text-[var(--fm-text-muted)]"
+                          aria-hidden="true"
+                        />
+                        {entry.label}
+                      </CommandPrimitive.Item>
+                    ))}
                 </CommandPrimitive.Group>
               ))}
             </CommandPrimitive.List>

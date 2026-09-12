@@ -1,7 +1,16 @@
 "use client";
 
 import type { AdminCategoryPage, AdminCategorySummary, RpcResult } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, Eye, Pencil, Plus, PowerOff } from "lucide-react";
+import {
+  Clipboard,
+  EllipsisVertical,
+  ExternalLink,
+  Eye,
+  Pencil,
+  Plus,
+  PowerOff,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -28,6 +37,8 @@ import {
 } from "@/components/ui/table";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
 import { useAdminContext } from "../../admin-context-provider";
+import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
+import { NewCategoryWorkspace } from "./new/page";
 
 type CategoriesPageClientProps = {
   initialPayload: RpcResult<AdminCategoryPage>;
@@ -54,6 +65,9 @@ export function CategoriesPageClient({
     requestId?: string;
   } | null>(null);
   const [copiedCategoryId, setCopiedCategoryId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<AdminCategorySummary | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
   const pagination = useAdminPagination();
   const adminContext = useAdminContext();
   const query = searchParams.get("query") ?? initialQuery;
@@ -153,17 +167,25 @@ export function CategoriesPageClient({
     }
   }
 
-  return (
-    <div className="space-y-6">
+  const master = (
+    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader
         title="Categories"
         action={
           canManage ? (
-            <Button asChild size="sm" className="fm-admin-reference-primary">
-              <Link href="/admin/catalog/categories/new" prefetch={false}>
-                <Plus aria-hidden="true" />
-                Add category
-              </Link>
+            <Button
+              type="button"
+              size="sm"
+              className="fm-admin-reference-primary"
+              aria-expanded={panelOpen && panelMode === "create"}
+              aria-controls="category-detail-panel"
+              onClick={() => {
+                setPanelMode("create");
+                setPanelOpen((open) => (panelMode === "create" ? !open : true));
+              }}
+            >
+              <Plus aria-hidden="true" />
+              Add category
             </Button>
           ) : null
         }
@@ -230,7 +252,23 @@ export function CategoriesPageClient({
               {items.map((item) => (
                 <TableRow key={item.categoryId}>
                   <TableCell>
-                    <span className="font-medium">{item.name}</span>
+                    <button
+                      type="button"
+                      aria-expanded={
+                        panelOpen &&
+                        panelMode === "detail" &&
+                        selectedCategory?.categoryId === item.categoryId
+                      }
+                      aria-controls="category-detail-panel"
+                      className="font-medium hover:underline"
+                      onClick={() => {
+                        setSelectedCategory(item);
+                        setPanelMode("detail");
+                        setPanelOpen(true);
+                      }}
+                    >
+                      {item.name}
+                    </button>
                     <span className="block text-xs text-[var(--fm-text-muted)]">{item.code}</span>
                   </TableCell>
                   <TableCell>{item.parentName ?? "Top level"}</TableCell>
@@ -256,13 +294,15 @@ export function CategoriesPageClient({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <a
-                            href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
-                          >
-                            <Eye aria-hidden="true" />
-                            View details
-                          </a>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setSelectedCategory(item);
+                            setPanelMode("detail");
+                            setPanelOpen(true);
+                          }}
+                        >
+                          <Eye aria-hidden="true" />
+                          View details
                         </DropdownMenuItem>
                         {canManage ? (
                           <DropdownMenuItem asChild>
@@ -330,6 +370,104 @@ export function CategoriesPageClient({
         onCancel={() => setCategoryToDeactivate(null)}
         onConfirm={(reason) => void deactivateCategory(reason)}
       />
-    </div>
+    </section>
+  );
+
+  const categoryDetail = selectedCategory ? (
+    <>
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+            Category details
+          </p>
+          <h2
+            id="category-panel-title"
+            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
+          >
+            {selectedCategory.name}
+          </h2>
+          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+            {selectedCategory.code}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close category details"
+          onClick={() => setPanelOpen(false)}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="mb-5">
+          <AdminStatusPill
+            status={selectedCategory.status}
+            tone={selectedCategory.status === "active" ? "success" : "danger"}
+            label={selectedCategory.status}
+          />
+        </div>
+        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+          {[
+            ["Parent", selectedCategory.parentName ?? "Top level"],
+            ["Products", String(selectedCategory.productCount)],
+            ["Category ID", selectedCategory.categoryId],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
+              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+              <dd className="max-w-64 break-all text-right font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+          Close
+        </Button>
+        <Button asChild variant="outline">
+          <Link
+            href={`/admin/catalog/categories/${selectedCategory.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+            prefetch={false}
+          >
+            <ExternalLink aria-hidden="true" />
+            Full details
+          </Link>
+        </Button>
+        {canManage ? (
+          <Button asChild>
+            <Link
+              href={`/admin/catalog/categories/${selectedCategory.categoryId}/edit${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+              prefetch={false}
+            >
+              <Pencil aria-hidden="true" />
+              Edit category
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+    </>
+  ) : null;
+
+  const createDetail = (
+    <NewCategoryWorkspace
+      embedded
+      onCancel={() => setPanelOpen(false)}
+      onCreated={() => {
+        setPanelOpen(false);
+        router.refresh();
+      }}
+    />
+  );
+
+  return (
+    <AdminMasterDetailWorkspace
+      open={panelOpen && (panelMode === "create" || selectedCategory !== null)}
+      master={master}
+      detail={panelMode === "create" ? createDetail : categoryDetail}
+      panelId="category-detail-panel"
+      labelledBy={panelMode === "create" ? "create-category-panel-title" : "category-panel-title"}
+      resizeLabel="Resize category workspace"
+    />
   );
 }

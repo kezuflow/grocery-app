@@ -1,8 +1,13 @@
 "use client";
 
-import type { AdminProductPage, AdminProductSummary, RpcResult } from "@freshmarkets/contracts";
-import Link from "next/link";
-import { Plus } from "lucide-react";
+import type {
+  AdminProductDetail,
+  AdminProductPage,
+  AdminProductSummary,
+  RpcResult,
+} from "@freshmarkets/contracts";
+import { adminProductDetailSchema } from "@freshmarkets/validation";
+import { Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
@@ -13,10 +18,14 @@ import {
 } from "@/components/admin/product-list-view";
 import { useAdminContext } from "../../admin-context-provider";
 import { PageHeader } from "@/components/admin/admin-shell";
+import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
+import { ProductPreviewPanel } from "@/components/admin/product-preview-panel";
+import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NewProductWorkspace } from "./new/page";
 import {
   resolveAdminProductScopeTarget,
   type AdminProductScopeTarget,
@@ -28,6 +37,12 @@ type ProductsPageClientProps = {
   initialQuery: string;
   initialStatus: string;
 };
+
+type ProductListItem = AdminProductPage["items"][number];
+type ProductPreviewState =
+  | { phase: "idle" | "loading" }
+  | { phase: "error"; message: string; requestId: string | null }
+  | { phase: "ready"; product: AdminProductDetail };
 
 function sameScopeTarget(
   left: AdminProductScopeTarget | null,
@@ -56,6 +71,11 @@ export function ProductsPageClient({
   const [payload, setPayload] = useState<RpcResult<AdminProductPage> | null>(initialPayload);
   const [bulkPending, setBulkPending] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [selectedProduct, setSelectedProduct] = useState<ProductListItem | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
+  const [previewState, setPreviewState] = useState<ProductPreviewState>({ phase: "idle" });
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const pagination = useAdminPagination();
   const adminContext = useAdminContext();
   const scopeTarget = useMemo(
@@ -114,6 +134,51 @@ export function ProductsPageClient({
     reloadVersion,
     status,
   ]);
+
+  useEffect(() => {
+    if (!panelOpen || panelMode !== "detail" || !selectedProduct) return;
+    if (!scopeTarget) {
+      setPreviewState({
+        phase: "error",
+        message: "Select a supported Admin scope to preview this product.",
+        requestId: null,
+      });
+      return;
+    }
+    const controller = new AbortController();
+    setPreviewState({ phase: "loading" });
+    const params = new URLSearchParams({ scopeKind: scopeTarget.kind });
+    if (scopeTarget.kind === "LOCATION") {
+      params.set("marketId", scopeTarget.marketId);
+      params.set("locationId", scopeTarget.locationId);
+    }
+    void fetch(
+      `/api/admin/catalog/products/${encodeURIComponent(selectedProduct.productId)}?${params}`,
+      { signal: controller.signal },
+    )
+      .then(async (response) =>
+        catalogResultSchema(adminProductDetailSchema).parse(await response.json()),
+      )
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        if (result.ok) setPreviewState({ phase: "ready", product: result.value });
+        else
+          setPreviewState({
+            phase: "error",
+            message: result.error.message,
+            requestId: result.error.requestId,
+          });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setPreviewState({
+          phase: "error",
+          message: "Product preview could not be loaded.",
+          requestId: null,
+        });
+      });
+    return () => controller.abort();
+  }, [panelMode, panelOpen, previewAttempt, scopeTarget, selectedProduct]);
 
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -183,17 +248,25 @@ export function ProductsPageClient({
     }
   }
 
-  return (
-    <div className="space-y-6">
+  const master = (
+    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader
         title="Products"
         action={
           canManage ? (
-            <Button asChild size="sm" className="fm-admin-reference-primary">
-              <Link href="/admin/catalog/products/new" prefetch={false}>
-                <Plus aria-hidden="true" />
-                Add product
-              </Link>
+            <Button
+              type="button"
+              size="sm"
+              className="fm-admin-reference-primary"
+              aria-expanded={panelOpen && panelMode === "create"}
+              aria-controls="product-detail-panel"
+              onClick={() => {
+                setPanelMode("create");
+                setPanelOpen((open) => (panelMode === "create" ? !open : true));
+              }}
+            >
+              <Plus aria-hidden="true" />
+              Add product
             </Button>
           ) : null
         }
@@ -217,6 +290,13 @@ export function ProductsPageClient({
             canManage={canManage}
             deactivationPending={bulkPending}
             onDeactivateSelected={deactivateProducts}
+            onOpenProduct={(product) => {
+              setSelectedProduct(product);
+              setPanelMode("detail");
+              setPanelOpen(true);
+            }}
+            openProductId={panelOpen && panelMode === "detail" ? selectedProduct?.productId : null}
+            detailPanelId="product-detail-panel"
             activeFilterCount={Number(query.trim().length > 0) + Number(status !== "all")}
             filters={
               <>
@@ -253,6 +333,93 @@ export function ProductsPageClient({
           />
         </>
       ) : null}
-    </div>
+    </section>
+  );
+
+  const productDetail = selectedProduct ? (
+    previewState.phase === "ready" ? (
+      <ProductPreviewPanel
+        product={previewState.product}
+        fromQuery={searchParams.toString()}
+        onClose={() => setPanelOpen(false)}
+      />
+    ) : (
+      <>
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+              Product preview
+            </p>
+            <h2
+              id="product-panel-title"
+              className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
+            >
+              {selectedProduct.name}
+            </h2>
+            <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+              {selectedProduct.slug}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close product details"
+            onClick={() => setPanelOpen(false)}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 px-5 py-5">
+          {previewState.phase === "error" ? (
+            <Alert variant="destructive">
+              <AlertTitle>Product preview could not be loaded</AlertTitle>
+              <AlertDescription>
+                {previewState.message}
+                {previewState.requestId ? ` Request reference: ${previewState.requestId}` : ""}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div role="status" aria-label="Loading product preview" className="space-y-3">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-11 w-full" />
+              <Skeleton className="h-56 w-full" />
+            </div>
+          )}
+        </div>
+        {previewState.phase === "error" ? (
+          <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+            <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+              Close
+            </Button>
+            <Button type="button" onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+      </>
+    )
+  ) : null;
+
+  const createDetail = (
+    <NewProductWorkspace
+      embedded
+      onCancel={() => setPanelOpen(false)}
+      onCreated={() => {
+        setPanelOpen(false);
+        setReloadVersion((current) => current + 1);
+      }}
+    />
+  );
+
+  return (
+    <AdminMasterDetailWorkspace
+      open={panelOpen && (panelMode === "create" || selectedProduct !== null)}
+      master={master}
+      detail={panelMode === "create" ? createDetail : productDetail}
+      panelId="product-detail-panel"
+      labelledBy={panelMode === "create" ? "create-product-panel-title" : "product-panel-title"}
+      resizeLabel="Resize product details"
+    />
   );
 }

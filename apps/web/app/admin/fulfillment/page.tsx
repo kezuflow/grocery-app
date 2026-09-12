@@ -107,7 +107,7 @@ export default function FulfillmentPage() {
       void load(pagination.cursor);
   }
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Fulfillment"
         description="Accept paid orders, pick items and complete packing. Accepting an Instant order closes customer cancellation; Scheduled cancellation closes at cutoff."

@@ -9,7 +9,7 @@ import type {
 import { z } from "@freshmarkets/validation";
 import { invitationEmailStatuses } from "@freshmarkets/contracts";
 import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
-import { Clipboard, EllipsisVertical, Eye, MailPlus, X } from "lucide-react";
+import { Clipboard, EllipsisVertical, ExternalLink, Eye, MailPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -19,6 +19,7 @@ import {
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { CustomerAccessStatusBadge } from "../../../components/admin/customer-status-badges";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
+import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -85,7 +86,9 @@ export default function CustomersPage() {
   const [invitationLoading, setInvitationLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<"invite" | "customer">("invite");
+  const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerSummary | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -196,8 +199,8 @@ export default function CustomersPage() {
   const allSelected = visibleCustomers.length > 0 && selectedIds.size === visibleCustomers.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
 
-  return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+  const master = (
+    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader
         title="Customers"
         action={
@@ -205,7 +208,12 @@ export default function CustomersPage() {
             type="button"
             size="sm"
             className="fm-admin-reference-primary"
-            onClick={() => setInviteOpen((open) => !open)}
+            aria-expanded={panelOpen && panelMode === "invite"}
+            aria-controls="customer-detail-panel"
+            onClick={() => {
+              setPanelMode("invite");
+              setPanelOpen((open) => (panelMode === "invite" ? !open : true));
+            }}
           >
             <MailPlus aria-hidden="true" />
             Invite customer
@@ -223,103 +231,6 @@ export default function CustomersPage() {
         >
           Retry unconfirmed action
         </Button>
-      ) : null}
-
-      {inviteOpen ? (
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)]">
-          <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={invite}>
-            <label className="grid flex-1 gap-1.5 text-sm font-medium sm:max-w-sm">
-              Email address
-              <Input
-                placeholder="customer@example.com"
-                type="email"
-                disabled={invitationCommand.busy || invitationCommand.uncertain}
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
-              />
-            </label>
-            <Button
-              type="submit"
-              size="sm"
-              className="fm-admin-reference-primary"
-              disabled={invitationCommand.busy || invitationCommand.uncertain}
-            >
-              {invitationCommand.busy ? "Creating…" : "Create invitation"}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setInviteOpen(false)}>
-              Cancel
-            </Button>
-          </form>
-          {invitations && invitations.items.length > 0 ? (
-            <section className="mt-4 space-y-3" aria-label="Customer invitations">
-              <h2 className="font-semibold">Customer invitations</h2>
-              <p className="text-sm">
-                Invitees sign in with their verified email at{" "}
-                <Link className="underline" href="/customer-invitation">
-                  Customer invitation
-                </Link>
-                . Invitation email is queued with creation; delivery status appears below.
-              </p>
-              {invitations.items.map((invitation) => (
-                <article key={invitation.invitationId} className="space-y-2 rounded border p-3">
-                  <p className="break-all">{invitation.email}</p>
-                  <p>
-                    {invitation.status} · Expires {date(invitation.expiresAt)}
-                  </p>
-                  <InvitationEmailStatusText status={invitation.emailStatus} />
-                  {invitation.status === "PENDING" ? (
-                    <fieldset
-                      disabled={invitationCommand.busy || invitationCommand.uncertain}
-                      className="flex flex-col gap-2 sm:flex-row"
-                    >
-                      <Input
-                        aria-label={`Revocation reason for ${invitation.email}`}
-                        placeholder="Reason for revocation"
-                        maxLength={500}
-                        value={revokeReasons[invitation.invitationId] ?? ""}
-                        onChange={(event) =>
-                          setRevokeReasons((previous) => ({
-                            ...previous,
-                            [invitation.invitationId]: event.target.value,
-                          }))
-                        }
-                      />
-                      <Button
-                        variant="outline"
-                        disabled={!revokeReasons[invitation.invitationId]?.trim()}
-                        onClick={async () => {
-                          if (
-                            await invitationCommand.run(
-                              `revoke:${invitation.invitationId}`,
-                              "/api/admin/customers/invitations/revoke",
-                              {
-                                invitationId: invitation.invitationId,
-                                expectedVersion: invitation.version,
-                                reason: revokeReasons[invitation.invitationId]?.trim(),
-                              },
-                            )
-                          )
-                            await load(appliedQuery, pagination.cursor);
-                        }}
-                      >
-                        Revoke invitation
-                      </Button>
-                    </fieldset>
-                  ) : null}
-                </article>
-              ))}
-              {invitations.nextCursor ? (
-                <Button
-                  variant="outline"
-                  disabled={invitationLoading}
-                  onClick={() => void loadMoreInvitations()}
-                >
-                  {invitationLoading ? "Loading invitations…" : "Load more invitations"}
-                </Button>
-              ) : null}
-            </section>
-          ) : null}
-        </section>
       ) : null}
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
@@ -448,13 +359,23 @@ export default function CustomersPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Link
+                    <button
+                      type="button"
+                      aria-expanded={
+                        panelOpen &&
+                        panelMode === "customer" &&
+                        selectedCustomer?.customerId === customer.customerId
+                      }
+                      aria-controls="customer-detail-panel"
                       className="font-medium hover:underline"
-                      href={`/admin/customers/${customer.customerId}`}
-                      prefetch={false}
+                      onClick={() => {
+                        setSelectedCustomer(customer);
+                        setPanelMode("customer");
+                        setPanelOpen(true);
+                      }}
                     >
                       {customer.email}
-                    </Link>
+                    </button>
                     <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
                       {customer.phone ?? customer.customerId}
                     </p>
@@ -487,11 +408,15 @@ export default function CustomersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/customers/${customer.customerId}`} prefetch={false}>
-                            <Eye aria-hidden="true" />
-                            View details
-                          </Link>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setSelectedCustomer(customer);
+                            setPanelMode("customer");
+                            setPanelOpen(true);
+                          }}
+                        >
+                          <Eye aria-hidden="true" />
+                          View details
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => void copyCustomerId(customer)}>
                           <Clipboard aria-hidden="true" />
@@ -515,6 +440,203 @@ export default function CustomersPage() {
           />
         ) : null}
       </section>
-    </div>
+    </section>
+  );
+
+  const inviteDetail = (
+    <>
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div>
+          <h2 id="customer-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+            Invite customer
+          </h2>
+          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            Create and monitor customer invitations.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close customer invitation"
+          onClick={() => setPanelOpen(false)}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <form className="space-y-4" onSubmit={invite}>
+          <label className="grid gap-1.5 text-sm font-medium">
+            Email address
+            <Input
+              placeholder="customer@example.com"
+              type="email"
+              disabled={invitationCommand.busy || invitationCommand.uncertain}
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+            />
+          </label>
+          <Button
+            type="submit"
+            className="fm-admin-reference-primary"
+            disabled={invitationCommand.busy || invitationCommand.uncertain}
+          >
+            {invitationCommand.busy ? "Creating…" : "Create invitation"}
+          </Button>
+        </form>
+        {invitations && invitations.items.length > 0 ? (
+          <section
+            className="space-y-3 border-t border-[var(--fm-border)] pt-5"
+            aria-label="Customer invitations"
+          >
+            <h3 className="font-semibold">Recent invitations</h3>
+            <p className="text-sm text-[var(--fm-text-muted)]">
+              Email delivery status and pending invitation controls.
+            </p>
+            {invitations.items.map((invitation) => (
+              <article
+                key={invitation.invitationId}
+                className="space-y-2 rounded-lg border border-[var(--fm-border)] p-3"
+              >
+                <p className="break-all font-medium">{invitation.email}</p>
+                <p className="text-sm text-[var(--fm-text-muted)]">
+                  {invitation.status} · Expires {date(invitation.expiresAt)}
+                </p>
+                <InvitationEmailStatusText status={invitation.emailStatus} />
+                {invitation.status === "PENDING" ? (
+                  <fieldset
+                    disabled={invitationCommand.busy || invitationCommand.uncertain}
+                    className="space-y-2"
+                  >
+                    <Input
+                      aria-label={`Revocation reason for ${invitation.email}`}
+                      placeholder="Reason for revocation"
+                      maxLength={500}
+                      value={revokeReasons[invitation.invitationId] ?? ""}
+                      onChange={(event) =>
+                        setRevokeReasons((previous) => ({
+                          ...previous,
+                          [invitation.invitationId]: event.target.value,
+                        }))
+                      }
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!revokeReasons[invitation.invitationId]?.trim()}
+                      onClick={async () => {
+                        if (
+                          await invitationCommand.run(
+                            `revoke:${invitation.invitationId}`,
+                            "/api/admin/customers/invitations/revoke",
+                            {
+                              invitationId: invitation.invitationId,
+                              expectedVersion: invitation.version,
+                              reason: revokeReasons[invitation.invitationId]?.trim(),
+                            },
+                          )
+                        )
+                          await load(appliedQuery, pagination.cursor);
+                      }}
+                    >
+                      Revoke invitation
+                    </Button>
+                  </fieldset>
+                ) : null}
+              </article>
+            ))}
+            {invitations.nextCursor ? (
+              <Button
+                variant="outline"
+                disabled={invitationLoading}
+                onClick={() => void loadMoreInvitations()}
+              >
+                {invitationLoading ? "Loading invitations…" : "Load more invitations"}
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 justify-end border-t border-[var(--fm-border)] px-5 py-4">
+        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+          Close
+        </Button>
+      </div>
+    </>
+  );
+
+  const customerDetail = selectedCustomer ? (
+    <>
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+            Customer details
+          </p>
+          <h2
+            id="customer-panel-title"
+            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
+          >
+            {selectedCustomer.email}
+          </h2>
+          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+            {selectedCustomer.phone ?? selectedCustomer.customerId}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close customer details"
+          onClick={() => setPanelOpen(false)}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="mb-5">
+          <CustomerAccessStatusBadge status={selectedCustomer.accessStatus} />
+        </div>
+        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+          {[
+            ["Orders", String(selectedCustomer.orderCount)],
+            ["Last order", date(selectedCustomer.lastOrderAt)],
+            ["Joined", date(selectedCustomer.createdAt)],
+            [
+              "Membership",
+              selectedCustomer.subscriptionState?.toLowerCase().replaceAll("_", " ") ??
+                "No membership",
+            ],
+            ["Customer ID", selectedCustomer.customerId],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
+              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+              <dd className="max-w-64 break-all text-right font-medium capitalize">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+          Close
+        </Button>
+        <Button asChild>
+          <Link href={`/admin/customers/${selectedCustomer.customerId}`} prefetch={false}>
+            <ExternalLink aria-hidden="true" />
+            Full customer
+          </Link>
+        </Button>
+      </div>
+    </>
+  ) : null;
+
+  return (
+    <AdminMasterDetailWorkspace
+      open={panelOpen}
+      master={master}
+      detail={panelMode === "invite" ? inviteDetail : customerDetail}
+      panelId="customer-detail-panel"
+      labelledBy="customer-panel-title"
+      resizeLabel="Resize customer workspace"
+    />
   );
 }

@@ -1,20 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import type {
   AdminCatalogSkuSummary,
   AdminScopeOptionView,
   AdminSkuPricesView,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { appErrorCodes } from "@freshmarkets/contracts";
+import { adminCatalogSkuSummarySchema, z } from "@freshmarkets/validation";
+import { Pencil, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { ListPageSection } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
-import { appErrorCodes } from "@freshmarkets/contracts";
-import { z } from "@freshmarkets/validation";
-import { adminCatalogSkuSummarySchema } from "@freshmarkets/validation";
+import { ListPageSection } from "./admin-shell";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -60,18 +60,188 @@ type PriceCommand = {
   expectedVersion: number;
 };
 
+export type ProductPriceSelection = {
+  skuId: string;
+  skuName: string;
+  locationId: string;
+  locationName: string;
+};
+
+function formatPrice(amountMinor: number | null, currency: string | null): string {
+  if (amountMinor === null || currency === null) return "Unavailable";
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(amountMinor / 100);
+}
+
+async function loadPrices(skuId: string, locationId: string) {
+  const response = await fetch(
+    `/api/admin/catalog/skus/${encodeURIComponent(skuId)}/prices?${new URLSearchParams({ locationId })}`,
+  );
+  return priceResultSchema.parse(await response.json());
+}
+
 export function GlobalPricePanel({
   skus,
   scopes,
+  onEditPrice,
 }: {
   skus: readonly AdminCatalogSkuSummary[];
   scopes: readonly AdminScopeOptionView[];
+  onEditPrice: (selection: ProductPriceSelection) => void;
 }) {
   const locations = scopes.filter((scope) => scope.kind === "location");
   const [skuId, setSkuId] = useState(skus[0]?.skuId ?? "");
   const [locationId, setLocationId] = useState(locations[0]?.locationId ?? "");
   const [view, setView] = useState<AdminSkuPricesView | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let canceled = false;
+    setView(null);
+    setNotice(null);
+    if (!skuId || !locationId) return;
+    setLoading(true);
+    void loadPrices(skuId, locationId)
+      .then((result) => {
+        if (canceled) return;
+        if (result.ok) setView(result.value);
+        else setNotice(`${result.error.message} Request reference: ${result.error.requestId}`);
+      })
+      .catch(() => {
+        if (!canceled) setNotice("Price history could not be loaded. Retry to refresh it.");
+      })
+      .finally(() => {
+        if (!canceled) setLoading(false);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [skuId, locationId, reload]);
+
+  const selectedSku = skus.find((sku) => sku.skuId === skuId);
+  const selectedLocation = locations.find((location) => location.locationId === locationId);
+
+  return (
+    <ListPageSection
+      title="Exact-location prices"
+      description="Select a selling option and location to inspect its current final retail price and history."
+    >
+      <div className="space-y-4 p-4 text-sm sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 font-medium">
+            Selling option
+            <Select value={skuId} onValueChange={setSkuId}>
+              <SelectTrigger aria-label="Price variant" className="w-full">
+                <SelectValue placeholder="Select selling option" />
+              </SelectTrigger>
+              <SelectContent>
+                {skus.map((sku) => (
+                  <SelectItem key={sku.skuId} value={sku.skuId}>
+                    {sku.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="grid gap-1 font-medium">
+            Location
+            <Select value={locationId} onValueChange={setLocationId}>
+              <SelectTrigger aria-label="Price location" className="w-full">
+                <SelectValue placeholder="Select location" />
+              </SelectTrigger>
+              <SelectContent>
+                {locations.map((location) => (
+                  <SelectItem key={location.locationId} value={location.locationId}>
+                    {location.locationName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+        {notice ? <p role="status">{notice}</p> : null}
+        {!skuId || !locationId ? (
+          <p className="text-[var(--fm-text-muted)]">
+            Create a selling option and operational location before setting prices.
+          </p>
+        ) : loading ? (
+          <p role="status">Loading price history…</p>
+        ) : !view ? (
+          <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
+            Retry price history
+          </Button>
+        ) : (
+          <>
+            <div className="grid items-center gap-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-4 sm:grid-cols-[1fr_1fr_auto]">
+              <div>
+                <p className="text-xs text-[var(--fm-text-muted)]">Selling option</p>
+                <p className="mt-1 font-medium">{selectedSku?.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-[var(--fm-text-muted)]">Current price</p>
+                <p className="mt-1 font-semibold">
+                  {formatPrice(view.currentPriceMinor, view.currency)}
+                </p>
+              </div>
+              {view.canManage && selectedSku && selectedLocation ? (
+                <Button
+                  type="button"
+                  className="fm-admin-reference-primary"
+                  onClick={() =>
+                    onEditPrice({
+                      skuId: selectedSku.skuId,
+                      skuName: selectedSku.name,
+                      locationId: selectedLocation.locationId,
+                      locationName: selectedLocation.locationName,
+                    })
+                  }
+                >
+                  <Pencil aria-hidden="true" />
+                  Edit price
+                </Button>
+              ) : (
+                <span className="text-xs text-[var(--fm-text-muted)]">Read only</span>
+              )}
+            </div>
+            <details>
+              <summary className="cursor-pointer font-medium">Price history</summary>
+              <ul className="mt-3 space-y-2" aria-label="Price history">
+                {view.history.map((entry) => (
+                  <li
+                    key={entry.version}
+                    className="rounded-md bg-[var(--fm-admin-surface-muted)] p-3"
+                  >
+                    {formatPrice(entry.amountMinor, entry.currency)} ·{" "}
+                    {new Date(entry.validFrom).toLocaleString()} →{" "}
+                    {entry.validTo === null ? "open end" : new Date(entry.validTo).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+              {view.history.length === 0 ? (
+                <p className="mt-3 text-[var(--fm-text-muted)]">
+                  No price has been recorded at this location.
+                </p>
+              ) : null}
+            </details>
+          </>
+        )}
+      </div>
+    </ListPageSection>
+  );
+}
+
+export function LocationPriceEditor({
+  selection,
+  onClose,
+  onSaved,
+}: {
+  selection: ProductPriceSelection;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [view, setView] = useState<AdminSkuPricesView | null>(null);
+  const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
@@ -81,30 +251,24 @@ export function GlobalPricePanel({
 
   useEffect(() => {
     let canceled = false;
-    setView(null);
-    setAmount("");
-    setEffectiveAt("");
-    if (!skuId || !locationId) return;
     setLoading(true);
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/admin/catalog/skus/${encodeURIComponent(skuId)}/prices?${new URLSearchParams({ locationId })}`,
-        );
-        const result = priceResultSchema.parse(await response.json());
+    setView(null);
+    void loadPrices(selection.skuId, selection.locationId)
+      .then((result) => {
         if (canceled) return;
         if (result.ok) setView(result.value);
-        else setNotice(result.error.message);
-      } catch {
-        if (!canceled) setNotice("Price history could not be loaded. Retry to refresh it.");
-      } finally {
+        else setNotice(`${result.error.message} Request reference: ${result.error.requestId}`);
+      })
+      .catch(() => {
+        if (!canceled) setNotice("The location price could not be loaded. Retry to continue.");
+      })
+      .finally(() => {
         if (!canceled) setLoading(false);
-      }
-    })();
+      });
     return () => {
       canceled = true;
     };
-  }, [skuId, locationId, reload]);
+  }, [selection, reload]);
 
   const submit = useCallback(
     async (pending: PriceCommand) => {
@@ -119,108 +283,116 @@ export function GlobalPricePanel({
               body: JSON.stringify(pending),
             },
           );
-          const result: RpcResult<unknown> = commandResultSchema.parse(await response.json());
-          return result;
+          const parsed: RpcResult<unknown> = commandResultSchema.parse(await response.json());
+          return parsed;
         });
         setCommand(null);
-        setNotice(result.ok ? "Exact-location price saved." : result.error.message);
-        setReload((value) => value + 1);
+        if (result.ok) {
+          setNotice("Exact-location price saved.");
+          setAmount("");
+          setReload((value) => value + 1);
+          onSaved();
+        } else {
+          setNotice(`${result.error.message} Request reference: ${result.error.requestId}`);
+        }
       } catch {
         setNotice("The price could not be confirmed. Select Save price to try again.");
       }
     },
-    [intent],
+    [intent, onSaved],
   );
 
+  function prepareCommand() {
+    if (!view) return null;
+    if (!/^\d+(\.\d{1,2})?$/.test(amount)) {
+      setNotice("Enter a positive price with at most two decimal places.");
+      return null;
+    }
+    const [whole, fraction = ""] = amount.split(".");
+    const amountMinor = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+    const validFrom = effectiveAt ? new Date(effectiveAt).getTime() : Date.now();
+    if (
+      !Number.isSafeInteger(amountMinor) ||
+      amountMinor <= 0 ||
+      !Number.isSafeInteger(validFrom)
+    ) {
+      setNotice("Enter a valid price and effective time.");
+      return null;
+    }
+    return {
+      skuId: selection.skuId,
+      locationId: selection.locationId,
+      marketId: view.marketId,
+      currency: view.currency,
+      amountMinor,
+      validFrom,
+      expectedVersion: view.latestVersion,
+    } satisfies PriceCommand;
+  }
+
   return (
-    <ListPageSection
-      title="Exact-location prices"
-      description="Set a final retail price for each location. Missing prices remain unavailable. History shows the latest 25 versions."
-    >
-      <div className="space-y-4 p-4 text-sm">
-        <div className="flex flex-wrap gap-3">
-          <Select value={skuId} onValueChange={setSkuId} disabled={command !== null}>
-            <SelectTrigger aria-label="Price variant" className="w-64">
-              <SelectValue placeholder="Select variant" />
-            </SelectTrigger>
-            <SelectContent>
-              {skus.map((sku) => (
-                <SelectItem key={sku.skuId} value={sku.skuId}>
-                  {sku.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={locationId} onValueChange={setLocationId} disabled={command !== null}>
-            <SelectTrigger aria-label="Price location" className="w-64">
-              <SelectValue placeholder="Select location" />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((location) => (
-                <SelectItem key={location.locationId} value={location.locationId}>
-                  {location.locationName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <>
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div>
+          <h2 id="location-price-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+            Edit location price
+          </h2>
+          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            Update this selling option at one location.
+          </p>
         </div>
-        {notice ? <p role="status">{notice}</p> : null}
-        {!skuId || !locationId ? (
-          <p>Create a variant and an operational location before setting prices.</p>
-        ) : loading ? (
-          <p role="status">Loading price history…</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close price editor"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+      <form
+        id="location-price-form"
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (command) {
+            void submit(command);
+            return;
+          }
+          const pending = prepareCommand();
+          if (pending) void submit(pending);
+        }}
+      >
+        {notice ? (
+          <p role="status" className="text-sm">
+            {notice}
+          </p>
+        ) : null}
+        <label className="grid gap-1 text-sm font-medium">
+          Location
+          <Input value={selection.locationName} readOnly />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Selling option
+          <Input value={selection.skuName} readOnly />
+        </label>
+        {loading ? (
+          <p role="status">Loading location price…</p>
         ) : !view ? (
-          <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
-            Retry price history
+          <Button type="button" variant="outline" onClick={() => setReload((value) => value + 1)}>
+            Retry location price
           </Button>
         ) : (
           <>
-            <p>
-              Current price:{" "}
-              {view.currentPriceMinor === null
-                ? "Unavailable"
-                : new Intl.NumberFormat(undefined, {
-                    style: "currency",
-                    currency: view.currency,
-                  }).format(view.currentPriceMinor / 100)}
-            </p>
+            <label className="grid gap-1 text-sm font-medium">
+              Current price
+              <Input value={formatPrice(view.currentPriceMinor, view.currency)} readOnly />
+            </label>
             {view.canManage ? (
-              <form
-                className="flex flex-wrap items-end gap-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (command) {
-                    void submit(command);
-                    return;
-                  }
-                  if (!/^\d+(\.\d{1,2})?$/.test(amount)) {
-                    setNotice("Enter a positive price with at most two decimal places.");
-                    return;
-                  }
-                  const [whole, fraction = ""] = amount.split(".");
-                  const amountMinor = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
-                  const validFrom = effectiveAt ? new Date(effectiveAt).getTime() : Date.now();
-                  if (
-                    !Number.isSafeInteger(amountMinor) ||
-                    amountMinor <= 0 ||
-                    !Number.isSafeInteger(validFrom)
-                  ) {
-                    setNotice("Enter a valid price and effective time.");
-                    return;
-                  }
-                  void submit({
-                    skuId,
-                    locationId,
-                    marketId: view.marketId,
-                    currency: view.currency,
-                    amountMinor,
-                    validFrom,
-                    expectedVersion: view.latestVersion,
-                  });
-                }}
-              >
-                <label className="space-y-1">
-                  Final price ({view.currency})
+              <>
+                <label className="grid gap-1 text-sm font-medium">
+                  New price ({view.currency})
                   <Input
                     aria-label="Final retail price"
                     value={amount}
@@ -229,10 +401,15 @@ export function GlobalPricePanel({
                     disabled={command !== null}
                     required
                   />
+                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                    Enter the final customer price for this location and selling option.
+                  </span>
                 </label>
-                <details>
-                  <summary className="cursor-pointer">Schedule a price change</summary>
-                  <label className="space-y-1">
+                <details className="border-t border-[var(--fm-border)] pt-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Schedule this price change
+                  </summary>
+                  <label className="mt-3 grid gap-1 text-sm font-medium">
                     Effective time (your local time)
                     <Input
                       aria-label="Price effective time"
@@ -243,34 +420,30 @@ export function GlobalPricePanel({
                     />
                   </label>
                 </details>
-                <Button type="submit" disabled={intent.pending}>
-                  {intent.pending ? "Saving price…" : "Save price"}
-                </Button>
-              </form>
+              </>
             ) : (
-              <p>Read only. Global price-management permission is required to set prices.</p>
+              <p className="text-sm text-[var(--fm-text-muted)]">
+                Read only. Global price-management permission is required to set prices.
+              </p>
             )}
-            <details>
-              <summary className="cursor-pointer">Price history</summary>
-              <ul className="space-y-2" aria-label="Price history">
-                {view.history.map((price) => (
-                  <li key={price.version}>
-                    {new Intl.NumberFormat(undefined, {
-                      style: "currency",
-                      currency: price.currency,
-                    }).format(price.amountMinor / 100)}{" "}
-                    · {new Date(price.validFrom).toLocaleString()} →{" "}
-                    {price.validTo === null ? "open end" : new Date(price.validTo).toLocaleString()}
-                  </li>
-                ))}
-              </ul>
-              {view.history.length === 0 ? (
-                <p>No price has been recorded at this location.</p>
-              ) : null}
-            </details>
           </>
         )}
+      </form>
+      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        {view?.canManage ? (
+          <Button
+            type="submit"
+            form="location-price-form"
+            className="fm-admin-reference-primary"
+            disabled={intent.pending || loading}
+          >
+            {intent.pending ? "Saving price…" : "Save price"}
+          </Button>
+        ) : null}
       </div>
-    </ListPageSection>
+    </>
   );
 }

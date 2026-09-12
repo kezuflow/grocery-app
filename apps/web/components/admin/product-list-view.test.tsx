@@ -144,6 +144,42 @@ describe("ProductListView", () => {
     expect(onDeactivateSelected).not.toHaveBeenCalled();
   });
 
+  it("opens the product preview from the complete row without hijacking row controls", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const onOpenProduct = vi.fn();
+
+    act(() => {
+      root?.render(
+        <ProductListView
+          page={page}
+          fromQuery="status=active"
+          canManage
+          onOpenProduct={onOpenProduct}
+          openProductId="product-onion"
+          detailPanelId="product-detail-panel"
+          onDeactivateSelected={vi.fn()}
+        />,
+      );
+    });
+
+    const row = container.querySelector<HTMLTableRowElement>('[data-product-row="product-onion"]');
+    expect(row?.dataset.previewOpen).toBe("true");
+    expect(container.querySelector('[aria-label="Preview Red onion"]')).not.toBeNull();
+
+    const categoryCell = [...(row?.querySelectorAll("td") ?? [])].find(
+      (cell) => cell.textContent === "VEGETABLES",
+    );
+    act(() => categoryCell?.click());
+    expect(onOpenProduct).toHaveBeenCalledWith(page.items[0]);
+
+    onOpenProduct.mockClear();
+    const checkbox = container.querySelector<HTMLButtonElement>('[aria-label="Select Red onion"]');
+    act(() => checkbox?.click());
+    expect(onOpenProduct).not.toHaveBeenCalled();
+  });
+
   it("opens a vertical row action menu with product commands", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);

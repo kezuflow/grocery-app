@@ -144,7 +144,7 @@ export default function CustomerDetailPage({
   const { customer } = state;
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 [&_h1]:break-all">
+    <div className="w-full space-y-6 [&_h1]:break-all">
       <PageHeader
         title={customer.email}
         description={`Joined ${customer.createdAt.slice(0, 10)} · ${customer.orderCount} order${customer.orderCount === 1 ? "" : "s"} · v${customer.version}`}

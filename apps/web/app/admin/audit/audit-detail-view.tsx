@@ -40,7 +40,7 @@ export function AuditDetailView({ state }: { state: AuditDetailState }) {
 
   const event = state.event;
   return (
-    <div className="mx-auto max-w-[1000px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader title={event.action} description={`Audit event ${event.auditEventId}`} />
       <ListPageSection title="Event" description="Immutable action and scope metadata.">
         <dl className="grid gap-4 p-4 text-sm sm:grid-cols-2">

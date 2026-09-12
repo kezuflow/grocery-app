@@ -191,6 +191,14 @@ function clickButton(match: (text: string) => boolean): void {
   act(() => button.click());
 }
 
+function clickProductResult(name: string): void {
+  const item = [...document.querySelectorAll<HTMLElement>('[data-slot="combobox-item"]')].find(
+    (candidate) => candidate.textContent?.includes(name),
+  );
+  if (!item) throw new Error(`Product result ${name} was not rendered`);
+  act(() => item.click());
+}
+
 it("searches live after debounce, loads location-scoped options and previews the sale price", async () => {
   await renderPicker();
   const search = document.querySelector<HTMLInputElement>(
@@ -202,8 +210,11 @@ it("searches live after debounce, loads location-scoped options and previews the
     "/api/admin/catalog/products?scopeKind=GLOBAL&status=active&limit=10&query=abiu",
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
+  const popup = document.querySelector<HTMLElement>('[data-slot="combobox-content"]');
+  expect(popup).not.toBeNull();
+  expect(host.contains(popup)).toBe(false);
 
-  clickButton((text) => text.includes("Abiu"));
+  clickProductResult("Abiu");
   await flush();
   const detailUrl = fetchMock.mock.calls
     .map(([input]) => String(input))
@@ -226,7 +237,7 @@ it("adds a whole-stock target by default and a fixed pool only for positive whol
   )!;
   setText(search, "abiu");
   await settleDebounce();
-  clickButton((text) => text.includes("Abiu"));
+  clickProductResult("Abiu");
   await flush();
   const pickOption = () => {
     clickButton((text) => text.includes("1 piece"));
@@ -263,7 +274,7 @@ it("warns when another active sale already covers the option at the location", a
   )!;
   setText(search, "abiu");
   await settleDebounce();
-  clickButton((text) => text.includes("Abiu"));
+  clickProductResult("Abiu");
   await flush();
   clickButton((text) => text.includes("1 piece"));
   expect(host.textContent).toContain("Another active sale already covers this option");

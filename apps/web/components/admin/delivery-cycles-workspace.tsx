@@ -429,7 +429,7 @@ export function DeliveryCyclesWorkspace({
                 <p className="text-sm">
                   {destinationsLoading
                     ? "Loading eligible destinations…"
-                    : "No eligible destinations loaded. Configure active locations and service areas first."}
+                    : "No eligible destinations loaded. Configure active fulfillment locations and their capabilities first."}
                 </p>
               )}
               {(destinationError || destinations.nextCursor) && (

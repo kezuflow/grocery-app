@@ -49,6 +49,8 @@ describe("ProductForm", () => {
       <ProductForm
         formId="create-product-form"
         hideSubmit
+        compact
+        preview={<p>Embedded product preview</p>}
         categories={[]}
         onChange={vi.fn()}
         onSubmit={vi.fn()}
@@ -80,9 +82,11 @@ describe("ProductForm", () => {
     );
     expect(html).toContain('id="create-product-form"');
     expect(html).toContain("Product images");
-    expect(html).toContain("Variants");
+    expect(html).toContain("Embedded product preview");
+    expect(html).toContain('aria-label="Product preview and organization"');
+    expect(html).toContain("Selling options");
     expect(html).toContain("Add image");
-    expect(html).toContain("Add variant");
+    expect(html).toContain("Add option");
     expect(html).toContain("Status");
     expect(html).toContain('<option value="active" selected="">Active</option>');
     expect(html).toContain('<option value="inactive">Inactive</option>');

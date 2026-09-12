@@ -13,6 +13,9 @@ import { ProductImagesEditor } from "@/components/admin/product-images-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext } from "../../../../admin-context-provider";
+import { AdminStatusPill } from "@/components/admin/admin-status-pill";
+
+const EDIT_PRODUCT_FORM_ID = "edit-product-form";
 
 export default function EditProductPage() {
   const productId = useParams<{ "product-id": string }>()?.["product-id"];
@@ -30,6 +33,7 @@ export default function EditProductPage() {
   const [reload, setReload] = useState(0);
   const loadedScope = useRef("");
   const editVersion = useRef<number | null>(null);
+  const initialValue = useRef<ProductFormValue | null>(null);
   useEffect(() => {
     // Keep the complete image intent mounted while its outcome is unknown.
     if (imageBusy) return;
@@ -51,6 +55,7 @@ export default function EditProductPage() {
       setDetail(null);
       setValue(null);
       editVersion.current = null;
+      initialValue.current = null;
     }
     setError(null);
     void fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`)
@@ -70,22 +75,24 @@ export default function EditProductPage() {
         }
         setDetail(product.value);
         editVersion.current ??= product.value.version;
-        setValue(
-          (currentValue) =>
-            currentValue ?? {
-              name: product.value.name,
-              slug: product.value.slug,
-              description: product.value.description,
-              categoryId: product.value.categoryId,
-              customerDetails: product.value.customerDetails.map(
-                ({ label, value: detailValue, sortOrder }) => ({
-                  label,
-                  value: detailValue,
-                  sortOrder,
-                }),
-              ),
-            },
-        );
+        setValue((currentValue) => {
+          if (currentValue) return currentValue;
+          const loadedValue: ProductFormValue = {
+            name: product.value.name,
+            slug: product.value.slug,
+            description: product.value.description,
+            categoryId: product.value.categoryId,
+            customerDetails: product.value.customerDetails.map(
+              ({ label, value: detailValue, sortOrder }) => ({
+                label,
+                value: detailValue,
+                sortOrder,
+              }),
+            ),
+          };
+          initialValue.current = loadedValue;
+          return loadedValue;
+        });
       })
       .catch(() => {
         if (current) setError("Product could not be loaded. Refresh to retry.");
@@ -148,17 +155,54 @@ export default function EditProductPage() {
       </Alert>
     );
   if (!detail || !value) return <Skeleton className="h-80 w-full" />;
+  const from = searchParams.get("from");
+  const detailHref = `/admin/catalog/products/${detail.productId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+  const dirty =
+    initialValue.current !== null && JSON.stringify(value) !== JSON.stringify(initialValue.current);
   return (
-    <div className="space-y-6">
-      <PageHeader title="Edit product" description="Update product details and photos." />
+    <div className="space-y-5">
+      <PageHeader
+        title="Edit product"
+        description="Update product details and images."
+        action={
+          dirty ? <AdminStatusPill status="unsaved" tone="warning" label="Unsaved changes" /> : null
+        }
+      />
       {error || categories.error ? (
         <Alert variant="destructive">
           <AlertDescription>{error ?? categories.error}</AlertDescription>
         </Alert>
       ) : null}
-      <section className="max-w-3xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-6">
-        <fieldset disabled={intent.pending || intent.uncertain || imageBusy}>
+      <div
+        role="navigation"
+        aria-label="Product editing sections"
+        className="border-b border-[var(--fm-border)]"
+      >
+        <div className="flex gap-1">
+          <a
+            href="#product-details-editor"
+            className="border-b-2 border-[var(--fm-admin-accent)] px-3 py-2 text-sm font-semibold"
+          >
+            Product details
+          </a>
+          <a
+            href="#product-images-editor"
+            className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)]"
+          >
+            Images
+          </a>
+        </div>
+      </div>
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(22rem,0.82fr)_minmax(0,1.18fr)]">
+        <fieldset
+          id="product-details-editor"
+          className="min-w-0 scroll-mt-24"
+          disabled={intent.pending || intent.uncertain || imageBusy}
+        >
           <ProductForm
+            formId={EDIT_PRODUCT_FORM_ID}
+            hideSubmit
+            compact
             value={value}
             categories={categories.items}
             currentCategoryName={detail.categoryName}
@@ -168,31 +212,49 @@ export default function EditProductPage() {
             onSubmit={submit}
           />
         </fieldset>
+        <fieldset
+          id="product-images-editor"
+          className="min-w-0 scroll-mt-24"
+          disabled={intent.pending || intent.uncertain}
+        >
+          <ProductImagesEditor
+            productId={detail.productId}
+            version={detail.version}
+            images={detail.media}
+            onBusyChange={setImageBusy}
+            onComplete={() => {
+              // Only our own image write advances the version of the unsaved
+              // identity draft. A concurrent edit must still reject that draft.
+              if (editVersion.current === detail.version) editVersion.current++;
+              setReload((value) => value + 1);
+            }}
+          />
+        </fieldset>
+      </div>
+      {categories.hasMore || categories.error ? (
+        <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+          {categories.error ? "Retry categories" : "More categories"}
+        </Button>
+      ) : null}
+      <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <Button type="button" variant="outline" onClick={() => router.push(detailHref)}>
+          Cancel
+        </Button>
         {intent.uncertain ? (
           <Button disabled={intent.pending} onClick={() => void save(true)}>
             Retry saved product
           </Button>
-        ) : null}
-        {categories.hasMore || categories.error ? (
-          <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
-            {categories.error ? "Retry categories" : "More categories"}
+        ) : (
+          <Button
+            type="submit"
+            form={EDIT_PRODUCT_FORM_ID}
+            className="fm-admin-reference-primary"
+            disabled={intent.pending || imageBusy || !dirty}
+          >
+            {intent.pending ? "Saving…" : "Save changes"}
           </Button>
-        ) : null}
-      </section>
-      <fieldset disabled={intent.pending || intent.uncertain}>
-        <ProductImagesEditor
-          productId={detail.productId}
-          version={detail.version}
-          images={detail.media}
-          onBusyChange={setImageBusy}
-          onComplete={() => {
-            // Only our own image write advances the version of the unsaved
-            // identity draft. A concurrent edit must still reject that draft.
-            if (editVersion.current === detail.version) editVersion.current++;
-            setReload((value) => value + 1);
-          }}
-        />
-      </fieldset>
+        )}
+      </div>
     </div>
   );
 }

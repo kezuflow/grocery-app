@@ -125,8 +125,10 @@
   --fm-container-content: 1180px;
   --fm-motion-fast: 150ms;
   --fm-motion-base: 200ms;
+  --fm-motion-panel: 240ms;
   --fm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --fm-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --fm-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --fm-font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --fm-font-body: "Open Sans", ui-sans-serif, system-ui, sans-serif;
   background: var(--fm-background);

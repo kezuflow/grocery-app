@@ -25,10 +25,15 @@ import {
 import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductImagesEditor } from "@/components/admin/product-images-editor";
-import { GlobalPricePanel } from "../../../../../components/admin/global-price-panel";
+import {
+  GlobalPricePanel,
+  LocationPriceEditor,
+  type ProductPriceSelection,
+} from "../../../../../components/admin/global-price-panel";
 import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
+import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 
 type LoadState =
   | { phase: "loading" }
@@ -70,6 +75,8 @@ export default function ProductDetailPage({
     estimatedShippingWeightGrams: "",
   });
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
+  const [priceSelection, setPriceSelection] = useState<ProductPriceSelection | null>(null);
+  const [priceRevision, setPriceRevision] = useState(0);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
       ? "Product created."
@@ -185,7 +192,7 @@ export default function ProductDetailPage({
   }
   if (state.phase === "loading") {
     return (
-      <div className="space-y-3" role="status" aria-label="Loading product">
+      <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading product">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -193,18 +200,20 @@ export default function ProductDetailPage({
   }
   if (state.phase === "error") {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>The product could not be loaded</AlertTitle>
-        <AlertDescription>
-          {state.message}
-          {state.requestId ? (
-            <>
-              <br />
-              <span className="font-mono text-xs">Request reference: {state.requestId}</span>
-            </>
-          ) : null}
-        </AlertDescription>
-      </Alert>
+      <div className="p-5 sm:p-7">
+        <Alert variant="destructive">
+          <AlertTitle>The product could not be loaded</AlertTitle>
+          <AlertDescription>
+            {state.message}
+            {state.requestId ? (
+              <>
+                <br />
+                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
+              </>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
@@ -233,8 +242,8 @@ export default function ProductDetailPage({
           ["Audit", "#product-audit"],
         ];
 
-  return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+  const master = (
+    <section className="w-full space-y-6 p-5 sm:p-7">
       <PageHeader
         title={product.name}
         description={`${product.categoryName} · ${product.skus.length} sell variant${product.skus.length === 1 ? "" : "s"} · ${countedSizes ? "actual counted sizes" : `shared ${product.inventoryPool.baseUnitCode} inventory`}`}
@@ -366,7 +375,12 @@ export default function ProductDetailPage({
       ) : null}
 
       {product.scope.kind === "GLOBAL" ? (
-        <GlobalPricePanel skus={product.skus} scopes={targetOptions} />
+        <GlobalPricePanel
+          key={`product-prices-${priceRevision}`}
+          skus={product.skus}
+          scopes={targetOptions}
+          onEditPrice={setPriceSelection}
+        />
       ) : null}
 
       <div id="product-variants" className="scroll-mt-32">
@@ -795,6 +809,26 @@ export default function ProductDetailPage({
           );
         }}
       />
-    </div>
+    </section>
+  );
+
+  return (
+    <AdminMasterDetailWorkspace
+      open={priceSelection !== null}
+      master={master}
+      detail={
+        priceSelection ? (
+          <LocationPriceEditor
+            key={`${priceSelection.skuId}:${priceSelection.locationId}`}
+            selection={priceSelection}
+            onClose={() => setPriceSelection(null)}
+            onSaved={() => setPriceRevision((revision) => revision + 1)}
+          />
+        ) : null
+      }
+      panelId="location-price-panel"
+      labelledBy="location-price-panel-title"
+      resizeLabel="Resize location price editor"
+    />
   );
 }

@@ -108,7 +108,7 @@ export function ProductMediaUpload({
     }
   }
   return (
-    <form onSubmit={submit} className="space-y-3 border-b p-4">
+    <form onSubmit={submit} className="space-y-3 p-4">
       <fieldset
         disabled={pending || intent.current !== null}
         onChange={() => {

@@ -56,7 +56,7 @@ export default function OperationalExceptionsPage() {
     if (locationId) void load(pagination.cursor);
   }, [load, locationId, pagination.cursor]);
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Operational exceptions"
         description={`Cross-domain exception visibility for ${label}, with source-owned resolution commands.`}

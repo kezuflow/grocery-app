@@ -27,7 +27,7 @@ export default function PaymentsOverviewPage() {
     void load();
   }, [load]);
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Payments"
         description="Canonical payment outcomes, refund exposure, and reconciliation workload."

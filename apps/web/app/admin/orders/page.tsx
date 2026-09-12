@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminOrderPage, AdminOrderSummary, RpcResult } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, Eye, X } from "lucide-react";
+import { Clipboard, EllipsisVertical, ExternalLink, Eye, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -9,6 +9,7 @@ import {
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
+import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { OrderStatusBadge } from "../../../components/admin/order-status-badge";
 import { Button } from "../../../components/ui/button";
@@ -65,6 +66,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrderSummary | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const pagination = useAdminPagination(status);
 
   const load = useCallback(async (nextStatus: string, cursor: string | null) => {
@@ -118,8 +121,8 @@ export default function OrdersPage() {
     }, 2_000);
   }
 
-  return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+  const master = (
+    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader title="Orders" />
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
@@ -236,13 +239,18 @@ export default function OrdersPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Link
+                    <button
+                      type="button"
+                      aria-expanded={panelOpen && selectedOrder?.orderId === order.orderId}
+                      aria-controls="order-detail-panel"
                       className="font-medium hover:underline"
-                      href={`/admin/orders/${order.orderId}`}
-                      prefetch={false}
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setPanelOpen(true);
+                      }}
                     >
                       {orderLabel(order)}
-                    </Link>
+                    </button>
                     {order.orderNumber ? (
                       <p className="mt-0.5 max-w-40 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
                         {order.orderId}
@@ -278,11 +286,14 @@ export default function OrdersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/orders/${order.orderId}`} prefetch={false}>
-                            <Eye aria-hidden="true" />
-                            View details
-                          </Link>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setSelectedOrder(order);
+                            setPanelOpen(true);
+                          }}
+                        >
+                          <Eye aria-hidden="true" />
+                          View details
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => void copyOrderId(order)}>
                           <Clipboard aria-hidden="true" />
@@ -306,6 +317,75 @@ export default function OrdersPage() {
           />
         ) : null}
       </section>
-    </div>
+    </section>
+  );
+
+  const detail = selectedOrder ? (
+    <>
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+            Order details
+          </p>
+          <h2 id="order-panel-title" className="mt-1 truncate text-xl font-bold tracking-[-0.03em]">
+            {orderLabel(selectedOrder)}
+          </h2>
+          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+            {selectedOrder.customerName ?? "Customer"} · {selectedOrder.customerEmail}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close order details"
+          onClick={() => setPanelOpen(false)}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="mb-5">
+          <OrderStatusBadge status={selectedOrder.status} />
+        </div>
+        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+          {[
+            ["Amount", money(selectedOrder.totalMinor, selectedOrder.currency)],
+            ["Committed", date(selectedOrder.committedAt)],
+            ["Fulfillment", selectedOrder.fulfillmentMode.toLowerCase()],
+            ["Customer", selectedOrder.customerName ?? "Customer"],
+            ["Email", selectedOrder.customerEmail],
+            ["Order ID", selectedOrder.orderId],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
+              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+              <dd className="max-w-64 break-all text-right font-medium capitalize">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
+          Close
+        </Button>
+        <Button asChild>
+          <Link href={`/admin/orders/${selectedOrder.orderId}`} prefetch={false}>
+            <ExternalLink aria-hidden="true" />
+            Full order
+          </Link>
+        </Button>
+      </div>
+    </>
+  ) : null;
+
+  return (
+    <AdminMasterDetailWorkspace
+      open={panelOpen && selectedOrder !== null}
+      master={master}
+      detail={detail}
+      panelId="order-detail-panel"
+      labelledBy="order-panel-title"
+      resizeLabel="Resize order details"
+    />
   );
 }

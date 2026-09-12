@@ -79,6 +79,9 @@ export function ProductListView({
   canManage = false,
   deactivationPending = false,
   onDeactivateSelected,
+  onOpenProduct,
+  openProductId,
+  detailPanelId,
   filters,
   activeFilterCount = 0,
 }: {
@@ -90,6 +93,9 @@ export function ProductListView({
     products: ReadonlyArray<BulkProductSelection>,
     reason: string,
   ) => Promise<BulkProductDeactivationResult>;
+  onOpenProduct?: (product: ProductListItem) => void;
+  openProductId?: string | null;
+  detailPanelId?: string;
   filters?: ReactNode;
   activeFilterCount?: number;
 }) {
@@ -401,7 +407,30 @@ export function ProductListView({
               {page.items.map((product) => (
                 <TableRow
                   key={product.productId}
+                  data-product-row={product.productId}
+                  data-preview-open={openProductId === product.productId ? "true" : undefined}
                   data-state={selectedIds.has(product.productId) ? "selected" : undefined}
+                  className={
+                    onOpenProduct
+                      ? `cursor-pointer ${
+                          openProductId === product.productId
+                            ? "bg-[var(--fm-admin-accent-soft)]"
+                            : ""
+                        }`
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    if (!onOpenProduct) return;
+                    const target = event.target;
+                    if (
+                      target instanceof Element &&
+                      target.closest(
+                        "button, a, input, select, textarea, [role='checkbox'], [role='menuitem']",
+                      )
+                    )
+                      return;
+                    onOpenProduct(product);
+                  }}
                 >
                   {canManage ? (
                     <TableCell className="w-12">
@@ -432,7 +461,20 @@ export function ProductListView({
                         </span>
                       )}
                       <span>
-                        <span className="block font-medium">{product.name}</span>
+                        {onOpenProduct ? (
+                          <button
+                            type="button"
+                            aria-label={`Preview ${product.name}`}
+                            aria-expanded={openProductId === product.productId}
+                            aria-controls={detailPanelId}
+                            className="block text-left font-medium hover:underline"
+                            onClick={() => onOpenProduct(product)}
+                          >
+                            {product.name}
+                          </button>
+                        ) : (
+                          <span className="block font-medium">{product.name}</span>
+                        )}
                         <span className="block text-xs text-[var(--fm-text-muted)]">
                           {product.slug}
                         </span>
@@ -509,14 +551,21 @@ export function ProductListView({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <a
-                            href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
-                          >
+                        {onOpenProduct ? (
+                          <DropdownMenuItem onSelect={() => onOpenProduct(product)}>
                             <Eye aria-hidden="true" />
                             View details
-                          </a>
-                        </DropdownMenuItem>
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
+                            >
+                              <Eye aria-hidden="true" />
+                              View details
+                            </a>
+                          </DropdownMenuItem>
+                        )}
                         {canManage ? (
                           <DropdownMenuItem asChild>
                             <a

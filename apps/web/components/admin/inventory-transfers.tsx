@@ -75,7 +75,7 @@ export function InventoryTransfersPage() {
     return () => controller.abort();
   }, [scopeKey, filter, pagination.cursor, reload]);
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Warehouse transfers"
         description="Dispatch physical stock from the central warehouse. Destinations credit only goods they have checked and accepted."
@@ -488,7 +488,7 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
     }
   }
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <Link className="underline" href="/admin/transfers">
         Warehouse transfers
       </Link>

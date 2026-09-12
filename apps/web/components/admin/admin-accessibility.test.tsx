@@ -7,7 +7,6 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table"
 import { AdminCursorPagination } from "./admin-controls";
 import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
 import { AdminPageState, AdminLiveRegion, type AdminPageStateKind } from "./admin-page-state";
-import { AdminBreadcrumbs } from "./admin-breadcrumbs";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
 vi.mock("../../app/admin/admin-context-provider", () => ({
@@ -30,6 +29,14 @@ vi.mock("next/navigation", () => ({
 
 const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+const workspaceResizeHandle = readFileSync(
+  new URL("./admin-workspace-resize-handle.tsx", import.meta.url),
+  "utf8",
+);
+const masterDetailWorkspace = readFileSync(
+  new URL("./admin-master-detail-workspace.tsx", import.meta.url),
+  "utf8",
+);
 const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
 const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
 const alertDialog = readFileSync(new URL("../ui/alert-dialog.tsx", import.meta.url), "utf8");
@@ -44,6 +51,31 @@ const inventoryPage = readFileSync(
   "utf8",
 );
 const auditPage = readFileSync(new URL("../../app/admin/audit/page.tsx", import.meta.url), "utf8");
+const promotionsPage = readFileSync(
+  new URL("../../app/admin/promotions/page.tsx", import.meta.url),
+  "utf8",
+);
+const salesPage = readFileSync(new URL("../../app/admin/sales/page.tsx", import.meta.url), "utf8");
+const productsPage = readFileSync(
+  new URL("../../app/admin/catalog/products/products-page-client.tsx", import.meta.url),
+  "utf8",
+);
+const categoriesPage = readFileSync(
+  new URL("../../app/admin/catalog/categories/categories-page-client.tsx", import.meta.url),
+  "utf8",
+);
+const ordersPage = readFileSync(
+  new URL("../../app/admin/orders/page.tsx", import.meta.url),
+  "utf8",
+);
+const customersPage = readFileSync(
+  new URL("../../app/admin/customers/page.tsx", import.meta.url),
+  "utf8",
+);
+const bannersPage = readFileSync(
+  new URL("../../app/admin/banners/page.tsx", import.meta.url),
+  "utf8",
+);
 const newProductPage = readFileSync(
   new URL("../../app/admin/catalog/products/new/page.tsx", import.meta.url),
   "utf8",
@@ -84,9 +116,8 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toMatch(/aria-current=/);
     expect(shell).toMatch(/focus-visible:ring-2/);
     expect(shell).toMatch(/onCloseAutoFocus/);
-    expect(shell).toContain('"/admin/catalog/products/new"');
-    expect(shell).toContain('"/admin/catalog/categories"');
-    expect(shell).toContain('"/admin/catalog/categories/new"');
+    expect(shell).not.toContain("AdminBreadcrumbs");
+    expect(shell).not.toContain("showBreadcrumbs");
     expect(shell).not.toMatch(/Mobile admin navigation/);
     expect(shell).toMatch(/fm-admin-sidebar-collapsed/);
   });
@@ -130,7 +161,10 @@ describe("shared Admin accessibility contract", () => {
     expect(shell).toContain("md:rounded-xl md:shadow-[var(--fm-shadow-shell)]");
     expect(shell).toContain("transition-[width] duration-200 ease-linear");
     expect(shell).toContain("transition-[width,height,padding] duration-150 ease-in-out");
-    expect(shell).toContain("transition-[max-width,margin,opacity] duration-200 ease-linear");
+    expect(shell).toContain(
+      "transition-[max-width,margin,opacity,visibility] duration-200 ease-linear",
+    );
+    expect(shell).toContain("transition-[max-width,opacity,visibility] duration-200 ease-linear");
     expect(shell).toContain("flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left");
     expect(shell).toContain(
       'activeCode === child.code &&\n                  "bg-[var(--fm-admin-sidebar-active)] font-medium',
@@ -166,7 +200,9 @@ describe("shared Admin accessibility contract", () => {
     expect(sidebarSource).toContain(
       "aria-controls={collapsed ? undefined : `admin-nav-children-${item.code}`}",
     );
-    expect(sidebarSource).toContain('collapsed ? "ml-0 max-w-0 opacity-0"');
+    expect(sidebarSource).toContain("<TooltipProvider disableHoverableContent>");
+    expect(sidebarSource).toContain("aria-hidden={collapsed}");
+    expect(sidebarSource).toContain('collapsed ? "invisible max-w-0 opacity-0"');
     expect(sidebarSource).toContain('collapsed ? "w-8 px-2" : "w-full px-2"');
     expect(sidebarSource).toContain('role="menu"');
     expect(sidebarSource).toContain('side="right"');
@@ -262,6 +298,77 @@ describe("shared Admin accessibility contract", () => {
       expect(page).toContain("Select a permitted location");
     }
     expect(globalFulfillmentModePage).toContain("Switch to Global scope");
+  });
+
+  it("gives resource workspaces full-bleed responsive master-detail panes", () => {
+    for (const path of [
+      "/admin/promotions",
+      "/admin/sales",
+      "/admin/catalog/products",
+      "/admin/catalog/categories",
+      "/admin/orders",
+      "/admin/customers",
+      "/admin/banners",
+    ]) {
+      expect(shell).toContain(`"${path}"`);
+    }
+    expect(shell).toContain('fullBleedWorkspace ? "p-0"');
+    expect(shell).toContain("productDetailWorkspace");
+    expect(masterDetailWorkspace).toContain(
+      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
+    );
+    expect(masterDetailWorkspace).toContain("fixed inset-0 z-50 flex h-svh");
+    expect(masterDetailWorkspace).toContain("[transition-duration:var(--fm-motion-panel)]");
+    expect(masterDetailWorkspace).toContain("motion-reduce:transition-[opacity]");
+    for (const page of [productsPage, ordersPage, customersPage, bannersPage]) {
+      expect(page).toContain("<AdminMasterDetailWorkspace");
+      expect(page).toContain("resizeLabel=");
+    }
+    expect(productsPage).toContain('detailPanelId="product-detail-panel"');
+    expect(productsPage).not.toContain('href="/admin/catalog/products/new"');
+    expect(productsPage).toContain("<NewProductWorkspace");
+    expect(productsPage).toContain("adminProductDetailSchema");
+    expect(productsPage).toContain("<ProductPreviewPanel");
+    expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
+    expect(categoriesPage).toContain("<NewCategoryWorkspace");
+    expect(ordersPage).toContain('aria-controls="order-detail-panel"');
+    expect(customersPage).toContain('aria-controls="customer-detail-panel"');
+    expect(bannersPage).toContain('aria-controls="banner-detail-panel"');
+    expect(promotionsPage).toContain(
+      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
+    );
+    expect(promotionsPage).toContain("xl:transition-[grid-template-columns]");
+    expect(promotionsPage).toContain(
+      "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]",
+    );
+    expect(promotionsPage).toContain("fixed inset-0 z-50 flex h-svh");
+    expect(promotionsPage).toContain("xl:h-[calc(100svh-4.5rem)]");
+    expect(promotionsPage).toContain("[transition-duration:var(--fm-motion-panel)]");
+    expect(promotionsPage).toContain("[transition-timing-function:var(--fm-ease-drawer)]");
+    expect(promotionsPage).toContain("motion-reduce:transition-[opacity]");
+    expect(promotionsPage).toMatch(
+      /aria-label=\{\s*selectedPromotion\s*\?\s*"Close promotion details"/,
+    );
+    expect(salesPage).toContain(
+      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
+    );
+    expect(salesPage).toContain("xl:transition-[grid-template-columns]");
+    expect(salesPage).toContain(
+      "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]",
+    );
+    expect(salesPage).toContain("fixed inset-0 z-50 flex h-svh");
+    expect(salesPage).toContain("xl:h-[calc(100svh-4.5rem)]");
+    expect(salesPage).toContain("[transition-duration:var(--fm-motion-panel)]");
+    expect(salesPage).toContain("[transition-timing-function:var(--fm-ease-drawer)]");
+    expect(salesPage).toContain("motion-reduce:transition-[opacity]");
+    expect(salesPage).toContain('aria-label="Close new inventory sale"');
+    expect(promotionsPage).toContain('label="Resize promotion workspace"');
+    expect(salesPage).toContain('label="Resize inventory sale workspace"');
+    expect(workspaceResizeHandle).toContain('role="separator"');
+    expect(workspaceResizeHandle).toContain("setPointerCapture");
+    expect(workspaceResizeHandle).toContain('event.key === "ArrowLeft"');
+    expect(workspaceResizeHandle).toContain('event.key === "ArrowRight"');
+    expect(workspaceResizeHandle).toContain('title="Drag to resize. Double-click to reset."');
   });
 
   it("names the mobile dialog close action", () => {
@@ -379,7 +486,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("Retry");
   });
 
-  it("renders a responsive typed data table, breadcrumbs, and live command result", () => {
+  it("renders a responsive typed data table and live command result", () => {
     type Row = { id: string; name: string; status: string };
     const columns: ReadonlyArray<AdminDataTableColumn<Row>> = [
       { key: "name", header: "Name", render: (row) => row.name },
@@ -389,9 +496,6 @@ describe("shared Admin accessibility contract", () => {
       createElement(
         "div",
         null,
-        createElement(AdminBreadcrumbs, {
-          items: [{ label: "Admin", href: "/admin" }, { label: "Orders" }],
-        }),
         createElement(AdminDataTable<Row>, {
           ariaLabel: "Typed records",
           columns,
@@ -401,8 +505,6 @@ describe("shared Admin accessibility contract", () => {
         createElement(AdminLiveRegion, { message: "Order updated" }),
       ),
     );
-    expect(markup).toContain('aria-label="Breadcrumb"');
-    expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('aria-label="Typed records"');
     expect(markup).toContain('data-label="Name"');
     expect(markup).toContain('aria-live="polite"');

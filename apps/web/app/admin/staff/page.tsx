@@ -121,7 +121,7 @@ export default function StaffPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Staff & Access"
         description="Identities, invitations, roles, and scopes. Administration is global-scope only."

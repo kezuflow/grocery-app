@@ -7,7 +7,7 @@ import type {
   AdminScopeOptionView,
   AdminSkuPricesView,
 } from "@freshmarkets/contracts";
-import { GlobalPricePanel } from "./global-price-panel";
+import { GlobalPricePanel, LocationPriceEditor } from "./global-price-panel";
 vi.mock("./admin-shell", () => ({
   ListPageSection: ({ title, children }: { title: string; children: ReactNode }) => (
     <section aria-label={title}>{children}</section>
@@ -75,18 +75,50 @@ afterEach(async () => {
 });
 const response = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
-const render = () =>
+const renderPanel = (onEditPrice = vi.fn()) =>
   act(async () => {
-    root.render(<GlobalPricePanel skus={skus} scopes={scopes} />);
+    root.render(<GlobalPricePanel skus={skus} scopes={scopes} onEditPrice={onEditPrice} />);
+  });
+const renderEditor = () =>
+  act(async () => {
+    root.render(
+      <LocationPriceEditor
+        selection={{
+          skuId: "sku-1",
+          skuName: "Onion",
+          locationId: "location-1",
+          locationName: "Cebu",
+        }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
   });
 
 describe("Global price editor", () => {
+  it("opens the selected selling option and location in the external editor workspace", async () => {
+    const onEditPrice = vi.fn();
+    fetchMock.mockResolvedValue(response({ ok: true, value: prices, requestId: "test" }));
+    await renderPanel(onEditPrice);
+    const edit = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Edit price",
+    );
+    if (!edit) throw new Error("Edit price button missing");
+    await act(async () => edit.click());
+    expect(onEditPrice).toHaveBeenCalledWith({
+      skuId: "sku-1",
+      skuName: "Onion",
+      locationId: "location-1",
+      locationName: "Cebu",
+    });
+  });
+
   it("shows unavailable prices and honors the Core read-only decision", async () => {
     fetchMock.mockResolvedValue(
       response({ ok: true, value: { ...prices, canManage: false }, requestId: "test" }),
     );
-    await render();
-    expect(container.textContent).toContain("Current price: Unavailable");
+    await renderPanel();
+    expect(container.textContent).toContain("Unavailable");
     expect(container.textContent).toContain("Read only");
     expect(container.querySelector("form")).toBeNull();
   });
@@ -105,7 +137,7 @@ describe("Global price editor", () => {
       }
       return response({ ok: true, value: prices, requestId: "test" });
     });
-    await render();
+    await renderEditor();
     const input = container.querySelector<HTMLInputElement>('[aria-label="Final retail price"]');
     if (!input) throw new Error("Price input missing");
     await act(async () => {
