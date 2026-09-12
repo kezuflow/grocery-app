@@ -320,6 +320,9 @@ export type AdminOrderCommandRequest = AuthenticatedRequest & {
 };
 
 export type OrdersService = {
+  listCustomerNotifications(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<import("./notifications").CustomerNotificationsView>>;
   listOrderAdditionOptions(
     request: OrderAdditionOptionsRequest,
   ): Promise<RpcResult<OrderAdditionOptionsView>>;

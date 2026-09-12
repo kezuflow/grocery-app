@@ -19,6 +19,7 @@ import {
 } from "@freshmarkets/validation";
 import { authenticatedRequestSchema } from "../validation";
 import { listCustomerOrders } from "../orders/application/list-customer-orders";
+import { listCustomerNotifications } from "../notifications/application/list-customer-notifications";
 import { getCustomerOrderDetail } from "../orders/application/get-customer-order-detail";
 import { reorderOrder } from "../orders/application/reorder-order";
 import { listCustomerOrderIssues } from "../orders/application/list-customer-order-issues";
@@ -33,6 +34,16 @@ import { validationFailure } from "./validation-errors";
 
 export function createOrdersRpc(context: CoreRpcContext) {
   return {
+    async listCustomerNotifications(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+      const validation = authenticatedRequestSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return listCustomerNotifications(context.env.DB, {
+        customerId: customer.value.customerId,
+        requestId: input.requestId,
+      });
+    },
     async listOrderAdditionOptions(input: OrderAdditionOptionsRequest) {
       const validation = authenticatedRequestSchema
         .extend({ orderId: identifierSchema, query: z.string().trim().max(100).optional() })

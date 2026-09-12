@@ -9,6 +9,9 @@ import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
 import { AdminPageState, AdminLiveRegion, type AdminPageStateKind } from "./admin-page-state";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
+vi.mock("../../app/admin/admin-overview-provider", () => ({
+  useAdminOverview: () => ({ result: null, refresh: vi.fn() }),
+}));
 vi.mock("../../app/admin/admin-context-provider", () => ({
   useAdminContext,
   adminSelectableScopes: (

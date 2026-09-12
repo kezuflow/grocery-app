@@ -380,7 +380,7 @@ access result. This is request-scoped reuse only: it is never cached across RPCs
 capability or scope checks, and the internal Staff evidence is not part of any public DTO.
 
 `AdminOverviewView` is generated for one Core-authorized selected scope and reporting timezone. It contains `generatedAt`, bounded operational cards, workload-stage counts, bounded active exceptions, bounded recent material operations, per-section freshness, and `deniedSections`. Cards and stages carry stable workspace/filter destinations and explicit availability; missing authority is never projected as numeric zero. Core composes the view from owning read models and applies each capability plus market/location scope independently. A global Staff principal with the required capabilities receives all Admin-safe sections and all reachable market/location records.
-The same overview includes at most 24 recent `notifications` with a stable identity, plain label, Order reference, occurrence instant, authorized destination and optional operational scope. Core reads committed Orders, delivery notification intents, unresolved problem reports and failed/escalated refunds; this is a bounded projection, not a new business record or read/unread workflow. Selected-location filtering and current read capabilities apply on every read. Problem notices require Global Staff plus orders.read; refund attention requires Global Staff plus payments.read. Assigned operations readers receive only their authorized fulfillment/delivery work. The overview refreshes on visible-window focus and every visible minute; the shell bell links to that existing dashboard section.
+The same overview includes at most 24 recent `notifications` with a stable identity, plain label, Order reference, occurrence instant, authorized destination and optional operational scope. Core reads committed Orders, delivery notification intents, unresolved problem reports and failed/escalated refunds; this is a bounded projection, not a new business record or read/unread workflow. Selected-location filtering and current read capabilities apply on every read. Problem notices require Global Staff plus orders.read; refund attention requires Global Staff plus payments.read. Assigned operations readers receive only their authorized fulfillment/delivery work. The overview refreshes on visible-window focus and every visible minute; the shell bell opens a notification panel backed by the same shared scoped Overview read and list as the dashboard section. Scope changes hide previous-scope results immediately; stale responses are discarded.
 
 Operational notice links use optional bounded `orderId` on the existing fulfillment and delivery queue reads. Core retains current location/read authorization and returns only that Order in the authorized location; explicit reads can include retained terminal rows. Omitting the filter preserves the default active queues. A notice does not authorize any action or reopen an Order. Global commercial notice links use existing Order/Problems/Payment details. Existing membership notification records remain retained, but the projector generates payment notices only for GROCERY_CHECKOUT and ORDER_AMENDMENT; membership enrollment/renewal facts cannot create new messages.
 
@@ -916,3 +916,22 @@ provider payloads remain in Core. The token is reused across typing and selected
 retired. Google Places search is Philippines-restricted and proximity-biased, not a delivery-coverage
 check. Existing final confirmation, pin provenance, nearest-location assignment and courier checks
 remain authoritative. No prediction or session token is persisted.
+
+## Customer notification read — 2026-09-13
+
+`listCustomerNotifications(AuthenticatedRequest)` returns `RpcResult<CustomerNotificationsView>` through
+`GET /api/commerce/notifications` with private, no-store caching. Core authenticates and resolves the
+customer; no customer ID, resource selector or caller-controlled limit is accepted. The result contains
+at most 24 newest updates, deterministic time/tie ordering and `hasMore`. Each item contains only
+`type`, `label`, `reference`, ISO `occurredAt`, `href` and `actionLabel`. No storage notification ID,
+recipient, email delivery status, provider payload or internal error is exposed.
+
+Committed Order confirmation comes from owned Order facts. Due material notification intent joins to
+owned Orders/cancellations/payments and excludes invitation/membership events and future reminders.
+Payment action/failure requires the corresponding current payment state and grocery purpose; amendment
+links require the owned Order. Refund support prompts require a current cancellation exception.
+Refund completed derives from a completed cancellation with a nonzero
+refund and matching successful refund members/Payments facts, never an email template. Email delivery
+state does not filter transaction updates. Customer Order routes reauthorize access on navigation;
+checkout and existing support destinations do not confer financial or Order authority. No writes,
+read/unread semantics, schema or transport-delivery changes are part of this read.

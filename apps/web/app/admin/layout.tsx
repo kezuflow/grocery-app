@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import "@fontsource-variable/dm-sans/wght.css";
 import { AdminContextProvider } from "./admin-context-provider";
+import { AdminOverviewProvider } from "./admin-overview-provider";
 import { AdminShellBoundary } from "../../components/admin/admin-shell";
 import { AdminThemeProvider } from "../../components/admin/admin-theme-provider";
 import { AdminToaster } from "../../components/admin/admin-toaster";
@@ -15,7 +16,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <AdminThemeProvider>
       <div className="fm-admin min-h-screen">
         <AdminContextProvider>
-          <AdminShellBoundary>{children}</AdminShellBoundary>
+          <AdminOverviewProvider>
+            <AdminShellBoundary>{children}</AdminShellBoundary>
+          </AdminOverviewProvider>
         </AdminContextProvider>
         <AdminToaster />
       </div>

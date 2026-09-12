@@ -347,6 +347,7 @@ export const coreServiceMethodNames = [
   "abandonCheckoutAttempt",
   "createPaymentIntent",
   "listCustomerOrders",
+  "listCustomerNotifications",
   "getCustomerOrderDetail",
   "getProvisionalTransactionSummary",
   "cancelCustomerOrder",

@@ -1,6 +1,77 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — API-CALL-EFFICIENCY-1 (2026-09-13)
+## Current owner request — NOTIFICATION-UI-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Acceptance: implement the two authorized notification UI surfaces, a minimal authenticated
+customer-safe typed read, scope-preserving Admin reuse, accessible responsive states/interactions,
+focused contract/Core/Web tests, local desktop/mobile browser acceptance and verified commit/push.
+
+Starting branch/HEAD: clean `main` at `30fb30e6b7bf925e8949aebcccd1ad3e98d9d07e`.
+No unrelated partial files were present. Owner authorized exactly one research-only Luna/max child;
+the spawn requested those settings and Mobbin MCP research completed with inspected images/canonical
+sources recorded in DESIGN. The child could not independently inspect its effective model settings.
+Astra owns all source/docs/tests and Git. No additional child, settings edit, live data mutation,
+deployment, provider transaction or outbound message is authorized/performed.
+
+Implemented working-tree behavior: storefront bell before Cart, customer session-aware lazy read,
+safe bounded notices joined to owned Orders/payments, independently verified refund completion,
+Admin shared Overview/bell data and row component, immediate Popover with explicit initial/return
+focus and separate design scopes. No schema/KV/read-state/delivery authority is added.
+
+Verification:
+- `pnpm.cmd check` passes formatting, naming, terminology, 31 harness tests, migrations/schema,
+  commit convention, architecture, readiness, lint, typechecks, all package tests and both builds:
+  Core 205 files / 1,658 tests; Web 126 / 510; contracts 20 / 69; other shared packages each 1 / 2.
+  Earlier attempts found one formatting omission and an authentication test importing transport from
+  the application directory; formatting and test placement were corrected without weakening guards.
+  The owner interruption ended another aggregate before Core/build completion; no surviving test
+  process was found, and the complete successful aggregate was executed on resume.
+- Final review suppresses resolved refund-exception support prompts. The focused post-adjustment
+  Core query, actual-session RPC and existing Admin scope suites pass 3 files / 9 tests using
+  `pnpm.cmd --filter @freshmarkets/core test src/notifications/application/list-customer-notifications.integration.test.ts src/entrypoint/customer-notifications.integration.test.ts src/admin/application/admin-overview.integration.test.ts --maxWorkers=1`.
+  Formatter, workspace typecheck and Core dry-run build pass after that adjustment. Lint identified
+  one unused Overview Link import left by shared-row extraction; it was removed before browser build.
+- Additional customer component access/session-race checks pass 7/7 after waiting for Radix's
+  asynchronous focus return; shared Admin identity/scope refresh checks pass 3/3. No previous-customer
+  or previous-Staff late response is shown. `vinext check` reports 100%, 16 supported / 0 issues.
+- Browser preparation used `E2E_START_STACK=1`, `E2E_STATE_NAME=e2e-notifications-20260913`,
+  `E2E_AUTHENTICATED=1` and `pnpm.cmd --filter @freshmarkets/web exec playwright test notifications.spec.ts admin-bootstrap.spec.ts`.
+  The named local state path was verified absent before creation; it is disposable test-owned data.
+  Core suites ended before the managed browser stack started. Source remained fixed during each
+  browser execution. First execution passed 5/7 checks (Admin desktop/mobile, one-request bootstrap,
+  anonymous private-read rejection and 320px long-list/error recovery). The first customer desktop
+  attempt exposed a rapid-reopen focus race: the previous Radix close callback stole focus after a
+  new open. Retries/mobile then hit a non-unique fixture Order number. The overlay now ignores old
+  close focus restoration while reopened, and fixture Order numbers are unique. Further browser
+  evidence required explicit focus on every open transition because rapid reopen can retain the
+  existing Radix focus scope. A stable blank header target replaced a raw edge/corner outside-click
+  target, avoiding the rounded desktop corner and the mobile navigation button. Assertions still
+  require dismissal and focus return. Final browser run passes all 7/7 in 33.4 seconds, without retry,
+  against the same isolated local Worker/D1 stack. It covers desktop 1440px/mobile 390px for both
+  surfaces, real authenticated customer reads/Order navigation, anonymous 401/no-store, keyboard
+  opening/Tab/Escape, rapid reopen, outside dismissal/focus return, one-request Admin bootstrap,
+  and 320px bounded long-label scrolling/error recovery. Only the latter response is synthetic
+  presentation data; commerce rows are local fixtures, not actual provider transactions.
+  Final command: `APP_BASE_URL=http://localhost:3100`, `E2E_START_STACK=0`, the same state/auth variables,
+  and `pnpm.cmd --filter @freshmarkets/web exec playwright test notifications.spec.ts admin-bootstrap.spec.ts --workers=1`.
+  The already-migrated stack was started with `node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev -c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/e2e-notifications-20260913 --port 3100`.
+  Final customer desktop/mobile/320px and Admin desktop/mobile screenshots were inspected, with no
+  overflow, unread indicators or copied reference assets. The test stack was stopped after acceptance.
+- Final source: full Web suite passes 126 files / 513 tests; formatter, lint (no warnings), architecture,
+  workspace typechecks and vinext compatibility pass. Final Web production build passes with the
+  open-transition focus fix; Core dry-run build passes with the resolved-exception filter.
+
+Completed task ID: NOTIFICATION-UI-1, both authorized UI surfaces and their minimal read/integration
+boundaries. Counting level: zero remaining notification UI implementation slices; one external
+notification acceptance obligation remains, the deployed commerce-event → received-email journey.
+Earlier commerce phase obligations remain open; this does not mark Phase 7 complete. No deployment,
+live provider transaction, outbound email, live data mutation, schema/KV store or read-state workflow
+was introduced. Git integration target is `main` → `origin/main`, with the resulting revision and
+push outcome reported in the task response. Concrete next action after integration: perform the
+external email journey only when its deployment/provider/message authority is separately supplied.
+
+## Prior owner request — API-CALL-EFFICIENCY-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. The owner requests the previously reviewed API-call reductions applied without further

@@ -1,5 +1,37 @@
 # FreshMarkets Design
 
+## Notification panels — owner approval 2026-09-13
+
+Storefront places its bell immediately left of Cart; Admin replaces its Overview anchor with a
+compact panel while retaining Recent notifications. Both use the established shadcn Popover,
+their separate token/font scopes, 44px controls, a viewport-clamped width and bounded scrolling.
+Rows contain a wrapping label/context, explicit date/time and an existing safe destination.
+Customer payment/support actions use an explicit next-step label. Admin panel and Overview share
+the same scoped data/list representation and reporting timezone. No read counts, dots or dismiss-row
+semantics are implied. Loading, empty, signed-out/denied, unavailable and retry states remain distinct.
+Opening focuses Close; Tab reaches links; Escape, Close and outside click dismiss with focus returned
+to the bell. Navigation closes the panel. No entry/exit motion or decorative notification animation
+is added, including for keyboard and reduced-motion users.
+
+Mobbin MCP research inspected DoorDash's [home bell](https://mobbin.com/screens/746c0aa0-aec7-443e-b502-9f3903e5b1c2),
+[caught-up feed](https://mobbin.com/screens/8239b91a-6531-42dc-a159-52236b81f35e),
+[active-order feed](https://mobbin.com/screens/aff3baf7-3bb3-4f49-bdac-0e2803a33c38)
+and [web notification drawer](https://mobbin.com/flows/6c6e1cef-e282-45f9-b25f-e8d39ac6cfa8).
+Adapt concise status/context/time rows and a calm empty state, keeping FreshMarkets branding and copy.
+Instacart's [confirmed](https://mobbin.com/screens/47fda39a-c618-4f2b-8ac1-7ccb7c7f3b02),
+[heading to customer](https://mobbin.com/screens/1ea1bd7a-7b38-4ad2-8215-80154f0f81a7)
+and [delivered](https://mobbin.com/screens/18c0be65-b4fd-4af0-b1ac-77615eab59dd) screens support
+explicit transaction status and existing receipt/help destinations. Uber Eats
+[order tracking](https://mobbin.com/screens/755dd9ed-b4ae-4a01-b06f-035d9b1e0592) supplied mobile
+status hierarchy; no Instacart bell/inbox or Uber Eats inbox was found.
+Shopify's [alert panel](https://mobbin.com/screens/668a7524-57c0-476a-8ce1-6f9cb05f85da) supports the
+Admin anchored list, while Faire's [action-required row](https://mobbin.com/screens/2af5769e-ba38-4609-a166-ca1221de2d2c)
+supports explanatory next steps. Fiverr's [Order notifications](https://mobbin.com/flows/bf5a190c-6a58-492e-aedf-55f2e9a59e19)
+uses day grouping/relative times; this bounded FreshMarkets list uses explicit dates without redundant
+group headings. Reference read-state workflows and proprietary assets/wording are excluded.
+Static images cannot verify focus, keyboard, outside dismissal, breakpoints or reduced motion;
+those require executed FreshMarkets interaction/browser evidence.
+
 Follow [PRODUCT.md](../product/PRODUCT.md) and the protected discussion it indexes. These presentation rules were extracted from existing design documents; they constrain agreed workflows and do not authorize new screens or a redesign. [ENGINEERING.md](../architecture/ENGINEERING.md) owns contracts, safeguards and verification. Archived proposals do not add scope.
 
 ## Ordinary Admin work

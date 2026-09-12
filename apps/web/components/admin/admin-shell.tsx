@@ -2,7 +2,6 @@
 
 import type { AdminSelectedScope } from "@freshmarkets/contracts";
 import {
-  Bell,
   ChevronDown,
   ChevronsUpDown,
   LoaderCircle,
@@ -36,6 +35,7 @@ import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { FreshMarketsMark } from "../brand/freshmarkets-mark";
 import { AdminCommandPalette } from "./admin-command-palette";
+import { AdminNotifications } from "./admin-notifications";
 import { adminStatusPillClassName } from "./admin-status-pill";
 import { useAdminTheme } from "./admin-theme-provider";
 import {
@@ -211,14 +211,7 @@ function AdminHeader({
             className="mx-1 hidden h-5 w-px bg-[var(--fm-border)] sm:block"
             aria-hidden="true"
           />
-          <Link
-            href="/admin#notifications"
-            prefetch={false}
-            aria-label="Open notifications"
-            className="inline-flex size-9 items-center justify-center rounded-lg hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
-          >
-            <Bell className="size-4" aria-hidden="true" />
-          </Link>
+          <AdminNotifications />
           <AdminThemeToggle />
           <AdminIdentity />
         </div>

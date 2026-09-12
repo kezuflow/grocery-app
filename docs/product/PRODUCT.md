@@ -1,5 +1,22 @@
 # FreshMarkets Product Rules
 
+## Owner-approved notification surfaces — 2026-09-13
+
+NOTIFICATION-UI-1 authorizes a customer bell immediately before Cart and an Admin header panel.
+Customer updates cover Order confirmation, payment action/failure, Scheduled cutoff reminders,
+delivery pickup/out-for-delivery/completion/failure, cancellation received/completed, and refund
+processing/completed/support exception. They are bounded read projections of owned transaction
+facts and existing notification intent. Email delivery status, addresses, provider details and internal
+errors remain private. Payment action notices must still be current; successful refund completion
+requires successful refund facts. Destinations use existing Order, checkout and support surfaces.
+Signed-out customers get a sign-in entry. No promotional feed, SMS, push, read/unread persistence,
+counts, permanent dots or notification-management workflow is approved.
+
+Admin reuses `AdminOverviewView.notifications` for the same six approved material notices and
+selected-scope destinations. Notifications grant no access and cannot reopen an Order. This approval
+adds no delivery authority, KV store or new notification database. Local notification verification
+does not accept the outstanding deployed commerce-event → received-email journey.
+
 The owner identifies SIMPLIFICATION_DISCUSSION.md as the product authority. This guide indexes its agreed decisions and the implementation boundaries; it does not add features. The owner's [agreed decision record](SIMPLIFICATION_DISCUSSION.md) remains intact; its agreed sections are product intent, the owner's later approved supplements below settle the named proposals and supersede conflicting details. Product approval is separate from implementation and acceptance. The [commerce continuation plan](COMMERCE_ALIGNMENT_E2E_PLAN.md) and [checkpoint](../operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) preserve existing work and unfinished acceptance; conflicting old feature requirements are outdated, not new authorization.
 
 ## Decision reconciliation
