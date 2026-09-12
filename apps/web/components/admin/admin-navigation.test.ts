@@ -116,6 +116,34 @@ describe("admin navigation mapping", () => {
     expect(items[0]?.icon).toBeTruthy();
   });
 
+  it("keeps the Core-authorized Locations workspace visible in Global and location scopes", () => {
+    const locations = {
+      code: "locations",
+      label: "Locations",
+      href: "/admin/locations",
+      section: "administration" as const,
+      scopeKinds: ["GLOBAL", "LOCATION"] as const,
+      parentCode: null,
+      kind: "workspace" as const,
+    };
+    const items = adminNavigationFromContext([locations]);
+
+    expect(items[0]).toMatchObject({
+      code: "locations",
+      label: "Locations",
+      href: "/admin/locations",
+    });
+    expect(items[0]?.icon).toBeTruthy();
+    expect(adminNavigationItemsForScope(items, { kind: "GLOBAL" })).toHaveLength(1);
+    expect(
+      adminNavigationItemsForScope(items, {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      }),
+    ).toHaveLength(1);
+  });
+
   it("groups only Core-provided entries under their canonical sections and parents", () => {
     const groups = groupAdminNavigation(
       adminNavigationFromContext([

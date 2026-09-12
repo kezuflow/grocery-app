@@ -241,6 +241,29 @@ describe("scoped admin context", () => {
     );
   });
 
+  it("publishes Locations for both Global and selected-location navigation", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["locations.read"],
+      scope: { kind: "global" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+
+    expect(context.value.navigation).toContainEqual({
+      code: "locations",
+      label: "Locations",
+      href: "/admin/locations",
+      section: "administration",
+      scopeKinds: ["GLOBAL", "LOCATION"],
+      parentCode: null,
+      kind: "workspace",
+    });
+  });
+
   it("publishes location Products only when both Catalog and Inventory reads are held", async () => {
     const staff = await staffCookie({
       permissionCodes: ["catalog.read", "inventory.read"],

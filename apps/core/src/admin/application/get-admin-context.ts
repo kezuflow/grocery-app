@@ -345,6 +345,7 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 ]);
 
 const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "locations",
   "settings",
   "transfers",
 ]);
