@@ -1,3 +1,0 @@
-# Repository defaults for new sessions; explicit host/session choices take precedence.
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
