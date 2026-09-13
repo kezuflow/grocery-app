@@ -1,6 +1,32 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — LOCATION-WIZARD-1 (2026-09-13)
+## Current owner investigation — CHECKOUT-SCHEDULED-BLOCKER-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner asks why Scheduled checkout remains unavailable after completing location setup.
+Read-only investigation on main at `18f5a8aa`; prior unfinished address/schedule/time-input files
+remain untouched. Acceptance: identify an observed blocker and distinguish it from saved readiness.
+
+Actual localhost:3000 Admin browser reads confirm Central Cebu active, dispatch Ready, saved pickup
+profile and seven operating intervals. Scheduled cycles shows the sole listed Next Cebu delivery
+OPEN, with ordering Sep 9–17, 2026 (Asia/Manila), but procurement, preparation and courier pickup are
+Not configured and no delivery windows are listed. No business configuration was changed.
+
+Code trace: list-fulfillment-options emits MODE_UNAVAILABLE when operationalCandidates returns no
+candidate. Scheduled candidate SQL requires a saved cycle schedule and delivery window with pickup
+at or before the window start; it then requires pickup inside location operating hours. Missing
+pickup/windows therefore independently prevents eligibility even with dispatch Ready. The customer
+message hides this distinction. Admin currently edits only DRAFT cycles, so the incomplete OPEN
+record also lacks a normal edit action. Its name exists in the historical bootstrap migration;
+provenance of the live record was not independently established.
+
+Completed investigation ID: CHECKOUT-SCHEDULED-BLOCKER-1. No application edits or tests; evidence is
+live read-only desktop views plus source tracing. Counting level: one confirmed configuration blocker;
+other checkout gates have not been exhaustively accepted. Next action: obtain the intended Scheduled
+pickup and customer delivery times, then repair the incomplete cycle through an authorized guarded
+workflow. Do not invent schedule values or cancel the current cycle as part of this investigation.
+
+## Prior owner request — LOCATION-WIZARD-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner authorizes making location setup multi-step. Acceptance: four targeted steps with
