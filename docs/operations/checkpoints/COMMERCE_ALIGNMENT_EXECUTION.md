@@ -12,7 +12,7 @@ the order-level courier package is consistently 20,000 g; preserve exact sold/ba
 optional historical line metadata. Start: `main` at `018536ba`; preserve unrelated location address,
 autofill, time-input, and location-schedule changes; no subagents.
 
-Implemented in the working tree: option listing and both quote modes no longer derive eligibility
+Implemented on main as `01cc3d5d`: option listing and both quote modes no longer derive eligibility
 from SKU weights. Provider quotation and committed-Order booking resolve the same fixed BOX / 20,000 g
 parcel. Payment and paid-reaction boundaries no longer reject nullable or larger line metadata.
 Scheduled exact demand and paid additions retain nullable line shipping evidence, and procurement
