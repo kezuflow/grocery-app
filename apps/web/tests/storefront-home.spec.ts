@@ -16,7 +16,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   await page.addInitScript(
     (point) =>
       localStorage.setItem(
-        "freshmarkets.delivery-location.v2",
+        "freshmarkets.delivery-location.v3",
         JSON.stringify({ displayAddress: "Synthetic selected location", coordinate: point }),
       ),
     coordinate,

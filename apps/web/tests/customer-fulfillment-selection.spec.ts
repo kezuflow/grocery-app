@@ -26,11 +26,7 @@ function address(id: string, label: string) {
     confirmationSource: "USER_PIN",
     confirmedAt: "2026-08-30T00:00:00.000Z",
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: null,
     },
     latitude: 10.3173,
     longitude: 123.9058,
@@ -169,7 +165,7 @@ for (const width of [1440, 390]) {
           quoteId: "quote-fulfillment",
           attemptVersion: 1,
           priceAcceptanceVersion: 1,
-          expiresAt: "2026-08-30T17:00:00.000Z",
+          expiresAt: "2099-08-30T17:00:00.000Z",
           currency: "PHP",
           merchandiseSubtotalMinor: 30_000,
           itemDiscountMinor: 0,
@@ -220,7 +216,7 @@ for (const width of [1440, 390]) {
     );
     await expect(page.getByRole("button", { name: "Retry delivery quotation" })).toBeEnabled();
     await page.getByRole("button", { name: "Try quotation again" }).click();
-    await expect(page.getByText("Review your current total: PHP 330.00.")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Order total review" })).toContainText("₱330.00");
 
     await page.screenshot({ path: `test-results/checkout-delivery-${width}.png` });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

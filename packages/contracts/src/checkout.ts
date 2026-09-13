@@ -17,7 +17,6 @@ type CustomerAddressCreateBase = AuthenticatedRequest & {
   phone: string;
   latitude: number;
   longitude: number;
-  notes?: string | null;
 };
 
 export type CreateCustomerAddressRequest = CustomerAddressCreateBase &
@@ -52,7 +51,6 @@ export type UpdateCustomerAddressRequest = AuthenticatedRequest & {
   addressJson?: string;
   latitude?: number;
   longitude?: number;
-  notes?: string | null;
 };
 
 export type CustomerAddressView = {
@@ -218,6 +216,14 @@ export type CartView = {
     /** New Core reads include media; retained browser carts may omit it. */
     media?: import("./catalog").CatalogMedia | null;
     availability: "AVAILABLE" | "UNAVAILABLE" | "PRICE_UNAVAILABLE";
+    /** Core-authored reason retained while an unavailable row remains in the cart. */
+    unavailableReason?:
+      | "NOT_SOLD_AT_LOCATION"
+      | "INSUFFICIENT_QUANTITY"
+      | "PRICE_UNAVAILABLE"
+      | null;
+    /** Current maximum at the assigned location when quantity is the blocker. */
+    availableQuantity?: number | null;
     unitPriceMinor: number | null;
     lineTotalMinor: number | null;
     /** Present only when Core applied a current item sale to the complete line. */

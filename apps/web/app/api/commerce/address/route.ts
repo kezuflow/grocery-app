@@ -17,11 +17,7 @@ const componentsSchema = z.object({
     .regex(/^[A-Za-z]{2}$/),
 });
 const instructionsSchema = z.object({
-  buildingUnit: nullableAddressText,
-  landmark: nullableAddressText,
-  gateGuard: nullableAddressText,
-  deliveryNote: z.string().trim().max(1000).nullable(),
-  recipientInstruction: z.string().trim().max(1000).nullable(),
+  deliveryInstructions: z.string().max(1000).nullable(),
 });
 const confirmationSourceSchema = z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]);
 const componentsSourceSchema = z.enum(["TEMPORARY_GEOCODER", "FIRST_PARTY", "SAVED_ADDRESS"]);
@@ -35,7 +31,6 @@ const addressBodySchema = z.object({
   longitude: z.number().finite().min(-180).max(180),
   confirmationSource: confirmationSourceSchema,
   instructions: instructionsSchema,
-  notes: z.string().max(1000).nullable().optional(),
 });
 const updateAddressBodySchema = addressBodySchema
   .partial()
@@ -124,7 +119,6 @@ export async function POST(request: Request) {
     longitude: body.longitude,
     confirmationSource: body.confirmationSource,
     instructions: body.instructions,
-    notes: body.notes,
   });
   return Response.json(result, { status: resultStatus(result) });
 }
@@ -156,7 +150,6 @@ export async function PATCH(request: Request) {
     instructions: body.instructions,
     latitude: body.latitude,
     longitude: body.longitude,
-    notes: body.notes,
   });
   return Response.json(result, { status: resultStatus(result) });
 }

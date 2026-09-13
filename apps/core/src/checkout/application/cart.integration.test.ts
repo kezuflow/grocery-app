@@ -216,6 +216,82 @@ describe("cart aggregate", () => {
     expect(unpriced).toMatchObject({ ok: false, error: { code: "PRICE_UNAVAILABLE" } });
   });
 
+  it("retains an over-quantity row with a specific blocker until the customer resolves it", async () => {
+    const configuration = await env.DB.prepare(
+      "SELECT fulfillment_mode FROM global_commerce_configuration WHERE id='global'",
+    ).first<{ fulfillment_mode: string }>();
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET fulfillment_mode='INSTANT',version=version+1,updated_at=? WHERE id='global'",
+    )
+      .bind(Date.now())
+      .run();
+    const principal = await customer();
+    const initial = await getCart(env.DB, principal);
+    if (!initial.ok) throw new Error("cart setup failed");
+    const applied = await setCartItem(env.DB, {
+      ...principal,
+      cartId: initial.value.id,
+      skuId: "sku-red-onion-500g",
+      quantity: 2,
+      expectedVersion: initial.value.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!applied.ok) throw new Error(applied.error.message);
+    const balance = await env.DB.prepare(
+      `SELECT b.on_hand,b.reserved FROM inventory_balance b
+       JOIN sku s ON COALESCE(s.stock_pool_id,(SELECT inventory_pool_id FROM product WHERE id=s.product_id))=b.inventory_pool_id
+       WHERE s.id='sku-red-onion-500g' AND b.location_id='location-cebu-central'`,
+    ).first<{ on_hand: number; reserved: number }>();
+    if (!balance) throw new Error("inventory setup missing");
+    try {
+      await env.DB.prepare(
+        `UPDATE inventory_balance SET on_hand=reserved
+         WHERE location_id='location-cebu-central' AND inventory_pool_id=(
+           SELECT COALESCE(s.stock_pool_id,p.inventory_pool_id) FROM sku s JOIN product p ON p.id=s.product_id
+           WHERE s.id='sku-red-onion-500g')`,
+      ).run();
+      expect(await getCart(env.DB, principal)).toMatchObject({
+        ok: true,
+        value: {
+          checkoutBlocked: true,
+          blockingReasons: ["ITEM_UNAVAILABLE"],
+          items: [
+            expect.objectContaining({
+              skuId: "sku-red-onion-500g",
+              quantity: 2,
+              availability: "UNAVAILABLE",
+              unavailableReason: "INSUFFICIENT_QUANTITY",
+              availableQuantity: 0,
+            }),
+          ],
+        },
+      });
+      const resolved = await setCartItem(env.DB, {
+        ...principal,
+        cartId: initial.value.id,
+        skuId: "sku-red-onion-500g",
+        quantity: 0,
+        expectedVersion: applied.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      expect(resolved).toMatchObject({ ok: true, value: { checkoutBlocked: false, items: [] } });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE global_commerce_configuration SET fulfillment_mode=?,version=version+1,updated_at=? WHERE id='global'",
+      )
+        .bind(configuration?.fulfillment_mode ?? "SCHEDULED", Date.now())
+        .run();
+      await env.DB.prepare(
+        `UPDATE inventory_balance SET on_hand=?,reserved=?
+         WHERE location_id='location-cebu-central' AND inventory_pool_id=(
+           SELECT COALESCE(s.stock_pool_id,p.inventory_pool_id) FROM sku s JOIN product p ON p.id=s.product_id
+           WHERE s.id='sku-red-onion-500g')`,
+      )
+        .bind(balance.on_hand, balance.reserved)
+        .run();
+    }
+  });
+
   it("uses the exact current location price", async () => {
     const principal = await customer();
     const initial = await getCart(env.DB, principal);

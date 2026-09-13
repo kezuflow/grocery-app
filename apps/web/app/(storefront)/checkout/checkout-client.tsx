@@ -25,7 +25,11 @@ import { AddressList } from "../../../components/storefront/address/address-list
 import { PromotionEntry } from "../../../components/storefront/checkout/promotion-entry";
 import { CheckoutTotalReview } from "../../../components/storefront/checkout/checkout-total-review";
 import { FulfillmentOptionPicker } from "../../../components/storefront/checkout/fulfillment-option-picker";
-import { addToCart, fetchCart } from "../../../lib/storefront/cart-client";
+import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
+import {
+  readDeliveryLocationSelection,
+  rememberDeliveryLocationSelection,
+} from "../../../lib/storefront/browsing-location";
 import { readJson } from "../../../lib/http/read-deadline";
 import {
   useAcceptCart,
@@ -84,6 +88,7 @@ export function CheckoutClient({
   browserApiKey?: string;
   mapId?: string;
 }) {
+  const carriedDestination = useRef(readDeliveryLocationSelection());
   const cartQuery = useCartQuery({ fresh: true });
   const cart = cartQuery.cart;
   const acceptCart = useAcceptCart();
@@ -106,10 +111,12 @@ export function CheckoutClient({
   const [editingAddress, setEditingAddress] = useState<CustomerAddressView>();
   const [showAddressEditor, setShowAddressEditor] = useState(false);
   const [showSavedAddresses, setShowSavedAddresses] = useState(true);
-  const [addressId, setAddressId] = useState(checkoutDraft.initial.addressId);
+  const initialAddressId =
+    checkoutDraft.initial.addressId || carriedDestination.current?.savedAddressId || "";
+  const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
   const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
-  const selectedAddressId = useRef(checkoutDraft.initial.addressId);
+  const selectedAddressId = useRef(initialAddressId);
   const selectedFulfillmentOptionId = useRef("");
   const [status, setStatus] = useState("");
   const [promotionCodes, setPromotionCodes] = useState<readonly string[]>(
@@ -142,6 +149,7 @@ export function CheckoutClient({
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
+  const addressSelectionGeneration = useRef(0);
   useEffect(() => {
     const continuation = readPaymentContinuation();
     paymentContinuationRef.current = continuation;
@@ -216,20 +224,31 @@ export function CheckoutClient({
       if (refreshedCart !== undefined) acceptCart(refreshedCart);
       setProfile(bootstrap.profile);
       setAddressLoadState("ready");
+      const browsingDestination = carriedDestination.current;
       const requestedAddressId =
-        preferredAddressId ?? (selectedAddressId.current || bootstrap.profile.defaultAddressId);
+        preferredAddressId ??
+        (selectedAddressId.current ||
+          (browsingDestination ? null : bootstrap.profile.defaultAddressId));
       const confirmed = bootstrap.addresses.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.confirmedAt ? confirmed.id : "");
       setShowSavedAddresses(!confirmed?.confirmedAt);
       if (!(await invalidatePendingQuote())) return;
       if (preferredAddressId) {
         if (confirmed?.confirmedAt) {
-          setStatus("Address confirmed. Courier availability will be checked now.");
+          await applySelectedAddress(confirmed);
+          setStatus("Address confirmed. Your cart was rechecked for this destination.");
         } else {
           setStatus("Confirm this saved address pin before using it at checkout.");
         }
         setEditingAddress(undefined);
         setShowAddressEditor(false);
+      } else if (requestedAddressId && !confirmed) {
+        setStatus(
+          "The Deliver to address is no longer available to this account. Choose or add an address to continue.",
+        );
+      } else if (!requestedAddressId && browsingDestination) {
+        setShowAddressEditor(true);
+        setStatus("Your Deliver to destination is ready. Add the missing delivery details.");
       }
     } catch {
       if (generation !== addressLoadGeneration.current) return;
@@ -390,15 +409,34 @@ export function CheckoutClient({
       setStatus("Confirm this saved address pin before using it at checkout.");
       return;
     }
-    const changed = selected.id !== selectedAddressId.current;
-    if (changed) {
-      setCurrentAddress(selected.id);
-      selectedFulfillmentOptionId.current = "";
-      setFulfillmentOptionId("");
-    }
-    if (!changed) void loadFulfillmentOptions(selected);
+    await applySelectedAddress(selected);
     setShowSavedAddresses(false);
-    setStatus("Delivery address selected. Checking the closest fulfillment location and courier.");
+    setStatus("Delivery address selected. Your cart was rechecked for this destination.");
+  }
+
+  async function applySelectedAddress(selected: CustomerAddressView) {
+    const generation = ++addressSelectionGeneration.current;
+    const destination = {
+      displayAddress: displayAddress(selected),
+      coordinate: { latitude: selected.latitude, longitude: selected.longitude },
+      savedAddressId: selected.id,
+    };
+    carriedDestination.current = destination;
+    rememberDeliveryLocationSelection(destination);
+    const refreshed = await refreshCartForLocation();
+    if (generation !== addressSelectionGeneration.current) return;
+    if (!refreshed) {
+      setCurrentAddress("");
+      setStatus(
+        "The cart could not be assigned to this destination. Review the address and retry.",
+      );
+      return;
+    }
+    acceptCart(refreshed);
+    await invalidateCheckoutReads();
+    setCurrentAddress(selected.id);
+    selectedFulfillmentOptionId.current = "";
+    setFulfillmentOptionId("");
   }
   async function reviewTotal(option: FulfillmentOptionView) {
     if (paymentInProgressRef.current) {
@@ -608,7 +646,7 @@ export function CheckoutClient({
     }
   }
   const guest = cart?.id === "guest-cart";
-  const canReview = Boolean(cart?.items.length && addressId && !guest);
+  const canReview = Boolean(cart?.items.length && addressId && !guest && !cart?.checkoutBlocked);
   const selectedAddress = addresses.find((address) => address.id === addressId);
   const selectedFulfillmentOption = fulfillmentOptions.find(
     (option) => option.optionId === fulfillmentOptionId,
@@ -701,6 +739,9 @@ export function CheckoutClient({
                     browserApiKey={browserApiKey}
                     mapId={mapId}
                     initialAddress={editingAddress}
+                    initialDestination={
+                      editingAddress ? undefined : (carriedDestination.current ?? undefined)
+                    }
                     defaultPhone={profile?.accountPhone ?? undefined}
                     savedPhoneNumbers={addresses.map((address) => address.phone)}
                     onConfirmed={async (confirmedAddressId) => {
@@ -729,7 +770,7 @@ export function CheckoutClient({
                         </p>
                         <h2 className="mt-1 text-xl font-bold">Where should we deliver?</h2>
                         <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                          Choose a saved destination or complete the three-step address guide.
+                          Choose a saved destination or confirm the details for Deliver to.
                         </p>
                       </div>
                     </div>
@@ -1003,15 +1044,17 @@ export function CheckoutClient({
               actionLabel={
                 guest
                   ? "Sign in to continue"
-                  : pendingQuote
-                    ? "Accept total and continue to payment"
-                    : quoteLoadState === "loading"
-                      ? "Checking delivery fee…"
-                      : quoteError && selectedFulfillmentOption
-                        ? "Retry delivery quotation"
-                        : addressId
-                          ? "Choose a delivery option"
-                          : "Select a delivery address"
+                  : cart?.checkoutBlocked
+                    ? "Resolve unavailable items to continue"
+                    : pendingQuote
+                      ? "Accept total and continue to payment"
+                      : quoteLoadState === "loading"
+                        ? "Checking delivery fee…"
+                        : quoteError && selectedFulfillmentOption
+                          ? "Retry delivery quotation"
+                          : addressId
+                            ? "Choose a delivery option"
+                            : "Select a delivery address"
               }
               actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
               onAction={
@@ -1026,6 +1069,7 @@ export function CheckoutClient({
                   ? false
                   : acceptingPayment ||
                     quoteLoadState === "loading" ||
+                    Boolean(cart?.checkoutBlocked) ||
                     (!pendingQuote && !selectedFulfillmentOption)
               }
               note="The closest fulfillment location and Lalamove route fee are confirmed at checkout."

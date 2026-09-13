@@ -41,13 +41,9 @@ function address(id: string, label: string, available: boolean) {
     phone: "+639171234567",
     components: candidate.components,
     confirmationSource: "GEOCODER",
-    confirmedAt: "2026-08-30T00:00:00.000Z",
+    confirmedAt: available ? "2026-08-30T00:00:00.000Z" : null,
     instructions: {
-      buildingUnit: null,
-      landmark: "Main entrance",
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: "Main entrance",
     },
     latitude: candidate.coordinate.latitude,
     longitude: candidate.coordinate.longitude,
@@ -72,16 +68,49 @@ async function assertNoCoordinateInputs(page: Page) {
   await expect(page.getByLabel("Longitude", { exact: true })).toHaveCount(0);
 }
 
+async function mockAddressResolution(
+  page: Page,
+  onAutocomplete?: (body: Record<string, unknown>) => void,
+) {
+  await page.route("**/api/commerce/address-autocomplete", async (route) => {
+    onAutocomplete?.(route.request().postDataJSON() as Record<string, unknown>);
+    await json(route, {
+      ok: true,
+      value: [{ candidateKey: candidate.candidateKey, displayAddress: candidate.displayAddress }],
+      requestId: "autocomplete-1",
+    });
+  });
+  await page.route("**/api/commerce/address-prediction", (route) =>
+    json(route, { ok: true, value: candidate, requestId: "prediction-1" }),
+  );
+}
+
+async function mockProfile(page: Page, defaultAddressId: string | null = null) {
+  await page.route("**/api/commerce/profile", (route) =>
+    json(route, {
+      ok: true,
+      value: {
+        customerId: "customer-1",
+        accountPhone: null,
+        defaultAddressId,
+        preferredLanguage: null,
+        promotionalEmails: false,
+        version: 1,
+      },
+    }),
+  );
+}
+
 test("searches, confirms, and saves an address from the address book with map fallback", async ({
   page,
 }) => {
   let savedAddresses: ReadonlyArray<ReturnType<typeof address>> = [];
   let searchRequest: Record<string, unknown> | undefined;
   let updateRequest: Record<string, unknown> | undefined;
-  await page.route("**/api/commerce/address-search", async (route) => {
-    searchRequest = route.request().postDataJSON() as Record<string, unknown>;
-    await json(route, { ok: true, value: [candidate], requestId: "search-1" });
+  await mockAddressResolution(page, (body) => {
+    searchRequest = body;
   });
+  await mockProfile(page);
   await page.route("**/api/serviceability", async (route) => {
     await json(route, { ok: true, value: serviceability, requestId: "serviceability-1" });
   });
@@ -111,17 +140,19 @@ test("searches, confirms, and saves an address from the address book with map fa
   await expect(page.getByText("No saved delivery addresses yet")).toBeVisible();
   await assertNoCoordinateInputs(page);
 
-  await page.getByLabel("Search for an address").fill("Ayala Cebu");
+  await page.getByRole("button", { name: "Search for an address" }).click();
+  await page.getByPlaceholder("Search for a delivery address").fill("Ayala Cebu");
   await page.getByRole("button", { name: candidate.displayAddress }).click();
-  await expect(page.getByText("Delivery is available", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Search-result address fields are provider-resolved/)).toBeVisible();
-  await page.getByLabel("Address label").fill("Home");
+  await expect(page.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Confirmed destination", { exact: true })).toBeVisible();
+  await page.getByLabel("Custom label").fill("Home");
   await page.getByLabel("Recipient name").fill("Ana Santos");
   await page.getByLabel("Phone number").fill("+639171234567");
-  await page.getByRole("button", { name: "Save confirmed address" }).click();
+  await page.getByRole("button", { name: "Save and use this address" }).click();
 
   await expect(page.getByRole("radio", { name: /Home/ })).toBeEnabled();
-  expect(searchRequest).toEqual({ query: "Ayala Cebu" });
+  expect(searchRequest).toMatchObject({ query: "Ayala Cebu" });
   expect(searchRequest).not.toHaveProperty("latitude");
   expect(searchRequest).not.toHaveProperty("longitude");
 
@@ -140,14 +171,15 @@ test("shows an unavailable saved address and opens correction without making it 
   page,
 }) => {
   const unavailable = address("address-parents", "Parents", false);
+  await mockProfile(page);
   await page.route("**/api/commerce/address", async (route) => {
     await json(route, { ok: true, value: [unavailable], requestId: "addresses-unavailable" });
   });
 
   await page.goto("/account/addresses");
-  await expect(page.getByText("Delivery unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("Address confirmation required", { exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Parents/ })).toBeDisabled();
-  await page.getByRole("button", { name: "Correct Parents address" }).click();
+  await page.getByRole("button", { name: "Confirm Parents address" }).click();
   await expect(page.getByRole("form", { name: "Delivery address editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Update confirmed address" })).toBeVisible();
   await assertNoCoordinateInputs(page);
@@ -164,18 +196,22 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
       ok: true,
       value: {
         id: "cart-1",
+        locationId: "location-cebu-central",
         version: 4,
+        currency: "PHP",
+        checkoutBlocked: false,
+        blockingReasons: [],
         items: [
           {
             skuId: "sku-1",
             quantity: 1,
             name: "Fresh produce",
+            availability: "AVAILABLE",
             unitPriceMinor: 30000,
             lineTotalMinor: 30000,
           },
         ],
         totalMinor: 30000,
-        currency: "PHP",
       },
       requestId: "cart-1",
     }),
@@ -209,8 +245,22 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
       requestId: "options-1",
     });
   });
-  await page.route("**/api/commerce/address", (route) =>
-    json(route, { ok: true, value: [home, unavailable], requestId: "addresses-checkout" }),
+  await page.route("**/api/checkout/bootstrap", (route) =>
+    json(route, {
+      ok: true,
+      value: {
+        addresses: [home, unavailable],
+        profile: {
+          customerId: "customer-1",
+          accountPhone: null,
+          defaultAddressId: "address-home",
+          preferredLanguage: null,
+          promotionalEmails: false,
+          version: 1,
+        },
+      },
+      requestId: "bootstrap-checkout",
+    }),
   );
   await page.route("**/api/checkout/quote", (route) =>
     json(route, {
@@ -219,7 +269,7 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
         quoteId: "quote-1",
         attemptVersion: 1,
         priceAcceptanceVersion: 1,
-        expiresAt: "2026-09-05T00:00:00.000Z",
+        expiresAt: "2099-09-05T00:00:00.000Z",
         currency: "PHP",
         merchandiseSubtotalMinor: 30_000,
         itemDiscountMinor: 0,
@@ -254,9 +304,7 @@ test("public serviceability checks a confirmed search result without saving or s
   page,
 }) => {
   let saveCalls = 0;
-  await page.route("**/api/commerce/address-search", (route) =>
-    json(route, { ok: true, value: [candidate], requestId: "public-search" }),
-  );
+  await mockAddressResolution(page);
   await page.route("**/api/serviceability", (route) =>
     json(route, { ok: true, value: serviceability, requestId: "public-serviceability" }),
   );
@@ -267,9 +315,9 @@ test("public serviceability checks a confirmed search result without saving or s
 
   await page.goto("/serviceability");
   await page.waitForLoadState("networkidle");
-  await page.getByLabel("Search for an address").fill("Ayala Cebu");
+  await page.getByPlaceholder("Enter a street or address").fill("Ayala Cebu");
   await page.getByRole("button", { name: candidate.displayAddress }).click();
-  await expect(page.getByText("Delivery is available", { exact: true })).toBeVisible();
+  await expect(page.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /save/i })).toHaveCount(0);
   await expect(page.getByText(/fulfillment hub/i)).toHaveCount(0);
   await expect(page.getByText(/operations location/i)).toHaveCount(0);
@@ -280,28 +328,26 @@ test("public serviceability checks a confirmed search result without saving or s
 test("storefront delivery control opens the address flow and keeps the confirmed browsing location", async ({
   page,
 }) => {
-  await page.route("**/api/commerce/address-search", (route) =>
-    json(route, { ok: true, value: [candidate], requestId: "header-search" }),
-  );
+  await mockAddressResolution(page);
   await page.route("**/api/serviceability", (route) =>
     json(route, { ok: true, value: serviceability, requestId: "header-serviceability" }),
   );
 
   await page.goto("/");
   const deliveryControl = page.getByRole("button", { name: "Choose delivery address" });
-  await deliveryControl.click();
   const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Search for an address").fill("Ayala Cebu");
+  await dialog.getByRole("button", { name: "Choose map" }).click();
+  await dialog.getByPlaceholder("Search address").fill("Ayala Cebu");
   await dialog.getByRole("button", { name: candidate.displayAddress }).click();
-  await expect(dialog.getByText("Delivery is available", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Deliver here" }).click();
 
   await expect(dialog).toHaveCount(0);
-  await expect(deliveryControl).toContainText("Ayala Center Cebu");
+  await expect(deliveryControl).toContainText("Confirmed delivery entrance");
   await page.reload();
   await expect(page.getByRole("button", { name: "Choose delivery address" })).toContainText(
-    "Ayala Center Cebu",
+    "Confirmed delivery entrance",
   );
 });
 

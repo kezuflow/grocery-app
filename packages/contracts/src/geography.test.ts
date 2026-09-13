@@ -124,11 +124,7 @@ describe("provider-neutral geography contracts", () => {
       Equal<
         DeliveryInstructions,
         {
-          buildingUnit: string | null;
-          landmark: string | null;
-          gateGuard: string | null;
-          deliveryNote: string | null;
-          recipientInstruction: string | null;
+          deliveryInstructions: string | null;
         }
       >
     >;
@@ -136,16 +132,12 @@ describe("provider-neutral geography contracts", () => {
     const source: CoordinateConfirmationSource = "DEVICE_LOCATION";
     const componentsSource: AddressComponentsSource = "TEMPORARY_GEOCODER";
     const instructions: DeliveryInstructions = {
-      buildingUnit: "Unit 4B",
-      landmark: "Across the public market",
-      gateGuard: null,
-      deliveryNote: "Call on arrival",
-      recipientInstruction: "Ask for Ana",
+      deliveryInstructions: "Unit 4B\nAcross the public market\nCall on arrival\nAsk for Ana",
     };
 
     expect(source).toBe("DEVICE_LOCATION");
     expect(componentsSource).toBe("TEMPORARY_GEOCODER");
-    expect(instructions.buildingUnit).toBe("Unit 4B");
+    expect(instructions.deliveryInstructions).toContain("Unit 4B");
     void (true as ConfirmationShape);
     void (true as ComponentsSourceShape);
     void (true as InstructionShape);
@@ -204,11 +196,7 @@ describe("provider-neutral geography contracts", () => {
       componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions: {
-        buildingUnit: null,
-        landmark: null,
-        gateGuard: null,
-        deliveryNote: null,
-        recipientInstruction: null,
+        deliveryInstructions: null,
       },
     } satisfies CreateCustomerAddressRequest;
     const legacyCreate = {

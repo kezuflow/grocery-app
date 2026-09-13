@@ -76,11 +76,7 @@ const baseAddress: CustomerAddressView = {
   confirmationSource: "USER_PIN",
   confirmedAt: "2026-08-30T00:00:00.000Z",
   instructions: {
-    buildingUnit: null,
-    landmark: "Main entrance",
-    gateGuard: null,
-    deliveryNote: null,
-    recipientInstruction: null,
+    deliveryInstructions: "Main entrance",
   },
   latitude: 10.3173,
   longitude: 123.9058,

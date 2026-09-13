@@ -67,11 +67,7 @@ type DispatchSourceRow = {
 };
 
 const EMPTY_INSTRUCTIONS: DeliveryInstructions = {
-  buildingUnit: null,
-  landmark: null,
-  gateGuard: null,
-  deliveryNote: null,
-  recipientInstruction: null,
+  deliveryInstructions: null,
 };
 
 function parseObject(value: string | null): Record<string, unknown> | null {
@@ -121,13 +117,16 @@ function deliveryInstructions(value: string | null): DeliveryInstructions | null
   if (value === null) return EMPTY_INSTRUCTIONS;
   const parsed = parseObject(value);
   if (!parsed) return null;
-  return {
-    buildingUnit: nullableString(parsed, "buildingUnit"),
-    landmark: nullableString(parsed, "landmark"),
-    gateGuard: nullableString(parsed, "gateGuard"),
-    deliveryNote: nullableString(parsed, "deliveryNote"),
-    recipientInstruction: nullableString(parsed, "recipientInstruction"),
-  };
+  const canonical = nullableString(parsed, "deliveryInstructions");
+  if (canonical) return { deliveryInstructions: canonical };
+  const legacy = [
+    nullableString(parsed, "buildingUnit"),
+    nullableString(parsed, "landmark"),
+    nullableString(parsed, "gateGuard"),
+    nullableString(parsed, "deliveryNote"),
+    nullableString(parsed, "recipientInstruction"),
+  ].filter((item): item is string => Boolean(item));
+  return { deliveryInstructions: [...new Set(legacy)].join("\n") || null };
 }
 
 function formattedDestination(components: AddressComponents): string {
@@ -507,7 +506,7 @@ export async function bookOrderDelivery(
           postalCode: row.postal_code,
           countryCode: row.country_code,
         },
-        instructions: { ...EMPTY_INSTRUCTIONS, deliveryNote: row.pickup_instructions },
+        instructions: { deliveryInstructions: row.pickup_instructions },
       },
       destination: {
         formattedAddress: formattedDestination(destination),

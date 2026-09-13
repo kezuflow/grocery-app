@@ -144,10 +144,19 @@ export async function createCheckoutQuote(
 
   // Cart identity and version.
   const cart = await database
-    .prepare("SELECT id, customer_id, version FROM cart WHERE id=? AND status='ACTIVE'")
+    .prepare("SELECT id, customer_id, version, status FROM cart WHERE id=?")
     .bind(command.cartId)
-    .first<{ id: string; customer_id: string; version: number }>();
+    .first<{ id: string; customer_id: string; version: number; status: string }>();
   if (!cart || cart.customer_id !== command.customerId)
+    return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  if (cart.status === "PAYMENT_PENDING")
+    return failure(
+      "CONFLICT",
+      "A payment for this cart is still being settled. Check that checkout before requesting a new total.",
+      command.requestId,
+      { reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON },
+    );
+  if (cart.status !== "ACTIVE")
     return failure("NOT_FOUND", "Active cart not found", command.requestId);
   if (await cartHasUnsettledCheckout(database, command.cartId))
     return failure(

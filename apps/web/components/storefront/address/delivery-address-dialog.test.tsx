@@ -219,7 +219,7 @@ it.each(["success", "unavailable", "failure", "dismiss"])(
       expect(mocks.contextChanged).toHaveBeenCalledTimes(1);
       expect(mocks.cart).toHaveBeenCalledTimes(1);
       expect(
-        JSON.parse(localStorage.getItem("freshmarkets.delivery-location.v2") ?? "null")
+        JSON.parse(localStorage.getItem("freshmarkets.delivery-location.v3") ?? "null")
           .displayAddress,
       ).toBe("Test street");
     } else {

@@ -46,11 +46,7 @@ const request: CreateDeliveryRequest = {
       countryCode: "PH",
     },
     instructions: {
-      buildingUnit: "FreshMarkets Dispatch",
-      landmark: null,
-      gateGuard: "Use the loading entrance",
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: "FreshMarkets Dispatch\nUse the loading entrance",
     },
   },
   destination: {
@@ -66,11 +62,8 @@ const request: CreateDeliveryRequest = {
       countryCode: "PH",
     },
     instructions: {
-      buildingUnit: "Unit 4B, Cedar Residences",
-      landmark: "Beside the pharmacy",
-      gateGuard: "Tell the guard the recipient name",
-      deliveryNote: "Keep the vegetables upright",
-      recipientInstruction: "Call when downstairs",
+      deliveryInstructions:
+        "Unit 4B, Cedar Residences\nBeside the pharmacy\nTell the guard the recipient name\nKeep the vegetables upright\nCall when downstairs",
     },
   },
   schedule: null,
@@ -169,11 +162,10 @@ describe("GrabExpress delivery adapter", () => {
         phone: "639171234567",
         smsEnabled: true,
         instruction:
-          "Unit 4B, Cedar Residences; Beside the pharmacy; Tell the guard the recipient name; Keep the vegetables upright; Call when downstairs",
+          "Unit 4B, Cedar Residences\nBeside the pharmacy\nTell the guard the recipient name\nKeep the vegetables upright\nCall when downstairs",
       },
       destination: {
         address: "Unit 4B, 1 Private Street, Cebu City, Cebu, Philippines",
-        keywords: "Unit 4B, Cedar Residences",
         coordinates: { latitude: 10.317331, longitude: 123.905812 },
       },
       packages: [
@@ -230,7 +222,7 @@ describe("GrabExpress delivery adapter", () => {
       request.recipient.name,
       request.recipient.phoneE164,
       request.destination.formattedAddress,
-      request.destination.instructions.deliveryNote,
+      request.destination.instructions.deliveryInstructions,
       String(request.destination.coordinate.latitude),
       "client-secret",
       "grab-access-token",

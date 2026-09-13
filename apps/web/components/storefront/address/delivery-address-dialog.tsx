@@ -10,7 +10,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   browsingPointFromCookies,
   DELIVERY_LOCATION_REQUEST_EVENT,
-  rememberBrowsingPoint,
+  readDeliveryLocationSelection,
+  rememberDeliveryLocationSelection,
 } from "../../../lib/storefront/browsing-location";
 import { useStorefrontRuntime } from "../storefront-runtime";
 import type { ServiceabilitySelection } from "./address-editor";
@@ -19,27 +20,9 @@ const AddressEditor = lazy(() =>
   import("./address-editor").then((module) => ({ default: module.AddressEditor })),
 );
 
-const SESSION_SELECTION_KEY = "freshmarkets.delivery-location.v2";
-
-type BrowsingLocation = Pick<ServiceabilitySelection, "displayAddress" | "coordinate">;
-
-function readSelection(): BrowsingLocation | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(SESSION_SELECTION_KEY) ?? "null") as unknown;
-    if (!value || typeof value !== "object") return null;
-    const candidate = value as Partial<BrowsingLocation>;
-    if (
-      typeof candidate.displayAddress !== "string" ||
-      !candidate.coordinate ||
-      !Number.isFinite(candidate.coordinate.latitude) ||
-      !Number.isFinite(candidate.coordinate.longitude)
-    )
-      return null;
-    return { displayAddress: candidate.displayAddress, coordinate: candidate.coordinate };
-  } catch {
-    return null;
-  }
-}
+type BrowsingLocation = Pick<ServiceabilitySelection, "displayAddress" | "coordinate"> & {
+  savedAddressId: string | null;
+};
 
 function compactAddress(value: string): string {
   return value.split(",")[0]?.trim() || "Choose location";
@@ -62,7 +45,8 @@ export function DeliveryAddressDialog() {
     localStorage.removeItem("freshmarkets.delivery-location.v1");
     sessionStorage.removeItem("freshmarkets.delivery-location.v1");
     document.cookie = "freshmarkets_browse_point=; Path=/; Max-Age=0; SameSite=Lax";
-    setSelection(readSelection());
+    localStorage.removeItem("freshmarkets.delivery-location.v2");
+    setSelection(readDeliveryLocationSelection());
     setInteractive(true);
     const browsing = pathname === "/" || pathname.startsWith("/products/") || pathname === "/cart";
     if (
@@ -106,14 +90,17 @@ export function DeliveryAddressDialog() {
     setOpen(false);
   }
 
-  function chooseAddress(next: ServiceabilitySelection): void {
+  function chooseAddress(
+    next: ServiceabilitySelection,
+    savedAddressId: string | null = null,
+  ): void {
     const previous = browsingPointFromCookies(document.cookie);
-    const browsingLocation = {
+    const browsingLocation: BrowsingLocation = {
       displayAddress: next.displayAddress,
       coordinate: next.coordinate,
+      savedAddressId,
     };
-    localStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify(browsingLocation));
-    rememberBrowsingPoint(next.coordinate);
+    rememberDeliveryLocationSelection(browsingLocation);
     setSelection(browsingLocation);
     dismiss();
     if (
@@ -196,7 +183,7 @@ export function DeliveryAddressDialog() {
 function SavedDeliveryAddresses({
   onChoose,
 }: {
-  onChoose: (selection: ServiceabilitySelection) => void;
+  onChoose: (selection: ServiceabilitySelection, savedAddressId?: string | null) => void;
 }) {
   const { data: session, isPending, error, refetch } = authClient.useSession();
   if (!isPending && !error && session?.user)
@@ -230,7 +217,7 @@ function SavedDeliveryAddresses({
 function AuthenticatedSavedDeliveryAddresses({
   onChoose,
 }: {
-  onChoose: (selection: ServiceabilitySelection) => void;
+  onChoose: (selection: ServiceabilitySelection, savedAddressId?: string | null) => void;
 }) {
   const [selecting, setSelecting] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState("");
@@ -265,7 +252,7 @@ function AuthenticatedSavedDeliveryAddresses({
             : "No fulfillment location is currently available. Please try again later.",
         );
       } else {
-        onChoose(result.value);
+        onChoose(result.value, address.id);
       }
     } catch {
       if (!controller.signal.aborted) setSelectionError("Couldn’t select this address. Try again.");

@@ -148,7 +148,6 @@ function grabContact(contact: DeliveryContact, instruction?: string) {
 function grabAddress(address: DeliveryProviderAddress) {
   return {
     address: address.formattedAddress,
-    ...(address.instructions.buildingUnit ? { keywords: address.instructions.buildingUnit } : {}),
     coordinates: {
       latitude: address.coordinate.latitude,
       longitude: address.coordinate.longitude,
@@ -157,15 +156,8 @@ function grabAddress(address: DeliveryProviderAddress) {
 }
 
 function instruction(address: DeliveryProviderAddress): string | undefined {
-  const values = [
-    address.instructions.buildingUnit,
-    address.instructions.landmark,
-    address.instructions.gateGuard,
-    address.instructions.deliveryNote,
-    address.instructions.recipientInstruction,
-  ].filter((value): value is string => Boolean(value?.trim()));
-  const combined = values.join("; ");
-  return combined ? combined.slice(0, 1_000) : undefined;
+  const instructions = address.instructions.deliveryInstructions;
+  return instructions?.trim() ? instructions : undefined;
 }
 
 function majorAmount(valueMinor: number, exponent: number): number {
@@ -337,7 +329,8 @@ function validRequest(request: DeliveryProviderRequest): boolean {
     !validContact(request.sender) ||
     !validContact(request.recipient) ||
     !validAddress(request.origin) ||
-    !validAddress(request.destination)
+    !validAddress(request.destination) ||
+    (request.destination.instructions.deliveryInstructions?.length ?? 0) > 1_000
   )
     return false;
   if (

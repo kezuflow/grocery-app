@@ -1,8 +1,8 @@
 # Delivery address simplification
 
-Status: planned, not implemented. Owner request: 2026-09-14. Planning task
-ADDR-0; implementation phases ADDR-1 through ADDR-4. PRODUCT owns the approved
-rule. This request authorizes planning, not deployment or provider transactions.
+Status: ADDR-1 through ADDR-4 implemented and locally verified on 2026-09-14.
+PRODUCT owns the approved rule. Deployment, real courier transactions and shared
+data changes remain outside this implementation.
 
 ## Outcome
 
@@ -111,5 +111,16 @@ DESIGN sections as interfaces are implemented; update the active checkpoint
 at meaningful milestones. Review intended diffs, commit directly to main and
 push origin main. Deployment/real courier transactions remain separate.
 
-Completion: all four implementation phases and acceptance cases pass. Next
-action: begin ADDR-1 with a fresh HEAD/status and instruction-consumer audit.
+Completion: ADDR-1 through ADDR-4 are complete at the application-source level.
+Contracts, Core and Web typechecks pass; contracts pass 20 files / 69 tests, Web
+passes 138 / 570 and Core passes 206 / 1,671. Focused managed Worker/D1/browser
+acceptance passes public destination confirmation and checkout address-change
+revalidation at 1440 px and 390 px, plus saved-address search/save/edit. Both
+Worker builds pass. Root `pnpm check`
+stops at the pre-existing staging delivery-binding harness mismatch (`lalamove`
+configured while that harness expects `disabled`); all subsequent stages were
+run directly and pass. Local adapters/fakes do not establish actual Lalamove or
+Grab acceptance. No deployment, real provider transaction or shared-data reset
+was performed. Counting level: zero remaining ADDR implementation phases; the
+remaining release gate is actual-provider/deployment acceptance when separately
+authorized.

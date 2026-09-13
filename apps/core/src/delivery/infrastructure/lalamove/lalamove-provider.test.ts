@@ -43,11 +43,7 @@ const request: CreateDeliveryRequest = {
       countryCode: "PH",
     },
     instructions: {
-      buildingUnit: "FreshMarkets Dispatch",
-      landmark: null,
-      gateGuard: "Use the loading entrance",
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: "FreshMarkets Dispatch\nUse the loading entrance",
     },
   },
   destination: {
@@ -63,11 +59,8 @@ const request: CreateDeliveryRequest = {
       countryCode: "PH",
     },
     instructions: {
-      buildingUnit: "Unit 4B, Cedar Residences",
-      landmark: "Beside the pharmacy",
-      gateGuard: "Tell the guard the recipient name",
-      deliveryNote: "Keep the vegetables upright",
-      recipientInstruction: "Call when downstairs",
+      deliveryInstructions:
+        "Unit 4B, Cedar Residences\nBeside the pharmacy\nTell the guard the recipient name\nKeep the vegetables upright\nCall when downstairs",
     },
   },
   schedule: null,
@@ -329,7 +322,7 @@ describe("Lalamove delivery adapter", () => {
             name: "Ana Maria Santos",
             phone: "+639171234567",
             remarks:
-              "Package: 1 bag\r\nBuilding/unit: Unit 4B, Cedar Residences\r\nLandmark: Beside the pharmacy\r\nGate/guard: Tell the guard the recipient name\r\nDelivery note: Keep the vegetables upright\r\nRecipient instruction: Call when downstairs",
+              "Unit 4B, Cedar Residences\nBeside the pharmacy\nTell the guard the recipient name\nKeep the vegetables upright\nCall when downstairs",
           },
         ],
         isPODEnabled: true,

@@ -1,5 +1,50 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADDR-1 through ADDR-4 (2026-09-14)
+
+Plan: `docs/product/DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md`, **ADDR-1 — Simplify delivery
+details** through **ADDR-4 — Verify and deliver**. Acceptance: retain the confirmed destination,
+Home/Work or custom label, recipient, mobile and one optional Delivery instructions value; preserve
+legacy delivery information/private-note separation and paid snapshots; carry Deliver to into
+checkout; Core-revalidate the Instant Cart after a destination change while keeping unavailable rows
+visible and payment blocked until explicit resolution; preserve started-payment locks, geographic
+routing and one-Order fulfillment. No deployment, real provider transaction, outbound message or
+shared-data reset. No subagents.
+
+Start: `main` at `64bfb27e`, with the separately owned staged Admin location/schedule slice and local
+HSPA artifacts preserved. Concurrent main commits through `78d6c0e0` were incorporated without
+restarting or staging their residual working-tree formatting/checkpoint edits. The implemented
+contract has one nullable `deliveryInstructions` field. Core combines distinct legacy courier fields
+in order, excludes retained private notes, preserves legacy JSON on unrelated edits and never rewrites
+paid address snapshots. Lalamove/Grab adapters pass the canonical value without truncation; Web/Core
+enforce the shared 1,000-character limit. The two-step Location/Details editor retains internal
+geography, adds Home/Work shortcuts and removes the separate optional-detail inputs.
+
+The browser selection stores public destination evidence plus an optional saved-address hint; session
+replacement clears the private identity while keeping the public pin. Checkout prefers that current
+selection over the default, explicitly rejects stale/inaccessible identity, seeds a new address from
+the confirmed guest destination and reauthorizes through Core. Selecting a saved destination invokes
+Core location selection and accepts its returned Cart. Core atomically releases unstarted quote/hold
+evidence, rejects any started Payment, recalculates Instant local stock/quantity/price, retains exact
+unavailable rows/reasons and blocks payment. Scheduled demand/stock semantics, nearest geographic
+assignment, no-split policy and immutable success evidence are unchanged.
+
+Verification on the final working-tree behavior: workspace typechecks and formatting pass; contracts
+pass 20 files / 69 tests, Web 138 / 570 and Core Worker/D1 206 / 1,671. Focused address/cart/quote and
+provider suites pass 120 Core tests, 49 Web tests and 9 contract tests; the final exact-instruction
+follow-up passes 49 Core and 29 Web tests. Managed isolated Worker/D1 browser acceptance passes saved
+address search/save/edit, public destination confirmation, and destination-change quote invalidation
+at 1440 px and 390 px. Both Worker builds pass. `pnpm migration:check`, commit convention,
+architecture, readiness and lint pass. Root `pnpm check` stops only at the pre-existing staging
+delivery-binding harness mismatch (`lalamove` configured while the harness expects `disabled`); the
+subsequent stages were executed directly and pass. Core `wrangler types --check` reports its generated
+environment declaration is out of date; Web's check passes. Local fakes do not establish actual
+Lalamove/Grab acceptance.
+
+Completed IDs: ADDR-1, ADDR-2, ADDR-3 and ADDR-4 at application-source/local-acceptance level.
+Counting level: zero remaining ADDR implementation phases. Next action: perform separately authorized
+deployment and actual-provider acceptance; earlier independent commerce/HSPA gates remain open.
+
 ## Concurrent owner request — CHECKOUT-PENDING-HANDOFF-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation

@@ -18,6 +18,7 @@ import {
   reloadForSessionChange,
 } from "../lib/query/query-client";
 import { resetCartSession } from "../lib/storefront/cart-client";
+import { clearSavedDeliverySelection } from "../lib/storefront/browsing-location";
 
 const QueryEpochContext = createContext(0);
 export function useQueryEpoch() {
@@ -44,6 +45,7 @@ export function ApplicationQueryProvider({ children }: { children: ReactNode }) 
     window.addEventListener(QUERY_CONTEXT_CHANGED_EVENT, reset);
     const resetSession = () => {
       transitionStarted.current = true;
+      clearSavedDeliverySelection();
       resetCartSession();
       reset();
       setSessionTransition(true);
@@ -59,6 +61,7 @@ export function ApplicationQueryProvider({ children }: { children: ReactNode }) 
     if (previousIdentity.current !== undefined && previousIdentity.current !== identity) {
       if (transitionStarted.current) return;
       transitionStarted.current = true;
+      clearSavedDeliverySelection();
       resetCartSession();
       void client.cancelQueries();
       client.clear();

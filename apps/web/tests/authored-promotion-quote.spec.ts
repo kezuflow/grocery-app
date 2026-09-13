@@ -125,11 +125,7 @@ test("Admin campaign reaches a real customer Quote at the authored code length b
     longitude: 123.9,
     confirmationSource: "USER_PIN",
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: null,
     },
   });
   const cart = z

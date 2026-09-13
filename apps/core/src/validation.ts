@@ -109,11 +109,7 @@ const addressComponentsSchema = z.object({
 const confirmationSourceSchema = z.enum(["GEOCODER", "USER_PIN", "DEVICE_LOCATION"]);
 const componentsSourceSchema = z.enum(["TEMPORARY_GEOCODER", "FIRST_PARTY", "SAVED_ADDRESS"]);
 const deliveryInstructionsSchema = z.object({
-  buildingUnit: nullableAddressText,
-  landmark: nullableAddressText,
-  gateGuard: nullableAddressText,
-  deliveryNote: z.string().trim().max(1000).nullable(),
-  recipientInstruction: z.string().trim().max(1000).nullable(),
+  deliveryInstructions: z.string().max(1000).nullable(),
 });
 
 export const addressRequestSchema = z.union([

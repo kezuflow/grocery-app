@@ -97,11 +97,7 @@ describe("customer checkout flow", () => {
       componentsSource: "FIRST_PARTY",
       confirmationSource: "USER_PIN",
       instructions: {
-        buildingUnit: null,
-        landmark: null,
-        gateGuard: null,
-        deliveryNote: null,
-        recipientInstruction: null,
+        deliveryInstructions: null,
       },
       latitude: 10.32,
       longitude: 123.9,

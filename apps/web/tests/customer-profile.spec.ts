@@ -97,14 +97,14 @@ for (const width of [1440, 390]) {
       .getByRole("textbox", { name: /^Search for an address/ })
       .fill("Test entrance");
     await signedInPage.getByRole("button", { name: candidate.displayAddress, exact: true }).click();
-    await expect(signedInPage.getByText("Delivery is available", { exact: true })).toBeVisible();
-    await signedInPage.getByRole("textbox", { name: /^Address label/ }).fill("Home");
+    await expect(signedInPage.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
+    await signedInPage.getByRole("textbox", { name: /^Custom label/ }).fill("Home");
     await signedInPage
       .getByRole("textbox", { name: "Recipient name", exact: true })
       .fill("Different recipient");
     await signedInPage.getByRole("textbox", { name: /^Phone number/ }).fill("0918 123 4567");
     await signedInPage
-      .getByRole("textbox", { name: /^Delivery note/ })
+      .getByRole("textbox", { name: /^Delivery instructions \(optional\)/ })
       .fill("Synthetic delivery instruction");
     const addressWrites: Record<
       string,
@@ -124,7 +124,9 @@ for (const width of [1440, 390]) {
       if (addressWrites[method].length === 1) await route.abort();
       else await route.fulfill({ response });
     });
-    await signedInPage.getByRole("button", { name: "Save confirmed address", exact: true }).click();
+    await signedInPage
+      .getByRole("button", { name: "Save and use this address", exact: true })
+      .click();
     await expect(signedInPage.getByRole("textbox", { name: /^Phone number/ })).toBeDisabled();
     await signedInPage.getByRole("button", { name: "Retry saving address", exact: true }).click();
     await expect(
@@ -159,12 +161,14 @@ for (const width of [1440, 390]) {
       "+639181234567",
     );
     await signedInPage
-      .getByRole("textbox", { name: /^Delivery note/ })
+      .getByRole("textbox", { name: /^Delivery instructions \(optional\)/ })
       .fill("Updated synthetic instruction");
     await signedInPage
       .getByRole("button", { name: "Update confirmed address", exact: true })
       .click();
-    await expect(signedInPage.getByRole("textbox", { name: /^Delivery note/ })).toBeDisabled();
+    await expect(
+      signedInPage.getByRole("textbox", { name: /^Delivery instructions \(optional\)/ }),
+    ).toBeDisabled();
     await signedInPage.getByRole("button", { name: "Retry saving address", exact: true }).click();
     await expect(
       signedInPage.getByText("Delivery address saved and refreshed.", { exact: true }),
@@ -174,7 +178,7 @@ for (const width of [1440, 390]) {
     expect(addressWrites.PATCH[1]).toEqual(addressWrites.PATCH[0]);
     expect(addressWrites.PATCH[0].result).toMatchObject({
       version: 2,
-      instructions: { deliveryNote: "Updated synthetic instruction" },
+      instructions: { deliveryInstructions: "Updated synthetic instruction" },
     });
     await signedInPage.goto("/checkout");
     await expect(signedInPage.getByRole("radio", { name: /^Home/ })).toBeChecked();

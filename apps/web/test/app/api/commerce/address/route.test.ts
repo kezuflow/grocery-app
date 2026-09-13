@@ -20,11 +20,7 @@ const components = {
   countryCode: "PH",
 };
 const instructions = {
-  buildingUnit: "Unit 4",
-  landmark: "Main entrance",
-  gateGuard: "Leave ID with guard",
-  deliveryNote: "Call on arrival",
-  recipientInstruction: "Ask for Ana",
+  deliveryInstructions: "Unit 4\nMain entrance\nLeave ID with guard\nCall on arrival\nAsk for Ana",
 };
 
 function request(method: "POST" | "PATCH", body: unknown) {
@@ -87,7 +83,6 @@ describe("customer address route", () => {
         longitude: 123.9058,
         confirmationSource: "USER_PIN",
         instructions,
-        notes: "Weekday deliveries",
       }),
     );
 
@@ -104,7 +99,6 @@ describe("customer address route", () => {
         longitude: 123.9058,
         confirmationSource: "USER_PIN",
         instructions,
-        notes: "Weekday deliveries",
         headers: expect.objectContaining({
           cookie: "freshmarkets.session=secret",
           origin: "https://freshmarkets.ph",

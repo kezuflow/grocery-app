@@ -151,6 +151,46 @@ describe("explicit Cart location and guest carryover", () => {
       await env.DB.prepare("UPDATE sku SET status='active' WHERE id='sku-potato-500g'").run();
     }
   });
+  it("supersedes an unstarted quote atomically when the Cart destination changes", async () => {
+    const cart = await selected();
+    const quoteId = crypto.randomUUID();
+    const addressId = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer_address(id,customer_id,label,recipient,phone,address_json,latitude,longitude,status,version,created_at,updated_at) VALUES (?,?,'Home','Customer','09','{}',10.32,123.9,'active',1,?,?)",
+      ).bind(addressId, cart.customerId, now, now),
+      env.DB.prepare(
+        `INSERT INTO checkout_quote
+          (id,attempt_id,customer_id,cart_id,address_id,delivery_cycle_id,fulfillment_mode,currency,
+           subtotal_minor,total_minor,lines_json,status,version,expires_at,idempotency_key,created_at,updated_at)
+         VALUES (?,?,?,?,?,NULL,'INSTANT','PHP',100,100,'[]','ACTIVE',1,?,?,?,?)`,
+      ).bind(
+        quoteId,
+        quoteId,
+        cart.customerId,
+        cart.cartId,
+        addressId,
+        now + 60_000,
+        crypto.randomUUID(),
+        now,
+        now,
+      ),
+    ]);
+    const changed = await selectCartLocation(env.DB, {
+      customerId: cart.customerId,
+      headers: {},
+      requestId: crypto.randomUUID(),
+      latitude: 10.34,
+      longitude: 123.94,
+      expectedVersion: cart.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(changed).toMatchObject({ ok: true, value: { version: cart.version + 1 } });
+    expect(
+      await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?").bind(quoteId).first(),
+    ).toEqual({ status: "SUPERSEDED" });
+  });
   it("rolls back every merge line and receipt when the Cart version changes inside the transaction", async () => {
     const cart = await selected(),
       idempotencyKey = crypto.randomUUID();

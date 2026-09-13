@@ -86,11 +86,19 @@ function destination(address: ProviderCheckoutAddress): DeliveryProviderAddress 
   };
   const instructionsObject = parseObject(address.delivery_instructions_json);
   const instructions: DeliveryInstructions = {
-    buildingUnit: field(instructionsObject, "buildingUnit"),
-    landmark: field(instructionsObject, "landmark"),
-    gateGuard: field(instructionsObject, "gateGuard"),
-    deliveryNote: field(instructionsObject, "deliveryNote"),
-    recipientInstruction: field(instructionsObject, "recipientInstruction"),
+    deliveryInstructions:
+      field(instructionsObject, "deliveryInstructions") ??
+      ([
+        field(instructionsObject, "buildingUnit"),
+        field(instructionsObject, "landmark"),
+        field(instructionsObject, "gateGuard"),
+        field(instructionsObject, "deliveryNote"),
+        field(instructionsObject, "recipientInstruction"),
+      ]
+        .filter((item): item is string => Boolean(item))
+        .filter((item, index, all) => all.indexOf(item) === index)
+        .join("\n") ||
+        null),
   };
   const formattedAddress =
     field(source, "formattedAddress") ??
@@ -283,11 +291,7 @@ export async function quoteProviderDelivery(
       countryCode: String(profile.country_code).toUpperCase(),
     },
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: text(profile.pickup_instructions),
-      recipientInstruction: null,
+      deliveryInstructions: text(profile.pickup_instructions),
     },
   };
   const quoteRequest: DeliveryProviderRequest = {

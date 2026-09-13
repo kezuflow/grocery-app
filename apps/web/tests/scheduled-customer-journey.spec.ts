@@ -209,11 +209,7 @@ for (const width of [1440, 390]) {
       longitude: 123.9,
       confirmationSource: "USER_PIN",
       instructions: {
-        buildingUnit: null,
-        landmark: null,
-        gateGuard: null,
-        deliveryNote: null,
-        recipientInstruction: null,
+        deliveryInstructions: null,
       },
     });
     // The provider-hosted page is the sole browser response fake. It has no

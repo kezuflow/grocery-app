@@ -347,11 +347,7 @@ for (const width of [1280, 390]) {
       longitude: 123.9,
       confirmationSource: "USER_PIN",
       instructions: {
-        buildingUnit: null,
-        landmark: null,
-        gateGuard: null,
-        deliveryNote: null,
-        recipientInstruction: null,
+        deliveryInstructions: null,
       },
     });
     const cart = z

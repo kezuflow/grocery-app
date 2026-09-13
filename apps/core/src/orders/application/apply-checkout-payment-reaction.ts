@@ -773,8 +773,7 @@ function deliveryInstructionsSnapshot(addressSnapshot: Record<string, unknown>):
   const structured = addressSnapshot.delivery_instructions_json;
   if (typeof structured === "string") return structured;
   if (structured !== null && typeof structured === "object") return JSON.stringify(structured);
-  const notes = addressSnapshot.notes;
-  return typeof notes === "string" ? JSON.stringify({ deliveryNote: notes }) : null;
+  return null;
 }
 
 async function recordFinanceExceptionRow(

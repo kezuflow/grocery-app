@@ -60,7 +60,14 @@ function safeAddress(snapshotJson: string): CustomerOrderDetailView["fulfillment
     region: stringOrNull(components.region ?? snapshot.region),
     postalCode: stringOrNull(components.postalCode ?? snapshot.postalCode),
     countryCode: stringOrNull(components.countryCode ?? snapshot.countryCode),
-    deliveryNote: stringOrNull(instructions.deliveryNote),
+    deliveryNote: stringOrNull(
+      instructions.deliveryInstructions ??
+        instructions.deliveryNote ??
+        instructions.buildingUnit ??
+        instructions.landmark ??
+        instructions.gateGuard ??
+        instructions.recipientInstruction,
+    ),
   };
 }
 

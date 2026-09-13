@@ -137,6 +137,18 @@ export function OrderSummary({
                           : money(item.lineTotalMinor, currency)}
                       </p>
                     </div>
+                    {item.unavailableReason ? (
+                      <p
+                        role="status"
+                        className="mt-2 text-xs font-medium text-[var(--fm-destructive)]"
+                      >
+                        {item.unavailableReason === "INSUFFICIENT_QUANTITY"
+                          ? `${item.availableQuantity ?? 0} available at this destination. Reduce the quantity or remove this item.`
+                          : item.unavailableReason === "PRICE_UNAVAILABLE"
+                            ? "No current price is available at this destination. Remove this item to continue."
+                            : "This item is not sold at this destination. Remove it to continue."}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               );

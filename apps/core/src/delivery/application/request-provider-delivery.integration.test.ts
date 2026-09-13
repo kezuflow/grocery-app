@@ -24,11 +24,7 @@ function request(merchantOrderId: string): CreateDeliveryRequest {
       countryCode: "PH",
     },
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: null,
     },
   } as const;
   return {

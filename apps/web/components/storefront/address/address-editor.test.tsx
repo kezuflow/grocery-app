@@ -53,11 +53,7 @@ const savedAddress: CustomerAddressView = {
   confirmationSource: "GEOCODER",
   confirmedAt: "2026-08-30T00:00:00.000Z",
   instructions: {
-    buildingUnit: "Unit 4",
-    landmark: null,
-    gateGuard: null,
-    deliveryNote: null,
-    recipientInstruction: null,
+    deliveryInstructions: "Unit 4",
   },
   latitude: candidate.coordinate.latitude,
   longitude: candidate.coordinate.longitude,
@@ -236,7 +232,7 @@ describe("AddressEditor", () => {
     };
     const writes = () => fetchImpl.mock.calls.filter(([url]) => url === "/api/commerce/address");
     try {
-      expect(container.textContent).toContain("Step 1 of 3");
+      expect(container.textContent).toContain("Step 1 of 2");
       const locationLayout = container.querySelector(
         '[data-address-location-layout="map-overlay"]',
       );
@@ -269,22 +265,19 @@ describe("AddressEditor", () => {
         [...container.querySelectorAll("button")].some((b) => b.textContent === "Save address"),
       ).toBe(false);
       await submit();
-      expect(container.textContent).toContain("Step 1 of 3");
+      expect(container.textContent).toContain("Step 1 of 2");
       await selectCandidate(container, fetchImpl);
       expect(container.querySelector('[data-address-location-layout="map-overlay"]')).toBe(
         locationLayout,
       );
       expect(searchToggle?.getAttribute("aria-expanded")).toBe("false");
       await submit();
-      expect(container.textContent).toContain("Step 2 of 3");
+      expect(container.textContent).toContain("Step 2 of 2");
       await submit();
-      expect(container.textContent).toContain("Step 2 of 3");
-      change(input(container, "Address label"), "Home");
+      expect(container.textContent).toContain("Step 2 of 2");
+      change(input(container, "Custom label"), "Home");
       change(input(container, "Recipient name"), "Test Recipient");
       change(input(container, "Phone number"), "09171234567");
-      await submit();
-      expect(container.textContent).toContain("Step 3 of 3");
-      expect(writes()).toHaveLength(0);
       click([...container.querySelectorAll("button")].find((b) => b.textContent === "Back")!);
       expect(input(container, "Recipient name").value).toBe("Test Recipient");
       await submit();
@@ -589,7 +582,7 @@ describe("AddressEditor", () => {
       .at(-1);
     expect(JSON.parse(String(serviceabilityCall?.[1]?.body))).toMatchObject(moved);
     expect(container.textContent).toContain("Delivery area confirmed");
-    change(input(container, "Address label"), "Home");
+    change(input(container, "Custom label"), "Home");
     change(input(container, "Recipient name"), "Ana Santos");
     change(input(container, "Phone number"), "+639171234567");
     const save = Array.from(container.querySelectorAll("button")).find((button) =>
@@ -648,7 +641,7 @@ describe("AddressEditor", () => {
     click(locate);
     act(() => currentLocationSuccess?.({ coords: deviceCoordinate } as GeolocationPosition));
     await flush();
-    change(input(container, "Address label"), "Home");
+    change(input(container, "Custom label"), "Home");
     change(input(container, "Recipient name"), "Ana Santos");
     change(input(container, "Phone number"), "+639171234567");
     const save = Array.from(container.querySelectorAll("button")).find((button) =>
@@ -682,15 +675,13 @@ describe("AddressEditor", () => {
     const { container, root } = mount({ fetchImpl, mapAdapter: adapter });
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
 
-    expect(container.textContent).toContain(
-      "Search-result address fields are provider-resolved when saved",
-    );
-    expect(input(container, "Street, building, or place")).toHaveProperty("readOnly", true);
-    expect(input(container, "Building or unit")).toHaveProperty("readOnly", false);
+    expect(container.textContent).toContain("Confirmed destination");
+    expect(container.querySelectorAll("textarea")).toHaveLength(1);
+    expect(input(container, "Delivery instructions (optional)")).toHaveProperty("readOnly", false);
 
     act(() => adapter.emitPinMove({ latitude: 10.319, longitude: 123.907 }));
     await flush();
-    expect(input(container, "Street, building, or place")).toHaveProperty("readOnly", false);
+    expect(container.textContent).toContain("Confirmed destination");
     act(() => root.unmount());
   });
 
@@ -848,14 +839,13 @@ describe("AddressEditor", () => {
     const { container, root } = mount({ fetchImpl, onConfirmed });
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
 
-    change(input(container, "Address label"), "Home");
+    change(input(container, "Custom label"), "Home");
     change(input(container, "Recipient name"), "Ana Santos");
     change(input(container, "Phone number"), "+639171234567");
-    change(input(container, "Building or unit"), "Unit 4");
-    change(input(container, "Landmark"), "Main entrance");
-    change(input(container, "Gate or guard instructions"), "Leave ID with guard");
-    change(input(container, "Delivery note"), "Call on arrival");
-    change(input(container, "Recipient guidance"), "Ask for Ana");
+    change(
+      input(container, "Delivery instructions (optional)"),
+      "Unit 4\nMain entrance\nLeave ID with guard\nCall on arrival\nAsk for Ana",
+    );
     await flush();
     expect(container.textContent).toContain("Outside our delivery area");
 
@@ -875,11 +865,8 @@ describe("AddressEditor", () => {
       longitude: candidate.coordinate.longitude,
       confirmationSource: "GEOCODER",
       instructions: {
-        buildingUnit: "Unit 4",
-        landmark: "Main entrance",
-        gateGuard: "Leave ID with guard",
-        deliveryNote: "Call on arrival",
-        recipientInstruction: "Ask for Ana",
+        deliveryInstructions:
+          "Unit 4\nMain entrance\nLeave ID with guard\nCall on arrival\nAsk for Ana",
       },
     });
     expect(savedBody).not.toHaveProperty("candidateKey");

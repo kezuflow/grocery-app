@@ -1205,7 +1205,7 @@ describe("external delivery request", () => {
       origin: { coordinate: { latitude: 10.3157, longitude: 123.8854 } },
       destination: {
         coordinate: { latitude: 10.33, longitude: 123.91 },
-        instructions: { buildingUnit: "Unit 2", landmark: "Blue gate" },
+        instructions: { deliveryInstructions: "Unit 2\nBlue gate" },
       },
       schedule: { pickupFrom: new Date(now + 60_000).toISOString() },
     });

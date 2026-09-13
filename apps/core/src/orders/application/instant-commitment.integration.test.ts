@@ -1626,7 +1626,7 @@ describe("instant order commitment", () => {
       latitude: 10.32,
       longitude: 123.9,
       contact_snapshot_json: '{"recipient":"C","phone":"+639171234567"}',
-      instructions_snapshot: '{"deliveryNote":"Call on arrival"}',
+      instructions_snapshot: null,
       status: "UNASSIGNED",
     });
     expect(JSON.parse(String(stop?.address_snapshot_json))).toMatchObject({

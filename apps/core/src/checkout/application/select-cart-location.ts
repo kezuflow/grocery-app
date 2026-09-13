@@ -13,6 +13,7 @@ import {
   CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
   cartHasUnsettledCheckout,
   cartMutationPaymentGuard,
+  releaseUncommittedCheckoutStatements,
 } from "./release-uncommitted-checkout";
 
 const SCOPE = "cart.selectLocation";
@@ -90,6 +91,14 @@ export async function selectCartLocation(
       "Your cart changed. Review it before changing delivery location.",
     );
   const now = Date.now();
+  const activeQuotes = cart
+    ? await database
+        .prepare(
+          "SELECT id FROM checkout_quote WHERE cart_id=? AND customer_id=? AND status='ACTIVE'",
+        )
+        .bind(cart.id, input.customerId)
+        .all<{ id: string }>()
+    : { results: [] as { id: string }[] };
   const value: CartLocationReceipt = {
     cartId: cart?.id ?? crypto.randomUUID(),
     version: input.expectedVersion + 1,
@@ -104,6 +113,15 @@ export async function selectCartLocation(
         .bind(SCOPE, input.idempotencyKey, hash, now, now),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -6 WHERE changes()=0"),
       ...(cart ? [cartMutationPaymentGuard(database, cart.id)] : []),
+      ...activeQuotes.results.flatMap((quote) =>
+        releaseUncommittedCheckoutStatements(database, {
+          quoteId: quote.id,
+          paymentIntentId: null,
+          customerId: input.customerId,
+          now,
+          attemptStatus: "EXPIRED",
+        }),
+      ),
       database
         .prepare(`INSERT INTO commitment_abort(id) SELECT -6 WHERE NOT EXISTS (
         SELECT 1 FROM geography_configuration g JOIN market m ON m.id=g.market_id AND m.status='active'

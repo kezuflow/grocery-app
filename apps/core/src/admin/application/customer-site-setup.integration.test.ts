@@ -149,11 +149,7 @@ it("routes a confirmed customer address to a new site configured through command
     componentsSource: "FIRST_PARTY",
     confirmationSource: "USER_PIN",
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: null,
     },
     addressJson: JSON.stringify({ line1: "Test customer entrance" }),
   });

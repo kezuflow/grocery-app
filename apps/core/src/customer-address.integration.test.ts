@@ -26,11 +26,7 @@ const components: AddressComponents = {
   countryCode: "PH",
 };
 const instructions: DeliveryInstructions = {
-  buildingUnit: "Unit 4B",
-  landmark: "Across the public market",
-  gateGuard: null,
-  deliveryNote: "Call on arrival",
-  recipientInstruction: "Ask for Ana",
+  deliveryInstructions: "Unit 4B\nAcross the public market\nCall on arrival\nAsk for Ana",
 };
 
 function requestId() {
@@ -824,6 +820,50 @@ describe("Phase 4B customer addresses", () => {
     });
   });
 
+  it("combines retained courier fields once and never exposes private notes", async () => {
+    const user = await account();
+    await core.listCustomerAddresses(user.request());
+    const customerId = await customerIdFor(user.userId);
+    const addressId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO customer_address (id,customer_id,label,recipient,phone,address_json,latitude,longitude,delivery_instructions_json,notes,status,version,created_at,updated_at) VALUES (?,?,'Legacy','Recipient','09000000000','{}',10.32,123.9,?,?,'active',1,0,0)",
+    )
+      .bind(
+        addressId,
+        customerId,
+        JSON.stringify({
+          buildingUnit: "Unit 4",
+          landmark: "Blue gate",
+          deliveryNote: "Blue gate",
+          recipientInstruction: "Call on arrival",
+        }),
+        "Private account note",
+      )
+      .run();
+    const listed = await core.listCustomerAddresses(user.request());
+    expect(listed).toMatchObject({
+      ok: true,
+      value: [
+        {
+          id: addressId,
+          instructions: { deliveryInstructions: "Unit 4\nBlue gate\nCall on arrival" },
+        },
+      ],
+    });
+    expect(JSON.stringify(listed)).not.toContain("Private account note");
+
+    const updated = await core.updateCustomerAddress({
+      ...user.request(),
+      addressId,
+      expectedVersion: 1,
+      label: "Home",
+    });
+    expect(updated).toMatchObject({
+      ok: true,
+      value: { instructions: { deliveryInstructions: "Unit 4\nBlue gate\nCall on arrival" } },
+    });
+  });
+
   it("updates with the correct version and rejects stale versions", async () => {
     const user = await account();
     const created = await createAddress(user.request());
@@ -1195,7 +1235,7 @@ describe("Phase 4B customer addresses", () => {
       addressId: created.value.id,
       expectedVersion: created.value.version,
       label: "Renamed after commitment",
-      instructions: { ...instructions, deliveryNote: "Changed after commitment" },
+      instructions: { deliveryInstructions: "Changed after commitment" },
     });
     expect(updated.ok).toBe(true);
     const storedOrder = await env.DB.prepare(

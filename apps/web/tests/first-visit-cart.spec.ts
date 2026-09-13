@@ -206,7 +206,7 @@ for (const width of [1440, 390]) {
       "Address confirmation is temporarily unavailable",
     );
     expect(
-      await page.evaluate(() => localStorage.getItem("freshmarkets.delivery-location.v2")),
+      await page.evaluate(() => localStorage.getItem("freshmarkets.delivery-location.v3")),
     ).toBeNull();
     expect(
       (await page.context().cookies()).some(

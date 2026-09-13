@@ -7,9 +7,10 @@ import type { CustomerAddressView } from "@freshmarkets/contracts";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createQueryClient, queryKeys } from "@/lib/query/query-client";
 
-const { addressEditorPropsMock, fetchCartMock } = vi.hoisted(() => ({
+const { addressEditorPropsMock, fetchCartMock, refreshCartForLocationMock } = vi.hoisted(() => ({
   addressEditorPropsMock: vi.fn(),
   fetchCartMock: vi.fn(),
+  refreshCartForLocationMock: vi.fn(),
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -17,6 +18,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/storefront/cart-client", () => ({
   fetchCart: fetchCartMock,
+  refreshCartForLocation: refreshCartForLocationMock,
   cartLoadError: () => "",
   CART_CHANGED_EVENT: "fm:cart-changed",
 }));
@@ -91,11 +93,7 @@ function address(id: string, label: string, serviceable: boolean): CustomerAddre
     confirmationSource: "USER_PIN",
     confirmedAt: "2026-08-30T00:00:00.000Z",
     instructions: {
-      buildingUnit: null,
-      landmark: null,
-      gateGuard: null,
-      deliveryNote: null,
-      recipientInstruction: null,
+      deliveryInstructions: null,
     },
     latitude: 10.3173,
     longitude: 123.9058,
@@ -295,6 +293,7 @@ describe("CheckoutClient delivery inputs", () => {
       totalMinor: 30000,
       currency: "PHP",
     });
+    refreshCartForLocationMock.mockImplementation(() => fetchCartMock());
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -307,6 +306,7 @@ describe("CheckoutClient delivery inputs", () => {
     vi.unstubAllGlobals();
     addressEditorPropsMock.mockReset();
     fetchCartMock.mockReset();
+    refreshCartForLocationMock.mockReset();
     window.sessionStorage.clear();
     vi.useRealTimers();
   });

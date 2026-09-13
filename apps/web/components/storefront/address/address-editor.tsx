@@ -8,7 +8,6 @@ import {
   Map,
   MapPin,
   Navigation,
-  NotebookPen,
   Search,
   UserRound,
   X,
@@ -55,16 +54,10 @@ const emptyComponents: AddressComponents = {
   countryCode: "PH",
 };
 const emptyInstructions: DeliveryInstructions = {
-  buildingUnit: null,
-  landmark: null,
-  gateGuard: null,
-  deliveryNote: null,
-  recipientInstruction: null,
+  deliveryInstructions: null,
 };
 
-type FieldErrors = Partial<
-  Record<"label" | "recipient" | "phone" | "addressLine1" | "city", string>
->;
+type FieldErrors = Partial<Record<"label" | "recipient" | "phone" | "addressLine1", string>>;
 
 export type AddressEditorProps = Readonly<{
   onConfirmed?: (addressId: string) => void;
@@ -74,6 +67,7 @@ export type AddressEditorProps = Readonly<{
   multiStep?: boolean;
   compactHeading?: string;
   initialAddress?: CustomerAddressView;
+  initialDestination?: Pick<ServiceabilitySelection, "displayAddress" | "coordinate">;
   defaultPhone?: string;
   savedPhoneNumbers?: readonly string[];
   browserApiKey?: string;
@@ -234,6 +228,7 @@ export function AddressEditor({
   multiStep = false,
   compactHeading,
   initialAddress,
+  initialDestination,
   defaultPhone,
   savedPhoneNumbers = [],
   browserApiKey,
@@ -302,17 +297,26 @@ export function AddressEditor({
   const [instructions, setInstructions] = useState(
     initialAddress?.instructions ?? emptyInstructions,
   );
-  const [notes, setNotes] = useState("");
   const [coordinate, setCoordinate] = useState<Coordinate | null>(
     initialAddress
       ? { latitude: initialAddress.latitude, longitude: initialAddress.longitude }
-      : null,
+      : (initialDestination?.coordinate ?? null),
   );
   const [confirmationSource, setConfirmationSource] = useState<CoordinateConfirmationSource | null>(
-    initialAddress?.confirmationSource ?? null,
+    initialAddress?.confirmationSource ?? (initialDestination ? "USER_PIN" : null),
   );
-  const [selectedDisplayAddress, setSelectedDisplayAddress] = useState(
-    initialAddress?.components.addressLine1 ?? "",
+  const [selectedDisplayAddress, setSelectedDisplayAddress] = useState(() =>
+    initialAddress
+      ? [
+          initialAddress.components.addressLine1,
+          initialAddress.components.addressLine2,
+          initialAddress.components.barangay,
+          initialAddress.components.city,
+          initialAddress.components.postalCode,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : (initialDestination?.displayAddress ?? ""),
   );
   const [coordinateAnnouncement, setCoordinateAnnouncement] = useState("");
   const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
@@ -333,7 +337,6 @@ export function AddressEditor({
   const coordinateActionGenerationRef = useRef(0);
   const initialMapCenterRef = useRef<Coordinate>(coordinate ?? CEBU_CENTER);
   const placesSession = useRef<string | null>(null);
-  const providerResolvedComponents = confirmationSource === "GEOCODER";
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -548,6 +551,14 @@ export function AddressEditor({
     }
   }
 
+  const initialDestinationResolved = useRef(false);
+  useEffect(() => {
+    if (initialAddress || !initialDestination || initialDestinationResolved.current) return;
+    initialDestinationResolved.current = true;
+    const generation = ++coordinateActionGenerationRef.current;
+    void confirmCoordinate(initialDestination.coordinate, "USER_PIN", generation);
+  }, [initialAddress, initialDestination]);
+
   function movePin(nextCoordinate: Coordinate): void {
     if (purpose === "save" && (saveInFlight.current || saveUncertain)) return;
     const generation = ++coordinateActionGenerationRef.current;
@@ -591,7 +602,6 @@ export function AddressEditor({
     if (!normalizePhilippineMobile(phone))
       errors.phone = "Enter a Philippine mobile number, such as 0917 123 4567.";
     if (!components.addressLine1.trim()) errors.addressLine1 = "Enter the street or building.";
-    if (!components.city.trim()) errors.city = "Enter the city.";
     return errors;
   }
 
@@ -659,13 +669,13 @@ export function AddressEditor({
         return;
       }
     }
-    setStep((current) => Math.min(3, current + 1));
+    setStep((current) => Math.min(2, current + 1));
   }
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (purpose !== "save" || saveInFlight.current) return;
-    if (wizard && step < 3) {
+    if (wizard && step < 2) {
       continueStep();
       return;
     }
@@ -691,7 +701,6 @@ export function AddressEditor({
         ...coordinate,
         confirmationSource,
         instructions,
-        ...(!initialAddress ? { notes: nullable(notes) } : {}),
       };
       pendingSave.current = { method, key: crypto.randomUUID(), body: JSON.stringify(body) };
     }
@@ -736,31 +745,24 @@ export function AddressEditor({
       {wizard && (
         <div className="border-b border-[var(--fm-border)] pb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-primary-dark)]">
-            Step {step} of 3
+            Step {step} of 2
           </p>
           <h2
             ref={stepHeadingRef}
             tabIndex={-1}
             className="mt-1 text-2xl font-bold tracking-[-0.025em] text-[var(--fm-text)] focus:outline-none"
           >
-            {step === 1
-              ? "Find a delivery address"
-              : step === 2
-                ? "Address and recipient details"
-                : "Delivery instructions"}
+            {step === 1 ? "Find a delivery address" : "Delivery details"}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--fm-text-muted)]">
             {step === 1
               ? "Search or use your current location, then place the pin at the exact delivery entrance."
-              : step === 2
-                ? "Tell us how to identify the destination and who will receive the delivery."
-                : "Add the practical details that help the courier complete the handoff."}
+              : "Add a label and recipient, plus optional instructions for the courier."}
           </p>
-          <ol aria-label="Address progress" className="mt-6 grid grid-cols-3 gap-2">
+          <ol aria-label="Address progress" className="mt-6 grid grid-cols-2 gap-2">
             {[
               { label: "Location", icon: LocateFixed },
               { label: "Details", icon: UserRound },
-              { label: "Instructions", icon: NotebookPen },
             ].map((item, index) => {
               const number = index + 1;
               const current = number === step;
@@ -1298,36 +1300,72 @@ export function AddressEditor({
               aria-labelledby="address-details-heading"
               className={`grid gap-4 [&[hidden]]:hidden ${wizard ? "pt-6" : ""}`}
             >
-              {wizard && selectedDisplayAddress ? (
-                <div className="flex items-start gap-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
+              {selectedDisplayAddress ? (
+                <div className="flex items-start gap-3 border-y border-[var(--fm-border)] py-4">
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
                     <MapPin className="size-4" aria-hidden="true" />
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                      Confirmed entrance
+                      Confirmed destination
                     </p>
                     <p className="mt-1 text-sm font-semibold text-[var(--fm-text)]">
                       {selectedDisplayAddress}
                     </p>
                   </div>
+                  {wizard ? (
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="min-h-11 text-sm font-semibold underline underline-offset-4"
+                    >
+                      Change
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               <h3 id="address-details-heading" className="text-lg font-semibold text-slate-950">
-                Contact and address
+                Delivery details
               </h3>
-              {providerResolvedComponents ? (
-                <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                  Search-result address fields are provider-resolved when saved. Move the pin to
-                  establish a first-party location before changing them; add unit, entrance,
-                  landmark, and courier guidance under Delivery instructions.
-                </p>
+              {!selectedDisplayAddress ? (
+                <TextField
+                  id="address-line-1"
+                  label="Confirmed address"
+                  description="Enter the readable destination because address lookup could not supply it."
+                  value={components.addressLine1}
+                  error={fieldErrors.addressLine1}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setFirstPartyComponent("addressLine1", value);
+                    setSelectedDisplayAddress(value);
+                  }}
+                />
               ) : null}
+              <div>
+                <p className="text-sm font-medium text-slate-800">Address label</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {["Home", "Work"].map((shortcut) => (
+                    <button
+                      key={shortcut}
+                      type="button"
+                      aria-pressed={label === shortcut}
+                      onClick={() => setLabel(shortcut)}
+                      className={`min-h-11 rounded-full border px-4 text-sm font-semibold ${
+                        label === shortcut
+                          ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
+                          : "border-[var(--fm-border)] bg-white"
+                      }`}
+                    >
+                      {shortcut}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextField
                   id="address-label"
-                  label="Address label"
-                  description="For example, Home or Office."
+                  label="Custom label"
+                  description="Use Home or Work above, or enter your own label."
                   value={label}
                   error={fieldErrors.label}
                   onChange={(event) => setLabel(event.currentTarget.value)}
@@ -1386,166 +1424,24 @@ export function AddressEditor({
                     }
                   />
                 </div>
-                <TextField
-                  id="address-line-1"
-                  label="Street, building, or place"
-                  readOnly={providerResolvedComponents}
-                  value={components.addressLine1}
-                  error={fieldErrors.addressLine1}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setFirstPartyComponent("addressLine1", value);
-                  }}
-                />
-                <TextField
-                  id="address-line-2"
-                  label="Additional address line"
-                  readOnly={providerResolvedComponents}
-                  value={components.addressLine2 ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setFirstPartyComponent("addressLine2", value);
-                  }}
-                />
-                <TextField
-                  id="address-barangay"
-                  label="Barangay"
-                  readOnly={providerResolvedComponents}
-                  value={components.barangay ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setFirstPartyComponent("barangay", value);
-                  }}
-                />
-                <TextField
-                  id="address-city"
-                  label="City"
-                  readOnly={providerResolvedComponents}
-                  value={components.city}
-                  error={fieldErrors.city}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setFirstPartyComponent("city", value);
-                  }}
-                />
-                <TextField
-                  id="address-region"
-                  label="Region or province"
-                  readOnly={providerResolvedComponents}
-                  value={components.region ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setFirstPartyComponent("region", value);
-                  }}
-                />
-                <TextField
-                  id="address-postal-code"
-                  label="Postal code"
-                  readOnly={providerResolvedComponents}
-                  inputMode="numeric"
-                  value={components.postalCode ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setFirstPartyComponent("postalCode", value);
-                  }}
-                />
               </div>
-            </section>
-
-            <section
-              hidden={wizard && step !== 3}
-              aria-labelledby="delivery-instructions-heading"
-              className={`grid gap-4 [&[hidden]]:hidden ${wizard ? "pt-6" : ""}`}
-            >
-              {wizard && selectedDisplayAddress ? (
-                <div className="flex items-start gap-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
-                    <MapPin className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                      Delivering to
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--fm-text)]">
-                      {selectedDisplayAddress}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                      {recipient || "Recipient"} · {phone || "Phone number"}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
               <div>
-                <h3
-                  id="delivery-instructions-heading"
-                  className="text-lg font-semibold text-slate-950"
-                >
-                  Help the courier find you
-                </h3>
+                <h3 className="text-lg font-semibold text-slate-950">Delivery instructions</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Add only details the external courier needs for this destination.
+                  Optional. Include a unit, entrance, landmark, gate, or handoff note here.
                 </p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  id="instruction-building-unit"
-                  label="Building or unit"
-                  value={instructions.buildingUnit ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setInstructions((current) => ({ ...current, buildingUnit: value }));
-                  }}
-                />
-                <TextField
-                  id="instruction-landmark"
-                  label="Landmark"
-                  value={instructions.landmark ?? ""}
-                  onChange={(event) => {
-                    const value = nullable(event.currentTarget.value);
-                    setInstructions((current) => ({ ...current, landmark: value }));
-                  }}
-                />
-              </div>
               <TextAreaField
-                id="instruction-gate-guard"
-                label="Gate or guard instructions"
-                value={instructions.gateGuard ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setInstructions((current) => ({ ...current, gateGuard: value }));
-                }}
-              />
-              <TextAreaField
-                id="instruction-delivery-note"
-                label="Delivery note"
-                description="For example, where to leave groceries or when to call."
+                id="delivery-instructions"
+                label="Delivery instructions (optional)"
+                description="Up to 1,000 characters. Shared with the courier exactly as entered."
                 maxLength={1000}
-                value={instructions.deliveryNote ?? ""}
+                value={instructions.deliveryInstructions ?? ""}
                 onChange={(event) => {
                   const value = nullable(event.currentTarget.value);
-                  setInstructions((current) => ({ ...current, deliveryNote: value }));
+                  setInstructions({ deliveryInstructions: value });
                 }}
               />
-              <TextAreaField
-                id="instruction-recipient"
-                label="Recipient guidance"
-                maxLength={1000}
-                value={instructions.recipientInstruction ?? ""}
-                onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
-                  setInstructions((current) => ({ ...current, recipientInstruction: value }));
-                }}
-              />
-              {!initialAddress ? (
-                <TextAreaField
-                  id="address-notes"
-                  label="Private address note"
-                  description="Optional account note. Delivery instructions belong in the fields above."
-                  maxLength={1000}
-                  value={notes}
-                  onChange={(event) => setNotes(event.currentTarget.value)}
-                />
-              ) : null}
             </section>
 
             {saveError ? (
@@ -1568,7 +1464,7 @@ export function AddressEditor({
                     Back
                   </button>
                 )}
-                {step < 3 && (
+                {step < 2 && (
                   <button
                     type="submit"
                     className="ml-auto inline-flex min-h-12 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
@@ -1577,7 +1473,7 @@ export function AddressEditor({
                     <ArrowRight className="size-4" aria-hidden="true" />
                   </button>
                 )}
-                {step === 3 && !saveUncertain ? (
+                {step === 2 && !saveUncertain ? (
                   <button
                     type="submit"
                     disabled={saveState === "saving" || !coordinate || !confirmationSource}

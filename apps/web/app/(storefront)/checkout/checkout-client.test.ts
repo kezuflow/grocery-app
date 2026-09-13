@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 const checkout = readFileSync(new URL("./checkout-client.tsx", import.meta.url), "utf8");
 
 describe("checkout address guide layout contract", () => {
-  it("uses the address editor's three-step guide inside the complete checkout workspace", () => {
+  it("uses the simplified address guide inside the complete checkout workspace", () => {
     expect(checkout).toContain("<AddressEditor");
     expect(checkout).toContain("multiStep");
-    expect(checkout).toContain("complete the three-step address guide");
+    expect(checkout).toContain("confirm the details for Deliver to");
     expect(checkout).toContain('aria-label="Address setup workspace"');
     expect(checkout).toContain("Your cart and order total remain available beside this guide.");
     expect(checkout).toContain("Where should we deliver?");

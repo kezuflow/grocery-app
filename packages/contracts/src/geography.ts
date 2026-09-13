@@ -47,11 +47,8 @@ export type AddressSearchCandidate = {
 };
 
 export type DeliveryInstructions = {
-  buildingUnit: string | null;
-  landmark: string | null;
-  gateGuard: string | null;
-  deliveryNote: string | null;
-  recipientInstruction: string | null;
+  /** One courier-facing value. Legacy structured fields are combined by Core on read. */
+  deliveryInstructions: string | null;
 };
 
 export type ServiceabilityFailureReason =

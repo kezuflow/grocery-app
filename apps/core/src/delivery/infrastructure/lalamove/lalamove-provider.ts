@@ -22,7 +22,6 @@ const SANDBOX_API_BASE = "https://rest.sandbox.lalamove.com";
 const PRODUCTION_API_BASE = "https://rest.lalamove.com";
 const RESPONSE_LIMIT_BYTES = 256 * 1024;
 const REQUEST_TIMEOUT_MILLISECONDS = 10_000;
-const MAX_REMARK_LENGTH = 1_500;
 const MAX_SCHEDULE_AHEAD_MILLISECONDS = 30 * 24 * 60 * 60 * 1_000;
 
 type JsonObject = Record<string, unknown>;
@@ -244,24 +243,8 @@ function parseDelivery(
 }
 
 function remarks(request: DeliveryProviderRequest): string | undefined {
-  const address = request.destination;
-  const deliveryPackage = request.packages[0];
-  const values = [
-    deliveryPackage ? `Package: 1 ${deliveryPackage.kind.toLowerCase()}` : null,
-    address.instructions.buildingUnit
-      ? `Building/unit: ${address.instructions.buildingUnit.trim()}`
-      : null,
-    address.instructions.landmark ? `Landmark: ${address.instructions.landmark.trim()}` : null,
-    address.instructions.gateGuard ? `Gate/guard: ${address.instructions.gateGuard.trim()}` : null,
-    address.instructions.deliveryNote
-      ? `Delivery note: ${address.instructions.deliveryNote.trim()}`
-      : null,
-    address.instructions.recipientInstruction
-      ? `Recipient instruction: ${address.instructions.recipientInstruction.trim()}`
-      : null,
-  ].filter((value): value is string => value !== null);
-  const combined = values.join("\r\n");
-  return combined ? combined.slice(0, MAX_REMARK_LENGTH) : undefined;
+  const instructions = request.destination.instructions.deliveryInstructions;
+  return instructions?.trim() ? instructions : undefined;
 }
 
 function stop(address: DeliveryProviderAddress) {
@@ -324,7 +307,8 @@ function validRequest(request: DeliveryProviderRequest, now: number): boolean {
     !validContact(request.sender) ||
     !validContact(request.recipient) ||
     !validAddress(request.origin) ||
-    !validAddress(request.destination)
+    !validAddress(request.destination) ||
+    (request.destination.instructions.deliveryInstructions?.length ?? 0) > 1_500
   )
     return false;
   if (request.schedule) {

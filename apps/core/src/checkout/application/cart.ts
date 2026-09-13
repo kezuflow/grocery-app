@@ -91,6 +91,15 @@ export async function getCart(
       `SELECT ci.sku_id, ci.quantity, p.name || ' · ' || s.name AS name,p.id product_id,p.category_id,
          ${productMediaProjectionSql} AS media_json,
          s.status AS sku_status, p.status AS product_status, sla.availability_status,
+         CAST(MAX(0,
+           COALESCE((SELECT b.on_hand-b.reserved FROM inventory_balance b
+             WHERE b.location_id=c.location_id
+               AND b.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id)),0)
+           - COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h
+             WHERE h.location_id=c.location_id
+               AND h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
+               AND h.status='HELD'),0)
+         ) / s.consumption_base_quantity AS INTEGER) AS available_quantity,
          (
            SELECT pv.amount_minor
            FROM price_version pv
@@ -120,18 +129,27 @@ export async function getCart(
       product_status: string;
       availability_status: string | null;
       unit_price_minor: number | null;
+      available_quantity: number;
       product_id: string;
       category_id: string;
     }>();
 
   const items: CartView["items"][number][] = rows.results.map((row) => {
-    const availability =
+    const unavailableReason: CartView["items"][number]["unavailableReason"] =
       row.sku_status !== "active" ||
       row.product_status !== "active" ||
       row.availability_status !== "AVAILABLE"
-        ? "UNAVAILABLE"
+        ? "NOT_SOLD_AT_LOCATION"
         : row.unit_price_minor === null
           ? "PRICE_UNAVAILABLE"
+          : currency.fulfillmentMode === "INSTANT" && row.available_quantity < row.quantity
+            ? "INSUFFICIENT_QUANTITY"
+            : null;
+    const availability =
+      unavailableReason === "PRICE_UNAVAILABLE"
+        ? "PRICE_UNAVAILABLE"
+        : unavailableReason
+          ? "UNAVAILABLE"
           : "AVAILABLE";
     const unitPriceMinor = availability === "AVAILABLE" ? row.unit_price_minor : null;
     return {
@@ -140,6 +158,9 @@ export async function getCart(
       name: row.name,
       media: publishedProductMediaView(row.media_json),
       availability,
+      unavailableReason,
+      availableQuantity:
+        unavailableReason === "INSUFFICIENT_QUANTITY" ? row.available_quantity : null,
       unitPriceMinor,
       lineTotalMinor: unitPriceMinor === null ? null : row.quantity * unitPriceMinor,
     };

@@ -55,11 +55,7 @@ for (const width of [1440, 390])
         longitude: 123.9058,
         confirmationSource: "USER_PIN",
         instructions: {
-          buildingUnit: null,
-          landmark: null,
-          gateGuard: null,
-          deliveryNote: null,
-          recipientInstruction: null,
+          deliveryInstructions: null,
         },
       },
     });

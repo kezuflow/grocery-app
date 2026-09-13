@@ -125,11 +125,7 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
           confirmationSource: "USER_PIN",
           confirmedAt: "2026-08-30T00:00:00.000Z",
           instructions: {
-            buildingUnit: null,
-            landmark: null,
-            gateGuard: null,
-            deliveryNote: null,
-            recipientInstruction: null,
+            deliveryInstructions: null,
           },
           latitude: 10.3173,
           longitude: 123.9058,

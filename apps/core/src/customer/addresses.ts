@@ -54,6 +54,14 @@ function failure(code: AppErrorCode, message: string, requestId: string) {
 }
 
 type AddressWrite = { scope: string; key: string; hash: string; actorUserId: string };
+const MAX_DELIVERY_INSTRUCTIONS_LENGTH = 1_000;
+
+function validDeliveryInstructions(value: DeliveryInstructions): boolean {
+  return (
+    value.deliveryInstructions === null ||
+    value.deliveryInstructions.length <= MAX_DELIVERY_INSTRUCTIONS_LENGTH
+  );
+}
 
 async function replayAddressWrite(
   database: D1Database,
@@ -234,6 +242,12 @@ export async function createCustomerAddress(
       "A valid Philippine mobile number is required",
       command.requestId,
     );
+  if (command.instructions && !validDeliveryInstructions(command.instructions))
+    return failure(
+      "VALIDATION_FAILED",
+      "Delivery instructions must be 1,000 characters or fewer",
+      command.requestId,
+    );
   const geo = await resolveServiceability(drizzle(database), command);
   if (!geo.ok) return { ok: false as const, error: geo.error };
   const id = crypto.randomUUID();
@@ -282,7 +296,7 @@ export async function createCustomerAddress(
     resolution_version: geo.value.serviceArea?.polygonVersion ?? null,
     serviceable: geo.value.serviceable ? 1 : 0,
     serviceability_reason: geo.value.reason,
-    notes: command.notes ?? null,
+    notes: null,
     status: "active",
     version: 1,
     created_at: now,
@@ -338,6 +352,12 @@ export async function updateCustomerAddress(
     return failure(
       "VALIDATION_FAILED",
       "A valid Philippine mobile number is required",
+      command.requestId,
+    );
+  if (command.instructions && !validDeliveryInstructions(command.instructions))
+    return failure(
+      "VALIDATION_FAILED",
+      "Delivery instructions must be 1,000 characters or fewer",
       command.requestId,
     );
 
@@ -510,13 +530,16 @@ export async function updateCustomerAddress(
     geocode_reference: geocodeReference,
     confirmation_source: confirmationSource,
     user_confirmed_at: confirmedAt,
-    delivery_instructions_json: canonicalFieldsPresent ? JSON.stringify(instructions) : null,
+    delivery_instructions_json: canonicalFieldsPresent
+      ? JSON.stringify(instructions)
+      : current.delivery_instructions_json,
     service_area_code: serviceability.serviceAreaCode,
     delivery_zone_code: serviceability.deliveryZoneCode,
     resolution_version: serviceability.resolutionVersion,
     serviceable: serviceability.serviceable,
     serviceability_reason: serviceability.reason,
-    notes: command.notes !== undefined ? command.notes : current.notes,
+    // Private retained notes are never rewritten or promoted into courier instructions.
+    notes: current.notes,
     version: current.version + 1,
     updated_at: now,
   };
@@ -554,13 +577,16 @@ function parseComponents(structuredJson: string | null, legacyJson: string): Add
 
 function parseInstructions(value: string | null): DeliveryInstructions {
   const parsed = parseRecord(value);
-  return {
-    buildingUnit: stringField(parsed, "buildingUnit"),
-    landmark: stringField(parsed, "landmark"),
-    gateGuard: stringField(parsed, "gateGuard"),
-    deliveryNote: stringField(parsed, "deliveryNote"),
-    recipientInstruction: stringField(parsed, "recipientInstruction"),
-  };
+  const canonical = stringField(parsed, "deliveryInstructions");
+  if (canonical) return { deliveryInstructions: canonical };
+  const legacy = [
+    stringField(parsed, "buildingUnit"),
+    stringField(parsed, "landmark"),
+    stringField(parsed, "gateGuard"),
+    stringField(parsed, "deliveryNote"),
+    stringField(parsed, "recipientInstruction"),
+  ].filter((item): item is string => Boolean(item?.trim()));
+  return { deliveryInstructions: legacy.length ? [...new Set(legacy)].join("\n") : null };
 }
 
 function parseRecord(value: string | null): Record<string, unknown> | null {
