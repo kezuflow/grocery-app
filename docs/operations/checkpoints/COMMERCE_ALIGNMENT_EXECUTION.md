@@ -1,6 +1,49 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — SCHEDULED-CYCLE-ACTIVATION-UX-1 (2026-09-13)
+## Current owner request — CHECKOUT-QUOTE-RECOVERY-UX-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. After activating the complete Scheduled cycle, owner can select Scheduled delivery but cannot
+continue. Acceptance: identify the live post-selection blocker; distinguish selected, quoting, failed
+and accepted states; keep courier fee evidence mandatory; show a failed quotation beside the option;
+offer a working identical retry; never enable payment without a current authoritative total. Start:
+main at `01974002`; preserve unrelated address-map/autofill and time-input/location-schedule work; no
+subagents.
+
+Observed localhost behavior: the complete `sample test` cycle is OPEN and its Scheduled option is
+eligible without consulting Instant operating hours. Selecting it sends `POST /api/checkout/quote`,
+which returns HTTP 200 only as an RPC envelope after approximately 11.4 seconds; its application result
+is a failed Scheduled delivery quotation. The UI previously selected the option before the request,
+had no quote pending/loading/error state and left the summary action disabled after failure. Therefore
+the checked card did not mean a fee or payable total had been accepted. The configured Lalamove sandbox
+quotation host also returned HTTP 502 to an independent unsigned connectivity probe. This supports a
+provider/sandbox-path outage at the time of observation; it does not authorize a fee bypass or prove a
+global Lalamove outage.
+
+Implemented in the working tree: checkout now exposes courier-quotation loading and failure directly
+under Delivery option. A failed application response or lost/network response retains the selected
+option, clears no real quote as accepted, and offers both an inline retry and an enabled summary retry.
+The retry preserves the same request identity when the prior outcome may be unknown. Option controls
+and the summary action are disabled while a quote is in flight; a successful retry restores the
+existing current-total review and payment action. DESIGN records that selection is not fee acceptance
+and that payment remains blocked until an authoritative fee exists.
+
+Verification on the intended working-tree scope: full Web Vitest passed 131 files / 539 tests; Web
+typecheck and production build, workspace lint, naming, terminology, architecture and formatting checks
+passed. Targeted
+Playwright passed the application-level quotation failure, visible error, retained Scheduled selection,
+enabled retry, successful current-total review and address-change quote invalidation at 1440px and
+390px, 2/2. The successful desktop result was visually inspected, and the existing localhost dev
+server hot-reloaded the change. These are local browser checks with mocked quote responses. Actual
+Lalamove quotation remains unavailable while the observed sandbox endpoint/path returns an error.
+
+Completed implementation ID: CHECKOUT-QUOTE-RECOVERY-UX-1. Counting level: zero remaining application
+changes for the selected/quoting/failed/retry mismatch; one external acceptance blocker remains at the
+actual-provider level. Next action: owner refreshes checkout and selects Scheduled delivery to see the
+specific live quotation result; a successful Lalamove response will reveal and enable the existing
+accepted-total payment action, while another provider failure will now remain visible and retryable.
+
+## Prior owner request — SCHEDULED-CYCLE-ACTIVATION-UX-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. After the read-only checkout diagnosis, owner asks to replace the hidden reason-driven cycle

@@ -74,6 +74,8 @@ export function CheckoutClient({
   const [promotionCodes, setPromotionCodes] = useState<readonly string[]>([]);
   const promotionCodesRef = useRef<readonly string[]>([]);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
+  const [quoteLoadState, setQuoteLoadState] = useState<"idle" | "loading" | "error">("idle");
+  const [quoteError, setQuoteError] = useState("");
   const [pendingQuote, setPendingQuote] = useState<
     | (CheckoutQuoteView & {
         input: {
@@ -189,6 +191,8 @@ export function CheckoutClient({
     const quote = pendingQuoteRef.current;
     if (!quote) {
       attemptKey.current = `checkout-${crypto.randomUUID()}`;
+      setQuoteLoadState("idle");
+      setQuoteError("");
       return true;
     }
     setStatus("Releasing the current checkout reservation…");
@@ -201,6 +205,8 @@ export function CheckoutClient({
       }
       pendingQuoteRef.current = null;
       setPendingQuote(null);
+      setQuoteLoadState("idle");
+      setQuoteError("");
       attemptKey.current = `checkout-${crypto.randomUUID()}`;
       return true;
     })();
@@ -325,34 +331,56 @@ export function CheckoutClient({
     };
     const quoteAttemptKey = attemptKey.current;
     if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
+    setQuoteLoadState("loading");
+    setQuoteError("");
+    setStatus("Checking the Lalamove route and delivery fee…");
     // 1) Core-authoritative quote. Core recalculates before payment and any
     // changed total must be accepted through a new attempt.
-    const quoteResponse = await fetch("/api/checkout/quote", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": quoteAttemptKey,
-      },
-      body: JSON.stringify({
-        cartId: cart.id,
-        cartVersion: cart.version,
-        addressId,
-        fulfillmentOptionId: option.optionId,
-        promotionCodes: promotionCodesRef.current,
-      }),
-    });
-    const quoteResult = (await quoteResponse.json()) as RpcResult<CheckoutQuoteView>;
-    if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
-    if (!quoteResult.ok) {
+    try {
+      const quoteResponse = await fetch("/api/checkout/quote", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": quoteAttemptKey,
+        },
+        body: JSON.stringify({
+          cartId: cart.id,
+          cartVersion: cart.version,
+          addressId,
+          fulfillmentOptionId: option.optionId,
+          promotionCodes: promotionCodesRef.current,
+        }),
+      });
+      const quoteResult = (await quoteResponse.json()) as RpcResult<CheckoutQuoteView>;
+      if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
+      if (!quoteResult.ok) {
+        const message = quoteResult.error?.message ?? "The delivery fee could not be confirmed.";
+        setPendingQuote(null);
+        setQuoteLoadState("error");
+        setQuoteError(`${message} Retry the delivery quotation.`);
+        setStatus("");
+        return;
+      }
+      if (!quoteResult.value) {
+        setQuoteLoadState("error");
+        setQuoteError("The delivery fee could not be confirmed. Retry the delivery quotation.");
+        setStatus("");
+        return;
+      }
+      setPendingQuote({ ...quoteResult.value, input: quoteInput, attemptKey: quoteAttemptKey });
+      setQuoteLoadState("idle");
+      setStatus(
+        `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
+      );
+    } catch {
+      if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
       setPendingQuote(null);
-      setStatus(quoteResult.error?.message ?? "Could not price your order.");
-      return;
+      setQuoteLoadState("error");
+      setQuoteError(
+        "The delivery fee could not be confirmed because Lalamove could not be reached. Retry the delivery quotation.",
+      );
+      setStatus("");
     }
-    if (!quoteResult.value) return;
-    setPendingQuote({ ...quoteResult.value, input: quoteInput, attemptKey: quoteAttemptKey });
-    setStatus(
-      `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
-    );
   }
 
   async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
@@ -448,6 +476,9 @@ export function CheckoutClient({
   const guest = cart?.id === "guest-cart";
   const canReview = Boolean(cart?.items.length && addressId && !guest);
   const selectedAddress = addresses.find((address) => address.id === addressId);
+  const selectedFulfillmentOption = fulfillmentOptions.find(
+    (option) => option.optionId === fulfillmentOptionId,
+  );
   return (
     <StorefrontShell>
       <div className="min-h-[100dvh] w-full bg-[var(--fm-surface-soft)]">
@@ -686,7 +717,7 @@ export function CheckoutClient({
                   {fulfillmentOptions.length ? (
                     <FulfillmentOptionPicker
                       options={fulfillmentOptions}
-                      disabled={!canReview}
+                      disabled={!canReview || quoteLoadState === "loading"}
                       selectedOptionId={fulfillmentOptionId}
                       onSelect={(option) => void reviewTotal(option)}
                     />
@@ -721,6 +752,30 @@ export function CheckoutClient({
                       </div>
                     </div>
                   )}
+                  {quoteLoadState === "loading" ? (
+                    <p
+                      role="status"
+                      className="mt-3 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-sm text-[var(--fm-text-muted)]"
+                    >
+                      Checking the Lalamove route and delivery fee…
+                    </p>
+                  ) : quoteError ? (
+                    <div
+                      role="alert"
+                      className="mt-3 rounded-[var(--fm-radius-control)] border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                    >
+                      <p>{quoteError}</p>
+                      {selectedFulfillmentOption ? (
+                        <button
+                          type="button"
+                          className="mt-2 min-h-11 font-semibold underline underline-offset-4"
+                          onClick={() => void reviewTotal(selectedFulfillmentOption)}
+                        >
+                          Try quotation again
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </section>
 
                 <div>
@@ -791,13 +846,29 @@ export function CheckoutClient({
                   ? "Sign in to continue"
                   : pendingQuote
                     ? "Accept total and continue to payment"
-                    : addressId
-                      ? "Choose a delivery option"
-                      : "Select a delivery address"
+                    : quoteLoadState === "loading"
+                      ? "Checking delivery fee…"
+                      : quoteError && selectedFulfillmentOption
+                        ? "Retry delivery quotation"
+                        : addressId
+                          ? "Choose a delivery option"
+                          : "Select a delivery address"
               }
               actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
-              onAction={pendingQuote ? confirmPayment : undefined}
-              disabled={guest ? false : !pendingQuote || acceptingPayment}
+              onAction={
+                pendingQuote
+                  ? confirmPayment
+                  : selectedFulfillmentOption
+                    ? () => void reviewTotal(selectedFulfillmentOption)
+                    : undefined
+              }
+              disabled={
+                guest
+                  ? false
+                  : acceptingPayment ||
+                    quoteLoadState === "loading" ||
+                    (!pendingQuote && !selectedFulfillmentOption)
+              }
               note="The closest fulfillment location and Lalamove route fee are confirmed at checkout."
               showItems
               onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}

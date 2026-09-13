@@ -153,6 +153,16 @@ for (const width of [1440, 390]) {
     });
     await page.route("**/api/checkout/quote", async (route) => {
       quoteRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+      if (quoteRequests.length === 1) {
+        await json(route, {
+          ok: false,
+          error: {
+            code: "CONFIGURATION_ERROR",
+            message: "Scheduled delivery quotation is unavailable.",
+          },
+        });
+        return;
+      }
       await json(route, {
         ok: true,
         value: {
@@ -200,7 +210,16 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("button", { name: /Instant delivery/ })).toBeEnabled();
     await expect(page.getByRole("button", { name: /Scheduled delivery/ })).toBeEnabled();
     await expect(page.getByText(/hub|location-cebu/i)).toHaveCount(0);
-    await page.getByRole("button", { name: /Instant delivery/ }).click();
+    await page.getByRole("button", { name: /Scheduled delivery/ }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Scheduled delivery quotation is unavailable. Retry the delivery quotation.",
+    );
+    await expect(page.getByRole("button", { name: /Scheduled delivery/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByRole("button", { name: "Retry delivery quotation" })).toBeEnabled();
+    await page.getByRole("button", { name: "Try quotation again" }).click();
     await expect(page.getByText("Review your current total: PHP 330.00.")).toBeVisible();
 
     await page.screenshot({ path: `test-results/checkout-delivery-${width}.png` });
@@ -213,11 +232,11 @@ for (const width of [1440, 390]) {
       cartId: "cart-fulfillment",
       cartVersion: 7,
     });
-    expect(quoteRequests[0]).toMatchObject({
+    expect(quoteRequests[1]).toMatchObject({
       addressId: "home",
-      fulfillmentOptionId: "fulfillment-instant-opaque",
+      fulfillmentOptionId: "fulfillment-scheduled-opaque",
     });
-    expect(quoteRequests[0]).not.toHaveProperty("cycleId");
+    expect(quoteRequests[1]).not.toHaveProperty("cycleId");
 
     await page.getByRole("button", { name: "Change saved address" }).click();
     await page.getByRole("radio", { name: /^Work/ }).focus();
