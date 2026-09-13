@@ -1,6 +1,38 @@
 # Commerce alignment — active checkpoint
 
-## Current owner investigation — CHECKOUT-SCHEDULED-BLOCKER-2 (2026-09-13)
+## Current owner request — SCHEDULED-CYCLE-ACTIVATION-UX-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. After the read-only checkout diagnosis, owner asks to replace the hidden reason-driven cycle
+publication/cancellation controls with direct Activate/Deactivate buttons. Acceptance: a complete draft
+has an obvious Activate action; a Scheduled/Open unpaid cycle has a guarded Deactivate action; ordinary
+activation/deactivation requires no separate reason field; preserve authority, current-version,
+idempotency/replay, unresolved-payment/Order/hold and quote-invalidation safeguards. Start: main at
+`6ba2b361`; preserve unrelated address-map/autofill and time-input/location-schedule work; no subagents.
+
+Implemented in the working tree: each cycle card puts its lifecycle action beside the name. Draft cards
+show Edit and Activate; Scheduled/Open cards show Deactivate or the existing Core-provided unavailable
+reason. The separate scheduling and cancellation reason controls are removed. The Web submits a stable
+action description as the required audit reason. Deactivate asks for confirmation that unstarted quotes
+close and the cycle cannot be reactivated, then invokes the existing terminal unpaid-cycle cancellation
+command. Notices now use activate/deactivate language. Core commands, state transitions and contracts
+are unchanged. PRODUCT and DESIGN record the owner-approved presentation and retained semantics.
+
+Verification on the intended working-tree scope: full Web Vitest passed 131 files / 539 tests; Web
+typecheck, workspace lint, terminology, naming, architecture and targeted formatting checks passed. The
+managed isolated Playwright journey built the app and passed create/save-response recovery, Activate,
+activation-response recovery, reload, Deactivate confirmation, cancellation-response recovery and final
+state at 1440px and 390px, 2/2. The desktop scheduled-cycle screenshot was inspected; the lifecycle
+button is visible in the card header. Localhost `/admin/settings/scheduled-cycles` returns HTTP 200 with
+the updated dev app. These are local Worker/D1/browser checks with the test provider; they do not change
+shared staging data or prove an actual Lalamove quote.
+
+Completed ID: SCHEDULED-CYCLE-ACTIVATION-UX-1. Counting level: zero remaining implementation slices for
+this request. Next action: owner refreshes the localhost Scheduled cycles page and clicks Activate on
+`sample test`; the shared scheduler should then open it on its next minute tick because its opening time
+has passed and cutoff remains in the future.
+
+## Prior owner investigation — CHECKOUT-SCHEDULED-BLOCKER-2 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner asks why Scheduled delivery remains unavailable at localhost checkout after the

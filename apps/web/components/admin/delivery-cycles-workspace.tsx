@@ -42,6 +42,8 @@ const commandResult = z.union([
 type Command =
   | ({ action: "SAVE" } & DeliveryCycleDraft)
   | { action: "SCHEDULE" | "CANCEL"; cycleId: string; expectedVersion: number; reason: string };
+const activationReason = "Activated from the Scheduled cycles workspace.";
+const deactivationReason = "Deactivated from the Scheduled cycles workspace.";
 const times = ["orderOpensAt", "cutoffAt", "procurementAt", "preparationAt", "pickupAt"] as const;
 const timeLabels = {
   orderOpensAt: "Orders open",
@@ -78,8 +80,6 @@ export function DeliveryCyclesWorkspace({
   initial: RpcResult<AdminDeliveryCyclePage>;
 }) {
   const { state: adminState } = useAdminContext();
-  const [scheduleReasons, setScheduleReasons] = useState<Record<string, string>>({});
-  const [cancelReasons, setCancelReasons] = useState<Record<string, string>>({});
   const [page, setPage] = useState(initial.ok ? initial.value : null);
   const [draft, setDraft] = useState<DeliveryCycleDraft | null>(null);
   const [destinations, setDestinations] = useState<AdminCycleDestinations>({
@@ -206,10 +206,10 @@ export function DeliveryCyclesWorkspace({
         setDraft(null);
         setNotice(
           result.value.status === "DRAFT"
-            ? "Draft saved. Review the schedule before publishing."
+            ? "Draft saved. Activate it when the plan is ready for customers."
             : result.value.status === "CANCELED"
-              ? "Cycle canceled. Unstarted checkout quotes are no longer usable."
-              : "Cycle scheduled. Orders become eligible at the configured opening time.",
+              ? "Cycle deactivated. Unstarted checkout quotes are no longer usable."
+              : "Cycle activated. Orders become eligible at the configured opening time.",
         );
       } else setNotice(result.error.message);
     } catch {
@@ -437,10 +437,91 @@ export function DeliveryCyclesWorkspace({
       {page?.items.length === 0 && <p>No cycles configured.</p>}
       {page?.items.map((cycle) => (
         <article key={cycle.cycleId} className="space-y-3 rounded-lg border p-4">
-          <h2 className="text-lg font-semibold">{cycle.name}</h2>
-          <p>
-            {cycle.status.replaceAll("_", " ")} · {cycle.timezone}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">{cycle.name}</h2>
+              <p>
+                {cycle.status.replaceAll("_", " ")} · {cycle.timezone}
+              </p>
+            </div>
+            {page.canManage && cycle.status === "DRAFT" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() =>
+                    setDraft({
+                      cycleId: cycle.cycleId,
+                      marketId: cycle.marketId,
+                      name: cycle.name,
+                      orderOpensAt: cycle.orderOpensAt,
+                      cutoffAt: cycle.cutoffAt,
+                      procurementAt: cycle.procurementAt ?? "",
+                      preparationAt: cycle.preparationAt ?? "",
+                      pickupAt: cycle.pickupAt ?? "",
+                      windows: [
+                        cycle.windows[0]
+                          ? {
+                              name: cycle.windows[0].name,
+                              startsAt: cycle.windows[0].startsAt,
+                              endsAt: cycle.windows[0].endsAt,
+                            }
+                          : { name: "Scheduled delivery", startsAt: "", endsAt: "" },
+                      ],
+                      participation: cycle.participation.map(({ zoneId, locationId }) => ({
+                        zoneId,
+                        locationId,
+                      })),
+                      expectedVersion: cycle.version,
+                      reason: "",
+                    })
+                  }
+                >
+                  Edit
+                </Button>
+                <Button
+                  disabled={disabled || !cycle.pickupAt || cycle.windows.length !== 1}
+                  onClick={() =>
+                    void submit({
+                      action: "SCHEDULE",
+                      cycleId: cycle.cycleId,
+                      expectedVersion: cycle.version,
+                      reason: activationReason,
+                    })
+                  }
+                >
+                  Activate
+                </Button>
+              </div>
+            ) : page.canManage && ["SCHEDULED", "OPEN"].includes(cycle.status) ? (
+              cycle.cancellationUnavailableReason ? (
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Deactivate unavailable: {cycle.cancellationUnavailableReason}
+                </p>
+              ) : (
+                <Button
+                  variant="destructive"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `Deactivate ${cycle.name}? This closes unstarted checkout quotes and cannot be undone for this cycle.`,
+                      )
+                    )
+                      return;
+                    void submit({
+                      action: "CANCEL",
+                      cycleId: cycle.cycleId,
+                      expectedVersion: cycle.version,
+                      reason: deactivationReason,
+                    });
+                  }}
+                >
+                  Deactivate
+                </Button>
+              )
+            ) : null}
+          </div>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             {times.map((field) => (
               <div key={field}>
@@ -475,117 +556,6 @@ export function DeliveryCyclesWorkspace({
             {[...new Set(cycle.participation.map((item) => item.locationName))].join("; ") ||
               "No fulfillment locations"}
           </p>
-          {page.canManage && cycle.status === "DRAFT" && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                disabled={disabled}
-                onClick={() =>
-                  setDraft({
-                    cycleId: cycle.cycleId,
-                    marketId: cycle.marketId,
-                    name: cycle.name,
-                    orderOpensAt: cycle.orderOpensAt,
-                    cutoffAt: cycle.cutoffAt,
-                    procurementAt: cycle.procurementAt ?? "",
-                    preparationAt: cycle.preparationAt ?? "",
-                    pickupAt: cycle.pickupAt ?? "",
-                    windows: [
-                      cycle.windows[0]
-                        ? {
-                            name: cycle.windows[0].name,
-                            startsAt: cycle.windows[0].startsAt,
-                            endsAt: cycle.windows[0].endsAt,
-                          }
-                        : { name: "Scheduled delivery", startsAt: "", endsAt: "" },
-                    ],
-                    participation: cycle.participation.map(({ zoneId, locationId }) => ({
-                      zoneId,
-                      locationId,
-                    })),
-                    expectedVersion: cycle.version,
-                    reason: "",
-                  })
-                }
-              >
-                Edit {cycle.name}
-              </Button>
-              <Button
-                disabled={
-                  disabled ||
-                  !cycle.pickupAt ||
-                  cycle.windows.length !== 1 ||
-                  !scheduleReasons[cycle.cycleId]?.trim()
-                }
-                onClick={() =>
-                  void submit({
-                    action: "SCHEDULE",
-                    cycleId: cycle.cycleId,
-                    expectedVersion: cycle.version,
-                    reason: scheduleReasons[cycle.cycleId] ?? "",
-                  })
-                }
-              >
-                Schedule {cycle.name}
-              </Button>
-              <div className="w-full space-y-1">
-                <Label htmlFor={`schedule-reason-${cycle.cycleId}`}>
-                  Scheduling reason for {cycle.name}
-                </Label>
-                <Input
-                  id={`schedule-reason-${cycle.cycleId}`}
-                  disabled={disabled}
-                  maxLength={500}
-                  value={scheduleReasons[cycle.cycleId] ?? ""}
-                  onChange={(event) =>
-                    setScheduleReasons({ ...scheduleReasons, [cycle.cycleId]: event.target.value })
-                  }
-                />
-              </div>
-            </div>
-          )}
-          {page.canManage &&
-            ["DRAFT", "SCHEDULED", "OPEN"].includes(cycle.status) &&
-            (cycle.cancellationUnavailableReason ? (
-              <p className="text-sm text-muted-foreground">
-                Cancellation unavailable: {cycle.cancellationUnavailableReason}
-              </p>
-            ) : (
-              <details className="rounded-lg border p-3">
-                <summary className="cursor-pointer font-medium">Cancel unpaid cycle</summary>
-                <p className="my-2 text-sm">
-                  Cancels this cycle and closes unstarted checkout quotes. Paid Orders and
-                  unresolved payments require coordinated recovery.
-                </p>
-                <Label htmlFor={`cancel-reason-${cycle.cycleId}`}>
-                  Cancellation reason for {cycle.name}
-                </Label>
-                <Input
-                  id={`cancel-reason-${cycle.cycleId}`}
-                  disabled={disabled}
-                  maxLength={500}
-                  value={cancelReasons[cycle.cycleId] ?? ""}
-                  onChange={(event) =>
-                    setCancelReasons({ ...cancelReasons, [cycle.cycleId]: event.target.value })
-                  }
-                />
-                <Button
-                  className="mt-2"
-                  variant="destructive"
-                  disabled={disabled || !cancelReasons[cycle.cycleId]?.trim()}
-                  onClick={() =>
-                    void submit({
-                      action: "CANCEL",
-                      cycleId: cycle.cycleId,
-                      expectedVersion: cycle.version,
-                      reason: cancelReasons[cycle.cycleId] ?? "",
-                    })
-                  }
-                >
-                  Cancel {cycle.name}
-                </Button>
-              </details>
-            ))}
         </article>
       ))}
       {page?.nextCursor && (

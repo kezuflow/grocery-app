@@ -64,6 +64,12 @@ obsolete window-name and add/remove-window controls. A different pickup or arriv
 cycle. Cycle summaries retain status, timezone, operational times, arrival range and fulfillment
 locations. Customer checkout and Order detail show the arrival range without an internal window label.
 
+Owner follow-up, 2026-09-13: each cycle summary places its primary lifecycle action beside the cycle
+name. Complete drafts show Activate; Scheduled/Open cycles show Deactivate when guarded cancellation is
+available. The ordinary workspace has no separate activation/deactivation reason fields. Deactivate
+requires a concise confirmation that it closes unstarted quotes and cannot be undone for that cycle;
+Core continues to block it when committed or unresolved work exists.
+
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.
 At least three points form the shaded draft; the last joins the first. Coordinates are a secondary

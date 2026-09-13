@@ -1,7 +1,7 @@
 import { test, expect } from "./admin-authenticated-fixture";
 
 for (const width of [1440, 390]) {
-  test(`operator creates and schedules one delivery range with response recovery at ${width}px`, async ({
+  test(`operator creates, activates and deactivates one delivery range with response recovery at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
@@ -57,10 +57,7 @@ for (const width of [1440, 390]) {
       .getByRole("article")
       .filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(cycle).toContainText("DRAFT");
-    await cycle
-      .getByLabel(`Scheduling reason for ${name}`)
-      .fill("Reviewed procurement and customer delivery");
-    await cycle.getByRole("button", { name: `Schedule ${name}`, exact: true }).click();
+    await cycle.getByRole("button", { name: "Activate", exact: true }).click();
     await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
     await expect(cycle).toContainText("SCHEDULED");
     await expect(cycle).toContainText("Customer delivery");
@@ -71,11 +68,10 @@ for (const width of [1440, 390]) {
     expect(attempts[3]).toEqual(attempts[2]);
     await page.reload();
     await expect(cycle).toContainText("SCHEDULED");
-    await expect(cycle.getByRole("button", { name: `Edit ${name}` })).toHaveCount(0);
+    await expect(cycle.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("scheduled-cycle.png"), fullPage: true });
-    await cycle.getByText("Cancel unpaid cycle", { exact: true }).click();
-    await cycle.getByLabel(`Cancellation reason for ${name}`).fill("Replace unused schedule");
-    await cycle.getByRole("button", { name: `Cancel ${name}`, exact: true }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await cycle.getByRole("button", { name: "Deactivate", exact: true }).click();
     await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
     await expect(cycle).toContainText("CANCELED");
     expect(attempts).toHaveLength(6);
