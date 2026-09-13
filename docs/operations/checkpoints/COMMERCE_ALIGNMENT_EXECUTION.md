@@ -1,6 +1,41 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — SCHEDULED-CYCLE-SIMPLIFICATION-1 (2026-09-13)
+## Current owner investigation — CHECKOUT-SCHEDULED-BLOCKER-2 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner asks why Scheduled delivery remains unavailable at localhost checkout after the
+Scheduled-hours correction and cycle-form simplification. Read-only investigation on main at
+`b40fd739`; preserve the unrelated address-map/autofill and time-input/location-schedule working-tree
+changes. Acceptance: identify the live blocking gate, distinguish it from location operating hours and
+courier quotation, and leave shared configuration unchanged.
+
+Observed shared staging D1 at 2026-09-13 10:06 Asia/Manila: global selling is OPEN in SCHEDULED/WEEKLY
+mode. Central Cebu is active, CUSTOMER_FULFILLMENT, dispatch-ready and has PICKING, PACKING and
+DISPATCH. The configured local delivery provider list contains Lalamove. The complete `sample test`
+cycle has a pickup plan, one customer arrival range and active Central Cebu participation, but remains
+DRAFT. The only OPEN cycle, `Next Cebu delivery`, has active participation but no schedule row and no
+delivery range. Therefore it cannot satisfy Scheduled operational-candidate eligibility.
+
+Source trace confirms `listFulfillmentOptions` emits `MODE_UNAVAILABLE` when
+`operationalCandidates` returns no row. Scheduled candidacy requires an OPEN cycle during its ordering
+period with an attached schedule, valid pickup-to-arrival range and active location participation;
+location operating hours are evaluated only for INSTANT. Provider quotation is intentionally deferred
+until an eligible option is selected, so Lalamove was not called. The storefront lowercases the enum
+verbatim, producing the misleading `mode unavailable` message.
+
+The deployed staging scheduler is healthy: the five latest `commerce.cycle-cutoff` runs succeeded at
+approximately one-minute intervals and opened zero cycles because `sample test` is still DRAFT. The
+Admin workflow saves a draft first, then requires a scheduling reason and the separate `Schedule sample
+test` action. Scheduling changes it to SCHEDULED; the next scheduler run opens it because its opening
+time has already passed and its cutoff remains in the future. No shared data, provider call or
+application source changed during this investigation.
+
+Completed investigation ID: CHECKOUT-SCHEDULED-BLOCKER-2. Counting level: one confirmed live blocker:
+the complete cycle has not been scheduled/published. Next action: owner schedules `sample test` through
+the guarded Admin action, waits for the next minute tick and refreshes checkout. Improving the generic
+checkout reason or combining save-and-publish would be a separate requested implementation.
+
+## Prior owner request — SCHEDULED-CYCLE-SIMPLIFICATION-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner asks to simplify Scheduled cycle setup after confirming that Global publishes the plan
