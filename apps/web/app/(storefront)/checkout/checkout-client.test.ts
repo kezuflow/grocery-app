@@ -27,9 +27,13 @@ describe("checkout address guide layout contract", () => {
       quantityUpdate.indexOf("await addToCart(item.skuId, quantity"),
     );
     expect(checkout).toContain("showItems");
-    expect(checkout).toContain("onQuantityChange={(item, quantity)");
+    expect(checkout).toContain("onQuantityChange={");
     expect(checkout).toContain("updatingSkuId={updatingSkuId}");
     expect(checkout).toContain("showAction={false}");
+    expect(checkout).toContain("cart?.paymentInProgress");
+    expect(checkout).toContain("window.location.replace(paymentContinuationHref");
+    expect(checkout).toContain("CHECKOUT_PAYMENT_IN_PROGRESS_REASON");
+    expect(checkout).toContain("window.sessionStorage.setItem");
   });
 
   it("uses flat surfaces across the checkout review workspace", () => {

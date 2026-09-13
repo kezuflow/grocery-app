@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { addCartItemsBatch, getCart, setCartItem } from "./cart";
+import { mergeGuestCart } from "./merge-guest-cart";
 import { selectCartLocation } from "./select-cart-location";
 
 async function customer() {
@@ -54,7 +55,89 @@ async function cloneSku(options: { available: boolean; priced: boolean; location
   return skuId;
 }
 
+async function lockCartForPayment(customerId: string, cartId: string) {
+  const suffix = crypto.randomUUID();
+  const now = Date.now();
+  const addressId = `cart-payment-address-${suffix}`;
+  const quoteId = `cart-payment-quote-${suffix}`;
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO customer_address (id,customer_id,label,recipient,phone,address_json,latitude,longitude,status,version,created_at,updated_at) VALUES (?,?,'Home','Customer','09','{}',10.3,123.9,'active',1,?,?)",
+    ).bind(addressId, customerId, now, now),
+    env.DB.prepare(
+      `INSERT INTO checkout_quote
+         (id,attempt_id,customer_id,cart_id,address_id,delivery_cycle_id,fulfillment_mode,currency,
+          subtotal_minor,total_minor,lines_json,status,version,expires_at,idempotency_key,created_at,updated_at)
+         VALUES (?,?,?,?,?,NULL,'INSTANT','PHP',100,100,'[]','ACTIVE',1,?,?,?,?)`,
+    ).bind(
+      quoteId,
+      quoteId,
+      customerId,
+      cartId,
+      addressId,
+      now + 60_000,
+      `quote-${suffix}`,
+      now,
+      now,
+    ),
+    env.DB.prepare(
+      "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','PROCESSING',?,1,?,?)",
+    ).bind(`payment-${suffix}`, quoteId, customerId, `payment-key-${suffix}`, now, now),
+  ]);
+}
+
 describe("cart aggregate", () => {
+  it("locks cart mutations while an accepted checkout payment is unresolved", async () => {
+    const principal = await customer();
+    const initial = await getCart(env.DB, principal);
+    if (!initial.ok) throw new Error("cart setup failed");
+    await lockCartForPayment(principal.customerId, initial.value.id);
+    expect(await getCart(env.DB, principal)).toMatchObject({
+      ok: true,
+      value: { paymentInProgress: true },
+    });
+
+    const line = await setCartItem(env.DB, {
+      ...principal,
+      cartId: initial.value.id,
+      skuId: "sku-red-onion-500g",
+      quantity: 1,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-locked-${crypto.randomUUID()}`,
+    });
+    const batch = await addCartItemsBatch(env.DB, {
+      ...principal,
+      sourceOrderId: `order-${crypto.randomUUID()}`,
+      cartId: initial.value.id,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-batch-locked-${crypto.randomUUID()}`,
+      lines: [{ skuId: "sku-red-onion-500g", quantity: 1, productName: "Onion" }],
+    });
+    const merge = await mergeGuestCart(env.DB, {
+      ...principal,
+      cartId: initial.value.id,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-merge-locked-${crypto.randomUUID()}`,
+      items: [{ skuId: "sku-red-onion-500g", quantity: 1 }],
+    });
+    const location = await selectCartLocation(env.DB, {
+      ...principal,
+      latitude: 10.32,
+      longitude: 123.9,
+      expectedVersion: initial.value.version,
+      idempotencyKey: `cart-location-locked-${crypto.randomUUID()}`,
+    });
+
+    for (const result of [line, batch, merge, location])
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          details: { reason: "CHECKOUT_PAYMENT_IN_PROGRESS" },
+        },
+      });
+  });
+
   it("returns the selected Cart identity under concurrent reads", async () => {
     const principal = await customer();
     const results = await Promise.all(Array.from({ length: 4 }, () => getCart(env.DB, principal)));

@@ -12,12 +12,31 @@ import {
   productMediaProjectionSql,
   publishedProductMediaView,
 } from "../../catalog/published-product-media";
+import {
+  CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+  cartHasUnsettledCheckout,
+  cartMutationPaymentGuard,
+} from "./release-uncommitted-checkout";
 
 const CART_SET_SCOPE = "cart.setItem";
 const CART_BATCH_SCOPE = "cart.addBatch";
 
-function failure(code: AppErrorCode, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
+function failure(
+  code: AppErrorCode,
+  message: string,
+  requestId: string,
+  details?: Readonly<Record<string, string>>,
+) {
+  return { ok: false as const, error: { code, message, requestId, details } };
+}
+
+function paymentInProgressFailure(requestId: string) {
+  return failure(
+    "CONFLICT",
+    "This cart is locked while its payment is being confirmed.",
+    requestId,
+    { reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON },
+  );
 }
 
 export type CartResult =
@@ -167,6 +186,7 @@ export async function getCart(
       ? (["PRICE_UNAVAILABLE"] as const)
       : []),
   ];
+  const paymentInProgress = await cartHasUnsettledCheckout(database, cart.id);
   return {
     ok: true,
     value: {
@@ -176,6 +196,7 @@ export async function getCart(
       items,
       totalMinor: items.reduce((sum, item) => sum + (item.lineTotalMinor ?? 0), 0),
       currency: currency.currency,
+      paymentInProgress,
       checkoutBlocked: blockingReasons.length > 0,
       blockingReasons,
     },
@@ -213,6 +234,8 @@ export async function setCartItem(
     .bind(command.cartId, command.customerId)
     .first<CartRow>();
   if (!cart) return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  if (await cartHasUnsettledCheckout(database, cart.id))
+    return paymentInProgressFailure(command.requestId);
   if (cart.version !== command.expectedVersion)
     return failure(
       "CART_VERSION_CONFLICT",
@@ -325,6 +348,7 @@ export async function setCartItem(
           "INSERT OR IGNORE INTO idempotency_records (scope, idempotency_key, request_hash, result_type, status, created_at, updated_at) VALUES (?, ?, ?, 'cart', 'PROCESSING', ?, ?)",
         )
         .bind(CART_SET_SCOPE, command.idempotencyKey, hash, now, now),
+      cartMutationPaymentGuard(database, cart.id),
       itemStatement,
       database
         .prepare(
@@ -362,6 +386,8 @@ export async function setCartItem(
     if (raced?.requestHash !== undefined && raced.requestHash !== hash)
       return failure("IDEMPOTENCY_CONFLICT", "Idempotency key conflict", command.requestId);
     if (raced?.status === "SUCCEEDED") return getCart(database, command);
+    if (await cartHasUnsettledCheckout(database, cart.id))
+      return paymentInProgressFailure(command.requestId);
     const latest = await activeCart(database, command.customerId);
     if (!latest || latest.id !== command.cartId)
       return failure("NOT_FOUND", "Active cart not found", command.requestId);
@@ -453,6 +479,8 @@ export async function addCartItemsBatch(
     .bind(command.cartId, command.customerId)
     .first<CartRow>();
   if (!cart) return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  if (await cartHasUnsettledCheckout(database, cart.id))
+    return paymentInProgressFailure(command.requestId);
   if (cart.version !== command.expectedVersion)
     return failure(
       "CART_VERSION_CONFLICT",
@@ -593,6 +621,7 @@ export async function addCartItemsBatch(
           "INSERT OR IGNORE INTO idempotency_records (scope,idempotency_key,request_hash,result_type,status,created_at,updated_at) VALUES (?,?,?,'cart_batch','PROCESSING',?,?)",
         )
         .bind(CART_BATCH_SCOPE, command.idempotencyKey, hash, now, now),
+      cartMutationPaymentGuard(database, cart.id),
       ...addedLines.map((line) =>
         database
           .prepare(
@@ -648,6 +677,8 @@ export async function addCartItemsBatch(
       const replay = replayBatchValue(raced.resultReference);
       if (replay) return { ok: true, value: replay, requestId: command.requestId };
     }
+    if (await cartHasUnsettledCheckout(database, cart.id))
+      return paymentInProgressFailure(command.requestId);
     const latest = await activeCart(database, command.customerId);
     if (!latest || latest.id !== cart.id)
       return failure("NOT_FOUND", "Active cart not found", command.requestId);

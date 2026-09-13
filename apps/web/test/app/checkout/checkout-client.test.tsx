@@ -307,7 +307,35 @@ describe("CheckoutClient delivery inputs", () => {
     vi.unstubAllGlobals();
     addressEditorPropsMock.mockReset();
     fetchCartMock.mockReset();
+    window.sessionStorage.clear();
     vi.useRealTimers();
+  });
+
+  it("leaves checkout and never requests another quote while payment is in progress", async () => {
+    const cart = await fetchCartMock();
+    fetchCartMock.mockResolvedValue({ ...cart, paymentInProgress: true });
+    window.sessionStorage.setItem(
+      "freshmarkets.checkoutPaymentAction",
+      JSON.stringify({
+        paymentIntentId: "payment-1",
+        state: "REQUIRES_ACTION",
+        actionType: "SDK",
+        redirectUrl: null,
+        clientToken: "client-token",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    );
+    const base = successfulFetch();
+    vi.stubGlobal("fetch", base);
+
+    act(() => root.render(checkout()));
+    await flush();
+    await flush();
+
+    expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+      0,
+    );
+    expect(container.textContent).not.toContain("Try quotation again");
   });
 
   it("automatically quotes the sole Scheduled option and refreshes it after four and a half minutes", async () => {

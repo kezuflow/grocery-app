@@ -38,6 +38,32 @@ import {
 
 const COURIER_QUOTE_REFRESH_INTERVAL_MS = 4.5 * 60_000;
 const COURIER_QUOTE_EXPIRY_BUFFER_MS = 30_000;
+const PAYMENT_ACTION_STORAGE_KEY = "freshmarkets.checkoutPaymentAction";
+const CHECKOUT_PAYMENT_IN_PROGRESS_REASON = "CHECKOUT_PAYMENT_IN_PROGRESS";
+
+function readPaymentContinuation(): PaymentActionView | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(PAYMENT_ACTION_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const action = JSON.parse(raw) as PaymentActionView;
+    const actionable =
+      (action.actionType === "REDIRECT" && Boolean(action.redirectUrl)) ||
+      (action.actionType === "SDK" && Boolean(action.clientToken));
+    if (!actionable || (action.expiresAt && Date.parse(action.expiresAt) <= Date.now()))
+      throw new Error("expired");
+    return action;
+  } catch {
+    window.sessionStorage.removeItem(PAYMENT_ACTION_STORAGE_KEY);
+    return null;
+  }
+}
+
+function paymentContinuationHref(action: PaymentActionView | null): string {
+  if (action?.actionType === "REDIRECT" && action.redirectUrl) return action.redirectUrl;
+  if (action?.actionType === "SDK" && action.clientToken) return "/checkout/payment";
+  return "/orders?payment=return";
+}
 
 function displayAddress(address: CustomerAddressView): string {
   return [
@@ -91,6 +117,8 @@ export function CheckoutClient({
   );
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.initial.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
+  const paymentInProgressRef = useRef(false);
+  const paymentContinuationRef = useRef<PaymentActionView | null>(null);
   const [quoteLoadState, setQuoteLoadState] = useState<"idle" | "loading" | "error">("idle");
   const [quoteError, setQuoteError] = useState("");
   const [pendingQuote, setPendingQuote] = useState<
@@ -114,6 +142,16 @@ export function CheckoutClient({
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
+  useEffect(() => {
+    const continuation = readPaymentContinuation();
+    paymentContinuationRef.current = continuation;
+  }, []);
+  useEffect(() => {
+    if (!cart?.paymentInProgress) return;
+    clearQuoteRefreshTimer();
+    paymentInProgressRef.current = true;
+    window.location.replace(paymentContinuationHref(paymentContinuationRef.current));
+  }, [cart?.paymentInProgress]);
   useEffect(() => {
     const address = addresses.find((entry) => entry.id === addressId && entry.confirmedAt);
     if (address && cart) void loadFulfillmentOptions(address);
@@ -289,7 +327,11 @@ export function CheckoutClient({
         fulfillmentOptionsRef.current = result.value;
         setFulfillmentLoadState("ready");
         const eligible = result.value.filter((option) => option.eligible);
-        if (eligible.length === 1 && eligible[0]?.mode === "SCHEDULED")
+        if (
+          !paymentInProgressRef.current &&
+          eligible.length === 1 &&
+          eligible[0]?.mode === "SCHEDULED"
+        )
           void reviewTotal(eligible[0]);
         return;
       }
@@ -337,6 +379,10 @@ export function CheckoutClient({
   }
 
   async function selectAddress(nextAddressId: string) {
+    if (paymentInProgressRef.current) {
+      setStatus("This checkout is locked while its payment is being confirmed.");
+      return;
+    }
     if (!(await invalidatePendingQuote())) return;
     const selected = addresses.find((address) => address.id === nextAddressId);
     if (!selected?.confirmedAt) {
@@ -355,6 +401,10 @@ export function CheckoutClient({
     setStatus("Delivery address selected. Checking the closest fulfillment location and courier.");
   }
   async function reviewTotal(option: FulfillmentOptionView) {
+    if (paymentInProgressRef.current) {
+      setStatus("Payment has already started. Continue it or check its status instead.");
+      return;
+    }
     if (!cart || !addressId) {
       setStatus("Confirm a delivery address first.");
       return;
@@ -402,6 +452,17 @@ export function CheckoutClient({
       if (!quoteResult.ok) {
         const message = quoteResult.error?.message ?? "The delivery fee could not be confirmed.";
         setPendingQuote(null);
+        if (quoteResult.error?.details?.reason === CHECKOUT_PAYMENT_IN_PROGRESS_REASON) {
+          clearQuoteRefreshTimer();
+          paymentInProgressRef.current = true;
+          const continuation = readPaymentContinuation();
+          paymentContinuationRef.current = continuation;
+          setQuoteLoadState("idle");
+          setQuoteError("");
+          setStatus("Payment has already started. Your cart is locked until it is confirmed.");
+          window.location.replace(paymentContinuationHref(readPaymentContinuation()));
+          return;
+        }
         setQuoteLoadState("error");
         setQuoteError(`${message} Retry the delivery quotation.`);
         setStatus("");
@@ -437,7 +498,11 @@ export function CheckoutClient({
   }
 
   async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
-    if (updatingSkuId) return;
+    if (updatingSkuId || paymentInProgressRef.current) {
+      if (paymentInProgressRef.current)
+        setStatus("This cart is locked while its payment is being confirmed.");
+      return;
+    }
     setUpdatingSkuId(item.skuId);
     try {
       if (!(await invalidatePendingQuote())) return;
@@ -508,18 +573,26 @@ export function CheckoutClient({
     const paymentResult = (await paymentResponse.json()) as RpcResult<PaymentActionView>;
     setAcceptingPayment(false);
     if (paymentResult.ok) {
+      const continuation =
+        (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) ||
+        (paymentResult.value.actionType === "SDK" && paymentResult.value.clientToken)
+          ? paymentResult.value
+          : null;
+      paymentInProgressRef.current = true;
+      paymentContinuationRef.current = continuation;
       if (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) {
-        setStatus("Payment is ready. Redirecting to the secure payment page…");
-        window.location.assign(paymentResult.value.redirectUrl);
-      } else if (paymentResult.value.actionType === "SDK" && paymentResult.value.clientToken) {
-        sessionStorage.setItem(
-          "freshmarkets.checkoutPaymentAction",
+        window.sessionStorage.setItem(
+          PAYMENT_ACTION_STORAGE_KEY,
           JSON.stringify(paymentResult.value),
         );
-        window.location.assign("/checkout/payment");
-      } else {
-        setStatus("Payment started. Keep this page open while the provider confirms it.");
+        setStatus("Payment is ready. Redirecting to the secure payment page…");
+      } else if (paymentResult.value.actionType === "SDK" && paymentResult.value.clientToken) {
+        window.sessionStorage.setItem(
+          PAYMENT_ACTION_STORAGE_KEY,
+          JSON.stringify(paymentResult.value),
+        );
       }
+      window.location.replace(paymentContinuationHref(continuation));
     } else {
       if (paymentResult.error?.code === "PRICE_CHANGED") {
         setPendingQuote(null);

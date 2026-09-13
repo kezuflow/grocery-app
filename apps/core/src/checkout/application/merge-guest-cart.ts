@@ -5,6 +5,11 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import {
+  CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+  cartHasUnsettledCheckout,
+  cartMutationPaymentGuard,
+} from "./release-uncommitted-checkout";
 
 const SCOPE = "cart.mergeGuest";
 
@@ -13,9 +18,13 @@ export async function mergeGuestCart(
   database: D1Database,
   input: MergeGuestCartRequest & { customerId: string },
 ): Promise<RpcResult<GuestCartMerge>> {
-  const fail = (code: AppErrorCode, message: string): RpcResult<GuestCartMerge> => ({
+  const fail = (
+    code: AppErrorCode,
+    message: string,
+    details?: Readonly<Record<string, string>>,
+  ): RpcResult<GuestCartMerge> => ({
     ok: false,
-    error: { code, message, requestId: input.requestId },
+    error: { code, message, requestId: input.requestId, details },
   });
   const items = [...input.items].sort((a, b) => a.skuId.localeCompare(b.skuId));
   if (
@@ -51,6 +60,10 @@ export async function mergeGuestCart(
     .bind(input.cartId, input.customerId)
     .first<{ version: number }>();
   if (!cart) return fail("NOT_FOUND", "Active cart not found.");
+  if (await cartHasUnsettledCheckout(database, input.cartId))
+    return fail("CONFLICT", "This cart is locked while its payment is being confirmed.", {
+      reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+    });
   if (cart.version !== input.expectedVersion)
     return fail(
       "CART_VERSION_CONFLICT",
@@ -86,6 +99,7 @@ export async function mergeGuestCart(
         )
         .bind(SCOPE, input.idempotencyKey, hash, now, now),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -6 WHERE changes()=0"),
+      cartMutationPaymentGuard(database, input.cartId),
       database
         .prepare(
           "INSERT INTO commitment_abort(id) SELECT -6 WHERE NOT EXISTS (SELECT 1 FROM customer c WHERE c.id=? AND c.status='active' AND NOT EXISTS (SELECT 1 FROM customer_principal principal WHERE principal.auth_user_id=c.auth_user_id AND principal.status!='active'))",
@@ -122,6 +136,10 @@ export async function mergeGuestCart(
       };
     if (raced && raced.requestHash !== hash)
       return fail("IDEMPOTENCY_CONFLICT", "This key belongs to a different cart merge.");
+    if (await cartHasUnsettledCheckout(database, input.cartId))
+      return fail("CONFLICT", "This cart is locked while its payment is being confirmed.", {
+        reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+      });
     const latest = await database
       .prepare("SELECT version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'")
       .bind(input.cartId, input.customerId)

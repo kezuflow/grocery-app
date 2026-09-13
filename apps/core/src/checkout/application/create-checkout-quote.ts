@@ -2,10 +2,14 @@ import {
   createCheckoutRepository,
   type CheckoutQuoteRow,
 } from "../infrastructure/d1-checkout-repository";
-import type { AppErrorCode, FulfillmentOptionView } from "@freshmarkets/contracts";
+import type { AppErrorCode, FulfillmentOptionView, RpcResult } from "@freshmarkets/contracts";
 import type { QuoteLine } from "../domain/quote";
 import { QUOTE_TTL_MS } from "../domain/quote";
-import { cartHasUnsettledCheckout, quoteRefreshPaymentGuard } from "./release-uncommitted-checkout";
+import {
+  CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+  cartHasUnsettledCheckout,
+  quoteRefreshPaymentGuard,
+} from "./release-uncommitted-checkout";
 import { createInstantQuote, type QuoteItem } from "./instant-quote";
 import { resolveLineShippingWeightGrams } from "../../fulfillment/domain/delivery-package";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
@@ -79,8 +83,13 @@ export type CheckoutQuoteView = {
   promotionApplications: readonly CheckoutPromotionApplicationView[];
 };
 
-function failure(code: AppErrorCode, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
+function failure(
+  code: AppErrorCode,
+  message: string,
+  requestId: string,
+  details?: Readonly<Record<string, string>>,
+): RpcResult<never> {
+  return { ok: false as const, error: { code, message, requestId, details } };
 }
 
 /**
@@ -145,6 +154,7 @@ export async function createCheckoutQuote(
       "CONFLICT",
       "A payment for this cart is still being settled. Check that checkout before requesting a new total.",
       command.requestId,
+      { reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON },
     );
   if (cart.version !== command.cartVersion)
     return failure(

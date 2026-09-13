@@ -594,6 +594,22 @@ describe("instant checkout quotes", () => {
       }),
     ).toMatchObject({ ok: true });
     expect(
+      await createCheckoutQuote(
+        env.DB,
+        {
+          ...command(basket.customerId, basket.cartId, basket.addressId),
+          deliveryCycleId: "cycle-next-cebu",
+        },
+        quoteDependencies,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "CONFLICT",
+        details: { reason: "CHECKOUT_PAYMENT_IN_PROGRESS" },
+      },
+    });
+    expect(
       await env.DB.prepare(
         "SELECT on_hand,reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
       )

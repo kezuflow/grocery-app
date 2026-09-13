@@ -225,6 +225,8 @@ export type CartView = {
   }>;
   totalMinor: number;
   currency: string;
+  /** Core-authoritative lock while an accepted checkout Payment may still settle. */
+  paymentInProgress?: boolean;
   checkoutBlocked: boolean;
   blockingReasons: ReadonlyArray<"ITEM_UNAVAILABLE" | "PRICE_UNAVAILABLE">;
 };

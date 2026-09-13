@@ -9,6 +9,11 @@ import { activeMarketCode } from "../../geography/market-defaults";
 import { resolveServiceability } from "../../geography/serviceability";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { getCart } from "./cart";
+import {
+  CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+  cartHasUnsettledCheckout,
+  cartMutationPaymentGuard,
+} from "./release-uncommitted-checkout";
 
 const SCOPE = "cart.selectLocation";
 type CartLocationReceipt = Omit<CartLocationSelection, "cart">;
@@ -18,9 +23,13 @@ export async function selectCartLocation(
   database: D1Database,
   input: SelectCartLocationRequest & { customerId: string },
 ): Promise<RpcResult<CartLocationSelection>> {
-  const fail = (code: AppErrorCode, message: string): RpcResult<CartLocationSelection> => ({
+  const fail = (
+    code: AppErrorCode,
+    message: string,
+    details?: Readonly<Record<string, string>>,
+  ): RpcResult<CartLocationSelection> => ({
     ok: false,
-    error: { code, message, requestId: input.requestId },
+    error: { code, message, requestId: input.requestId, details },
   });
   const withCart = async (
     receipt: CartLocationReceipt,
@@ -71,6 +80,10 @@ export async function selectCartLocation(
     .prepare("SELECT id,version FROM cart WHERE customer_id=? AND status='ACTIVE'")
     .bind(input.customerId)
     .first<{ id: string; version: number }>();
+  if (cart && (await cartHasUnsettledCheckout(database, cart.id)))
+    return fail("CONFLICT", "This cart is locked while its payment is being confirmed.", {
+      reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+    });
   if ((cart?.version ?? 0) !== input.expectedVersion)
     return fail(
       "CART_VERSION_CONFLICT",
@@ -90,6 +103,7 @@ export async function selectCartLocation(
         )
         .bind(SCOPE, input.idempotencyKey, hash, now, now),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -6 WHERE changes()=0"),
+      ...(cart ? [cartMutationPaymentGuard(database, cart.id)] : []),
       database
         .prepare(`INSERT INTO commitment_abort(id) SELECT -6 WHERE NOT EXISTS (
         SELECT 1 FROM geography_configuration g JOIN market m ON m.id=g.market_id AND m.status='active'
@@ -124,6 +138,10 @@ export async function selectCartLocation(
       return withCart(JSON.parse(raced.resultReference) as CartLocationReceipt);
     if (raced && raced.requestHash !== hash)
       return fail("IDEMPOTENCY_CONFLICT", "This key belongs to a different location selection.");
+    if (cart && (await cartHasUnsettledCheckout(database, cart.id)))
+      return fail("CONFLICT", "This cart is locked while its payment is being confirmed.", {
+        reason: CHECKOUT_PAYMENT_IN_PROGRESS_REASON,
+      });
     const latest = await database
       .prepare(
         "SELECT (SELECT version FROM cart WHERE customer_id=? AND status='ACTIVE') cartVersion,(SELECT version FROM geography_configuration WHERE market_id=?) geographyVersion",

@@ -9,7 +9,7 @@ export default function CheckoutPaymentPage() {
         description="PayMongo securely processes your payment. FreshMarkets confirms the order only after the signed provider event arrives."
         returnPath="/orders?payment=return"
         donePath="/orders?payment=submitted"
-        backPath="/checkout"
+        backPath="/orders?payment=return"
       />
     </>
   );
