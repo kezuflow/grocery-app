@@ -79,7 +79,7 @@ const renderPanel = (onEditPrice = vi.fn()) =>
   act(async () => {
     root.render(<GlobalPricePanel skus={skus} scopes={scopes} onEditPrice={onEditPrice} />);
   });
-const renderEditor = () =>
+const renderEditor = (onRecoveryStateChange = vi.fn()) =>
   act(async () => {
     root.render(
       <LocationPriceEditor
@@ -91,6 +91,7 @@ const renderEditor = () =>
         }}
         onClose={vi.fn()}
         onSaved={vi.fn()}
+        onRecoveryStateChange={onRecoveryStateChange}
       />,
     );
   });
@@ -124,6 +125,7 @@ describe("Global price editor", () => {
   });
 
   it("retains the exact command and key after a lost response", async () => {
+    const onRecoveryStateChange = vi.fn();
     const writes: RequestInit[] = [];
     fetchMock.mockImplementation(async (_url, options) => {
       if (options?.method === "POST") {
@@ -137,7 +139,7 @@ describe("Global price editor", () => {
       }
       return response({ ok: true, value: prices, requestId: "test" });
     });
-    await renderEditor();
+    await renderEditor(onRecoveryStateChange);
     const input = container.querySelector<HTMLInputElement>('[aria-label="Final retail price"]');
     if (!input) throw new Error("Price input missing");
     await act(async () => {
@@ -152,6 +154,7 @@ describe("Global price editor", () => {
         ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(container.textContent).toContain("price could not be confirmed");
+    expect(onRecoveryStateChange).toHaveBeenCalledWith(true);
     expect(input.disabled).toBe(true);
     const retry = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Save price",
@@ -168,5 +171,6 @@ describe("Global price editor", () => {
       expectedVersion: 0,
     });
     expect(container.textContent).toContain("price saved");
+    expect(onRecoveryStateChange).toHaveBeenLastCalledWith(false);
   });
 });

@@ -1,16 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import {
-  CART_CHANGED_EVENT,
-  addToCart,
-  announceToast,
-  cachedCart,
-  quantityForSku,
-} from "../../../lib/storefront/cart-client";
-import type { CartView, CatalogMedia } from "@freshmarkets/contracts";
+import { addToCart, announceToast, quantityForSku } from "../../../lib/storefront/cart-client";
+import type { CatalogMedia } from "@freshmarkets/contracts";
+import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
 
 /** Product cards keep a compact plus button; cart quantities are edited in the cart. */
 export function AddToCartButton({
@@ -30,19 +25,11 @@ export function AddToCartButton({
 }) {
   // The header can populate the browser cache before streamed cards hydrate.
   // Keep the first render identical to SSR, then adopt that cache after hydration.
-  const [quantity, setQuantity] = useState(0);
+  const { cart } = useCartQuery();
+  const quantity = cart ? quantityForSku(cart, skuId) : 0;
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    const view = cachedCart();
-    setQuantity(view ? quantityForSku(view, skuId) : 0);
-    const onCartChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: CartView | null }>).detail;
-      setQuantity(detail?.view ? quantityForSku(detail.view, skuId) : 0);
-    };
-    window.addEventListener(CART_CHANGED_EVENT, onCartChanged);
-    return () => window.removeEventListener(CART_CHANGED_EVENT, onCartChanged);
-  }, [skuId]);
+  const acceptCart = useAcceptCart();
+  const invalidateCheckout = useInvalidateCheckoutReads();
 
   async function mutate(next: number) {
     setPending(true);
@@ -54,6 +41,8 @@ export function AddToCartButton({
     });
     setPending(false);
     if (result.ok) {
+      acceptCart(result.view);
+      await invalidateCheckout();
       if (next > quantity) {
         announceToast({
           message: result.requiresSignIn
@@ -63,7 +52,6 @@ export function AddToCartButton({
           signInHref: result.requiresSignIn ? "/auth/login?returnTo=/cart" : undefined,
         });
       }
-      setQuantity(next);
       return;
     }
     if (result.reason === "unauthenticated") {

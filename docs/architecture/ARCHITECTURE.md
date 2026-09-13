@@ -225,6 +225,36 @@ Cloudflare Cron Triggers are the approved time-driven execution mechanism. They 
 
 ## vinext Compatibility Policy
 
+### Hybrid application ownership
+
+The storefront route group `app/(storefront)/layout.tsx` owns header, sidebar, footer, drawer and
+notification chrome for home, products, cart, checkout, account, orders and informational pages.
+The root retains maps runtime configuration and a per-mounted-instance TanStack Query client.
+No server/Worker-global QueryClient stores user data. Admin retains its separate existing shell.
+Framework routing remains vinext; no static index fallback or second router is introduced.
+
+Catalog entries remain server-rendered. Serializable initial page/home DTOs seed the exact browser
+query shape, with 30-second display freshness and a separate home key. Same-path catalog selection
+uses vinext's supported native-history integration; cross-path navigation uses framework routing.
+Infinite-query pages retain cursor identity. Query keys include a local session/context epoch;
+Admin keys additionally include the authorized scope. Neither signed browsing tokens nor raw
+coordinates are serialized as keys. These identities isolate presentation, never authorize requests.
+
+On resolved identity replacement the provider hides the old subtree, cancels/clears queries,
+invalidates the legacy cart operation generation and reloads the document. This explicit session
+boundary replaces private server-rendered props as well as transient owners; the gate stays closed
+until unload. Initial session resolution and ordinary same-session navigation do not trigger it.
+Location acceptance advances the query epoch and invalidates affected reads; old SSR data cannot
+seed that new epoch. Reads propagate cancellation where supported and retry at most once; writes
+never use generic query retries. Core continues to revalidate every applicable session, scope,
+price, availability and command precondition. Accepted command DTOs and targeted read invalidation
+remain the only client source for business outcomes.
+
+Published banner media optionally requests one of three WebP widths (480, 960, 1440) through the
+existing Web media route and Core publication check. Web's Images binding transforms only those
+published bytes. Variant identity is included in the bounded public media cache and ETag; private
+HTML/API caching is unchanged. Maps editor code is loaded when the address dialog opens.
+
 The current release may rely on App Router, React Server Components, client components, route handlers, server actions used as thin adapters, middleware for coarse presentation behavior, navigation/headers APIs, metadata, request-time images, and selected static/ISR output.
 
 Before implementation, run a compatibility spike and `vinext check`. Explicitly test nested layouts, loading/error boundaries, cookies, headers, redirects, streaming, Service Binding access, auth route proxying, OAuth redirects, and production Worker builds.

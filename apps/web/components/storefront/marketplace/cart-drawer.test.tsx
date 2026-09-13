@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CartView } from "@freshmarkets/contracts";
 import { CartDrawer } from "./cart-drawer";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createQueryClient } from "../../../lib/query/query-client";
 import { CART_DRAWER_REQUEST_EVENT, clearGuestCart } from "../../../lib/storefront/cart-client";
 import { rememberBrowsingPoint } from "../../../lib/storefront/browsing-location";
 vi.mock("./checkout-auth-dialog", () => ({ CheckoutAuthDialog: () => null }));
@@ -11,6 +13,11 @@ vi.mock("./order-summary", () => ({
   OrderSummary: ({ cart }: { cart: CartView }) => <p>Total {cart.totalMinor}</p>,
 }));
 let root: Root;
+const drawer = () => (
+  <QueryClientProvider client={createQueryClient()}>
+    <CartDrawer />
+  </QueryClientProvider>
+);
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   localStorage.clear();
@@ -78,10 +85,13 @@ it("uses the mutation response without repeating coverage and cart reads", async
     }),
   );
   vi.stubGlobal("fetch", fetcher);
-  await act(async () => root.render(<CartDrawer />));
+  await act(async () => root.render(drawer()));
   await act(async () => {
     window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
   });
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Increase Test fruit"]')).not.toBeNull(),
+  );
   expect(fetcher).toHaveBeenCalledTimes(2);
   const quantityControl = document.querySelector<HTMLButtonElement>(
     '[aria-label="Increase Test fruit"]',
@@ -149,8 +159,13 @@ it("confirms before clearing every cart line through authoritative mutations", a
     return Response.json({ ok: true, value: authoritative });
   });
   vi.stubGlobal("fetch", fetcher);
-  await act(async () => root.render(<CartDrawer />));
+  await act(async () => root.render(drawer()));
   await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+  await vi.waitFor(() =>
+    expect(
+      document.querySelector<HTMLButtonElement>("button")?.ownerDocument.body.textContent,
+    ).toContain("Clear cart"),
+  );
 
   await act(async () => {
     [...document.querySelectorAll<HTMLButtonElement>("button")]
@@ -188,7 +203,7 @@ it.each([false, true])(
     );
     document.body.style.overflow = "auto";
     document.body.style.paddingRight = "12px";
-    await act(async () => root.render(<CartDrawer />));
+    await act(async () => root.render(drawer()));
     await act(async () => {
       window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
     });
@@ -215,7 +230,7 @@ it("cancels a pending close when the cart is reopened", async () => {
       Response.json({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
     ),
   );
-  await act(async () => root.render(<CartDrawer />));
+  await act(async () => root.render(drawer()));
   await act(async () => {
     window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
   });

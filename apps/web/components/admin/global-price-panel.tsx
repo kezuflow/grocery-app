@@ -235,10 +235,12 @@ export function LocationPriceEditor({
   selection,
   onClose,
   onSaved,
+  onRecoveryStateChange,
 }: {
   selection: ProductPriceSelection;
   onClose: () => void;
   onSaved: () => void;
+  onRecoveryStateChange?: (active: boolean) => void;
 }) {
   const [view, setView] = useState<AdminSkuPricesView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -248,6 +250,11 @@ export function LocationPriceEditor({
   const [command, setCommand] = useState<PriceCommand | null>(null);
   const [reload, setReload] = useState(0);
   const intent = useAdminCommandIntent();
+
+  useEffect(() => {
+    onRecoveryStateChange?.(intent.pending || command !== null);
+    return () => onRecoveryStateChange?.(false);
+  }, [command, intent.pending, onRecoveryStateChange]);
 
   useEffect(() => {
     let canceled = false;

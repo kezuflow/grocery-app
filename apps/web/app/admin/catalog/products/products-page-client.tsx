@@ -1,16 +1,11 @@
 "use client";
 
-import type {
-  AdminProductDetail,
-  AdminProductPage,
-  AdminProductSummary,
-  RpcResult,
-} from "@freshmarkets/contracts";
-import { adminProductDetailSchema } from "@freshmarkets/validation";
+import type { AdminProductPage, AdminProductSummary, RpcResult } from "@freshmarkets/contracts";
 import { Plus, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AdminCursorPagination, useAdminUrlPagination } from "@/components/admin/admin-controls";
 import {
   ProductListView,
   type BulkProductDeactivationResult,
@@ -20,7 +15,6 @@ import { useAdminContext } from "../../admin-context-provider";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { ProductPreviewPanel } from "@/components/admin/product-preview-panel";
-import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +24,17 @@ import {
   resolveAdminProductScopeTarget,
   type AdminProductScopeTarget,
 } from "@/lib/admin/product-scope-target";
+import { useQueryEpoch } from "@/components/query-provider";
+import { queryKeys } from "@/lib/query/query-client";
+import {
+  adminProductDetailResource,
+  adminProductListResource,
+  fetchAdminProductDetail,
+  fetchAdminProducts,
+  invalidateAdminProductQueries,
+  isAdminProductWorkspaceVisible,
+  serializeProductScope,
+} from "@/lib/query/admin-products";
 
 type ProductsPageClientProps = {
   initialPayload: RpcResult<AdminProductPage> | null;
@@ -39,11 +44,6 @@ type ProductsPageClientProps = {
 };
 
 type ProductListItem = AdminProductPage["items"][number];
-type ProductPreviewState =
-  | { phase: "idle" | "loading" }
-  | { phase: "error"; message: string; requestId: string | null }
-  | { phase: "ready"; product: AdminProductDetail };
-
 function sameScopeTarget(
   left: AdminProductScopeTarget | null,
   right: AdminProductScopeTarget | null,
@@ -64,20 +64,18 @@ export function ProductsPageClient({
   initialQuery,
   initialStatus,
 }: ProductsPageClientProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const query = searchParams.get("query") ?? initialQuery;
-  const status = searchParams.get("status") ?? initialStatus;
-  const [payload, setPayload] = useState<RpcResult<AdminProductPage> | null>(initialPayload);
+  const query = searchParams.get("query") ?? "";
+  const status = searchParams.get("status") ?? "all";
   const [bulkPending, setBulkPending] = useState(false);
-  const [reloadVersion, setReloadVersion] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<ProductListItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
-  const [previewState, setPreviewState] = useState<ProductPreviewState>({ phase: "idle" });
-  const [previewAttempt, setPreviewAttempt] = useState(0);
-  const pagination = useAdminPagination();
+  const [workspaceScopeKey, setWorkspaceScopeKey] = useState<string | null>(null);
+  const pagination = useAdminUrlPagination("/admin/catalog/products");
   const adminContext = useAdminContext();
+  const epoch = useQueryEpoch();
+  const queryClient = useQueryClient();
   const scopeTarget = useMemo(
     () =>
       adminContext.state.phase === "ready"
@@ -89,103 +87,74 @@ export function ProductsPageClient({
     adminContext.state.phase === "ready" &&
     adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
-  useEffect(() => {
-    if (!scopeTarget) return;
-    const filterNavigationPending = query !== initialQuery || status !== initialStatus;
-    if (filterNavigationPending && !pagination.cursor && reloadVersion === 0) return;
-    const serverPayloadMatches =
-      initialPayload !== null &&
-      !pagination.cursor &&
-      reloadVersion === 0 &&
-      sameScopeTarget(scopeTarget, initialScopeTarget);
-    if (serverPayloadMatches) return;
-
-    setPayload(null);
-    const params = new URLSearchParams({ limit: "50" });
-    params.set("scopeKind", scopeTarget.kind);
-    if (scopeTarget.kind === "LOCATION") {
-      params.set("marketId", scopeTarget.marketId);
-      params.set("locationId", scopeTarget.locationId);
-    }
-    if (query.trim()) params.set("query", query.trim());
-    if (status !== "all") params.set("status", status);
-    if (pagination.cursor) params.set("cursor", pagination.cursor);
-    void fetch(`/api/admin/catalog/products?${params}`)
-      .then((response) => response.json() as Promise<RpcResult<AdminProductPage>>)
-      .then(setPayload)
-      .catch(() =>
-        setPayload({
+  const scopeKey = scopeTarget ? serializeProductScope(scopeTarget) : "unresolved";
+  const serverPayloadMatches =
+    initialPayload !== null &&
+    !pagination.cursor &&
+    query === initialQuery &&
+    status === initialStatus &&
+    sameScopeTarget(scopeTarget, initialScopeTarget) &&
+    epoch === 0;
+  const listQuery = useQuery({
+    queryKey: queryKeys.admin(
+      epoch,
+      scopeKey,
+      adminProductListResource(query, status, pagination.cursor),
+    ),
+    queryFn: ({ signal }) => {
+      if (!scopeTarget) throw new Error("Select an Admin Product scope");
+      return fetchAdminProducts({
+        scope: scopeTarget,
+        query,
+        status,
+        cursor: pagination.cursor,
+        signal,
+      });
+    },
+    enabled: scopeTarget !== null,
+    initialData: serverPayloadMatches ? initialPayload : undefined,
+  });
+  const payload: RpcResult<AdminProductPage> | null =
+    listQuery.data ??
+    (listQuery.isError
+      ? {
           ok: false,
           error: {
             code: "INTERNAL_ERROR",
             message: "Network error loading Products",
             requestId: "unavailable",
           },
-        }),
-      );
-  }, [
-    initialPayload,
-    initialScopeTarget,
-    initialQuery,
-    initialStatus,
-    pagination.cursor,
-    scopeTarget,
-    query,
-    reloadVersion,
-    status,
-  ]);
-
-  useEffect(() => {
-    if (!panelOpen || panelMode !== "detail" || !selectedProduct) return;
-    if (!scopeTarget) {
-      setPreviewState({
-        phase: "error",
-        message: "Select a supported Admin scope to preview this product.",
-        requestId: null,
+        }
+      : null);
+  const previewQuery = useQuery({
+    queryKey: queryKeys.admin(
+      epoch,
+      scopeKey,
+      adminProductDetailResource(selectedProduct?.productId ?? "none"),
+    ),
+    queryFn: ({ signal }) => {
+      if (!scopeTarget || !selectedProduct) throw new Error("Select a product and Admin scope");
+      return fetchAdminProductDetail({
+        scope: scopeTarget,
+        productId: selectedProduct.productId,
+        signal,
       });
-      return;
-    }
-    const controller = new AbortController();
-    setPreviewState({ phase: "loading" });
-    const params = new URLSearchParams({ scopeKind: scopeTarget.kind });
-    if (scopeTarget.kind === "LOCATION") {
-      params.set("marketId", scopeTarget.marketId);
-      params.set("locationId", scopeTarget.locationId);
-    }
-    void fetch(
-      `/api/admin/catalog/products/${encodeURIComponent(selectedProduct.productId)}?${params}`,
-      { signal: controller.signal },
-    )
-      .then(async (response) =>
-        catalogResultSchema(adminProductDetailSchema).parse(await response.json()),
-      )
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        if (result.ok) setPreviewState({ phase: "ready", product: result.value });
-        else
-          setPreviewState({
-            phase: "error",
-            message: result.error.message,
-            requestId: result.error.requestId,
-          });
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setPreviewState({
-          phase: "error",
-          message: "Product preview could not be loaded.",
-          requestId: null,
-        });
-      });
-    return () => controller.abort();
-  }, [panelMode, panelOpen, previewAttempt, scopeTarget, selectedProduct]);
+    },
+    enabled:
+      panelOpen &&
+      workspaceScopeKey === scopeKey &&
+      panelMode === "detail" &&
+      scopeTarget !== null &&
+      selectedProduct !== null,
+  });
+  const panelVisible = isAdminProductWorkspaceVisible(panelOpen, workspaceScopeKey, scopeKey);
 
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);
     else next.delete(key);
-    pagination.reset();
-    router.replace(`/admin/catalog/products${next.size ? `?${next}` : ""}`);
+    pagination.reset(next);
+    window.history.replaceState(null, "", `/admin/catalog/products${next.size ? `?${next}` : ""}`);
   }
 
   async function deactivateProducts(
@@ -241,7 +210,10 @@ export function ProductsPageClient({
           });
         }
       }
-      setReloadVersion((current) => current + 1);
+      await invalidateAdminProductQueries(
+        queryClient,
+        outcome.succeeded.map((product) => product.productId),
+      );
       return outcome;
     } finally {
       setBulkPending(false);
@@ -258,10 +230,11 @@ export function ProductsPageClient({
               type="button"
               size="sm"
               className="fm-admin-reference-primary"
-              aria-expanded={panelOpen && panelMode === "create"}
+              aria-expanded={panelVisible && panelMode === "create"}
               aria-controls="product-detail-panel"
               onClick={() => {
                 setPanelMode("create");
+                setWorkspaceScopeKey(scopeKey);
                 setPanelOpen((open) => (panelMode === "create" ? !open : true));
               }}
             >
@@ -272,6 +245,19 @@ export function ProductsPageClient({
         }
       />
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
+      {listQuery.data && listQuery.isFetching ? (
+        <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+          Refreshing products…
+        </p>
+      ) : null}
+      {listQuery.data && listQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Products could not be refreshed</AlertTitle>
+          <AlertDescription>
+            The previous authorized results remain visible. Try refreshing this list again.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {payload && !payload.ok ? (
         <Alert variant="destructive">
           <AlertTitle>Products could not be loaded</AlertTitle>
@@ -285,6 +271,7 @@ export function ProductsPageClient({
       {payload?.ok ? (
         <>
           <ProductListView
+            key={scopeKey}
             page={payload.value}
             fromQuery={searchParams.toString()}
             canManage={canManage}
@@ -293,9 +280,12 @@ export function ProductsPageClient({
             onOpenProduct={(product) => {
               setSelectedProduct(product);
               setPanelMode("detail");
+              setWorkspaceScopeKey(scopeKey);
               setPanelOpen(true);
             }}
-            openProductId={panelOpen && panelMode === "detail" ? selectedProduct?.productId : null}
+            openProductId={
+              panelVisible && panelMode === "detail" ? selectedProduct?.productId : null
+            }
             detailPanelId="product-detail-panel"
             activeFilterCount={Number(query.trim().length > 0) + Number(status !== "all")}
             filters={
@@ -336,10 +326,11 @@ export function ProductsPageClient({
     </section>
   );
 
+  const previewResult = previewQuery.data;
   const productDetail = selectedProduct ? (
-    previewState.phase === "ready" ? (
+    previewResult?.ok ? (
       <ProductPreviewPanel
-        product={previewState.product}
+        product={previewResult.value}
         fromQuery={searchParams.toString()}
         onClose={() => setPanelOpen(false)}
       />
@@ -371,12 +362,16 @@ export function ProductsPageClient({
           </Button>
         </div>
         <div className="min-h-0 flex-1 px-5 py-5">
-          {previewState.phase === "error" ? (
+          {previewQuery.isError || (previewResult && !previewResult.ok) ? (
             <Alert variant="destructive">
               <AlertTitle>Product preview could not be loaded</AlertTitle>
               <AlertDescription>
-                {previewState.message}
-                {previewState.requestId ? ` Request reference: ${previewState.requestId}` : ""}
+                {previewResult && !previewResult.ok
+                  ? previewResult.error.message
+                  : "Product preview could not be loaded."}
+                {previewResult && !previewResult.ok
+                  ? ` Request reference: ${previewResult.error.requestId}`
+                  : ""}
               </AlertDescription>
             </Alert>
           ) : (
@@ -387,12 +382,12 @@ export function ProductsPageClient({
             </div>
           )}
         </div>
-        {previewState.phase === "error" ? (
+        {previewQuery.isError || (previewResult && !previewResult.ok) ? (
           <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
             <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
               Close
             </Button>
-            <Button type="button" onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>
+            <Button type="button" onClick={() => void previewQuery.refetch()}>
               Retry
             </Button>
           </div>
@@ -403,20 +398,21 @@ export function ProductsPageClient({
 
   const createDetail = (
     <NewProductWorkspace
+      key={scopeKey}
       embedded
       onCancel={() => setPanelOpen(false)}
       onCreated={() => {
         setPanelOpen(false);
-        setReloadVersion((current) => current + 1);
+        void invalidateAdminProductQueries(queryClient);
       }}
     />
   );
 
   return (
     <AdminMasterDetailWorkspace
-      open={panelOpen && (panelMode === "create" || selectedProduct !== null)}
+      open={panelVisible && (panelMode === "create" || selectedProduct !== null)}
       master={master}
-      detail={panelMode === "create" ? createDetail : productDetail}
+      detail={panelVisible ? (panelMode === "create" ? createDetail : productDetail) : null}
       panelId="product-detail-panel"
       labelledBy={panelMode === "create" ? "create-product-panel-title" : "product-panel-title"}
       resizeLabel="Resize product details"

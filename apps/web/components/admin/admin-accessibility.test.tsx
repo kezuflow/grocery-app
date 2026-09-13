@@ -63,6 +63,10 @@ const productsPage = readFileSync(
   new URL("../../app/admin/catalog/products/products-page-client.tsx", import.meta.url),
   "utf8",
 );
+const adminProductsQuery = readFileSync(
+  new URL("../../lib/query/admin-products.ts", import.meta.url),
+  "utf8",
+);
 const categoriesPage = readFileSync(
   new URL("../../app/admin/catalog/categories/categories-page-client.tsx", import.meta.url),
   "utf8",
@@ -158,7 +162,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("w-[var(--fm-admin-sidebar-collapsed)]");
     expect(markup).toContain('aria-label="Expand admin navigation"');
     expect(shell).toContain('aria-label="freshmarkets admin home"');
-    expect(markup).toContain('src="/brand/freshmarkets-mark.png"');
+    expect(markup).toContain('src="/brand/freshmarkets-mark.webp"');
     expect(shell).toContain(
       "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
     );
@@ -337,7 +341,8 @@ describe("shared Admin accessibility contract", () => {
     expect(productsPage).toContain('detailPanelId="product-detail-panel"');
     expect(productsPage).not.toContain('href="/admin/catalog/products/new"');
     expect(productsPage).toContain("<NewProductWorkspace");
-    expect(productsPage).toContain("adminProductDetailSchema");
+    expect(productsPage).toContain("fetchAdminProductDetail");
+    expect(adminProductsQuery).toContain("catalogResultSchema(adminProductDetailSchema).parse");
     expect(productsPage).toContain("<ProductPreviewPanel");
     expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
     expect(categoriesPage).toContain("<NewCategoryWorkspace");

@@ -1,0 +1,648 @@
+{
+  "publicBefore": {
+    "origin": "https://freshmarkets.ph",
+    "measuredAt": "2026-09-13T21:09:22.110Z",
+    "samples": [
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 1,
+        "entry": {
+          "lcp": 2784,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 824.5999999940395,
+          "fcp": 1656,
+          "bytes": 9413685,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 947,
+          "usefulMs": 952,
+          "documents": 0,
+          "rsc": 5,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 2,
+        "entry": {
+          "lcp": 2344,
+          "cls": 0.0007132648399991427,
+          "longTasks": 0,
+          "ttfb": 443.30000001192093,
+          "fcp": 1244,
+          "bytes": 9390791,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 913,
+          "usefulMs": 921,
+          "documents": 0,
+          "rsc": 5,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 3,
+        "entry": {
+          "lcp": 2528,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 803.4000000059605,
+          "fcp": 1080,
+          "bytes": 9413735,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 873,
+          "usefulMs": 880,
+          "documents": 0,
+          "rsc": 5,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 4,
+        "entry": {
+          "lcp": 2232,
+          "cls": 0.0007132648399991427,
+          "longTasks": 0,
+          "ttfb": 430.2000000178814,
+          "fcp": 808,
+          "bytes": 9391047,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 957,
+          "usefulMs": 961,
+          "documents": 0,
+          "rsc": 5,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 5,
+        "entry": {
+          "lcp": 2640,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 844,
+          "fcp": 1156,
+          "bytes": 9414021,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 895,
+          "usefulMs": 900,
+          "documents": 0,
+          "rsc": 5,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 1,
+        "entry": {
+          "lcp": 3780,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 460.40000000596046,
+          "fcp": 3196,
+          "bytes": 8957764,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 1044,
+          "usefulMs": 1058,
+          "documents": 0,
+          "rsc": 3,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 2,
+        "entry": {
+          "lcp": 5036,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 1137.0999999940395,
+          "fcp": 3044,
+          "bytes": 8957573,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 1029,
+          "usefulMs": 1042,
+          "documents": 0,
+          "rsc": 3,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 3,
+        "entry": {
+          "lcp": 4504,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 811.7999999821186,
+          "fcp": 3244,
+          "bytes": 8957745,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 1105,
+          "usefulMs": 1134,
+          "documents": 0,
+          "rsc": 3,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 4,
+        "entry": {
+          "lcp": 4936,
+          "cls": 0.001173197391651534,
+          "longTasks": 4,
+          "ttfb": 883.7999999821186,
+          "fcp": 3300,
+          "bytes": 8957978,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 1092,
+          "usefulMs": 1121,
+          "documents": 0,
+          "rsc": 3,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 5,
+        "entry": {
+          "lcp": 5024,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 1228.7999999821186,
+          "fcp": 3624,
+          "bytes": 8957568,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 1138,
+          "usefulMs": 1151,
+          "documents": 0,
+          "rsc": 3,
+          "json": 0,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      }
+    ]
+  },
+  "localhostBefore": {
+    "environment": "isolated-localhost",
+    "samples": [
+      {
+        "profile": "authenticated-catalog",
+        "sample": 1,
+        "entry": {
+          "ttfb": 475.40000000596046,
+          "fcp": 576
+        },
+        "usefulMs": 270,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 2,
+        "entry": {
+          "ttfb": 202.30000001192093,
+          "fcp": 496
+        },
+        "usefulMs": 162,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 3,
+        "entry": {
+          "ttfb": 130.90000000596046,
+          "fcp": 360
+        },
+        "usefulMs": 162,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 4,
+        "entry": {
+          "ttfb": 128.2000000178814,
+          "fcp": 412
+        },
+        "usefulMs": 154,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 5,
+        "entry": {
+          "ttfb": 119.5,
+          "fcp": 336
+        },
+        "usefulMs": 99,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 1,
+        "entry": {
+          "ttfb": 319.60000002384186,
+          "fcp": 752
+        },
+        "usefulMs": 117,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 2,
+        "entry": {
+          "ttfb": 36.69999998807907,
+          "fcp": 400
+        },
+        "usefulMs": 76,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 3,
+        "entry": {
+          "ttfb": 29.399999976158142,
+          "fcp": 324
+        },
+        "usefulMs": 96,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 4,
+        "entry": {
+          "ttfb": 23.5,
+          "fcp": 312
+        },
+        "usefulMs": 134,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 5,
+        "entry": {
+          "ttfb": 32.400000005960464,
+          "fcp": 320
+        },
+        "usefulMs": 76,
+        "documentPreserved": true
+      }
+    ]
+  },
+  "localhostAfter": {
+    "environment": "isolated-localhost",
+    "samples": [
+      {
+        "profile": "authenticated-catalog",
+        "sample": 1,
+        "entry": {
+          "ttfb": 397.2999999821186,
+          "fcp": 500
+        },
+        "usefulMs": 148,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 2,
+        "entry": {
+          "ttfb": 184.90000000596046,
+          "fcp": 256
+        },
+        "usefulMs": 1354,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 3,
+        "entry": {
+          "ttfb": 74.80000001192093,
+          "fcp": 176
+        },
+        "usefulMs": 155,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 4,
+        "entry": {
+          "ttfb": 151.5,
+          "fcp": 228
+        },
+        "usefulMs": 150,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 5,
+        "entry": {
+          "ttfb": 148.30000001192093,
+          "fcp": 228
+        },
+        "usefulMs": 120,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 1,
+        "entry": {
+          "ttfb": 316.09999999403954,
+          "fcp": 812
+        },
+        "usefulMs": 168,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 2,
+        "entry": {
+          "ttfb": 38.599999994039536,
+          "fcp": 460
+        },
+        "usefulMs": 145,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 3,
+        "entry": {
+          "ttfb": 35.19999998807907,
+          "fcp": 492
+        },
+        "usefulMs": 159,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 4,
+        "entry": {
+          "ttfb": 32.599999994039536,
+          "fcp": 420
+        },
+        "usefulMs": 179,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 5,
+        "entry": {
+          "ttfb": 40.80000001192093,
+          "fcp": 452
+        },
+        "usefulMs": 175,
+        "documentPreserved": true
+      }
+    ]
+  },
+  "localhostImmediateBefore": {
+    "environment": "isolated-localhost",
+    "samples": [
+      {
+        "profile": "authenticated-catalog",
+        "sample": 1,
+        "entry": {
+          "ttfb": 1500.300000011921,
+          "fcp": 1608
+        },
+        "usefulMs": 329,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 2,
+        "entry": {
+          "ttfb": 62.099999994039536,
+          "fcp": 244
+        },
+        "usefulMs": 319,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 3,
+        "entry": {
+          "ttfb": 84.59999999403954,
+          "fcp": 240
+        },
+        "usefulMs": 298,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 4,
+        "entry": {
+          "ttfb": 101.5,
+          "fcp": 264
+        },
+        "usefulMs": 308,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 5,
+        "entry": {
+          "ttfb": 106,
+          "fcp": 276
+        },
+        "usefulMs": 310,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 1,
+        "entry": {
+          "ttfb": 322.90000000596046,
+          "fcp": 740
+        },
+        "usefulMs": 112,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 2,
+        "entry": {
+          "ttfb": 20.19999998807907,
+          "fcp": 316
+        },
+        "usefulMs": 130,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 3,
+        "entry": {
+          "ttfb": 23.69999998807907,
+          "fcp": 308
+        },
+        "usefulMs": 80,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 4,
+        "entry": {
+          "ttfb": 23.30000001192093,
+          "fcp": 320
+        },
+        "usefulMs": 106,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 5,
+        "entry": {
+          "ttfb": 29.599999994039536,
+          "fcp": 332
+        },
+        "usefulMs": 89,
+        "documentPreserved": true
+      }
+    ]
+  },
+  "localhostImmediateAfter": {
+    "environment": "isolated-localhost",
+    "samples": [
+      {
+        "profile": "authenticated-catalog",
+        "sample": 1,
+        "entry": {
+          "ttfb": 592.6999999880791,
+          "fcp": 716
+        },
+        "usefulMs": 923,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 2,
+        "entry": {
+          "ttfb": 227.5,
+          "fcp": 300
+        },
+        "usefulMs": 874,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 3,
+        "entry": {
+          "ttfb": 219.69999998807907,
+          "fcp": 332
+        },
+        "usefulMs": 900,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 4,
+        "entry": {
+          "ttfb": 668.3999999761581,
+          "fcp": 788
+        },
+        "usefulMs": 892,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-catalog",
+        "sample": 5,
+        "entry": {
+          "ttfb": 327.90000000596046,
+          "fcp": 792
+        },
+        "usefulMs": 914,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 1,
+        "entry": {
+          "ttfb": 463.30000001192093,
+          "fcp": 1268
+        },
+        "usefulMs": 325,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 2,
+        "entry": {
+          "ttfb": 149.59999999403954,
+          "fcp": 480
+        },
+        "usefulMs": 140,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 3,
+        "entry": {
+          "ttfb": 28.099999994039536,
+          "fcp": 348
+        },
+        "usefulMs": 93,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 4,
+        "entry": {
+          "ttfb": 29.100000023841858,
+          "fcp": 396
+        },
+        "usefulMs": 126,
+        "documentPreserved": true
+      },
+      {
+        "profile": "authenticated-admin",
+        "sample": 5,
+        "entry": {
+          "ttfb": 33.10000002384186,
+          "fcp": 432
+        },
+        "usefulMs": 215,
+        "documentPreserved": true
+      }
+    ]
+  }
+}

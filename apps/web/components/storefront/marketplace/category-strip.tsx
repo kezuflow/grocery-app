@@ -20,10 +20,12 @@ const FALLBACK_ICON_SRC = "/category-icons/all-groceries.svg";
 export function CategoryStrip({
   categories,
   activeCategory = "all",
+  onCategorySelect,
   className,
 }: {
   categories: ReadonlyArray<CategoryNavigationItem>;
   activeCategory?: string;
+  onCategorySelect?: (category: string) => void;
   className?: string;
 }) {
   const railRef = useRef<HTMLElement>(null);
@@ -67,10 +69,10 @@ export function CategoryStrip({
     });
   };
 
-  const finishDrag = (event: PointerEvent<HTMLElement>) => {
+  const finishDrag = (event: PointerEvent<HTMLElement>, suppressClick = true) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    suppressClickRef.current = drag.moved;
+    suppressClickRef.current = suppressClick && drag.moved;
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -86,6 +88,20 @@ export function CategoryStrip({
 
   const itemClassName =
     "group flex h-[132px] w-[116px] shrink-0 snap-start flex-col items-center gap-2 py-1 text-center text-[15px] leading-5 font-semibold text-[var(--fm-text)] transition-transform hover:-translate-y-0.5";
+  const selectCategory = (category: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !onCategorySelect ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    onCategorySelect(category);
+  };
 
   return (
     <div className={cn("relative", className)}>
@@ -93,31 +109,37 @@ export function CategoryStrip({
         ref={railRef}
         aria-label="Grocery categories"
         data-testid="storefront-category-strip"
-        className="fm-scrollbar-none flex cursor-grab snap-x snap-mandatory gap-3 overflow-x-auto active:cursor-grabbing"
+        className="fm-scrollbar-none flex touch-pan-y cursor-grab snap-x snap-mandatory gap-3 overflow-x-auto active:cursor-grabbing"
         onPointerDown={(event) => {
           if (event.button !== 0) return;
+          suppressClickRef.current = false;
           dragRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
             startScrollLeft: event.currentTarget.scrollLeft,
             moved: false,
           };
-          event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
           const drag = dragRef.current;
           if (!drag || drag.pointerId !== event.pointerId) return;
           const distance = event.clientX - drag.startX;
-          if (Math.abs(distance) > 6) drag.moved = true;
+          if (!drag.moved) {
+            if (Math.abs(distance) <= 6) return;
+            drag.moved = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }
           event.currentTarget.scrollLeft = drag.startScrollLeft - distance;
         }}
         onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
+        onPointerCancel={(event) => finishDrag(event, false)}
         onClickCapture={preventDraggedClick}
       >
         <Link
           href="/"
+          prefetch={false}
           aria-current={activeCategory === "all" ? "page" : undefined}
+          onClick={selectCategory("all")}
           className={itemClassName}
         >
           <img
@@ -133,8 +155,10 @@ export function CategoryStrip({
         {categories.map(({ code, name, slug, iconSrc }) => (
           <Link
             key={code}
+            prefetch={false}
             href={`/?category=${slug}`}
             aria-current={slug === activeCategory ? "page" : undefined}
+            onClick={selectCategory(slug)}
             className={itemClassName}
           >
             <img

@@ -3,7 +3,7 @@ import { cn } from "../../lib/utils";
 export function FreshMarketsMark({ className }: { className?: string }) {
   return (
     <img
-      src="/brand/freshmarkets-mark.png"
+      src="/brand/freshmarkets-mark.webp"
       alt=""
       aria-hidden="true"
       width={32}

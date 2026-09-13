@@ -10,7 +10,7 @@ vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-import AccountPage from "@/app/account/page";
+import AccountPage from "@/app/(storefront)/account/page";
 
 describe("account", () => {
   it("keeps customer account links without enrollment or recurring billing", () => {

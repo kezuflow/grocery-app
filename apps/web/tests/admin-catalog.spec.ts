@@ -38,7 +38,7 @@ test("a provisioned Staff reader can scan the Category workspace", async ({ admi
   await adminPage.goto("/admin/catalog/categories");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Categories" })).toBeVisible();
   await expect(
-    adminPage.locator("#main-content").getByRole("link", { name: "Add category" }).first(),
+    adminPage.locator("#main-content").getByRole("button", { name: "Add category" }).first(),
   ).toBeVisible();
   await expect(adminPage.getByRole("table", { name: "Categories" })).toBeVisible();
   await expect(adminPage.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
@@ -57,7 +57,7 @@ test("a provisioned Staff reader can scan the Product workspace", async ({ admin
   await adminPage.goto("/admin/catalog/products");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
   await expect(
-    adminPage.locator("#main-content").getByRole("link", { name: "Add product" }).first(),
+    adminPage.locator("#main-content").getByRole("button", { name: "Add product" }).first(),
   ).toBeVisible();
   await expect(adminPage.getByRole("table", { name: "Products" })).toBeVisible();
   await expect(adminPage.getByRole("navigation", { name: "Results pagination" })).toBeVisible();
@@ -70,7 +70,7 @@ test("a catalog read-only principal sees no Product or Category mutation control
   await expect(
     catalogReadOnlyPage.getByRole("heading", { level: 1, name: "Products" }),
   ).toBeVisible();
-  await expect(catalogReadOnlyPage.getByRole("link", { name: "Add product" })).toHaveCount(0);
+  await expect(catalogReadOnlyPage.getByRole("button", { name: "Add product" })).toHaveCount(0);
   await catalogReadOnlyPage
     .getByRole("button", { name: /Open actions for/ })
     .first()
@@ -79,7 +79,7 @@ test("a catalog read-only principal sees no Product or Category mutation control
   await expect(catalogReadOnlyPage.getByRole("button", { name: "Add variant" })).toHaveCount(0);
 
   await catalogReadOnlyPage.goto("/admin/catalog/categories");
-  await expect(catalogReadOnlyPage.getByRole("link", { name: "Add category" })).toHaveCount(0);
+  await expect(catalogReadOnlyPage.getByRole("button", { name: "Add category" })).toHaveCount(0);
 });
 
 test("a Product manager can create, inspect, and edit customer-facing details", async ({
@@ -108,7 +108,7 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await expect(adminPage.getByText("Keep refrigerated.")).toBeVisible();
   await adminPage.getByRole("link", { name: "Edit product" }).click();
   await adminPage.getByLabel("Product name").fill("E2E updated product");
-  await adminPage.getByRole("button", { name: "Save product" }).click();
+  await adminPage.getByRole("button", { name: "Save changes" }).click();
   await expect(adminPage.getByText("Product updated.", { exact: true })).toBeVisible();
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "E2E updated product" }),
@@ -120,19 +120,23 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await adminPage.getByLabel("Primary image").check();
   await adminPage.getByLabel("Media sort order").fill("1");
   await adminPage.getByRole("button", { name: "Upload image" }).click();
-  await expect(adminPage.getByText("Media uploaded.", { exact: true })).toBeVisible();
+  const productImages = adminPage.getByRole("region", { name: "Product images" });
   await expect(adminPage.getByLabel("Alt text for E2E product image")).toHaveValue(
     "E2E product image",
   );
+  await expect(productImages.getByRole("img", { name: "E2E product image" })).toHaveAttribute(
+    "src",
+    /\/api\/admin\/catalog\/products\/.+\/media\/.+\/content\?version=\d+/,
+  );
   await adminPage.getByLabel("Alt text for E2E product image").fill("E2E updated media");
   await adminPage.getByRole("button", { name: "Save E2E product image" }).click();
-  await expect(adminPage.getByText("Media updated.", { exact: true })).toBeVisible();
-  await adminPage.getByRole("button", { name: "Review remove E2E updated media" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText(
-    "deactivates the canonical attachment before deleting its stored image",
+  await expect(adminPage.getByLabel("Alt text for E2E updated media")).toHaveValue(
+    "E2E updated media",
   );
-  await adminPage.getByRole("button", { name: "Confirm media removal" }).click();
-  await expect(adminPage.getByText("Media removed.", { exact: true })).toBeVisible();
+  await expect(productImages.getByRole("img", { name: "E2E updated media" })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Remove E2E updated media" }).click();
+  await expect(productImages.getByRole("img", { name: "E2E updated media" })).toHaveCount(0);
+  await expect(productImages).toContainText("0 of 5");
   await adminPage.getByLabel("Reason").fill("Lifecycle impact review");
   const reviewDeactivation = adminPage.getByRole("button", { name: "Review deactivation" });
   await reviewDeactivation.click();
@@ -146,9 +150,16 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
 
   await adminPage.getByRole("combobox", { name: "Price location", exact: true }).click();
   await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await adminPage.getByRole("button", { name: "Edit price", exact: true }).click();
+  await expect(adminPage.getByRole("complementary", { name: "Edit location price" })).toBeVisible();
+  await expect(adminPage.getByRole("textbox", { name: "Location", exact: true })).toHaveValue(
+    "Central Cebu",
+  );
   await adminPage.getByLabel("Final retail price", { exact: true }).fill("29.99");
   await adminPage.getByRole("button", { name: "Save price", exact: true }).click();
-  await expect(adminPage.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
+  await expect(adminPage.getByRole("textbox", { name: "Current price", exact: true })).toHaveValue(
+    "₱29.99",
+  );
 
   const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
   if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {

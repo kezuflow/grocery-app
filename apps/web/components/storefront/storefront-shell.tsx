@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { AccountPopover } from "./marketplace/account-popover";
 import { CustomerNotifications } from "./marketplace/customer-notifications";
 import type { ReactNode } from "react";
@@ -10,6 +10,7 @@ import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
 import { StorefrontFooter } from "./storefront-footer";
+import { CatalogSearchForm } from "./marketplace/catalog-search-form";
 import { FreshMarketsMark } from "../brand/freshmarkets-mark";
 
 export { CategoryStrip } from "./marketplace/category-strip";
@@ -42,39 +43,16 @@ export function StorefrontHeader() {
           <FreshMarketsMark className="size-7" />
           freshmarkets
         </Link>
-        <form action="/" className="ml-auto hidden min-w-0 flex-1 md:block md:max-w-md">
-          <label className="sr-only" htmlFor="storefront-search">
-            Search groceries
-          </label>
-          <div className="flex h-10 items-center gap-2 rounded-full border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)] transition-colors focus-within:border-[var(--fm-primary-dark)]">
-            <Search className="size-4" aria-hidden="true" />
-            <input
-              id="storefront-search"
-              name="q"
-              placeholder="Search fresh groceries"
-              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--fm-text)] outline-none placeholder:text-[var(--fm-text-muted)]"
-            />
-          </div>
-        </form>
+        <CatalogSearchForm
+          id="storefront-search"
+          className="ml-auto hidden min-w-0 flex-1 md:block md:max-w-md"
+        />
         <DeliveryAddressDialog />
         <CustomerNotifications />
         <CartIndicator />
       </div>
       <div className="border-t border-[var(--fm-border)] px-4 py-2 md:hidden">
-        <form action="/">
-          <label className="sr-only" htmlFor="mobile-storefront-search">
-            Search groceries
-          </label>
-          <div className="flex h-10 items-center gap-2 rounded-full border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-3 text-[var(--fm-text-muted)]">
-            <Search className="size-4" aria-hidden="true" />
-            <input
-              id="mobile-storefront-search"
-              name="q"
-              placeholder="Search fresh groceries"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-            />
-          </div>
-        </form>
+        <CatalogSearchForm id="mobile-storefront-search" mobile />
       </div>
     </header>
   );

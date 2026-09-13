@@ -3,7 +3,7 @@
 import { ChevronDown, MapPin, Pencil } from "lucide-react";
 import Link from "next/link";
 import type { CustomerAddressView, RpcResult } from "@freshmarkets/contracts";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { authClient } from "../../../lib/auth/auth-client";
 import { refreshCartForLocation } from "../../../lib/storefront/cart-client";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,7 +13,11 @@ import {
   rememberBrowsingPoint,
 } from "../../../lib/storefront/browsing-location";
 import { useStorefrontRuntime } from "../storefront-runtime";
-import { AddressEditor, type ServiceabilitySelection } from "./address-editor";
+import type { ServiceabilitySelection } from "./address-editor";
+import { notifyQueryContextChanged } from "../../../lib/query/query-client";
+const AddressEditor = lazy(() =>
+  import("./address-editor").then((module) => ({ default: module.AddressEditor })),
+);
 
 const SESSION_SELECTION_KEY = "freshmarkets.delivery-location.v2";
 
@@ -117,7 +121,8 @@ export function DeliveryAddressDialog() {
       previous?.longitude !== next.coordinate.longitude
     ) {
       void refreshCartForLocation();
-      router.refresh();
+      notifyQueryContextChanged();
+      if (pathname !== "/") router.refresh();
     }
   }
 
@@ -169,14 +174,16 @@ export function DeliveryAddressDialog() {
             className="max-h-[inherit] overflow-y-auto rounded-xl bg-white shadow-[var(--fm-shadow-overlay)]"
           >
             <div className="p-4">
-              <AddressEditor
-                compact
-                compactHeading="Deliver to"
-                purpose="serviceability"
-                browserApiKey={googleMapsBrowserApiKey}
-                mapId={googleMapsMapId}
-                onServiceabilityConfirmed={chooseAddress}
-              />
+              <Suspense fallback={<p role="status">Loading address search…</p>}>
+                <AddressEditor
+                  compact
+                  compactHeading="Deliver to"
+                  purpose="serviceability"
+                  browserApiKey={googleMapsBrowserApiKey}
+                  mapId={googleMapsMapId}
+                  onServiceabilityConfirmed={chooseAddress}
+                />
+              </Suspense>
               <SavedDeliveryAddresses onChoose={chooseAddress} />
             </div>
           </section>

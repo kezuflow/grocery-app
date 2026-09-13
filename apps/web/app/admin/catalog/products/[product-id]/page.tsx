@@ -34,11 +34,24 @@ import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
+import {
+  adminProductReadIdentity,
+  isAdminProductRecordCurrent,
+  isAdminProductTransientCurrent,
+} from "@/lib/query/admin-products";
+import { resolveAdminProductScopeTarget } from "@/lib/admin/product-scope-target";
 
 type LoadState =
   | { phase: "loading" }
   | { phase: "error"; message: string; requestId: string | null }
-  | { phase: "ready"; product: AdminProductDetail; units: AdminUnitSummary[] };
+  | {
+      phase: "ready";
+      product: AdminProductDetail;
+      units: AdminUnitSummary[];
+      readIdentity: string;
+    };
 
 const BASE = "/api/admin/catalog";
 
@@ -50,6 +63,12 @@ type VariantCommandConfirmation = {
   expectedVersion: number;
   locationId: string;
   targetLabel: string;
+  readIdentity: string;
+};
+
+type OwnedPriceSelection = {
+  selection: ProductPriceSelection;
+  readIdentity: string;
 };
 
 export default function ProductDetailPage({
@@ -58,13 +77,14 @@ export default function ProductDetailPage({
   params: Promise<{ "product-id": string }>;
 }) {
   const { "product-id": productId } = use(params);
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const adminContext = useAdminContext();
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [imageBusy, setImageBusy] = useState(false);
   const loadRequest = useRef(0);
   const [reason, setReason] = useState("");
-  const [confirmingStatus, setConfirmingStatus] = useState(false);
+  const [confirmingStatus, setConfirmingStatus] = useState<string | null>(null);
   const statusTrigger = useRef<HTMLButtonElement>(null);
   const [newSku, setNewSku] = useState({
     code: "",
@@ -75,7 +95,8 @@ export default function ProductDetailPage({
     estimatedShippingWeightGrams: "",
   });
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
-  const [priceSelection, setPriceSelection] = useState<ProductPriceSelection | null>(null);
+  const [priceSelection, setPriceSelection] = useState<OwnedPriceSelection | null>(null);
+  const [priceRecoveryActive, setPriceRecoveryActive] = useState(false);
   const [priceRevision, setPriceRevision] = useState(0);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
@@ -96,6 +117,7 @@ export default function ProductDetailPage({
   const targetOptions = adminContext.state.phase === "ready" ? adminContext.state.scopes : [];
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
+  const productScopeTarget = resolveAdminProductScopeTarget(selectedScope);
   const selectedTarget =
     selectedScope?.kind === "LOCATION"
       ? targetOptions.find(
@@ -104,8 +126,9 @@ export default function ProductDetailPage({
       : null;
 
   const load = useCallback(() => {
-    if (imageBusy) return;
+    if (commandIntent.pending || priceRecoveryActive) return;
     if (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION") return;
+    const readIdentity = adminProductReadIdentity(productId, selectedScope);
     const requestNumber = loadRequest.current + 1;
     loadRequest.current = requestNumber;
     setState({ phase: "loading" });
@@ -153,6 +176,7 @@ export default function ProductDetailPage({
           phase: "ready",
           product: productPayload.value,
           units: unitsPayload.ok ? unitsPayload.value : [],
+          readIdentity,
         });
       } catch {
         if (loadRequest.current !== requestNumber) return;
@@ -163,9 +187,13 @@ export default function ProductDetailPage({
         });
       }
     })();
-  }, [productId, selectedScope, imageBusy]);
+  }, [productId, selectedScope, commandIntent.pending, priceRecoveryActive]);
 
   useEffect(() => load(), [load]);
+  const acceptedProductChange = () => {
+    void invalidateAdminProductQueries(queryClient, [productId]);
+    load();
+  };
 
   async function run(
     url: string,
@@ -176,7 +204,7 @@ export default function ProductDetailPage({
     skuCommand.setNotice(null);
     const applied = await command.run(url, url, body, method);
     setNotice(applied ? successMessage : null);
-    if (applied) load();
+    if (applied) acceptedProductChange();
     return applied;
   }
   async function addVariant(body?: unknown) {
@@ -187,8 +215,20 @@ export default function ProductDetailPage({
         : await skuCommand.run(`${BASE}/skus`, `${BASE}/skus`, body);
     if (applied) {
       setNotice("Variant added.");
-      load();
+      acceptedProductChange();
     }
+  }
+  if (!productScopeTarget && state.phase !== "ready") {
+    return (
+      <div className="p-5 sm:p-7">
+        <Alert variant="destructive">
+          <AlertTitle>Product scope required</AlertTitle>
+          <AlertDescription>
+            Select a supported Product scope before viewing this record.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
   }
   if (state.phase === "loading") {
     return (
@@ -218,6 +258,27 @@ export default function ProductDetailPage({
   }
 
   const { product, units } = state;
+  const recordCurrent = isAdminProductRecordCurrent(
+    state.readIdentity,
+    productId,
+    productScopeTarget,
+  );
+  const statusConfirmationCurrent = isAdminProductTransientCurrent(
+    recordCurrent,
+    confirmingStatus,
+    state.readIdentity,
+  );
+  const variantCommandCurrent = isAdminProductTransientCurrent(
+    recordCurrent,
+    variantCommand?.readIdentity ?? null,
+    state.readIdentity,
+  );
+  const priceSelectionCurrent = isAdminProductTransientCurrent(
+    recordCurrent,
+    priceSelection?.readIdentity ?? null,
+    state.readIdentity,
+  );
+  const retainPriceEditor = priceSelection !== null && priceRecoveryActive;
   const from = searchParams.get("from");
   const countedSizes = product.inventoryPool.stockTracking === "COUNTED_SIZES";
   const variantBaseUnitCode = countedSizes ? "PIECE" : product.inventoryPool.baseUnitCode;
@@ -298,7 +359,7 @@ export default function ProductDetailPage({
             onClick={async () => {
               if (await command.retry()) {
                 setNotice("Applied.");
-                load();
+                acceptedProductChange();
               }
             }}
           >
@@ -320,7 +381,7 @@ export default function ProductDetailPage({
               onBusyChange={setImageBusy}
               onComplete={() => {
                 setNotice("Images updated.");
-                load();
+                acceptedProductChange();
               }}
             />
           </fieldset>
@@ -364,7 +425,7 @@ export default function ProductDetailPage({
                     setNotice("A reason is required.");
                     return;
                   }
-                  setConfirmingStatus(true);
+                  setConfirmingStatus(state.readIdentity);
                 }}
               >
                 {product.status === "active" ? "Review deactivation" : "Review activation"}
@@ -379,7 +440,9 @@ export default function ProductDetailPage({
           key={`product-prices-${priceRevision}`}
           skus={product.skus}
           scopes={targetOptions}
-          onEditPrice={setPriceSelection}
+          onEditPrice={(selection) =>
+            setPriceSelection({ selection, readIdentity: state.readIdentity })
+          }
         />
       ) : null}
 
@@ -641,7 +704,7 @@ export default function ProductDetailPage({
                           disabled={commandIntent.pending}
                           onSaved={() => {
                             setNotice("Variant saved.");
-                            load();
+                            acceptedProductChange();
                           }}
                         />
                       </TableCell>
@@ -719,6 +782,7 @@ export default function ProductDetailPage({
                                     sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
                                   expectedVersion: sku.availabilityVersion ?? 0,
                                   targetLabel: selectedTarget.locationName,
+                                  readIdentity: state.readIdentity,
                                 });
                               }}
                             >
@@ -759,7 +823,7 @@ export default function ProductDetailPage({
         </ListPageSection>
       </div>
       <ConfirmCommandDialog
-        open={confirmingStatus}
+        open={statusConfirmationCurrent}
         title={product.status === "active" ? "Deactivate product?" : "Activate product?"}
         resource={`${product.name} · version ${product.version}`}
         scope="Global Catalog"
@@ -773,9 +837,10 @@ export default function ProductDetailPage({
         cancelLabel="Cancel"
         pending={commandIntent.pending}
         restoreFocusRef={statusTrigger}
-        onCancel={() => setConfirmingStatus(false)}
+        onCancel={() => setConfirmingStatus(null)}
         onConfirm={(confirmedReason) => {
-          setConfirmingStatus(false);
+          if (confirmingStatus !== state.readIdentity || !recordCurrent) return;
+          setConfirmingStatus(null);
           void run(`${BASE}/products/${encodeURIComponent(productId)}/status`, "POST", {
             status: product.status === "active" ? "inactive" : "active",
             reason: confirmedReason,
@@ -784,7 +849,7 @@ export default function ProductDetailPage({
         }}
       />
       <ConfirmCommandDialog
-        open={variantCommand !== null}
+        open={variantCommand !== null && variantCommandCurrent}
         title="Change selling status?"
         resource={variantCommand?.skuCode ?? "Sell variant"}
         scope={variantCommand?.targetLabel ?? "Catalog target"}
@@ -795,8 +860,13 @@ export default function ProductDetailPage({
         onCancel={() => setVariantCommand(null)}
         onConfirm={() => {
           const pendingCommand = variantCommand;
+          if (
+            !pendingCommand ||
+            pendingCommand.readIdentity !== state.readIdentity ||
+            !recordCurrent
+          )
+            return;
           setVariantCommand(null);
-          if (!pendingCommand) return;
           void run(
             `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/availability`,
             "PUT",
@@ -813,22 +883,42 @@ export default function ProductDetailPage({
   );
 
   return (
-    <AdminMasterDetailWorkspace
-      open={priceSelection !== null}
-      master={master}
-      detail={
-        priceSelection ? (
-          <LocationPriceEditor
-            key={`${priceSelection.skuId}:${priceSelection.locationId}`}
-            selection={priceSelection}
-            onClose={() => setPriceSelection(null)}
-            onSaved={() => setPriceRevision((revision) => revision + 1)}
-          />
-        ) : null
-      }
-      panelId="location-price-panel"
-      labelledBy="location-price-panel-title"
-      resizeLabel="Resize location price editor"
-    />
+    <>
+      {!recordCurrent ? (
+        <Alert variant="destructive" className="m-5 sm:m-7">
+          <AlertTitle>Product hidden while Admin scope changes</AlertTitle>
+          <AlertDescription>
+            Select a supported Product scope and wait for Core to authorize the current record.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <div
+        className={recordCurrent ? "contents" : undefined}
+        hidden={!recordCurrent}
+        inert={!recordCurrent}
+      >
+        <AdminMasterDetailWorkspace
+          open={priceSelection !== null && (priceSelectionCurrent || retainPriceEditor)}
+          master={master}
+          detail={
+            priceSelection && (priceSelectionCurrent || retainPriceEditor) ? (
+              <LocationPriceEditor
+                key={`${priceSelection.selection.skuId}:${priceSelection.selection.locationId}`}
+                selection={priceSelection.selection}
+                onRecoveryStateChange={setPriceRecoveryActive}
+                onClose={() => setPriceSelection(null)}
+                onSaved={() => {
+                  void invalidateAdminProductQueries(queryClient, [productId]);
+                  setPriceRevision((revision) => revision + 1);
+                }}
+              />
+            ) : null
+          }
+          panelId="location-price-panel"
+          labelledBy="location-price-panel-title"
+          resizeLabel="Resize location price editor"
+        />
+      </div>
+    </>
   );
 }

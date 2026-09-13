@@ -14,18 +14,25 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext } from "../../../../admin-context-provider";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
+import { adminProductReadIdentity, isAdminProductRecordCurrent } from "@/lib/query/admin-products";
+import { resolveAdminProductScopeTarget } from "@/lib/admin/product-scope-target";
 
 const EDIT_PRODUCT_FORM_ID = "edit-product-form";
 
 export default function EditProductPage() {
   const productId = useParams<{ "product-id": string }>()?.["product-id"];
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const intent = useCatalogCommand(adminProductSummarySchema);
   const adminContext = useAdminContext();
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
+  const productScopeTarget = resolveAdminProductScopeTarget(selectedScope);
   const [detail, setDetail] = useState<AdminProductDetail | null>(null);
+  const [detailIdentity, setDetailIdentity] = useState<string | null>(null);
   const categories = useCategoryOptions();
   const [value, setValue] = useState<ProductFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +43,7 @@ export default function EditProductPage() {
   const initialValue = useRef<ProductFormValue | null>(null);
   useEffect(() => {
     // Keep the complete image intent mounted while its outcome is unknown.
-    if (imageBusy) return;
+    if (imageBusy || intent.pending || intent.uncertain) return;
     if (!productId || (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION"))
       return;
     const scopeParams = new URLSearchParams(
@@ -53,6 +60,7 @@ export default function EditProductPage() {
     if (loadedScope.current !== scopeKey) {
       loadedScope.current = scopeKey;
       setDetail(null);
+      setDetailIdentity(null);
       setValue(null);
       editVersion.current = null;
       initialValue.current = null;
@@ -74,6 +82,7 @@ export default function EditProductPage() {
           return;
         }
         setDetail(product.value);
+        setDetailIdentity(adminProductReadIdentity(productId, selectedScope));
         editVersion.current ??= product.value.version;
         setValue((currentValue) => {
           if (currentValue) return currentValue;
@@ -100,7 +109,7 @@ export default function EditProductPage() {
     return () => {
       current = false;
     };
-  }, [productId, selectedScope, reload, imageBusy]);
+  }, [productId, selectedScope, reload, imageBusy, intent.pending, intent.uncertain]);
   async function save(retry = false) {
     if (!retry && (!detail || !value)) return;
     setError(null);
@@ -123,6 +132,7 @@ export default function EditProductPage() {
         );
         return;
       }
+      await invalidateAdminProductQueries(queryClient, [result.value.productId]);
       const from = searchParams.get("from");
       router.push(
         `/admin/catalog/products/${result.value.productId}?updated=1${from ? `&from=${encodeURIComponent(from)}` : ""}`,
@@ -154,107 +164,132 @@ export default function EditProductPage() {
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     );
+  if (!productScopeTarget && (!detail || !value))
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          Select a supported Product scope before editing this record.
+        </AlertDescription>
+      </Alert>
+    );
   if (!detail || !value) return <Skeleton className="h-80 w-full" />;
+  const recordCurrent = isAdminProductRecordCurrent(detailIdentity, productId, productScopeTarget);
   const from = searchParams.get("from");
   const detailHref = `/admin/catalog/products/${detail.productId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
   const dirty =
     initialValue.current !== null && JSON.stringify(value) !== JSON.stringify(initialValue.current);
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Edit product"
-        description="Update product details and images."
-        action={
-          dirty ? <AdminStatusPill status="unsaved" tone="warning" label="Unsaved changes" /> : null
-        }
-      />
-      {error || categories.error ? (
+    <>
+      {!recordCurrent ? (
         <Alert variant="destructive">
-          <AlertDescription>{error ?? categories.error}</AlertDescription>
+          <AlertDescription>
+            Product editing is hidden while Core authorizes the current Admin scope.
+          </AlertDescription>
         </Alert>
       ) : null}
       <div
-        role="navigation"
-        aria-label="Product editing sections"
-        className="border-b border-[var(--fm-border)]"
+        className={recordCurrent ? "space-y-5" : undefined}
+        hidden={!recordCurrent}
+        inert={!recordCurrent}
       >
-        <div className="flex gap-1">
-          <a
-            href="#product-details-editor"
-            className="border-b-2 border-[var(--fm-admin-accent)] px-3 py-2 text-sm font-semibold"
+        <PageHeader
+          title="Edit product"
+          description="Update product details and images."
+          action={
+            dirty ? (
+              <AdminStatusPill status="unsaved" tone="warning" label="Unsaved changes" />
+            ) : null
+          }
+        />
+        {error || categories.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error ?? categories.error}</AlertDescription>
+          </Alert>
+        ) : null}
+        <div
+          role="navigation"
+          aria-label="Product editing sections"
+          className="border-b border-[var(--fm-border)]"
+        >
+          <div className="flex gap-1">
+            <a
+              href="#product-details-editor"
+              className="border-b-2 border-[var(--fm-admin-accent)] px-3 py-2 text-sm font-semibold"
+            >
+              Product details
+            </a>
+            <a
+              href="#product-images-editor"
+              className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)]"
+            >
+              Images
+            </a>
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(22rem,0.82fr)_minmax(0,1.18fr)]">
+          <fieldset
+            id="product-details-editor"
+            className="min-w-0 scroll-mt-24"
+            disabled={intent.pending || intent.uncertain || imageBusy}
           >
-            Product details
-          </a>
-          <a
-            href="#product-images-editor"
-            className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)]"
+            <ProductForm
+              formId={EDIT_PRODUCT_FORM_ID}
+              hideSubmit
+              compact
+              value={value}
+              categories={categories.items}
+              currentCategoryName={detail.categoryName}
+              pending={intent.pending}
+              submitLabel="Save product"
+              onChange={setValue}
+              onSubmit={submit}
+            />
+          </fieldset>
+          <fieldset
+            id="product-images-editor"
+            className="min-w-0 scroll-mt-24"
+            disabled={intent.pending || intent.uncertain}
           >
-            Images
-          </a>
+            <ProductImagesEditor
+              productId={detail.productId}
+              version={detail.version}
+              images={detail.media}
+              onBusyChange={setImageBusy}
+              onComplete={() => {
+                // Only our own image write advances the version of the unsaved
+                // identity draft. A concurrent edit must still reject that draft.
+                if (editVersion.current === detail.version) editVersion.current++;
+                void invalidateAdminProductQueries(queryClient, [detail.productId]);
+                setReload((value) => value + 1);
+              }}
+            />
+          </fieldset>
+        </div>
+        {categories.hasMore || categories.error ? (
+          <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+            {categories.error ? "Retry categories" : "More categories"}
+          </Button>
+        ) : null}
+        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <Button type="button" variant="outline" onClick={() => router.push(detailHref)}>
+            Cancel
+          </Button>
+          {intent.uncertain ? (
+            <Button disabled={intent.pending} onClick={() => void save(true)}>
+              Retry saved product
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              form={EDIT_PRODUCT_FORM_ID}
+              className="fm-admin-reference-primary"
+              disabled={intent.pending || imageBusy || !dirty}
+            >
+              {intent.pending ? "Saving…" : "Save changes"}
+            </Button>
+          )}
         </div>
       </div>
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(22rem,0.82fr)_minmax(0,1.18fr)]">
-        <fieldset
-          id="product-details-editor"
-          className="min-w-0 scroll-mt-24"
-          disabled={intent.pending || intent.uncertain || imageBusy}
-        >
-          <ProductForm
-            formId={EDIT_PRODUCT_FORM_ID}
-            hideSubmit
-            compact
-            value={value}
-            categories={categories.items}
-            currentCategoryName={detail.categoryName}
-            pending={intent.pending}
-            submitLabel="Save product"
-            onChange={setValue}
-            onSubmit={submit}
-          />
-        </fieldset>
-        <fieldset
-          id="product-images-editor"
-          className="min-w-0 scroll-mt-24"
-          disabled={intent.pending || intent.uncertain}
-        >
-          <ProductImagesEditor
-            productId={detail.productId}
-            version={detail.version}
-            images={detail.media}
-            onBusyChange={setImageBusy}
-            onComplete={() => {
-              // Only our own image write advances the version of the unsaved
-              // identity draft. A concurrent edit must still reject that draft.
-              if (editVersion.current === detail.version) editVersion.current++;
-              setReload((value) => value + 1);
-            }}
-          />
-        </fieldset>
-      </div>
-      {categories.hasMore || categories.error ? (
-        <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
-          {categories.error ? "Retry categories" : "More categories"}
-        </Button>
-      ) : null}
-      <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <Button type="button" variant="outline" onClick={() => router.push(detailHref)}>
-          Cancel
-        </Button>
-        {intent.uncertain ? (
-          <Button disabled={intent.pending} onClick={() => void save(true)}>
-            Retry saved product
-          </Button>
-        ) : (
-          <Button
-            type="submit"
-            form={EDIT_PRODUCT_FORM_ID}
-            className="fm-admin-reference-primary"
-            disabled={intent.pending || imageBusy || !dirty}
-          >
-            {intent.pending ? "Saving…" : "Save changes"}
-          </Button>
-        )}
-      </div>
-    </div>
+    </>
   );
 }

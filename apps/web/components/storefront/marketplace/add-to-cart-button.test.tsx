@@ -15,6 +15,13 @@ vi.mock("../../../lib/storefront/cart-client", () => ({
   addToCart: vi.fn().mockResolvedValue({ ok: true }),
   announceToast: vi.fn(),
 }));
+vi.mock("../../../lib/query/cart", () => ({
+  useCartQuery: () => ({ cart: cache.view }),
+  useAcceptCart: () => (view: CartView | null) => {
+    cache.view = view;
+  },
+  useInvalidateCheckoutReads: () => async () => undefined,
+}));
 let root: Root | undefined;
 afterEach(() => {
   act(() => root?.unmount());

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { notifyQuerySessionChanged } from "../../../lib/query/query-client";
 
 export default function LogoutPage() {
   const [status, setStatus] = useState("");
@@ -18,6 +19,8 @@ export default function LogoutPage() {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Sign out failed");
+      notifyQuerySessionChanged();
+      window.location.assign("/");
       setComplete(true);
       setStatus("You are signed out.");
     } catch {

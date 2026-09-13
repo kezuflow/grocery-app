@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Minus, Plus, ShoppingBasket, X } from "lucide-react";
 import type { CartView } from "@freshmarkets/contracts";
 import { ProductMedia } from "../product-media";
-import {
-  CART_DRAWER_REQUEST_EVENT,
-  CART_CHANGED_EVENT,
-  addToCart,
-  fetchCart,
-  cartLoadError,
-} from "../../../lib/storefront/cart-client";
+import { CART_DRAWER_REQUEST_EVENT, addToCart } from "../../../lib/storefront/cart-client";
+import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
 import { OrderSummary } from "./order-summary";
 import { CheckoutAuthDialog } from "./checkout-auth-dialog";
 import {
@@ -25,29 +21,34 @@ const money = (value: number, currency: string) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
 
 export function CartDrawer() {
+  const pathname = usePathname();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [cart, setCart] = useState<CartView | null>(null);
-  const [error, setError] = useState("");
+  const cartQuery = useCartQuery({ enabled: open });
+  const cart = cartQuery.cart;
+  const loading = open && cartQuery.isPending;
+  const [commandError, setCommandError] = useState("");
+  const error =
+    commandError ||
+    (cartQuery.isError ? "Your cart could not be loaded right now." : cartQuery.cartError);
+  const acceptCart = useAcceptCart();
+  const invalidateCheckout = useInvalidateCheckoutReads();
   const [authOpen, setAuthOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState("");
   const checkoutAfterClose = useRef(false);
+  useEffect(() => {
+    setOpen(false);
+    setAuthOpen(false);
+    setConfirmingClear(false);
+  }, [pathname]);
 
   useEffect(() => {
     const requestOpen = () => {
       setOpen(true);
-      setLoading(true);
       setClearError("");
-      void fetchCart()
-        .then((next) => {
-          setCart(next);
-          setError(cartLoadError());
-        })
-        .catch(() => setError("Your cart could not be loaded right now."))
-        .finally(() => setLoading(false));
+      setCommandError("");
     };
     window.addEventListener(CART_DRAWER_REQUEST_EVENT, requestOpen);
     return () => window.removeEventListener(CART_DRAWER_REQUEST_EVENT, requestOpen);
@@ -97,11 +98,12 @@ export function CartDrawer() {
       currency: cart?.currency ?? "PHP",
     });
     if (!result.ok) {
-      setError(result.message);
+      setCommandError(result.message);
       return;
     }
-    setCart(result.view);
-    setError("");
+    acceptCart(result.view);
+    setCommandError("");
+    await invalidateCheckout();
   }
 
   async function clearCart() {
@@ -129,7 +131,7 @@ export function CartDrawer() {
         }
         removed++;
         latest = result.view;
-        setCart(result.view);
+        acceptCart(result.view);
       }
       if (latest.items.length > 0) {
         setClearError(
@@ -138,6 +140,7 @@ export function CartDrawer() {
         return;
       }
       setConfirmingClear(false);
+      await invalidateCheckout();
     } catch {
       setClearError(
         removed > 0
@@ -148,16 +151,6 @@ export function CartDrawer() {
       setClearing(false);
     }
   }
-
-  useEffect(() => {
-    const changed = (event: Event) => {
-      const { view } = (event as CustomEvent<{ view: CartView | null }>).detail;
-      setCart(view);
-      setError(cartLoadError());
-    };
-    window.addEventListener(CART_CHANGED_EVENT, changed);
-    return () => window.removeEventListener(CART_CHANGED_EVENT, changed);
-  }, []);
 
   const guest = cart?.id === "guest-cart";
   const hasItems = Boolean(cart?.items.length);
@@ -236,7 +229,7 @@ export function CartDrawer() {
                 <button
                   type="button"
                   className="ml-3 min-h-11 underline"
-                  onClick={() => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT))}
+                  onClick={() => void cartQuery.refetch()}
                 >
                   Retry loading cart
                 </button>

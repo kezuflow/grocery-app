@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
 import { JSDOM } from "jsdom";
 import type { CustomerAddressView } from "@freshmarkets/contracts";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { createQueryClient, queryKeys } from "@/lib/query/query-client";
 
 const { addressEditorPropsMock, fetchCartMock } = vi.hoisted(() => ({
   addressEditorPropsMock: vi.fn(),
@@ -13,7 +15,11 @@ vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
     createElement("a", { href }, children),
 }));
-vi.mock("@/lib/storefront/cart-client", () => ({ fetchCart: fetchCartMock }));
+vi.mock("@/lib/storefront/cart-client", () => ({
+  fetchCart: fetchCartMock,
+  cartLoadError: () => "",
+  CART_CHANGED_EVENT: "fm:cart-changed",
+}));
 vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));
@@ -39,7 +45,13 @@ vi.mock("@/components/storefront/address/address-editor", () => ({
   },
 }));
 
-import { CheckoutClient } from "@/app/checkout/checkout-client";
+import { CheckoutClient } from "@/app/(storefront)/checkout/checkout-client";
+
+const checkout = (client: QueryClient = createQueryClient()) => (
+  <QueryClientProvider client={client}>
+    <CheckoutClient />
+  </QueryClientProvider>
+);
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "https://freshmarkets.ph/checkout",
@@ -338,7 +350,7 @@ describe("CheckoutClient delivery inputs", () => {
       }),
     );
 
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -364,7 +376,7 @@ describe("CheckoutClient delivery inputs", () => {
           quoteKeys.push(String(new Headers(init?.headers).get("idempotency-key"))),
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
 
     choose(container, "Home");
@@ -392,7 +404,7 @@ describe("CheckoutClient delivery inputs", () => {
           quoteKeys.push(String(new Headers(init?.headers).get("idempotency-key"))),
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
 
     choose(container, "Home");
@@ -421,7 +433,7 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
 
     choose(container, "Home");
@@ -443,7 +455,7 @@ describe("CheckoutClient delivery inputs", () => {
     fetchCartMock.mockReturnValue(pendingCart.promise);
     const base = successfulFetch();
     vi.stubGlobal("fetch", base);
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -452,9 +464,11 @@ describe("CheckoutClient delivery inputs", () => {
     ).toHaveLength(0);
     await act(async () => pendingCart.resolve(cart));
     await flush();
-    expect(
-      base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
-    ).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(
+        base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
+      ).toHaveLength(1),
+    );
     click(container, "Instant delivery");
     await flush();
     expect(container.textContent).toContain("Payment review");
@@ -483,7 +497,7 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -513,7 +527,7 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -541,7 +555,7 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -569,7 +583,7 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
     await flush();
@@ -599,7 +613,7 @@ describe("CheckoutClient delivery inputs", () => {
         onQuote: (init) => quoteBodies.push(JSON.parse(String(init?.body))),
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    act(() => root.render(checkout()));
     await flush();
 
     choose(container, "Home");
@@ -645,13 +659,17 @@ describe("CheckoutClient delivery inputs", () => {
         return base(url, init);
       }),
     );
-    act(() => root.render(<CheckoutClient />));
+    const client = createQueryClient();
+    const accountKey = queryKeys.private(0, "account-addresses");
+    client.setQueryData(accountKey, { addresses: [home], profile: { defaultAddressId: home.id } });
+    act(() => root.render(checkout(client)));
     await flush();
     click(container, "Add delivery address");
     expect(addressEditorPropsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ multiStep: true }),
     );
     click(container, "Complete checkout address save");
+    await vi.waitFor(() => expect(client.getQueryState(accountKey)?.isInvalidated).toBe(true));
 
     refreshed.resolve(addressesResponse([{ ...home, id: "address-new", label: "Current" }]));
     await flush();

@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 import { ProductDraftPreview } from "@/components/admin/product-draft-preview";
 import { X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
 
 const CREATE_PRODUCT_FORM_ID = "create-product-form";
 
@@ -81,6 +83,7 @@ export function NewProductWorkspace({
   embedded?: boolean;
 } = {}) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const intent = useAdminCommandIntent();
   const savedSetup = useRef<ProductFormValue | null>(null);
   const [recovering, setRecovering] = useState(false);
@@ -297,6 +300,7 @@ export function NewProductWorkspace({
         setError(`${result.error.message} Request reference: ${result.error.requestId}`);
         return;
       }
+      await invalidateAdminProductQueries(queryClient, [result.value.productId]);
       if (onCreated) onCreated(result.value);
       else router.push(`/admin/catalog/products/${result.value.productId}?created=1`);
     } catch (caught) {

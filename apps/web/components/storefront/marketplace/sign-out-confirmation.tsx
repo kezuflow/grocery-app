@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { LogOut } from "lucide-react";
 import { authClient } from "../../../lib/auth/auth-client";
+import { notifyQuerySessionChanged } from "../../../lib/query/query-client";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -29,6 +30,7 @@ export function SignOutConfirmation({
     try {
       const result = await authClient.signOut();
       if (result.error) throw new Error("Sign out failed");
+      notifyQuerySessionChanged();
       window.location.assign("/");
     } catch {
       setError("Couldn’t sign out. Please try again.");

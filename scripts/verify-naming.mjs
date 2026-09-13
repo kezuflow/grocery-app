@@ -54,6 +54,14 @@ const datedSuperpowersPlanPattern =
   /^docs\/superpowers\/plans\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 const violations = [];
 
+export function isAppRouteGroupDirectory(relativePath) {
+  const normalized = relativePath.split(sep).join("/");
+  return (
+    normalized.startsWith("apps/web/app/") &&
+    /^\([a-z0-9]+(?:-[a-z0-9]+)*\)$/.test(normalized.slice(normalized.lastIndexOf("/") + 1))
+  );
+}
+
 export function isDocumentationPathCompliant(relativePath) {
   const normalizedPath = relativePath.split(sep).join("/");
   const filename = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
@@ -75,7 +83,8 @@ async function walk(directory) {
     if (ignoredDirectories.has(entry.name)) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      const isRouteDirectory = routeDirectoryPattern.test(entry.name);
+      const isRouteDirectory =
+        routeDirectoryPattern.test(entry.name) || isAppRouteGroupDirectory(display(path));
       const isKebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name);
       const isKnownDirectory = allowedDirectoryNames.has(entry.name);
       if (!isRouteDirectory && !isKebab && !isKnownDirectory) {

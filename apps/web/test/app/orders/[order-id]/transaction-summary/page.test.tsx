@@ -7,7 +7,7 @@ vi.mock("next/link", () => ({ default: ({ children }: { children: ReactNode }) =
 vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));
-import TransactionSummaryPage from "@/app/orders/[order-id]/transaction-summary/page";
+import TransactionSummaryPage from "@/app/(storefront)/orders/[order-id]/transaction-summary/page";
 
 describe("TransactionSummaryPage", () => {
   it("renders a bounded loading state before the owned summary arrives", () => {

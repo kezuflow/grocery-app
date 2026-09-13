@@ -10,6 +10,7 @@ import {
 const mocks = vi.hoisted(() => ({
   pathname: "/",
   refresh: vi.fn(),
+  contextChanged: vi.fn(),
   cart: vi.fn(),
   session: {
     data: null as { user: { id: string } } | null,
@@ -29,6 +30,9 @@ vi.mock("../storefront-runtime", () => ({
   useStorefrontRuntime: () => ({ googleMapsBrowserApiKey: "", googleMapsMapId: "" }),
 }));
 vi.mock("../../../lib/storefront/cart-client", () => ({ refreshCartForLocation: mocks.cart }));
+vi.mock("../../../lib/query/query-client", () => ({
+  notifyQueryContextChanged: mocks.contextChanged,
+}));
 // This boundary receives an already-confirmed selection. Provider confirmation
 // is tested in AddressEditor; the dialog consumes only the display and point.
 vi.mock("./address-editor", () => ({
@@ -60,6 +64,7 @@ beforeEach(() => {
   mocks.session.isPending = false;
   mocks.session.error = null;
   mocks.refresh.mockClear();
+  mocks.contextChanged.mockClear();
   mocks.cart.mockClear();
   localStorage.clear();
   sessionStorage.clear();
@@ -108,7 +113,8 @@ it.each([true, false])("refreshes only for a changed point (same=%s)", async (sa
       .find((button) => button.textContent === "Confirm test choice")
       ?.click(),
   );
-  expect(mocks.refresh).toHaveBeenCalledTimes(same ? 0 : 1);
+  expect(mocks.refresh).not.toHaveBeenCalled();
+  expect(mocks.contextChanged).toHaveBeenCalledTimes(same ? 0 : 1);
   expect(mocks.cart).toHaveBeenCalledTimes(same ? 0 : 1);
   expect(document.querySelector("dialog")).toBeNull();
 });
@@ -209,7 +215,8 @@ it.each(["success", "unavailable", "failure", "dismiss"])(
     );
     if (outcome === "success") {
       expect(document.querySelector("dialog")).toBeNull();
-      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      expect(mocks.contextChanged).toHaveBeenCalledTimes(1);
       expect(mocks.cart).toHaveBeenCalledTimes(1);
       expect(
         JSON.parse(localStorage.getItem("freshmarkets.delivery-location.v2") ?? "null")

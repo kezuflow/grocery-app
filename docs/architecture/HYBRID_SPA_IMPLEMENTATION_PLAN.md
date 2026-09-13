@@ -3,9 +3,10 @@
 ## Hybrid SPA design and execution plan
 
 Owner request: 2026-09-14. Planning task: **HYBRID-SPA-PLAN-1**.
-Status: plan delivered; implementation slices **HSPA-0 through HSPA-6 are not started**.
-The owner selected hybrid SPA as the desired direction. This document defines implementation work;
-it does not claim that the work, delegation, or a new deployment has occurred.
+Status: owner-authorized execution in progress. HSPA-0 through HSPA-5 are implemented;
+HSPA-6 integrated verification, staging rollout and matched measurements are in progress.
+The active checkpoint records executed evidence and remaining acceptance gaps; implementation
+status alone does not establish runtime or performance acceptance.
 
 This is a focused Web architecture change alongside
 [commerce Phase 7](../product/COMMERCE_ALIGNMENT_E2E_PLAN.md).

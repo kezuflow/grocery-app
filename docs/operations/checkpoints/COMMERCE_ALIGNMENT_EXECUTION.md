@@ -1,6 +1,167 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — HYBRID-SPA-PLAN-1 (2026-09-14)
+## Current owner request — HSPA-0 through HSPA-6 (2026-09-14)
+
+Plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, ordered phases HSPA-0
+through HSPA-6. Owner authorizes scoped Sol/low implementation delegation, Astra/medium
+orchestration/review, commits/push to main and staging deployment, followed by matched measurements.
+No production deployment, real provider transactions, migration or personal settings changes.
+Acceptance: SSR entry pages, persistent vinext shells, client navigation, scoped shared query cache,
+targeted invalidation, unchanged Core authority, integrated runtime/browser checks and measured results.
+
+Start: main at c9775b1bfca0a549bf9f2a939a5b96bdda494182. Preserve the existing changes in
+location-address-map, location-schedule-workspace, locations-workspace and its tests,
+address-predictions, location-schedule.spec, untracked time-of-day-input files and local logs.
+These files are excluded from hybrid SPA ownership and staging deployment.
+
+Working-tree milestone: HSPA-0 pointer fix/inventory and HSPA-1 persistent route-group/query
+foundation are implemented. HSPA-2 uses SSR bootstrap with native-history JSON catalog navigation,
+infinite-page caching and aborts. HSPA-3 shares accepted cart DTOs and targeted address/checkout
+reads; only safe address/promotion drafts survive navigation. HSPA-4 migrates Admin Products
+list/preview/filter/pagination and accepted-write invalidation across affected scopes. HSPA-5 adds
+bounded responsive banner WebP transformations through Web Images, a 96px brand WebP (4,924 bytes
+vs 89,198-byte source) and lazy address editor code. No Core business/schema changes.
+
+Astra review corrections applied: close persistent drawer on pathname change; gate/clear private
+state and reload on resolved identity replacement to replace private RSC props; prevent SSR bootstrap
+reuse after any epoch change, including remount; hide Admin transient selections on scope changes;
+invalidate product queries after standalone writes; force address refresh after accepted commands;
+return typed rejection for a queued cart command superseded by a session/location change.
+
+Executed local working-tree checks: Web typecheck; vinext check 16 supported / zero issues;
+initial Web full suite 133 files / 550 tests before subsequent data work; Web production build passed.
+HSPA-3 final focused run passed 6 files / 35 tests; HSPA-4 focused 5/5; public image cache/brand/banner
+focused 10/10. These are local tests, not staging/provider acceptance. Images binding types regenerated.
+The finalized baseline harness collects five desktop and five mobile samples on existing staging;
+no architecture performance claim or new deployment yet. Earlier invalid keyboard probes were
+rejected because the first-visit modal held focus; the harness now uses the existing dismiss preference
+and confirms focus. DevTools profile remains occupied; isolated Chrome does not disturb it.
+
+HSPA-6 integrated verification is active. The owner approved localhost for authenticated
+measurements. Five catalog and five Admin baseline samples were captured against the old Web
+revision fc763e7 using isolated test Core/D1 at localhost:3100; no real provider transactions.
+A separate owner task committed a63b5b9c and deployed Core 730f486c-8188-4e20-bb3e-01183d99020a
+while this work was running. Preserve that configuration and its evidence below; this task will
+deploy Web only. Refresh the public baseline with that Core version held constant.
+
+Root pnpm check is blocked by the unrelated staging-provider binding harness expecting disabled
+selectors after a63b5b9c enabled them. An isolated intended-change checkout based on c9775b1 excludes
+that change and all pre-existing location edits. Its Web suite passes 137 files / 557 tests; Core
+aggregate passed 205 files / 1,665 tests. Both generated binding freshness checks pass, vinext reports 16 supported /
+zero issues, and worker-readiness configuration passes. Final review found and fixed the reverse
+checkout-address-save -> account-addresses invalidation; its 12 focused tests and typecheck pass.
+Final integrated Web validation: 137 files / 560 tests, typecheck and build pass, including
+concurrent adca01ad checkout picker interface. All 17 selected browser cases passed across corrected
+runs (5 hybrid, 10 Admin catalog, 2 lost-response checkout releases). Test setup explicitly provides
+local dispatch hours; selectors now target real buttons/edit panels and persisted media/price state.
+Astra-reviewed scope gates preserve uncertain image and price command recovery while hiding old
+records, permissions, selections and portaled confirmations. Core c9775b1b was pinned for the final
+localhost comparison: ready-state catalog median 162 -> 150 ms; Admin preview 96 -> 168 ms. The
+catalog 30% target is unmet and Admin latency regressed. An earlier immediate-post-load run showed
+310 -> 900 ms catalog interaction and remains a hydration/readiness concern. Public baseline has five
+valid samples per device with Core 730f486c held constant; one failed keyboard attempt is recorded.
+See docs/architecture/HYBRID_SPA_RESULTS.md for method and acceptance limits.
+Next action: commit/push intended integrated files on current main, build clean staging Web, verify
+resolved bindings, deploy Web only, then capture matched public after metrics and actual Images health.
+
+
+## Concurrent owner request — CHECKOUT-SCHEDULED-FEE-REFRESH-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. After confirming Lalamove v3 quotation validity is five minutes and each response supplies
+the authoritative `expiresAt`, the owner requests that the sole Scheduled option quote automatically,
+display the fee instead of `Calculated on review`, and refresh after four minutes thirty seconds.
+Acceptance: auto-quote only the single eligible Scheduled option; display its accepted fee; refresh
+the complete Core quote at 4:30 or thirty seconds before `expiresAt` when earlier; retain current
+address/cart/option identity, safe abandonment, idempotency, payment blocking and explicit recovery.
+
+Commit `adca01ad` implements the timer and display in the tracked pre-HSPA checkout route, picker,
+tests, PRODUCT and DESIGN and is pushed to `origin/main`. The timer stops before payment, unmount and
+invalidation; refresh abandons the prior attempt before requesting a replacement; failed abandonment
+does not enter a retry loop. The concurrent untracked Hybrid SPA route carries the equivalent checkout
+client behavior in the shared working tree and was not included in this scoped commit. Clean-worktree
+Web typecheck, focused checkout/picker tests (2 files / 12 tests), lint, naming, architecture checks
+and production build passed. Build warnings only report intentionally unavailable local secrets.
+The owner then explicitly authorized Web staging deployment. A fresh isolated worktree at
+`adca01ad` installed the frozen lockfile, rebuilt with `CLOUDFLARE_ENV=staging`, and confirmed the
+generated `freshmarkets-web-staging` worker, `https://freshmarkets.ph` origin and
+`freshmarkets-core-staging#CoreEntrypoint` binding. The generated-config Wrangler dry run passed.
+Web staging version `942c3968-67ed-4c90-8096-8557da94ac85` deployed to the workers.dev diagnostic
+host and `freshmarkets.ph` custom domain. Version inspection confirms the staging origin/Core binding
+and existing secret names without exposing values. Public homepage, `/health` and `/api/core-health`
+returned HTTP 200. The deployed checkout asset contains the formatted-fee states and minified
+270,000/30,000 ms refresh constants. No live customer checkout, payment or courier quotation was
+performed. Next action: verify the authenticated address-click/automatic-fee flow in staging and
+ensure the concurrent Hybrid SPA commit retains equivalent new-route logic.
+
+## Concurrent owner request — CHECKOUT-DELIVERY-QUOTE-REUSE-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner reports that editing produce quantity in Order summary requests another slow
+Lalamove quote, confirms that address changes must still re-quote, and authorizes implementation.
+Acceptance: every cart change still creates a fresh Core-owned checkout quote and rechecks current
+cart version, products, exact-location prices, availability, promotions, inventory admission and
+totals; unchanged provider/service, fulfillment origin, saved address and pickup window reuse the
+same unexpired provider quotation; changed route inputs or expiry call the provider again. Preserve
+the owner-corrected fixed 20,000 g courier envelope; item shipping metadata is not weight admission.
+
+Working-tree implementation adds a SHA-256 route fingerprint to new provider fee snapshots. The
+fingerprint covers the exact provider request plus provider code and saved-address identity but
+intentionally excludes cart contents. Core searches only quotation evidence for the same customer,
+cart and address, validates all reused commercial fields, and requires more than 30 seconds of
+remaining provider validity. Old snapshots without a fingerprint fail closed to one provider call.
+Near-expiry payment revalidation explicitly bypasses reuse and asks the provider again. Both Instant
+and Scheduled quote creation use the shared boundary; no Web cache authority or schema migration was
+added. `docs/product/PRODUCT.md` records the approved rule.
+
+Local working-tree evidence: Core typecheck passed. The full checkout integration file passed 23/23;
+focused Scheduled fixed-envelope/cart-change, Instant cart-change/address-change, and near-expiry
+replacement tests passed 3/3. These prove a new merchandise total with one provider call, identical
+quotation IDs across cart-only changes, a second call after address change, and forced near-expiry
+revalidation. The aggregate Core test process later terminated on Windows with exit 3221226505 after
+roughly three minutes and no Vitest failure report; this is not a test pass. Bounded fulfillment-option
+and payment-reaction integration suites then passed 2 files / 40 tests. Core lint, dry-run build,
+architecture/readiness checks and naming validation passed. Commit `b76165ae` contains only the five
+Core files and PRODUCT supplement and is pushed to `origin/main`; concurrent Hybrid SPA files and this
+shared checkpoint were not staged. Implementation is complete at the committed-code level. Next
+action: deploy Core staging and verify a staged cart-only change versus address change if the owner
+explicitly authorizes deployment; provider/runtime acceptance has not been claimed for this revision.
+
+## Concurrent owner request — STAGING-LALAMOVE-ACTIVATION-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence; provider procedure: `docs/operations/LALAMOVE_SETUP_RUNBOOK.md`. Owner reports Scheduled
+checkout showing `fee unavailable`, authorizes copying the verified non-secret local Lalamove
+configuration into the Core staging environment, then explicitly authorizes staging deployment.
+Acceptance: deploy only committed Core configuration, preserve the active Hybrid SPA working tree,
+verify exact deployed bindings and runtime readiness, and do not create a courier order.
+
+Root cause: deployed Core version `b21e15d5-c3a9-464a-a3c1-b34dfe31c599` had both delivery selectors
+disabled and blank market/language/service-type variables. The credentials were bound, but Core
+therefore composed no Scheduled delivery partner and correctly returned `FEE_UNAVAILABLE` before
+any provider call. Commit `a63b5b9c` copies only the non-secret `.dev.vars` values into
+`env.staging.vars`: ordered provider `lalamove`, market `PH`, language `en_PH` and the previously
+verified Cebu service key. Credential values remain Cloudflare secrets and were not logged or committed.
+
+Deployment used an isolated clean worktree at `a63b5b9c`; the unrelated Hybrid SPA working files were
+not included. Core typecheck, the runtime-provider and fulfillment-option suites (2 files / 8 tests),
+and a staging Wrangler dry run passed. Core staging version
+`730f486c-8188-4e20-bb3e-01183d99020a` was deployed. Cloudflare version inspection confirms the two
+credential secret names and the intended non-secret delivery bindings. Direct `/health`, `/ready`,
+and `https://freshmarkets.ph/api/core-health` returned HTTP 200. The pre-existing Wrangler warning
+about `INITIAL_GLOBAL_ADMIN_EMAIL` not inheriting into staging remains unrelated. No D1 migration,
+customer checkout, courier order or payment was performed during deployment. Follow-up provider
+latency measurement used the credential-safe synthetic Cebu smoke path, not the saved customer
+address. Three successful sandbox quotations returned PHP 40.00 with two stops and no special
+requests. Provider response-header times were 782.5 ms, 445.8 ms and 425.6 ms (median 445.8 ms,
+mean 551.3 ms); complete in-process times were 790.4 ms, 453.3 ms and 433.5 ms, leaving about 8 ms
+for local file/signing/body-processing overhead. No provider order was created. The customer quote
+request additionally revalidates fulfillment options and performs authoritative Core/D1 pricing and
+commit work, so these direct samples do not establish the full browser-to-Core duration. Next action:
+capture one staged checkout request plus its `core.rpc.completed` and `delivery_provider` durations
+to separate Web/Core/D1 latency from the approximately 0.4–0.8 second provider call.
+
+## Prior owner request — HYBRID-SPA-PLAN-1 (2026-09-14)
 
 Plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, phase **Hybrid SPA design and
 execution plan**. The owner redirects the staging/performance investigation to a concrete hybrid SPA

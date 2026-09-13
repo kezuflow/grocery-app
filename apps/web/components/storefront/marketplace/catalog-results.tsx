@@ -1,104 +1,117 @@
 "use client";
 
-import { readJson } from "../../../lib/http/read-deadline";
-import { useCallback, useState } from "react";
-import type { CatalogProduct, CatalogSearchPage } from "@freshmarkets/contracts";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQueryEpoch } from "../../../components/query-provider";
 import {
-  toPresentationProducts,
-  type PresentationProduct,
-} from "../../../lib/storefront/catalog-presentation";
-import { ProductGrid } from "../catalog-components";
-import {
-  appendUniqueProducts,
-  loadMoreAnnouncement,
-} from "../../../lib/storefront/storefront-pagination";
+  fetchCatalogPage,
+  type CatalogPresentationPage,
+  type CatalogSelection,
+} from "../../../lib/query/catalog";
+import { queryKeys } from "../../../lib/query/query-client";
+import { appendUniqueProducts } from "../../../lib/storefront/storefront-pagination";
+import { ProductGrid, ProductGridEmpty } from "../catalog-components";
+import { QuickViewProvider } from "./quick-view-provider";
 
-/**
- * Progressive category/search result list. The server renders the first page
- * through Core's paginated search; this boundary appends cursor pages from
- * /api/catalog without ever client-filtering a truncated global list.
- */
 export function CatalogResults({
-  initialItems,
-  initialCursor,
-  query = "",
-  categorySlug,
+  selection,
+  initialPage,
 }: {
-  initialItems: ReadonlyArray<PresentationProduct>;
-  initialCursor: string | null;
-  query?: string;
-  categorySlug?: string;
+  selection: CatalogSelection;
+  initialPage?: CatalogPresentationPage;
 }) {
-  const [items, setItems] = useState<PresentationProduct[]>([...initialItems]);
-  const [cursor, setCursor] = useState<string | null>(initialCursor);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [announcement, setAnnouncement] = useState("");
+  const epoch = useQueryEpoch();
+  const result = useInfiniteQuery({
+    queryKey: queryKeys.catalog(epoch, selection.query, selection.category),
+    queryFn: ({ pageParam, signal }) =>
+      fetchCatalogPage({ ...selection, cursor: pageParam, signal }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    initialData:
+      initialPage && epoch === 0 ? { pages: [initialPage], pageParams: [null] } : undefined,
+  });
+  const items = useMemo(
+    () =>
+      result.data?.pages.reduce(
+        (current, page) => appendUniqueProducts(current, page.items),
+        [] as CatalogPresentationPage["items"],
+      ) ?? [],
+    [result.data],
+  );
 
-  const loadMore = useCallback(async () => {
-    if (!cursor || loading) return;
-    setLoading(true);
-    setError(false);
-    try {
-      const params = new URLSearchParams();
-      if (query.trim() !== "") params.set("q", query.trim());
-      if (categorySlug) params.set("category", categorySlug);
-      params.set("cursor", cursor);
-      params.set("limit", "24");
-      const payload = await readJson<{ ok: true; value: CatalogSearchPage } | { ok: false }>(
-        `/api/catalog?${params.toString()}`,
-      );
-      if (!payload.ok) throw new Error("catalog request failed");
-      const converted = toPresentationProducts(
-        payload.value.items as ReadonlyArray<CatalogProduct>,
-      );
-      setItems((current) => appendUniqueProducts(current, converted));
-      setAnnouncement(
-        loadMoreAnnouncement({
-          added: converted.length,
-          totalShown: items.length + converted.length,
-        }),
-      );
-      setCursor(payload.value.nextCursor);
-    } catch {
-      setError(true);
-      setAnnouncement("Could not load more products. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [cursor, loading, query, categorySlug, items.length]);
+  if (result.isPending)
+    return (
+      <p role="status" className="py-16 text-center text-sm text-[var(--fm-text-muted)]">
+        Loading groceries…
+      </p>
+    );
+  if (result.isError && !result.data)
+    return (
+      <div role="alert" className="border-y border-[var(--fm-border)] py-12 text-center">
+        <p className="text-sm text-[var(--fm-text-muted)]">Groceries could not be loaded.</p>
+        <button
+          type="button"
+          onClick={() => void result.refetch()}
+          className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)]"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  if (items.length === 0) return <ProductGridEmpty query={selection.query} />;
 
   return (
-    <div>
-      <ProductGrid products={items} />
-      <p role="status" aria-live="polite" className="sr-only">
-        {items.length} products shown.
-        {announcement ? ` ${announcement}` : ""}
-      </p>
-      <p className="mt-6 text-center text-xs text-[var(--fm-text-muted)]" aria-hidden="true">
-        Showing {items.length} {items.length === 1 ? "product" : "products"}
-      </p>
-      <div className="mt-4 flex justify-center">
-        {error ? (
-          <button
-            type="button"
-            onClick={() => void loadMore()}
-            className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)]"
-          >
-            Try again
-          </button>
-        ) : cursor ? (
-          <button
-            type="button"
-            onClick={() => void loadMore()}
-            disabled={loading}
-            data-testid="load-more"
-            className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-6 text-sm font-bold text-white disabled:opacity-60"
-          >
-            {loading ? "Loading…" : "Load more groceries"}
-          </button>
+    <QuickViewProvider products={items}>
+      <div>
+        {result.isFetching && !result.isFetchingNextPage ? (
+          <p role="status" className="mb-3 text-sm text-[var(--fm-text-muted)]">
+            Refreshing groceries…
+          </p>
         ) : null}
+        {result.isError ? (
+          <div
+            role="alert"
+            className="mb-4 flex items-center justify-between gap-3 text-sm text-[var(--fm-danger)]"
+          >
+            <span>Could not refresh groceries. Showing the previous results.</span>
+            <button
+              type="button"
+              onClick={() => void result.refetch()}
+              className="min-h-11 px-3 font-semibold underline"
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+        <ProductGrid products={items} />
+        <p role="status" aria-live="polite" className="sr-only">
+          {items.length} products shown.
+        </p>
+        <p className="mt-6 text-center text-xs text-[var(--fm-text-muted)]" aria-hidden="true">
+          Showing {items.length} {items.length === 1 ? "product" : "products"}
+        </p>
+        <div className="mt-4 flex justify-center">
+          {result.isFetchNextPageError ? (
+            <button
+              type="button"
+              onClick={() => void result.fetchNextPage()}
+              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)]"
+            >
+              Try again
+            </button>
+          ) : result.hasNextPage ? (
+            <button
+              type="button"
+              onClick={() => void result.fetchNextPage()}
+              disabled={result.isFetchingNextPage}
+              data-testid="load-more"
+              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-6 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {result.isFetchingNextPage ? "Loading…" : "Load more groceries"}
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </QuickViewProvider>
   );
 }

@@ -167,6 +167,7 @@ export function ProductRail({
           {href ? (
             <Link
               href={href}
+              prefetch={false}
               className="inline-flex min-h-10 items-center px-1 text-sm font-semibold text-[var(--fm-text)] hover:underline"
             >
               See all

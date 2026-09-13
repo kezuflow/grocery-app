@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
 import { JSDOM } from "jsdom";
 import type { CustomerAddressView } from "@freshmarkets/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createQueryClient } from "@/lib/query/query-client";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -33,7 +35,12 @@ vi.mock("@/components/storefront/address/address-editor", () => ({
   ),
 }));
 
-import { AddressBookClient } from "@/app/account/addresses/address-book-client";
+import { AddressBookClient } from "@/app/(storefront)/account/addresses/address-book-client";
+const addressBook = () => (
+  <QueryClientProvider client={createQueryClient()}>
+    <AddressBookClient />
+  </QueryClientProvider>
+);
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "https://freshmarkets.ph/account/addresses",
@@ -160,7 +167,7 @@ describe("AddressBookClient", () => {
       .mockResolvedValueOnce(response([{ ...baseAddress, recipient: "Bea Santos", version: 3 }]));
     vi.stubGlobal("fetch", addressAndProfileReads(addressRead));
 
-    act(() => root.render(<AddressBookClient />));
+    act(() => root.render(addressBook()));
     await flush();
     click(container, "Edit Home address");
 
@@ -174,33 +181,36 @@ describe("AddressBookClient", () => {
     expect(container.textContent).toContain("Delivery address saved and refreshed");
   });
 
-  it("ignores a superseded mount response that arrives after the saved-address refresh", async () => {
-    const initial = deferred<Response>();
-    const refreshed = deferred<Response>();
-    const addressRead = vi
-      .fn()
-      .mockReturnValueOnce(initial.promise)
-      .mockResolvedValueOnce(response([baseAddress]))
-      .mockReturnValueOnce(refreshed.promise);
+  it("deduplicates the Strict Mode mount read and renders the shared result", async () => {
+    const addressRead = vi.fn().mockResolvedValue(response([baseAddress]));
     vi.stubGlobal("fetch", addressAndProfileReads(addressRead));
 
-    act(() =>
-      root.render(
-        <StrictMode>
-          <AddressBookClient />
-        </StrictMode>,
+    act(() => root.render(<StrictMode>{addressBook()}</StrictMode>));
+    await flush();
+    expect(addressRead).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Home");
+    expect(container.textContent).toContain("Ana Santos");
+  });
+
+  it("refreshes cached addresses after an accepted default-address command", async () => {
+    const addressRead = vi
+      .fn()
+      .mockResolvedValueOnce(response([baseAddress]))
+      .mockResolvedValueOnce(response([{ ...baseAddress, recipient: "Current recipient" }]));
+    const base = addressAndProfileReads(addressRead);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        url === "/api/commerce/address/manage"
+          ? Promise.resolve(Response.json({ ok: true, value: { status: "default" } }))
+          : base(url),
       ),
     );
+    act(() => root.render(addressBook()));
     await flush();
-    click(container, "Complete address save");
-    expect(addressRead).toHaveBeenCalledTimes(3);
-
-    refreshed.resolve(response([{ ...baseAddress, id: "address-new", label: "Current" }]));
-    await flush();
-    initial.resolve(response([{ ...baseAddress, label: "Stale" }]));
-    await flush();
-
-    expect(container.textContent).toContain("Current");
-    expect(container.textContent).not.toContain("Stale");
+    click(container, "Use Home as default");
+    await vi.waitFor(() => expect(addressRead).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(container.textContent).toContain("Current recipient"));
+    expect(container.textContent).toContain("Default address saved");
   });
 });

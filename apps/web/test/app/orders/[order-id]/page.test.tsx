@@ -19,7 +19,7 @@ vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));
 
-import { OrderDetailContent } from "@/app/orders/[order-id]/page";
+import { OrderDetailContent } from "@/app/(storefront)/orders/[order-id]/page";
 
 function detail(source: CustomerOrderDetailView["financial"]["source"]): CustomerOrderDetailView {
   const components = source === "ORDER_TOTAL_ONLY" ? null : 0;

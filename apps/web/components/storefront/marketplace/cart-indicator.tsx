@@ -1,40 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRef } from "react";
 import { ShoppingCart } from "lucide-react";
-import {
-  CART_CHANGED_EVENT,
-  CART_DRAWER_REQUEST_EVENT,
-  cartCountFromView,
-  fetchCart,
-} from "../../../lib/storefront/cart-client";
-import type { CartView } from "@freshmarkets/contracts";
+import { CART_DRAWER_REQUEST_EVENT, cartCountFromView } from "../../../lib/storefront/cart-client";
+import { useCartQuery } from "../../../lib/query/cart";
 
 /**
  * Header cart button with a live item-count badge. Resolves to the signed-out
  * presentation for anonymous visitors; Core stays authoritative for cart state.
  */
 export function CartIndicator() {
-  const [count, setCount] = useState<number | null>(null);
-  const receivedCartChange = useRef(false);
-
-  useEffect(() => {
-    void fetchCart().then((view: CartView | null) => {
-      if (receivedCartChange.current) return;
-      setCount(view ? cartCountFromView(view) : 0);
-    });
-    const onCartChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ count?: number }>).detail;
-      if (typeof detail?.count === "number") {
-        receivedCartChange.current = true;
-        setCount(detail.count);
-      }
-    };
-    window.addEventListener(CART_CHANGED_EVENT, onCartChanged);
-    return () => window.removeEventListener(CART_CHANGED_EVENT, onCartChanged);
-  }, []);
+  const { cart } = useCartQuery();
+  const count = cart ? cartCountFromView(cart) : 0;
 
   return (
     <Link

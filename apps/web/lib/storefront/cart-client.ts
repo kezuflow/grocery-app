@@ -361,14 +361,22 @@ export function addToCart(
   return runCartOperation(async () => {
     if (requestedGeneration !== locationGeneration)
       return {
-        ok: false,
-        reason: "error",
+        ok: false as const,
+        reason: "error" as const,
         message: "Delivery location changed. Review your cart before editing.",
       };
     const result = await postCartQuantity(skuId, quantity, metadata);
     return result.ok && activeOperationGeneration !== locationGeneration
       ? { ...result, view: { ...result.view, checkoutBlocked: true } }
       : result;
+  }).catch((error: unknown): AddToCartResult => {
+    if (error instanceof StaleCartOperationError)
+      return {
+        ok: false,
+        reason: "error",
+        message: "Your session or delivery location changed. Review your cart before editing.",
+      };
+    throw error;
   });
 }
 
@@ -381,8 +389,22 @@ export function addToCart(
 let operations: Promise<void> = Promise.resolve();
 let locationGeneration = 0;
 let activeOperationGeneration = 0;
+class StaleCartOperationError extends Error {}
+/** Identity changes discard display state without issuing a command as the new user. */
+export function resetCartSession(): void {
+  locationGeneration++;
+  cachedCartView = null;
+  cachedCartLoadedAt = 0;
+  loadError = "";
+  loadingCart = null;
+  refreshingCart = null;
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
+}
 function runCartOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const generation = locationGeneration;
   const next = operations.then(() => {
+    if (generation !== locationGeneration) throw new StaleCartOperationError();
     activeOperationGeneration = locationGeneration;
     return operation();
   });

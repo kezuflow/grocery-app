@@ -1,9 +1,14 @@
 const lifetimeSeconds = 300;
 
 /** Only use for anonymous, versioned published media responses. */
-export async function cachedPublicImage(request: Request, load: () => Promise<Response>) {
+export async function cachedPublicImage(
+  request: Request,
+  load: () => Promise<Response>,
+  variant?: string,
+) {
   const url = new URL(request.url);
   url.search = "";
+  if (variant) url.searchParams.set("variant", variant);
   const key = new Request(url, { method: "GET" });
   let cache: Cache | undefined;
   let response: Response | undefined;

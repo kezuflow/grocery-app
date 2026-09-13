@@ -5,6 +5,7 @@ import "@fontsource-variable/geist-mono/wght.css";
 import { StorefrontRuntimeProvider } from "../components/storefront/storefront-runtime";
 import { googleMapsBrowserConfiguration } from "../lib/maps/google-maps-runtime";
 import "./globals.css";
+import { ApplicationQueryProvider } from "../components/query-provider";
 
 export const metadata: Metadata = {
   title: "FreshMarkets Cebu Grocery Delivery",
@@ -20,7 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           googleMapsBrowserApiKey={googleMaps.browserApiKey}
           googleMapsMapId={googleMaps.mapId}
         >
-          {children}
+          <ApplicationQueryProvider>{children}</ApplicationQueryProvider>
         </StorefrontRuntimeProvider>
       </body>
     </html>

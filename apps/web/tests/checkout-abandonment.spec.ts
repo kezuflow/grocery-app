@@ -5,10 +5,20 @@ for (const width of [1440, 390])
     signedInPage: page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
+    const schedule = JSON.stringify({
+      weekly: Array.from({ length: 7 }, (_, index) => ({
+        dayOfWeek: index + 1,
+        opensMinute: 0,
+        closesMinute: 1440,
+      })),
+      closures: [],
+    });
     // Operational readiness and stock are isolated setup; cart, address, quote and release use Web/Core.
     executeAdminE2eSql(`
       UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='INSTANT',cadence=NULL,version=version+1 WHERE id='global';
       UPDATE fulfillment_location_readiness SET instant_promise_minutes=90,max_concurrent_instant_orders=25,dispatch_ready=1,version=version+1 WHERE location_id='location-cebu-central';
+      INSERT OR REPLACE INTO location_operating_schedule(location_id,timezone,definition_json,updated_at)
+      SELECT l.id,m.timezone,'${schedule}',0 FROM fulfillment_location l JOIN market m ON m.id=l.market_id WHERE l.id='location-cebu-central';
       UPDATE inventory_balance SET on_hand=100000 WHERE inventory_pool_id='pool-red-onion' AND location_id='location-cebu-central';
       INSERT OR IGNORE INTO fulfillment_location_delivery_profile(location_id,sender_name,phone_e164,formatted_address,address_line1,city,country_code,version,created_at,updated_at)
       VALUES ('location-cebu-central','Test pickup','+639171234567','Test pickup, Cebu City','Test pickup','Cebu City','PH',1,1,1);
@@ -55,7 +65,7 @@ for (const width of [1440, 390])
     });
     expect(await address.json()).toMatchObject({ ok: true });
     await page.goto("/checkout");
-    await page.getByRole("radio", { name: /Checkout home/ }).check();
+    await page.locator("label").filter({ hasText: "Checkout home" }).click();
     await page
       .getByRole("group", { name: "Fulfillment option", exact: true })
       .getByRole("button")

@@ -25,6 +25,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+it("keeps responsive variants separate from the original and one another", async () => {
+  const request = new Request("https://example.com/media/banners/a/1");
+  await cachedPublicImage(request, origin);
+  await cachedPublicImage(request, origin, "480-webp-85");
+  await cachedPublicImage(request, origin, "960-webp-85");
+  await cachedPublicImage(request, origin, "480-webp-85");
+  expect(origin).toHaveBeenCalledTimes(3);
+});
 const request = (suffix = "", headers = {}) =>
   new Request(`https://freshmarkets.test/media/products/image/1${suffix}`, { headers });
 it("reuses public image bytes across queries and visitors without a second origin read", async () => {

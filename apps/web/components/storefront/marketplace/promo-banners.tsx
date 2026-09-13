@@ -163,10 +163,13 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedBanner[] }) {
             >
               <img
                 src={promo.image.src}
+                srcSet={`${promo.image.src}?width=480 480w, ${promo.image.src}?width=960 960w, ${promo.image.src}?width=1440 1440w`}
+                sizes="(min-width: 1280px) 32vw, (min-width: 1024px) 36vw, (min-width: 768px) 44vw, (min-width: 640px) 58vw, 86vw"
                 alt={promo.image.alt}
                 width={1200}
                 height={540}
                 loading={index === 0 ? "eager" : "lazy"}
+                fetchPriority={index === 0 ? "high" : "low"}
                 draggable={false}
                 className="pointer-events-none aspect-[20/9] h-auto w-full select-none object-cover transition-transform duration-200 group-hover:scale-[1.01]"
               />

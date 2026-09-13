@@ -12,6 +12,7 @@ import {
   cartLoadError,
   refreshCartForLocation,
   cachedCart,
+  resetCartSession,
 } from "./cart-client";
 
 // Location-command behavior is exercised separately against its real fetch sequence.
@@ -304,4 +305,27 @@ it("discards an old location read and serializes the fresh cart behind it", asyn
   const published = dispatch.mock.calls.map(([event]) => event.detail.view).filter(Boolean);
   expect(published).toHaveLength(1);
   expect(published[0].locationId).toBe("location-2");
+});
+
+it("returns a typed failure without executing a queued write after session replacement", async () => {
+  let finish: (response: Response) => void = () => {};
+  const fetcher = vi.fn(
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const read = fetchCart({ fresh: true });
+  await Promise.resolve();
+  const queued = addToCart("sku-a", 3);
+  resetCartSession();
+  finish(response({ ok: true, value: view() }));
+  expect(await read).toBeNull();
+  await expect(queued).resolves.toEqual({
+    ok: false,
+    reason: "error",
+    message: "Your session or delivery location changed. Review your cart before editing.",
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

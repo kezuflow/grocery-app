@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -85,6 +86,40 @@ export function useAdminPagination(resetKey: string | null = null) {
     },
     reset() {
       setPagination({ key: resetKey, cursors: [null] });
+    },
+  };
+}
+
+/** URL-owned cursor history for SPA lists; Back/Forward restores the exact page. */
+export function useAdminUrlPagination(pathname: string) {
+  const searchParams = useSearchParams();
+  const cursor = searchParams.get("cursor");
+  const history = searchParams.getAll("cursorHistory");
+  const navigate = (params: URLSearchParams) => {
+    window.history.pushState(null, "", `${pathname}${params.size ? `?${params}` : ""}`);
+  };
+  return {
+    cursor,
+    pageNumber: history.length + 1,
+    next(nextCursor: string) {
+      const next = new URLSearchParams(searchParams.toString());
+      next.append("cursorHistory", cursor ?? "");
+      next.set("cursor", nextCursor);
+      navigate(next);
+    },
+    previous() {
+      if (history.length === 0) return;
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("cursorHistory");
+      for (const prior of history.slice(0, -1)) next.append("cursorHistory", prior);
+      const previousCursor = history.at(-1);
+      if (previousCursor) next.set("cursor", previousCursor);
+      else next.delete("cursor");
+      navigate(next);
+    },
+    reset(params: URLSearchParams) {
+      params.delete("cursor");
+      params.delete("cursorHistory");
     },
   };
 }

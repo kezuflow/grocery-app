@@ -5,9 +5,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { isDocumentationPathCompliant } from "./verify-naming.mjs";
+import { isDocumentationPathCompliant, isAppRouteGroupDirectory } from "./verify-naming.mjs";
 
 const verifier = fileURLToPath(new URL("./verify-naming.mjs", import.meta.url));
+
+test("allows lowercase vinext route groups only beneath the Web app router", () => {
+  assert.equal(isAppRouteGroupDirectory("apps/web/app/(storefront)"), true);
+  assert.equal(isAppRouteGroupDirectory("apps/web/app/admin/(read-only)"), true);
+  assert.equal(isAppRouteGroupDirectory("apps/web/components/(storefront)"), false);
+  assert.equal(isAppRouteGroupDirectory("apps/web/app/(Storefront)"), false);
+  assert.equal(isAppRouteGroupDirectory("apps/web/app/(store_front)"), false);
+});
 
 test("ignores generated test results and linked worktree metadata", async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "freshmarkets-naming-"));

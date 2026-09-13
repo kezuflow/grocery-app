@@ -20,6 +20,18 @@ function positiveIntParam(value: string | null, fallback: number): number {
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { requestId } = webRequestContext(request);
+  const catalogLocation = await readBrowsingLocation(request.headers.get("cookie") ?? "");
+  if (url.searchParams.get("home") === "1") {
+    const result = await coreClient(env.CORE).getStorefrontHome({
+      requestId,
+      itemsPerRail: 12,
+      ...catalogLocation,
+    });
+    return jsonWithRequestId(result, requestId, {
+      status: result.ok ? 200 : 502,
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
   const category = url.searchParams.get("category");
   const result = await coreClient(env.CORE).searchCatalog({
     requestId,
@@ -27,9 +39,10 @@ export async function GET(request: Request): Promise<Response> {
     categorySlug: category && category.trim() !== "" ? category.trim() : undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: positiveIntParam(url.searchParams.get("limit"), DEFAULT_LIMIT),
-    ...(await readBrowsingLocation(request.headers.get("cookie") ?? "")),
+    ...catalogLocation,
   });
   return jsonWithRequestId(result, requestId, {
+    headers: { "cache-control": "private, no-store" },
     status: result.ok ? 200 : result.error.code === "VALIDATION_FAILED" ? 400 : 502,
   });
 }

@@ -111,6 +111,17 @@ The DTO intentionally excludes Better Auth session tokens and password/account i
 
 ## Customer and Marketplace Queries
 
+Hybrid Web reads preserve existing Core DTOs. `/api/catalog` returns `CatalogSearchPage` for
+query/category/cursor reads; `home=1` returns the existing `StorefrontHomeView` composite. Both
+forward the opaque browsing context to Core and return private/no-store HTTP responses. The client
+normalizes initial SSR and JSON pages into the same presentation shape; no signed context token is
+sent as a client cache key. Catalog read cancellation never changes command semantics.
+
+Published banner media accepts an optional `width` of 480, 960 or 1440. Unsupported widths return
+400/no-store. A variant still requires Core's publication/version check; Web encodes WebP at quality
+85 through Images. Variant-specific ETags and public cache keys separate it from the original.
+Transformation failure returns 503/no-store and is not cached as a successful image.
+
 - `marketplace.getHome({ marketHint?, addressId? }) -> MarketplaceHomeView`
 - `catalog.search({ query, categoryId?, cursor?, limit? }) -> ProductSearchPage`
 - `catalog.searchMarketplace(...) -> { page, categories, categoriesAvailable }`
