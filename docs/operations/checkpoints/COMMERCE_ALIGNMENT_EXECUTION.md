@@ -1,6 +1,93 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — GEIST-TYPOGRAPHY-UI-1 (2026-09-14)
+## Current owner request — HYBRID-SPA-PLAN-1 (2026-09-14)
+
+Plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, phase **Hybrid SPA design and
+execution plan**. The owner redirects the staging/performance investigation to a concrete hybrid SPA
+plan and an orchestrator/implementer subagent recommendation. Acceptance: define persistent layouts,
+client navigation/data ownership and SSR entry behavior on vinext/Cloudflare; preserve Core authority;
+provide ordered implementation slices, measurable checks and scoped agent responsibilities.
+
+Delivered the plan with seven implementation slices, HSPA-0 through HSPA-6, and a recommended
+GPT-6 Astra/high orchestrator, GPT-5.6 Sol/high implementer and optional independent review.
+No implementation agents were launched, application architecture changed, or model settings edited.
+The earlier staging deployment is recorded below; no subsequent deployment occurred for this plan.
+
+Observed `main` at `fc763e7bd654a19a155edf26a9de367f1497b000`. Preserved unrelated location map,
+schedule, workspace, address-prediction and browser-test changes, untracked time-input files and local
+logs. The planning diff contains only the new plan and this checkpoint. `git diff --check` and
+`pnpm naming:check` passed; all relative plan links resolve and seven slice headings were verified.
+Application tests were not rerun for this documentation-only change. Counting level: one planning deliverable complete;
+seven implementation slices not started. Next action: execute HSPA-0 when implementation is requested;
+the plan includes a reusable instruction explicitly authorizing scoped delegation.
+
+## Prior owner request — STAGING-PERF-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner authorizes staging deployment followed by measurements to assess whether SPA/hybrid
+navigation would improve perceived lag, and asks to verify Grab's SPA documentation and Cloudflare's
+vinext recommendation. Acceptance: deploy a reproducible committed revision, verify runtime readiness,
+measure actual public load/navigation behavior, distinguish observations from untested SPA gains,
+and preserve unfinished work. No architecture migration or provider transaction is requested.
+
+Start: `main` at `fc763e7bd654a19a155edf26a9de367f1497b000`. The existing location map, schedule,
+workspace, address-prediction and browser-test edits, untracked time-input files and local logs are
+preserved. Detached checkout `.worktrees/staging-perf-fc763e7` isolates the committed deployment;
+the owner's development server remains untouched. Staging Web's canonical origin is `freshmarkets.ph`.
+
+Deployment completed from the isolated committed checkout. `pnpm install --frozen-lockfile`,
+aggregate `pnpm check`, both `wrangler types --check` binding checks, `vinext check` (16 supported /
+zero issues), and `node scripts/verify-worker-readiness.mjs` passed. Aggregate tests included Core
+205 files / 1665 tests, Web 130 files / 538 tests and contracts 20 files / 69 tests. The staging Web
+build with `CLOUDFLARE_ENV=staging` passed and its generated bindings/origin were reviewed.
+Executed Core `wrangler deploy --config wrangler.jsonc --env staging`, followed by Web
+`wrangler deploy --config dist/server/wrangler.json`, through their respective pnpm package filters.
+New Core version: `b21e15d5-c3a9-464a-a3c1-b34dfe31c599`.
+New Web version: `402f12e4-ffef-4813-854c-c5f0157548bb`.
+Previous versions: Core `03d8b911-e5bd-4790-aa05-f9b46f570d1a`,
+Web `bb626de0-1c56-457a-9cdf-669560bd143d`.
+Core `/ready` returned HTTP 200 with runtime/database/payment readiness; `/health`, Web
+`/api/core-health` and the canonical homepage returned HTTP 200. This is runtime readiness evidence,
+not actual payment or delivery acceptance. Delivery remains disabled.
+
+Missing staging Google Maps and Lalamove secret names were populated from existing local configuration
+through protected stdin, with values omitted from logs/checkpoint. Existing auth/payment secrets were
+not rotated. No courier activation or real provider transaction occurred.
+
+Migration milestone: exported staging D1 privately outside Git and rehearsed `0097` on the actual
+export using SQLite. Reordered schema/data/trigger import; customer/default-address cycles required
+deferred foreign keys within the import transaction, with constraints enabled and validated at commit.
+The temporary importer first rejected SQLite sequence/empty statements and cyclic insert order;
+corrected those parsing/import assumptions without changing data or schema constraints. All rows in
+162 tables matched before/after migration; local full integrity and foreign-key checks passed.
+Revalidated both affected remote tables had zero rows and foreign keys were valid, then applied only
+`0097_fixed_delivery_package.sql` with the normal remote staging migration runner (27 commands).
+No migrations remain. Remote whole-database `quick_check` failed with D1 `SQLITE_NOMEM`; separately
+executed foreign-key checks passed, affected-table row counts stayed zero, and both affected-table
+`quick_check` calls returned `ok`. That bounded evidence does not claim a remote full integrity pass.
+
+Research: current official Cloudflare Next.js guidance recommends vinext as its default Workers path
+and identifies it as beta. Grab's Front End Study Guide describes SPA navigation and server-rendered
+state bootstrapping. Prior GrabFood HTML inspection establishes pre-rendered content plus Next.js
+assets, not the rendering strategy of every route. Live GrabFood home-to-Italian-cuisine navigation
+also preserved the document time origin while changing URL/content, confirming client navigation
+alongside pre-rendered initial content in this observed flow.
+
+Bounded staging lab evidence at the deployed revision: desktop cold samples had LCP 3.22 s on the
+first post-deploy load and 1.53/1.31 s on two repeats. One 390px, CPU 4x, Slow 4G cold sample had LCP
+4.35 s and CLS 0.00117; four banner transfers totaled about 7.9 MB. Two valid desktop keyboard
+category navigations preserved the document and took approximately 705/744 ms, dominated by
+685/727 ms RSC reads. Separate JSON catalog reads took 422–446 ms but have different response work
+and are not an architecture A/B test. Pointer category selection was intercepted by immediate
+navigation-container pointer capture; keyboard selection worked. Source inspection found document
+GET search forms, but the search interaction timing run was not completed. Discarded invalid probes
+are not timing evidence. No authenticated Admin/checkout baseline or field CWV collection occurred.
+Owner redirected work to HYBRID-SPA-PLAN-1 before the full comparison; that remaining measurement
+work is incorporated into HSPA-0/HSPA-6. The trace is stopped; the isolated deployment checkout and
+private backup remain available. Completed counting level: one staging baseline revision deployed;
+architecture improvement and full matched performance acceptance remain untested.
+
+## Prior owner request — GEIST-TYPOGRAPHY-UI-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. The owner asks for a sent.dm-inspired UI typography pass using Geist and Geist Mono for
