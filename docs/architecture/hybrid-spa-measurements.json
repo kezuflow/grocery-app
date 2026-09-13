@@ -644,5 +644,306 @@
         "documentPreserved": true
       }
     ]
+  },
+  "publicAfterRolledBack": {
+    "origin": "https://freshmarkets.ph",
+    "measuredAt": "2026-09-13T21:26:10.904Z",
+    "samples": [
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 1,
+        "entry": {
+          "lcp": 4000,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 1457.800000011921,
+          "fcp": 2064,
+          "bytes": 1518159,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 17,
+          "usefulMs": 842,
+          "documents": 0,
+          "rsc": 2,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 2,
+        "entry": {
+          "lcp": 1864,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 745.5999999940395,
+          "fcp": 1188,
+          "bytes": 1463085,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 15,
+          "usefulMs": 829,
+          "documents": 0,
+          "rsc": 5,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 3,
+        "entry": {
+          "lcp": 1384,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 399,
+          "fcp": 716,
+          "bytes": 1518228,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 16,
+          "usefulMs": 851,
+          "documents": 0,
+          "rsc": 2,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 4,
+        "entry": {
+          "lcp": 3180,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 795.4000000059605,
+          "fcp": 1220,
+          "bytes": 1517722,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 15,
+          "usefulMs": 830,
+          "documents": 0,
+          "rsc": 2,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "desktop-unthrottled",
+        "sample": 5,
+        "entry": {
+          "lcp": 3148,
+          "cls": 0.00010606686104145231,
+          "longTasks": 0,
+          "ttfb": 1289.300000011921,
+          "fcp": 1668,
+          "bytes": 1518351,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 14,
+          "usefulMs": 831,
+          "documents": 0,
+          "rsc": 2,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 1,
+        "entry": {
+          "lcp": 4112,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 843,
+          "fcp": 3076,
+          "bytes": 1040649,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 54,
+          "usefulMs": 869,
+          "documents": 0,
+          "rsc": 1,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 2,
+        "entry": {
+          "lcp": 3256,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 417.2000000178814,
+          "fcp": 2896,
+          "bytes": 1040765,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 69,
+          "usefulMs": 886,
+          "documents": 0,
+          "rsc": 1,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 3,
+        "entry": {
+          "lcp": 3920,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 1062.300000011921,
+          "fcp": 3556,
+          "bytes": 1040641,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 55,
+          "usefulMs": 880,
+          "documents": 0,
+          "rsc": 1,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 4,
+        "entry": {
+          "lcp": 3492,
+          "cls": 0.001173197391651534,
+          "longTasks": 3,
+          "ttfb": 444.2999999821186,
+          "fcp": 2828,
+          "bytes": 1041138,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 53,
+          "usefulMs": 870,
+          "documents": 0,
+          "rsc": 1,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "sample": 5,
+        "entry": {
+          "lcp": 3364,
+          "cls": 0.001173197391651534,
+          "longTasks": 4,
+          "ttfb": 441.59999999403954,
+          "fcp": 2932,
+          "bytes": 1040984,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+        },
+        "navigation": {
+          "feedbackMs": 55,
+          "usefulMs": 895,
+          "documents": 0,
+          "rsc": 1,
+          "json": 1,
+          "documentPreserved": true,
+          "shellPreserved": true
+        }
+      }
+    ]
+  },
+  "stagingCacheInspection": {
+    "origin": "https://freshmarkets.ph",
+    "results": [
+      {
+        "profile": "desktop-unthrottled",
+        "status": 200,
+        "images": [
+          {
+            "src": "https://freshmarkets.ph/media/banners/ceecbdcc-9154-4349-8847-9e4e27aec927/1?width=480",
+            "width": 460,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/b264afdb-3556-4130-89a2-485dc979a113/1?width=480",
+            "width": 460,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/88de17b5-fdb0-469a-b245-7867efa08add/1?width=480",
+            "width": 460,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/044ccc7d-0a34-46aa-aa52-2a902e6680bc/1?width=480",
+            "width": 460,
+            "complete": true
+          }
+        ],
+        "cachedRevisitsMs": [
+          11,
+          12,
+          13,
+          11,
+          12
+        ],
+        "catalogReads": 0,
+        "errors": []
+      },
+      {
+        "profile": "mobile-4x-1.6mbps-150ms",
+        "status": 200,
+        "images": [
+          {
+            "src": "https://freshmarkets.ph/media/banners/ceecbdcc-9154-4349-8847-9e4e27aec927/1?width=480",
+            "width": 335,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/b264afdb-3556-4130-89a2-485dc979a113/1?width=480",
+            "width": 335,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/88de17b5-fdb0-469a-b245-7867efa08add/1?width=480",
+            "width": 335,
+            "complete": true
+          },
+          {
+            "src": "https://freshmarkets.ph/media/banners/044ccc7d-0a34-46aa-aa52-2a902e6680bc/1?width=480",
+            "width": 335,
+            "complete": true
+          }
+        ],
+        "cachedRevisitsMs": [
+          50,
+          47,
+          46,
+          46,
+          46
+        ],
+        "catalogReads": 0,
+        "errors": []
+      }
+    ]
   }
 }

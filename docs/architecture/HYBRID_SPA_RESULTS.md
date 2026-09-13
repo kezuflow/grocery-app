@@ -66,6 +66,12 @@ an acceptance gap; there is no production rollout.
 
 ## Remaining acceptance
 
+The first staging Web deployment (83768065-b400-46ca-979a-07032400e7a1 at 5e237183) passed health,
+SSR and image checks, but desktop LCP regressed from 2,528 to 3,148 ms median. It was rolled back
+to 402f12e4-ffef-4813-854c-c5f0157548bb with Core/data unchanged. LCP diagnostics identified the
+second visible banner loading at low priority. The correction prioritizes the three banners visible
+on desktop; its three focused banner tests pass. Remeasurement is pending.
+
 Final staged image transformation, runtime health, matched public timings and frozen-Core
 authenticated localhost results are pending. Existing commerce/provider activation gaps remain
 independent of HSPA. No production rollout or real provider transaction is authorized here.

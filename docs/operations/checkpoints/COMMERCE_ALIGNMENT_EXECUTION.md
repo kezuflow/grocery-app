@@ -61,8 +61,17 @@ catalog 30% target is unmet and Admin latency regressed. An earlier immediate-po
 310 -> 900 ms catalog interaction and remains a hydration/readiness concern. Public baseline has five
 valid samples per device with Core 730f486c held constant; one failed keyboard attempt is recorded.
 See docs/architecture/HYBRID_SPA_RESULTS.md for method and acceptance limits.
-Next action: commit/push intended integrated files on current main, build clean staging Web, verify
-resolved bindings, deploy Web only, then capture matched public after metrics and actual Images health.
+Committed/pushed implementation 5e237183. Clean staging build resolved Web-only target, Images,
+private Core binding and no SPA fallback; deployed Web 83768065-b400-46ca-979a-07032400e7a1.
+Core stayed 730f486c-8188-4e20-bb3e-01183d99020a; health/ready/Web health returned 200. Images
+returned real WebP and all desktop/mobile banners rendered. Cached revisit medians were 12/46 ms
+with zero catalog reads. Public after measurements reduced bytes substantially but desktop LCP
+regressed (2,528 -> 3,148 ms median). Diagnostic LCP entries identified the second visible banner,
+which was loading at low priority. Per rollback rule, Web was restored to compatible baseline
+402f12e4-ffef-4813-854c-c5f0157548bb at 100%; Core and data untouched.
+Correction: prioritize/eager-load the first three banners visible on desktop, retaining lazy low
+priority for the offscreen remainder. Next action: verify this bounded correction, commit/push,
+rebuild/deploy Web staging and repeat the identical public performance harness.
 
 
 ## Concurrent owner request — CHECKOUT-SCHEDULED-FEE-REFRESH-1 (2026-09-14)

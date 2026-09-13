@@ -168,8 +168,8 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedBanner[] }) {
                 alt={promo.image.alt}
                 width={1200}
                 height={540}
-                loading={index === 0 ? "eager" : "lazy"}
-                fetchPriority={index === 0 ? "high" : "low"}
+                loading={index < 3 ? "eager" : "lazy"}
+                fetchPriority={index < 3 ? "high" : "low"}
                 draggable={false}
                 className="pointer-events-none aspect-[20/9] h-auto w-full select-none object-cover transition-transform duration-200 group-hover:scale-[1.01]"
               />
