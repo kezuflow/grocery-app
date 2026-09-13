@@ -214,6 +214,8 @@ export async function revalidateCheckoutQuote(
     const provider = deliveryProviders?.get(acceptedDelivery.providerCode);
     if (!provider) return rejected("CONFIGURATION_ERROR", "Delivery provider is unavailable");
     deliveryFee = await quoteProviderDelivery(database, provider, {
+      customerId: quote.customerId,
+      addressId: quote.addressId,
       providerCode: acceptedDelivery.providerCode,
       serviceType: acceptedDelivery.serviceType,
       marketId,
@@ -222,6 +224,7 @@ export async function revalidateCheckoutQuote(
       address,
       scheduleAt: acceptedDelivery.scheduleAt,
       now,
+      reuseExisting: false,
     });
   }
   if (!deliveryFee)

@@ -353,6 +353,8 @@ async function createScheduledQuote(
       command.requestId,
     );
   const deliveryFee = await quoteProviderDelivery(database, scheduledProvider, {
+    customerId: command.customerId,
+    addressId: command.addressId,
     providerCode: scheduledPartner.providerCode,
     serviceType: scheduledPartner.serviceType,
     marketId: cycle.market_id,

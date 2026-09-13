@@ -168,6 +168,8 @@ export async function createInstantQuote(
   if (!provider)
     return failure("CONFIGURATION_ERROR", "Delivery partner is unavailable", command.requestId);
   const deliveryFee = await quoteProviderDelivery(database, provider, {
+    customerId: command.customerId,
+    addressId: command.addressId,
     providerCode: command.deliveryPartner.code,
     serviceType: command.deliveryPartner.serviceType,
     marketId: routing.market_id,

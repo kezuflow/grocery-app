@@ -4,7 +4,9 @@ import type {
   DeliveryProvider,
   DeliveryProviderAddress,
   DeliveryQuote,
+  DeliveryProviderRequest,
 } from "../../delivery/ports/delivery-provider";
+import { requestHash } from "../../idempotency";
 
 type JsonObject = Record<string, unknown>;
 
@@ -20,6 +22,8 @@ export type ProviderDeliveryFeeSnapshot = Readonly<{
   currency: string;
   amountMinor: number;
   distanceMeters: number | null;
+  /** Exact provider-relevant route/request identity; cart contents are intentionally excluded. */
+  routeFingerprint?: string;
 }>;
 
 export type CheckoutDeliveryQuote = Readonly<{
@@ -126,11 +130,88 @@ function chooseQuote(
   return quote.providerQuotationId && Number.isFinite(expiresAt) && expiresAt > now ? quote : null;
 }
 
+const MINIMUM_REUSABLE_QUOTE_LIFETIME_MS = 30_000;
+
+function reusableSnapshot(
+  raw: string,
+  input: Readonly<{
+    routeFingerprint: string;
+    providerCode: string;
+    serviceType: string;
+    currency: string;
+    scheduleAt: string | null;
+    now: number;
+  }>,
+): ProviderDeliveryFeeSnapshot | null {
+  const parsed = parseObject(raw);
+  if (!parsed) return null;
+  const expiresAt = text(parsed.expiresAt);
+  const quotedAt = text(parsed.quotedAt);
+  const amountMinor = parsed.amountMinor;
+  const distanceMeters = parsed.distanceMeters;
+  if (
+    parsed.source !== "EXTERNAL_PROVIDER" ||
+    parsed.routeFingerprint !== input.routeFingerprint ||
+    parsed.providerCode !== input.providerCode ||
+    parsed.serviceType !== input.serviceType ||
+    parsed.currency !== input.currency ||
+    (parsed.scheduleAt ?? null) !== input.scheduleAt ||
+    !text(parsed.providerQuotationId) ||
+    !text(parsed.providerRequestId) ||
+    !quotedAt ||
+    !expiresAt ||
+    !Number.isFinite(Date.parse(quotedAt)) ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    !Number.isInteger(amountMinor) ||
+    (amountMinor as number) < 0 ||
+    (distanceMeters !== null &&
+      distanceMeters !== undefined &&
+      (!Number.isFinite(distanceMeters) || (distanceMeters as number) < 0)) ||
+    Date.parse(expiresAt) <= input.now + MINIMUM_REUSABLE_QUOTE_LIFETIME_MS
+  )
+    return null;
+  return parsed as ProviderDeliveryFeeSnapshot;
+}
+
+async function findReusableQuote(
+  database: D1Database,
+  input: Readonly<{
+    customerId: string;
+    cartId: string;
+    addressId: string;
+    routeFingerprint: string;
+    providerCode: string;
+    serviceType: string;
+    currency: string;
+    scheduleAt: string | null;
+    now: number;
+  }>,
+): Promise<CheckoutDeliveryQuote | null> {
+  const candidates = await database
+    .prepare(
+      `SELECT delivery_fee_snapshot_json
+       FROM checkout_quote
+       WHERE customer_id=? AND cart_id=? AND address_id=?
+         AND delivery_fee_snapshot_json IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 10`,
+    )
+    .bind(input.customerId, input.cartId, input.addressId)
+    .all<{ delivery_fee_snapshot_json: string }>();
+  for (const candidate of candidates.results) {
+    const snapshot = reusableSnapshot(candidate.delivery_fee_snapshot_json, input);
+    if (snapshot) return { feeMinor: snapshot.amountMinor, snapshot };
+  }
+  return null;
+}
+
 /** Build and verify a provider quote from authoritative Core state only. */
 export async function quoteProviderDelivery(
   database: D1Database,
   provider: DeliveryProvider,
   input: Readonly<{
+    customerId: string;
+    addressId: string;
     providerCode: string;
     serviceType: string;
     marketId: string;
@@ -139,6 +220,8 @@ export async function quoteProviderDelivery(
     address: ProviderCheckoutAddress;
     scheduleAt: string | null;
     now: number;
+    /** Revalidation of near-expiry accepted evidence must always ask the provider again. */
+    reuseExisting?: boolean;
   }>,
 ): Promise<CheckoutDeliveryQuote | null> {
   const [profile, market, cart] = await Promise.all([
@@ -207,7 +290,7 @@ export async function quoteProviderDelivery(
       recipientInstruction: null,
     },
   };
-  const result = await provider.quote({
+  const quoteRequest: DeliveryProviderRequest = {
     serviceType: input.serviceType,
     currencyCode: market.currency,
     currencyExponent: 2,
@@ -242,7 +325,27 @@ export async function quoteProviderDelivery(
             pickupFrom: new Date(scheduleAt).toISOString(),
             pickupTo: new Date(scheduleAt + 30 * 60_000).toISOString(),
           },
+  };
+  const routeFingerprint = await requestHash({
+    providerCode: input.providerCode,
+    addressId: input.addressId,
+    quoteRequest,
   });
+  if (input.reuseExisting !== false) {
+    const reusable = await findReusableQuote(database, {
+      customerId: input.customerId,
+      cartId: input.cartId,
+      addressId: input.addressId,
+      routeFingerprint,
+      providerCode: input.providerCode,
+      serviceType: input.serviceType,
+      currency: market.currency,
+      scheduleAt: input.scheduleAt,
+      now: input.now,
+    });
+    if (reusable) return reusable;
+  }
+  const result = await provider.quote(quoteRequest);
   if (!result.ok || !result.providerRequestId) return null;
   const quote = chooseQuote(result.value, input.serviceType, market.currency, input.now);
   if (!quote) return null;
@@ -260,6 +363,7 @@ export async function quoteProviderDelivery(
       currency: quote.currency,
       amountMinor: quote.amountMinor,
       distanceMeters: quote.distanceMeters,
+      routeFingerprint,
     },
   };
 }

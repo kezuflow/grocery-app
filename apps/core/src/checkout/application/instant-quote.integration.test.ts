@@ -623,13 +623,25 @@ describe("instant checkout quotes", () => {
       ),
     ]);
     const basket = await seedBasket({ onHand: 0, quantity: 40 });
+    let providerQuoteCalls = 0;
+    const countingProvider = {
+      ...deliveryProvider,
+      quote: async (request: Parameters<typeof deliveryProvider.quote>[0]) => {
+        providerQuoteCalls += 1;
+        return deliveryProvider.quote(request);
+      },
+    };
+    const dependencies = {
+      ...quoteDependencies,
+      deliveryProviders: new Map([["lalamove", countingProvider]]),
+    };
     const result = await createCheckoutQuote(
       env.DB,
       {
         ...command(basket.customerId, basket.cartId, basket.addressId),
         deliveryCycleId: "cycle-next-cebu",
       },
-      quoteDependencies,
+      dependencies,
     );
 
     expect(result).toMatchObject({
@@ -644,6 +656,7 @@ describe("instant checkout quotes", () => {
         ],
       },
     });
+    expect(providerQuoteCalls).toBe(1);
     await env.DB.prepare("UPDATE cart_item SET quantity=41 WHERE cart_id=?")
       .bind(basket.cartId)
       .run();
@@ -654,7 +667,7 @@ describe("instant checkout quotes", () => {
           ...command(basket.customerId, basket.cartId, basket.addressId),
           deliveryCycleId: "cycle-next-cebu",
         },
-        quoteDependencies,
+        dependencies,
       ),
     ).toMatchObject({
       ok: true,
@@ -668,6 +681,7 @@ describe("instant checkout quotes", () => {
         ],
       },
     });
+    expect(providerQuoteCalls).toBe(1);
     await env.DB.prepare(
       "UPDATE cycle_zone_capacity SET allocated=0 WHERE cycle_id='cycle-next-cebu'",
     ).run();
@@ -909,6 +923,104 @@ describe("instant checkout quotes", () => {
         { status: "HELD", count: 1 },
       ]),
     );
+  });
+
+  it("reuses an unexpired courier quote after cart changes but re-quotes for an address change", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED' WHERE id='pool-red-onion'",
+    ).run();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    let providerQuoteCalls = 0;
+    const countingProvider = {
+      ...deliveryProvider,
+      quote: async (request: Parameters<typeof deliveryProvider.quote>[0]) => {
+        providerQuoteCalls += 1;
+        return deliveryProvider.quote(request);
+      },
+    };
+    const dependencies = {
+      ...quoteDependencies,
+      deliveryProviders: new Map([["lalamove", countingProvider]]),
+    };
+
+    const first = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      dependencies,
+    );
+    if (!first.ok) throw new Error(first.error.message);
+    expect(providerQuoteCalls).toBe(1);
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE cart_item SET quantity=quantity+1 WHERE cart_id=?").bind(
+        basket.cartId,
+      ),
+      env.DB.prepare("UPDATE cart SET version=2,updated_at=? WHERE id=?").bind(
+        Date.now(),
+        basket.cartId,
+      ),
+    ]);
+    const second = await createCheckoutQuote(
+      env.DB,
+      { ...command(basket.customerId, basket.cartId, basket.addressId), cartVersion: 2 },
+      dependencies,
+    );
+    if (!second.ok) throw new Error(second.error.message);
+    expect(second.value.quoteId).not.toBe(first.value.quoteId);
+    expect(second.value.merchandiseSubtotalMinor).toBeGreaterThan(
+      first.value.merchandiseSubtotalMinor,
+    );
+    expect(providerQuoteCalls).toBe(1);
+
+    const snapshots = await env.DB.prepare(
+      "SELECT delivery_fee_snapshot_json FROM checkout_quote WHERE id IN (?,?) ORDER BY created_at",
+    )
+      .bind(first.value.quoteId, second.value.quoteId)
+      .all<{ delivery_fee_snapshot_json: string }>();
+    expect(
+      snapshots.results.map(
+        (row) =>
+          (JSON.parse(row.delivery_fee_snapshot_json) as { providerQuotationId: string })
+            .providerQuotationId,
+      ),
+    ).toEqual([
+      expect.stringMatching(/^mock-delivery-quote-/),
+      expect.stringMatching(/^mock-delivery-quote-/),
+    ]);
+    expect(
+      new Set(
+        snapshots.results.map(
+          (row) =>
+            (JSON.parse(row.delivery_fee_snapshot_json) as { providerQuotationId: string })
+              .providerQuotationId,
+        ),
+      ).size,
+    ).toBe(1);
+
+    const otherAddressId = `addr-other-${crypto.randomUUID()}`;
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO customer_address (id,customer_id,label,recipient,phone,address_json,latitude,longitude,service_area_code,delivery_zone_code,status,version,created_at,updated_at) VALUES (?,?,'Other','Inst Test','+639171234567','{}',10.32,123.91,'CEBU_CITY',?,'active',1,?,?)",
+    )
+      .bind(otherAddressId, basket.customerId, ZONE_CODE, now, now)
+      .run();
+    const third = await createCheckoutQuote(
+      env.DB,
+      { ...command(basket.customerId, basket.cartId, otherAddressId), cartVersion: 2 },
+      dependencies,
+    );
+    if (!third.ok) throw new Error(third.error.message);
+    expect(providerQuoteCalls).toBe(2);
+    expect(
+      await abandonCheckoutAttempt(env.DB, {
+        customerId: basket.customerId,
+        quoteId: third.value.quoteId,
+        expectedVersion: third.value.attemptVersion,
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   it("ignores legacy sourcing configuration in the Instant path", async () => {
