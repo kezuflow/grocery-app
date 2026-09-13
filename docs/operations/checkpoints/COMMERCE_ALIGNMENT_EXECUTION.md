@@ -1,6 +1,35 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — CHECKOUT-FLAT-WORKSPACE-UI-1 (2026-09-13)
+## Current owner request — CART-DRAWER-CLEAR-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asks for a clear-cart action when opening the cart. Acceptance: the cart button
+continues to open the drawer; a nonempty drawer exposes a clear action; clearing requires explicit
+confirmation; every line is removed through the existing authoritative zero-quantity mutation path
+for authenticated and guest carts; accepted views continue to update the drawer and cart badge;
+concurrent or partial failure does not claim an empty cart and remains retryable. Start: `main` at
+`47f6d055`; preserve unrelated location address, autofill, time-input and location-schedule changes;
+do not start the development stack; no subagents.
+
+Implemented in `b15a2463`: the nonempty cart drawer now has a plain destructive `Clear cart`
+action beside Close. It opens an accessible confirmation dialog before mutation. Confirmation removes
+each current SKU sequentially through the existing cart client, allowing Core's current cart-version
+compare-and-swap to remain authoritative and allowing anonymous carts to use their existing local
+guest path. Each accepted view is published normally. Quantity and checkout controls are disabled
+while clearing; a failed or concurrently changed cart remains visible through an honest retryable
+message instead of reporting success. DESIGN records the interaction.
+
+Verification on the intended change: the focused cart-drawer Vitest file passed 5/5 tests, including
+no mutation before confirmation, zero-quantity commands for both lines, and the updated expected
+version on the second command. Web typecheck, targeted formatting and focused lint passed. The full
+Web suite passed 131 files / 545 tests, and the Web production build passed on the combined working
+tree. No localhost server or browser surface was available for visual confirmation, and none was
+started in accordance with the owner's instruction to run `pnpm dev` personally. No cart was cleared
+outside automated fixtures. Completed implementation ID: CART-DRAWER-CLEAR-1. Counting level: zero
+remaining application changes for the requested clear-cart action. Next action: owner runs `pnpm dev`,
+opens a nonempty cart and visually confirms the clear action and confirmation dialog.
+
+## Prior owner request — CHECKOUT-FLAT-WORKSPACE-UI-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. The owner asks to remove the boxed gray treatment from the checkout page, not only from
