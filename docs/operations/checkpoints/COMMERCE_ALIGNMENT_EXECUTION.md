@@ -36,10 +36,10 @@ response, Review navigation and persisted closure/hour values. Both full-page sc
 inspected; controls remain legible and wrap without horizontal overflow. This proves local
 Worker/D1/browser behavior with test configuration, not actual Google Maps/provider or deployed
 acceptance. Completed ID: LOCATION-UX-FINISH-1. Counting level: zero remaining implementation slices
-for this request. Integration target: commit and push the staged location/checkpoint files while
-preserving all concurrent delivery-address work and local artifacts. Next action: owner reviews the
-real Admin location pin and operating hours with actual location values; earlier provider/deployment
-obligations remain open.
+for this request. Commit `32ee796c` is pushed to `origin/main`; all concurrent delivery-address work
+and local artifacts remain outside that commit. Next action: owner reviews the real Admin location
+pin and operating hours with actual location values; earlier provider/deployment obligations remain
+open.
 
 ## Owner request — ADDR-0 delivery address plan (2026-09-14)
 
