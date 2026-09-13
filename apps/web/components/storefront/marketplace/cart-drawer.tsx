@@ -155,7 +155,7 @@ export function CartDrawer() {
 
   const guest = cart?.id === "guest-cart";
   const hasItems = Boolean(cart?.items.length);
-  const canClear = hasItems && !loading && !error;
+  const canClear = hasItems && !loading && !error && !cart?.paymentInProgress;
 
   return (
     <>
@@ -275,7 +275,7 @@ export function CartDrawer() {
                             type="button"
                             aria-label={`Decrease ${item.name}`}
                             onClick={() => void update(item, item.quantity - 1)}
-                            disabled={clearing}
+                            disabled={clearing || cart?.paymentInProgress}
                             className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
                             <Minus className="size-3.5" aria-hidden="true" />
@@ -287,7 +287,11 @@ export function CartDrawer() {
                             type="button"
                             aria-label={`Increase ${item.name}`}
                             onClick={() => void update(item, item.quantity + 1)}
-                            disabled={clearing || item.availability !== "AVAILABLE"}
+                            disabled={
+                              clearing ||
+                              cart?.paymentInProgress ||
+                              item.availability !== "AVAILABLE"
+                            }
                             className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
                             <Plus className="size-3.5" aria-hidden="true" />
@@ -337,7 +341,7 @@ export function CartDrawer() {
                     : undefined
                 }
                 note="Availability and delivery are confirmed at checkout."
-                disabled={clearing || cart?.checkoutBlocked}
+                disabled={clearing || cart?.checkoutBlocked || cart?.paymentInProgress}
               />
             </div>
           ) : null}

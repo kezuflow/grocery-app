@@ -125,6 +125,31 @@ export async function recoverPaymentCreation(
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
     );
   }
+  if (row.purpose === "GROCERY_CHECKOUT" && row.subject_type === "checkout_quote") {
+    const submittedCart = await database
+      .prepare(`SELECT c.id FROM checkout_quote q JOIN cart c ON c.id=q.cart_id
+        WHERE q.id=? AND q.customer_id=? AND c.customer_id=q.customer_id
+          AND c.status='ACTIVE' AND q.cart_version=c.version`)
+      .bind(row.subject_id, row.customer_id)
+      .first<{ id: string }>();
+    if (submittedCart) {
+      const successorCartId = `cart-after-submitted-${submittedCart.id}`;
+      statements.push(
+        database
+          .prepare(`UPDATE cart SET status='PAYMENT_PENDING',version=version+1,updated_at=?
+        WHERE id=(SELECT cart_id FROM checkout_quote WHERE id=? AND customer_id=? AND cart_version=cart.version)
+          AND customer_id=? AND status='ACTIVE'`)
+          .bind(now, row.subject_id, row.customer_id, row.customer_id),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+        database
+          .prepare(`INSERT INTO cart(id,customer_id,location_id,status,version,created_at,updated_at)
+        SELECT ?,customer_id,location_id,'ACTIVE',1,?,? FROM cart
+        WHERE id=(SELECT cart_id FROM checkout_quote WHERE id=? AND customer_id=?) AND status='PAYMENT_PENDING'`)
+          .bind(successorCartId, now, now, row.subject_id, row.customer_id),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+      );
+    }
+  }
   statements.push(
     auditEventStatement(database, {
       actorUserId: null,

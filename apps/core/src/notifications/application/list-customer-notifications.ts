@@ -30,11 +30,11 @@ export async function listCustomerNotifications(
     .prepare(`WITH owned_orders AS (
     SELECT id,order_number,committed_at FROM grocery_order WHERE customer_id=?
   ), notices AS (
-    SELECT 'ORDER_CONFIRMED' type, 'order:'||o.id sortId, o.id orderId,
+    SELECT 'ORDER_CONFIRMED' type, 'order:'||o.id sortId, o.id orderId,NULL paymentId,
       o.order_number reference,o.committed_at occurredAt
     FROM owned_orders o WHERE o.committed_at IS NOT NULL AND o.committed_at<=?
     UNION ALL
-    SELECT n.event_type,n.id,o.id,o.order_number,n.scheduled_at
+    SELECT n.event_type,n.id,o.id,NULL,o.order_number,n.scheduled_at
     FROM notification_outbox n
     LEFT JOIN order_cancellation c ON n.aggregate_type='ORDER_CANCELLATION' AND c.id=n.aggregate_id
     JOIN owned_orders o ON o.id=CASE WHEN n.aggregate_type='ORDER_CANCELLATION' THEN c.order_id ELSE n.aggregate_id END
@@ -46,17 +46,20 @@ export async function listCustomerNotifications(
         ('ORDER_CANCELLATION_REQUESTED','ORDER_REFUND_PROGRESSING','ORDER_CANCELLATION_COMPLETED','ORDER_REFUND_EXCEPTION'))
     )
     UNION ALL
-    SELECT n.event_type,n.id,o.id,COALESCE(o.order_number,'Checkout payment'),n.scheduled_at
+    SELECT n.event_type,n.id,o.id,p.id,COALESCE(o.order_number,'Checkout payment'),n.scheduled_at
     FROM notification_outbox n JOIN payment_intent p ON p.id=n.aggregate_id AND p.customer_id=?
     LEFT JOIN paid_order_amendment a ON a.payment_intent_id=p.id
     LEFT JOIN owned_orders o ON o.id=a.order_id
     WHERE n.customer_id=? AND n.aggregate_type='PAYMENT' AND n.scheduled_at<=?
       AND p.purpose IN ('GROCERY_CHECKOUT','ORDER_AMENDMENT')
       AND (p.purpose='GROCERY_CHECKOUT' OR o.id IS NOT NULL)
-      AND ((n.event_type='PAYMENT_ACTION_REQUIRED' AND p.status='REQUIRES_ACTION')
+      AND ((n.event_type='PAYMENT_ACTION_REQUIRED' AND p.status='REQUIRES_ACTION' AND EXISTS (
+        SELECT 1 FROM payment_provider_action action WHERE action.payment_intent_id=p.id
+          AND action.status='ACTIVE' AND action.expires_at>?
+      ))
         OR (n.event_type='PAYMENT_FAILED' AND p.status='FAILED'))
     UNION ALL
-    SELECT 'ORDER_REFUND_COMPLETED','refund:'||c.id,o.id,o.order_number,c.updated_at
+    SELECT 'ORDER_REFUND_COMPLETED','refund:'||c.id,o.id,NULL,o.order_number,c.updated_at
     FROM order_cancellation c JOIN owned_orders o ON o.id=c.order_id
     WHERE c.status='COMPLETED' AND c.required_refund_minor>0 AND c.updated_at<=?
       AND EXISTS (SELECT 1 FROM order_cancellation_refund_member m WHERE m.cancellation_id=c.id)
@@ -64,7 +67,7 @@ export async function listCustomerNotifications(
         SELECT 1 FROM order_cancellation_refund_member m LEFT JOIN payment_refund r ON r.id=m.refund_id
         WHERE m.cancellation_id=c.id AND (m.status!='SUCCEEDED' OR r.id IS NULL OR r.status!='SUCCEEDED'
           OR r.payment_intent_id!=m.payment_intent_id OR r.amount_minor!=m.required_amount_minor OR r.currency!=m.currency))
-  ) SELECT type,orderId,reference,occurredAt FROM notices ORDER BY occurredAt DESC,sortId DESC LIMIT 25`)
+  ) SELECT type,orderId,paymentId,reference,occurredAt FROM notices ORDER BY occurredAt DESC,sortId DESC LIMIT 25`)
     .bind(
       input.customerId,
       now,
@@ -74,8 +77,15 @@ export async function listCustomerNotifications(
       input.customerId,
       now,
       now,
+      now,
     )
-    .all<{ type: string; orderId: string | null; reference: string | null; occurredAt: number }>();
+    .all<{
+      type: string;
+      orderId: string | null;
+      paymentId: string | null;
+      reference: string | null;
+      occurredAt: number;
+    }>();
   return {
     ok: true,
     requestId: input.requestId,
@@ -95,12 +105,14 @@ export async function listCustomerNotifications(
               ? "mailto:support@freshmarkets.ph"
               : row.orderId
                 ? `/orders/${encodeURIComponent(row.orderId)}`
-                : "/checkout",
+                : row.paymentId
+                  ? `/orders?filter=incomplete&paymentIntentId=${encodeURIComponent(row.paymentId)}`
+                  : "/orders?filter=incomplete",
             actionLabel: support
               ? "Contact support"
               : row.orderId
                 ? "View order"
-                : "Review checkout",
+                : "Continue payment",
           },
         ];
       }),

@@ -14,7 +14,7 @@ A provider-confirmed canonical Payments outcome sufficient under the configured 
 
 ## Cart
 
-An explicitly located Cart is `ACTIVE`. A new Quote records its Cart version and guards that version when storing the Quote and related holds/claims. Successful paid-Order commitment changes that Cart to `CONVERTED` in the same transaction only when the Cart remains active at the recorded version. Keep its rows and quantities as history. A changed Cart or a retained Quote without version evidence stays intact; payment success still commits the accepted Order snapshot. Rejected commitment rolls back Cart completion, and payment replay never completes a later Cart. A subsequent Cart is created through explicit current location selection.
+An explicitly located Cart is `ACTIVE`. A new Quote records its Cart version and guards that version when storing the Quote and related holds/claims. Durable adoption of a grocery payment submission changes that exact Cart to `PAYMENT_PENDING` and creates one empty `ACTIVE` successor at the same location in the same transaction. The submitted rows remain immutable payment evidence and never populate the successor implicitly. Successful paid-Order commitment changes the matching `PAYMENT_PENDING` Cart to `CONVERTED`; retained pre-upgrade active Carts remain compatible. A changed Cart or a retained Quote without version evidence stays intact; payment success still commits the accepted Order snapshot. Rejected commitment rolls back Cart completion, and payment replay never completes the successor Cart.
 
 ## Global Commerce Configuration
 

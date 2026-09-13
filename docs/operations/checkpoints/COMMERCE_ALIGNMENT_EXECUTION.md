@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Concurrent owner request — CHECKOUT-PENDING-HANDOFF-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner confirmed that a durably submitted Instant checkout must leave the editable Cart
+immediately and remain reachable from notifications and Orders until an Order is committed.
+Acceptance: submitted rows remain payment evidence; one empty successor Cart is available; Orders
+shows owned incomplete checkouts and fresh continuation actions; expired actions are not advertised;
+retained locked carts do not offer Clear or quantity mutations.
+
+Implementation staged for owner-authorized release: payment-creation adoption atomically moves the
+quoted Cart to
+`PAYMENT_PENDING` and creates its empty successor; paid commitment completes either the new state or
+the retained pre-upgrade active state without touching the successor. Migration 0098 upgrades
+existing unsettled submitted carts. A no-store Core/Web read supplies the new Needs payment Orders
+view from payment/quote evidence, and notifications link there only while an active unexpired
+provider action exists. Checkout clears the shared Cart projection before redirecting. Relevant
+contracts, state/API/data specifications, migration verification and focused Core/Web tests were
+updated. Existing unrelated Admin/address/inventory/provider/HSPA work and local logs remain
+preserved. The owner authorized commit, push and deployment; no real payment/provider transaction is
+authorized.
+
+Verification: intended-file format/lint/diff checks, migration verification, Contracts (20 files / 69
+tests), final focused Core (5 files / 60 tests), focused provider recovery (3 / 55), focused Web (3 / 21),
+Core typecheck and both Worker builds passed. The complete Web suite passed 138 files / 570 tests.
+The complete Core suite passed 205 files / 1,670 tests and has one failure in the concurrent
+over-quantity availability slice; it is outside this task. A later Web typecheck is likewise blocked
+by a duplicate property in concurrent `tests/address-map.spec.ts`; Web typecheck had passed before
+that edit appeared. No browser or deployed acceptance is claimed yet. Current observed main is
+f6cb30f4. Next action: commit and push the isolated CHECKOUT-PENDING-HANDOFF-1 changes, deploy Core,
+apply migration 0098, deploy Web from the committed clean tree, and verify live health/schema state.
+
 ## Latest owner request — LOCATION-UX-FINISH-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
@@ -36,16 +67,10 @@ response, Review navigation and persisted closure/hour values. Both full-page sc
 inspected; controls remain legible and wrap without horizontal overflow. This proves local
 Worker/D1/browser behavior with test configuration, not actual Google Maps/provider or deployed
 acceptance. Completed ID: LOCATION-UX-FINISH-1. Counting level: zero remaining implementation slices
-for this request. Commits `32ee796c` and `f6cb30f4` are pushed to `origin/main`; all concurrent work and
-local artifacts remain outside those commits. The owner then authorized deployment. A clean worktree
-pinned to `f6cb30f4` installed the frozen lockfile, built with `CLOUDFLARE_ENV=staging`, and confirmed
-the generated `freshmarkets-web-staging` worker, `https://freshmarkets.ph` origin and
-`freshmarkets-core-staging#CoreEntrypoint` binding; generated-config Wrangler dry run passed. Web
-version `22e1f1cb-70be-4d7f-bf83-f1a8872223cd` is active at 100%. Public homepage, Web liveness,
-Web-to-Core health, direct Core health and Core readiness returned HTTP 200/ready. The public hashed
-Admin asset contains both reverse-address and 12-hour-control markers. Core/D1 were unchanged; no
-provider transaction was performed. Next action: owner reviews the real Admin location pin and
-operating hours with actual location values; earlier actual-provider obligations remain open.
+for this request. Commit `32ee796c` is pushed to `origin/main`; all concurrent delivery-address work
+and local artifacts remain outside that commit. Next action: owner reviews the real Admin location
+pin and operating hours with actual location values; earlier provider/deployment obligations remain
+open.
 
 ## Owner request — ADDR-0 delivery address plan (2026-09-14)
 

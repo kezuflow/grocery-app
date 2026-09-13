@@ -480,16 +480,28 @@ describe("order commitment from canonical payment reactions", () => {
     )
       .bind(quote.value.quoteId)
       .run();
+    const payment = await createCheckoutPaymentIntent(
+      env.DB,
+      new ProviderRegistry("test", [createMockPaymentProvider()]),
+      "mock",
+      quoteDependencies.routeDistance,
+      paymentCommandForQuote(fixture.customerId, quote.value),
+      quoteDependencies.deliveryProviders,
+    );
+    expect(payment).toMatchObject({ ok: true });
+    if (!payment.ok) throw new Error(payment.error.message);
     expect(
-      await createCheckoutPaymentIntent(
-        env.DB,
-        new ProviderRegistry("test", [createMockPaymentProvider()]),
-        "mock",
-        quoteDependencies.routeDistance,
-        paymentCommandForQuote(fixture.customerId, quote.value),
-        quoteDependencies.deliveryProviders,
-      ),
-    ).toMatchObject({ ok: true });
+      await env.DB.prepare("SELECT status,version FROM cart WHERE id=?")
+        .bind(fixture.cartId)
+        .first(),
+    ).toEqual({ status: "PAYMENT_PENDING", version: 4 });
+    expect(
+      await env.DB.prepare(
+        "SELECT status,COUNT(cart_item.sku_id) item_count FROM cart LEFT JOIN cart_item ON cart_item.cart_id=cart.id WHERE cart.id=? GROUP BY cart.id",
+      )
+        .bind(`cart-after-submitted-${fixture.cartId}`)
+        .first(),
+    ).toEqual({ status: "ACTIVE", item_count: 0 });
     expect(
       await env.DB.prepare("SELECT id FROM payment_intent WHERE customer_id=?")
         .bind(fixture.customerId)

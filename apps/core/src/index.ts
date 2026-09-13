@@ -3223,6 +3223,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.ordersRpc.listCustomerOrders(input);
   }
 
+  async listCustomerIncompleteCheckouts(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest,
+  ) {
+    return this.ordersRpc.listCustomerIncompleteCheckouts(input);
+  }
+
   async listCustomerNotifications(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
     return this.ordersRpc.listCustomerNotifications(input);
   }

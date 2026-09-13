@@ -580,6 +580,10 @@ export function CheckoutClient({
           : null;
       paymentInProgressRef.current = true;
       paymentContinuationRef.current = continuation;
+      // Core has atomically frozen the submitted Cart and created an empty successor.
+      // Clear the shared browser projection before leaving checkout so the header and
+      // drawer cannot keep showing the submitted lines from cache.
+      acceptCart(null);
       if (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) {
         window.sessionStorage.setItem(
           PAYMENT_ACTION_STORAGE_KEY,

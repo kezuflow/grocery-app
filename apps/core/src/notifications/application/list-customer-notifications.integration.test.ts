@@ -99,12 +99,33 @@ describe("customer notification read boundary", () => {
     )
       .bind(payment, order, customerId, payment)
       .run();
+    await env.DB.prepare(
+      "INSERT INTO payment_provider_action(id,payment_intent_id,provider,provider_reference,action_type,redirect_url,client_token,expires_at,status,created_at,updated_at) VALUES (?,?,'mock',?,'REDIRECT','https://payments.example/continue',NULL,9999999999999,'ACTIVE',1,1)",
+    )
+      .bind(crypto.randomUUID(), payment, payment)
+      .run();
     await notice(customerId, payment, "PAYMENT_ACTION_REQUIRED", 1, "PAYMENT");
     let result = await listCustomerNotifications(env.DB, { customerId, requestId: "payment" }, 100);
     expect(result).toMatchObject({
       ok: true,
-      value: { items: [{ type: "PAYMENT_ACTION_REQUIRED", href: "/checkout" }] },
+      value: {
+        items: [
+          {
+            type: "PAYMENT_ACTION_REQUIRED",
+            href: `/orders?filter=incomplete&paymentIntentId=${payment}`,
+            actionLabel: "Continue payment",
+          },
+        ],
+      },
     });
+    await env.DB.prepare(
+      "UPDATE payment_provider_action SET status='EXPIRED' WHERE payment_intent_id=?",
+    )
+      .bind(payment)
+      .run();
+    expect(
+      await listCustomerNotifications(env.DB, { customerId, requestId: "expired-action" }, 100),
+    ).toMatchObject({ ok: true, value: { items: [] } });
     await env.DB.prepare("UPDATE payment_intent SET status='FAILED' WHERE id=?")
       .bind(payment)
       .run();

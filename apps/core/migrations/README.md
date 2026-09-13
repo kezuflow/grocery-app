@@ -118,6 +118,10 @@ checkout fails closed until the selected store has a complete profile.
 paid Scheduled demand and procurement requirements to proceed without it. Courier quotation and
 booking use the fixed order-level 20 kg Motorcycle parcel in Core policy.
 
+`0098_pending_checkout_carts.sql` moves a submitted grocery Cart to `PAYMENT_PENDING` while
+retaining its lines for reconciliation, then creates one empty active successor Cart. Existing
+unsettled checkouts are upgraded without fabricating an Order or payment outcome.
+
 ## 0069 integrity boundary
 
 The policy-placement revision also removes promotion component-count uniqueness, the three promotion usage-count triggers, mode/cadence coupling CHECKs and service_fee_configuration.active_for_new_commerce. Benefit/claim/redemption identities remain unique; Core guards current stacking and usage within commitment transactions, validates supported cadence and never prices new quotes from retired fee configuration. Original historical migration boundaries remain reproducible. Update final-schema consumers with this baseline; do not apply a changed 0069 over an already-recorded 0069 without a tested forward upgrade.

@@ -40,6 +40,22 @@ export type CustomerOrdersPage = {
   nextCursor: string | null;
 };
 
+export type CustomerIncompleteCheckoutView = {
+  paymentIntentId: string;
+  checkoutAttemptId: string;
+  state: "INITIATED" | "REQUIRES_ACTION" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "EXPIRED";
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  submittedAt: string;
+  totalMinor: number;
+  currency: string;
+  itemCount: number;
+  action: import("./payments").PaymentActionView;
+};
+
+export type CustomerIncompleteCheckoutsView = {
+  items: readonly CustomerIncompleteCheckoutView[];
+};
+
 export type CustomerOrderLineSnapshot = {
   orderItemId: string;
   skuId: string;
@@ -327,6 +343,9 @@ export type OrdersService = {
     request: OrderAdditionOptionsRequest,
   ): Promise<RpcResult<OrderAdditionOptionsView>>;
   listCustomerOrders(request: ListCustomerOrdersRequest): Promise<RpcResult<CustomerOrdersPage>>;
+  listCustomerIncompleteCheckouts(
+    request: AuthenticatedRequest,
+  ): Promise<RpcResult<CustomerIncompleteCheckoutsView>>;
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;

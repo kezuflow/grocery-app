@@ -19,6 +19,7 @@ import {
 } from "@freshmarkets/validation";
 import { authenticatedRequestSchema } from "../validation";
 import { listCustomerOrders } from "../orders/application/list-customer-orders";
+import { listCustomerIncompleteCheckouts } from "../orders/application/list-customer-incomplete-checkouts";
 import { listCustomerNotifications } from "../notifications/application/list-customer-notifications";
 import { getCustomerOrderDetail } from "../orders/application/get-customer-order-detail";
 import { reorderOrder } from "../orders/application/reorder-order";
@@ -73,6 +74,18 @@ export function createOrdersRpc(context: CoreRpcContext) {
         cursor: validation.data.cursor,
         limit: validation.data.limit,
         filter: validation.data.filter,
+      });
+    },
+    async listCustomerIncompleteCheckouts(
+      input: import("@freshmarkets/contracts").AuthenticatedRequest,
+    ) {
+      const validation = authenticatedRequestSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return listCustomerIncompleteCheckouts(context.env.DB, {
+        customerId: customer.value.customerId,
+        requestId: input.requestId,
       });
     },
     async getCustomerOrderDetail(input: CustomerOrderDetailRequest) {

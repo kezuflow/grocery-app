@@ -110,6 +110,58 @@ it("uses the mutation response without repeating coverage and cart reads", async
   expect(document.body.textContent).toContain("Total 200");
 });
 
+it("does not offer cart mutations while a retained checkout payment is pending", async () => {
+  const pending: CartView = {
+    id: "cart-pending",
+    locationId: "location-1",
+    version: 2,
+    currency: "PHP",
+    items: [
+      {
+        skuId: "sku-1",
+        name: "Pending fruit",
+        quantity: 1,
+        unitPriceMinor: 100,
+        lineTotalMinor: 100,
+        availability: "AVAILABLE",
+      },
+    ],
+    totalMinor: 100,
+    paymentInProgress: true,
+    checkoutBlocked: false,
+    blockingReasons: [],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json({
+        ok: true,
+        value:
+          url === "/api/serviceability"
+            ? { serviceable: true, fulfillmentLocation: { id: "location-1" } }
+            : pending,
+      }),
+    ),
+  );
+  await act(async () => root.render(drawer()));
+  await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Increase Pending fruit"]')).not.toBeNull(),
+  );
+  const cartDialog = document.querySelector<HTMLDialogElement>('[aria-label="Shopping cart"]');
+  expect(
+    [...(cartDialog?.querySelectorAll("button") ?? [])].some(
+      (button) => button.textContent === "Clear cart",
+    ),
+  ).toBe(false);
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Increase Pending fruit"]')?.disabled,
+  ).toBe(true);
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Decrease Pending fruit"]')?.disabled,
+  ).toBe(true);
+});
+
 it("confirms before clearing every cart line through authoritative mutations", async () => {
   let authoritative: CartView = {
     id: "cart-1",

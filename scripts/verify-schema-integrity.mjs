@@ -292,12 +292,49 @@ const beforeReports = database
     const query = `SELECT rowid,${columns.join(",")} FROM ${quote(name)} ORDER BY rowid`;
     return { name, query, rows: database.prepare(query).all() };
   });
+const pendingCartPayments = database
+  .prepare(`SELECT DISTINCT c.id cart_id FROM cart c
+    JOIN checkout_quote q ON q.cart_id=c.id AND q.customer_id=c.customer_id
+    JOIN payment_intent p ON p.subject_type='checkout_quote' AND p.subject_id=q.id
+    WHERE c.status='ACTIVE' AND p.purpose='GROCERY_CHECKOUT'
+      AND p.status IN ('REQUIRES_ACTION','PROCESSING','SUCCEEDED')
+      AND NOT EXISTS (SELECT 1 FROM order_payment_reaction committed WHERE committed.payment_intent_id=p.id)`)
+  .all();
 apply(
   database,
   migrations.filter((name) => name >= "0093_"),
 );
 for (const snapshot of beforeReports) {
   const actual = database.prepare(snapshot.query).all();
+  if (snapshot.name === "cart") {
+    const pendingIds = new Set(pendingCartPayments.map((row) => row.cart_id));
+    for (const previous of snapshot.rows) {
+      const current = actual.find((row) => row.id === previous.id);
+      if (!pendingIds.has(previous.id)) {
+        assert.deepEqual(current, previous, `${previous.id}: unrelated Cart is unchanged`);
+        continue;
+      }
+      assert.deepEqual(
+        {
+          ...current,
+          status: previous.status,
+          version: previous.version,
+          updated_at: previous.updated_at,
+        },
+        { ...previous },
+        `${previous.id}: submitted Cart retains identity and contents`,
+      );
+      assert.equal(current.status, "PAYMENT_PENDING");
+      assert.equal(current.version, previous.version + 1);
+      assert.ok(current.updated_at >= previous.updated_at);
+    }
+    for (const pending of pendingCartPayments) {
+      const successor = actual.find((row) => row.id === `cart-after-submitted-${pending.cart_id}`);
+      assert.equal(successor?.status, "ACTIVE", `${pending.cart_id}: empty successor Cart created`);
+    }
+    assert.equal(actual.length, snapshot.rows.length + pendingCartPayments.length);
+    continue;
+  }
   if (snapshot.name !== "metric_definitions") {
     assert.deepEqual(
       actual,

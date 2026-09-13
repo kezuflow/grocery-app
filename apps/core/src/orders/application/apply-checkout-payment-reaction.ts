@@ -366,21 +366,25 @@ export async function applyCheckoutPaymentReaction(
     // `changes()` is scoped to the immediately preceding statement. A lost
     // quote CAS aborts the whole batch before any dependent order survives.
     database.prepare("INSERT INTO commitment_abort (id) SELECT -3 WHERE changes()=0"),
-    // A newer Cart is intentionally preserved. For an unchanged Cart, completing
-    // it is part of the paid commitment; a suppressed write must abort the batch.
+    // The submitted Cart is retained separately from the customer's successor Cart.
+    // Pre-handoff rows remain compatible; a suppressed matching write aborts the batch.
     ...(quote.cartVersion === null
       ? []
       : [
           database
             .prepare(
-              "UPDATE cart SET status='CONVERTED',version=version+1,updated_at=? WHERE id=? AND customer_id=? AND status='ACTIVE' AND version=?",
+              `UPDATE cart SET status='CONVERTED',version=version+1,updated_at=?
+               WHERE id=? AND customer_id=? AND ((status='ACTIVE' AND version=?)
+                 OR (status='PAYMENT_PENDING' AND version=?))`,
             )
-            .bind(now, quote.cartId, quote.customerId, quote.cartVersion),
+            .bind(now, quote.cartId, quote.customerId, quote.cartVersion, quote.cartVersion + 1),
           database
             .prepare(
-              "INSERT INTO commitment_abort(id) SELECT -3 WHERE EXISTS (SELECT 1 FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE' AND version=?)",
+              `INSERT INTO commitment_abort(id) SELECT -3 WHERE EXISTS (
+                SELECT 1 FROM cart WHERE id=? AND customer_id=?
+                  AND ((status='ACTIVE' AND version=?) OR (status='PAYMENT_PENDING' AND version=?)))`,
             )
-            .bind(quote.cartId, quote.customerId, quote.cartVersion),
+            .bind(quote.cartId, quote.customerId, quote.cartVersion, quote.cartVersion + 1),
         ]),
     ...committedLines.map(({ line, orderItemId }) =>
       database

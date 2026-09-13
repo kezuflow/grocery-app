@@ -30,6 +30,7 @@ let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  window.history.replaceState(null, "", "/orders");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -47,6 +48,38 @@ async function click(name: string) {
   await act(async () => button.click());
 }
 describe("customer order history", () => {
+  it("shows an incomplete checkout with a durable payment action", async () => {
+    const pending = {
+      paymentIntentId: "payment-pending",
+      checkoutAttemptId: "quote-pending",
+      state: "REQUIRES_ACTION",
+      fulfillmentMode: "INSTANT",
+      submittedAt: new Date(1000).toISOString(),
+      totalMinor: 25000,
+      currency: "PHP",
+      itemCount: 3,
+      action: {
+        paymentIntentId: "payment-pending",
+        state: "REQUIRES_ACTION",
+        actionType: "REDIRECT",
+        redirectUrl: "https://payments.example/continue",
+        clientToken: null,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { items: [], nextCursor: null } }))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { items: [pending] } }));
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () => root.render(<OrdersPage />));
+    await click("Needs payment");
+    expect(fetcher.mock.calls[1]?.[0]).toBe("/api/commerce/incomplete-checkouts");
+    expect(container.textContent).toContain("Instant checkout");
+    expect(container.textContent).toContain("3 items");
+    expect(container.textContent).toContain("Continue payment");
+  });
+
   it("loads more orders and restarts pagination when the server-side filter changes", async () => {
     const fetcher = vi
       .fn()
