@@ -92,8 +92,14 @@ top-layer ordering is authoritative. It retains labelled/described dialog semant
 cancel guards, pending/error actions and a dedicated scrim. Focused Web component tests pass 5/5;
 Web typecheck, focused lint and formatting pass. A managed isolated Worker/D1 Playwright case passes
 and verifies the confirmation is topmost through actual center-point hit testing, then confirms Keep
-items dismisses only the confirmation while the drawer remains visible. No deployment was authorized
-or performed. Next action: deploy Web staging only if the owner explicitly requests it.
+items dismisses only the confirmation while the drawer remains visible. Commit `5dbd2c35` was pushed
+to `origin/main`; the owner then explicitly authorized deployment. A clean worktree pinned to current
+pushed main `64bfb27e` passed the staging Web build and generated-config Wrangler dry run, confirming
+`freshmarkets-web-staging`, `freshmarkets.ph` and the existing staging Core binding. Web staging
+version `3afa321e-c2f9-4ca4-8472-cd1293926c9f` is active at 100%. Public homepage, `/health` and
+`/api/core-health` returned HTTP 200, and the deployed cart chunk contains the new confirmation
+marker. Core and D1 were unchanged; no payment or courier transaction was performed. Next action:
+verify the clear-cart confirmation during an ordinary staging browsing session when convenient.
 
 ## Concurrent owner request — CHECKOUT-PAYMENT-ROUTING-1 (2026-09-14)
 
