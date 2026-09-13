@@ -368,7 +368,7 @@ export type AdminSkuCreateRequest = AuthenticatedRequest & {
   sellableUnitId: string;
   sellQuantity: number;
   consumptionBaseQuantity: number;
-  /** Required for delivery weight resolution when the Product base unit is not GRAM. */
+  /** Optional logistics estimate; courier admission uses the fixed order-level parcel. */
   estimatedShippingWeightGrams?: number;
   merchandisingLabel?: string | null;
   sortOrder?: number;

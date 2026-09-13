@@ -461,7 +461,7 @@ describe("order commitment from canonical payment reactions", () => {
     },
   );
 
-  it("rejects a retained overweight quote before creating payment intent", async () => {
+  it("does not use retained line-weight metadata as payment eligibility", async () => {
     const fixture = await seededCheckout();
     const quote = await createCheckoutQuote(
       env.DB,
@@ -489,12 +489,12 @@ describe("order commitment from canonical payment reactions", () => {
         paymentCommandForQuote(fixture.customerId, quote.value),
         quoteDependencies.deliveryProviders,
       ),
-    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    ).toMatchObject({ ok: true });
     expect(
       await env.DB.prepare("SELECT id FROM payment_intent WHERE customer_id=?")
         .bind(fixture.customerId)
         .first(),
-    ).toBeNull();
+    ).not.toBeNull();
   });
   it("carries an operator-created window through payment, recovery and the customer order without stock", async () => {
     const staff = await locationManager();

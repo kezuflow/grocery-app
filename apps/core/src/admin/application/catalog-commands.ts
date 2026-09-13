@@ -183,7 +183,7 @@ const variantEligibility = `SELECT 1 FROM product p JOIN inventory_pool pool ON 
   AND (?*sell.conversion_numerator)%sell.conversion_denominator=0
   AND (?*sell.conversion_numerator)/sell.conversion_denominator=?
   AND (p.stock_tracking='SHARED' OR (sell.code='PIECE' AND ?=1))
-  AND ((base.code='GRAM' AND ? IS NULL) OR (base.code='PIECE' AND ?>0))`;
+  AND ((base.code='GRAM' AND ? IS NULL) OR (base.code='PIECE' AND COALESCE(?,1)>0))`;
 export async function createAdminSku(
   deps: CatalogAdministrationDeps,
   input: unknown,
@@ -236,7 +236,7 @@ export async function createAdminSku(
   )
     return failure(
       "VALIDATION_FAILED",
-      "An active same-dimension unit must convert exactly to base consumption; Piece variants require shipping grams",
+      "An active same-dimension unit must convert exactly to base consumption",
       request.requestId,
     );
   const id = crypto.randomUUID(),

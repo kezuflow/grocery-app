@@ -4,6 +4,24 @@ export type DeliveryPackageKind = "BAG" | "BOX";
 
 export const BOX_MINIMUM_WEIGHT_GRAMS = 10_000;
 export const MAX_ORDER_WEIGHT_GRAMS = 20_000;
+export const FIXED_DELIVERY_PACKAGE_WEIGHT_GRAMS = MAX_ORDER_WEIGHT_GRAMS;
+
+/**
+ * FreshMarkets admits each courier order as one pre-packed motorcycle parcel.
+ * Item-level weights remain optional logistics metadata and do not determine
+ * quotation, payment, or booking eligibility.
+ */
+export function fixedDeliveryPackage(): Readonly<{
+  kind: "BOX";
+  quantity: 1;
+  weightGrams: typeof FIXED_DELIVERY_PACKAGE_WEIGHT_GRAMS;
+}> {
+  return {
+    kind: "BOX",
+    quantity: 1,
+    weightGrams: FIXED_DELIVERY_PACKAGE_WEIGHT_GRAMS,
+  };
+}
 
 function positiveSafeInteger(value: number | null): value is number {
   return value !== null && Number.isSafeInteger(value) && value > 0;

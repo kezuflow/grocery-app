@@ -468,7 +468,7 @@ describe("instant checkout quotes", () => {
     void replay;
   });
 
-  it("rejects an external-provider quote when a non-gram line has no shipping estimate", async () => {
+  it("quotes the fixed courier parcel when a non-gram line has no shipping estimate", async () => {
     await configureInstant();
     await env.DB.prepare(
       "UPDATE inventory_pool SET canonical_sourcing_mode='STOCKED',base_unit_id='unit-piece' WHERE id='pool-red-onion'",
@@ -490,7 +490,13 @@ describe("instant checkout quotes", () => {
       quoteDependencies,
     );
 
-    expect(result).toMatchObject({ ok: false, error: { code: "CONFIGURATION_ERROR" } });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        deliveryFeeMinor: 5_000,
+        lines: [expect.objectContaining({ shippingWeightGrams: null })],
+      },
+    });
     await env.DB.prepare(
       "UPDATE inventory_pool SET base_unit_id='unit-gram' WHERE id='pool-red-onion'",
     ).run();
@@ -603,7 +609,7 @@ describe("instant checkout quotes", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("quotes 20 kg of Scheduled goods without consulting physical stock or legacy capacity", async () => {
+  it("uses one fixed 20 kg parcel without deriving an order limit from line metadata", async () => {
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare(
@@ -651,10 +657,15 @@ describe("instant checkout quotes", () => {
         quoteDependencies,
       ),
     ).toMatchObject({
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "An order including additions cannot exceed 20 kg",
+      ok: true,
+      value: {
+        lines: [
+          expect.objectContaining({
+            quantity: 41,
+            baseQuantity: 20_500,
+            shippingWeightGrams: 20_500,
+          }),
+        ],
       },
     });
     await env.DB.prepare(

@@ -264,8 +264,8 @@ describe("listFulfillmentOptions", () => {
       ok: true,
       value: [
         {
-          eligible: false,
-          unavailableReason: "DELIVERY_WEIGHT_UNAVAILABLE",
+          eligible: true,
+          unavailableReason: null,
           deliveryPartner: { code: "lalamove" },
         },
       ],

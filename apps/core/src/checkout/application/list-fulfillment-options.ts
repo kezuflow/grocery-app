@@ -4,7 +4,6 @@ import type { RouteDistancePort } from "../../geography/ports/route-distance";
 import { operationalCandidates } from "../../geography/application/operational-candidates";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
-import { MAX_ORDER_WEIGHT_GRAMS } from "../../fulfillment/domain/delivery-package";
 
 type Query = {
   customerId: string;
@@ -86,27 +85,13 @@ export async function listFulfillmentOptions(
       },
     };
   const itemCount = await database
-    .prepare(`SELECT COUNT(*) count,
-      SUM(CASE WHEN unit.canonical_base_code='GRAM' THEN item.quantity*sku.consumption_base_quantity
-        ELSE item.quantity*sku.estimated_shipping_weight_grams END) grams
-      FROM cart_item item JOIN sku ON sku.id=item.sku_id JOIN product ON product.id=sku.product_id
-      JOIN inventory_pool pool ON pool.id=COALESCE(sku.stock_pool_id,product.inventory_pool_id)
-      JOIN unit ON unit.id=pool.base_unit_id WHERE item.cart_id=?`)
+    .prepare("SELECT COUNT(*) count FROM cart_item WHERE cart_id=?")
     .bind(query.cartId)
-    .first<{ count: number; grams: number | null }>();
+    .first<{ count: number }>();
   if (!itemCount?.count)
     return {
       ok: false,
       error: { code: "VALIDATION_FAILED", message: "Cart is empty", requestId: query.requestId },
-    };
-  if ((itemCount.grams ?? 0) > MAX_ORDER_WEIGHT_GRAMS)
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_FAILED",
-        message: "An order including additions cannot exceed 20 kg",
-        requestId: query.requestId,
-      },
     };
   if (address.status !== "active" || !address.user_confirmed_at)
     return {
@@ -146,23 +131,6 @@ export async function listFulfillmentOptions(
         .bind(candidate.locationId, query.cartId, candidate.locationId)
         .first();
       if (unavailable) reason = "INVENTORY_UNAVAILABLE";
-      if (reason === null) {
-        const missingDeliveryWeight = await database
-          .prepare(
-            `SELECT 1 found
-             FROM cart_item ci
-             JOIN sku s ON s.id=ci.sku_id
-             JOIN product p ON p.id=s.product_id
-             JOIN inventory_pool ip ON ip.id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
-             JOIN unit bu ON bu.id=ip.base_unit_id
-             WHERE ci.cart_id=? AND bu.canonical_base_code<>'GRAM'
-               AND s.estimated_shipping_weight_grams IS NULL
-             LIMIT 1`,
-          )
-          .bind(query.cartId)
-          .first();
-        if (missingDeliveryWeight) reason = "DELIVERY_WEIGHT_UNAVAILABLE";
-      }
     }
     if (candidate && mode === "SCHEDULED") {
       for (const operationalCandidate of orderedCandidates) {

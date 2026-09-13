@@ -557,6 +557,29 @@ describe("procurement command transaction and recovery", () => {
         .first(),
     ).toEqual({ count: 1 });
   });
+  it("aggregates exact paid demand when shipping-weight metadata is unavailable", async () => {
+    const { request, id } = await fixture();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE order_item SET shipping_weight_grams=NULL WHERE order_id=?").bind(id),
+      env.DB.prepare(
+        "UPDATE committed_demand SET shipping_weight_grams=NULL WHERE order_id=?",
+      ).bind(id),
+    ]);
+
+    const result = await core.aggregateAdminProcurementDemand(request);
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { requiredQuantityBase: 500, shippingWeightGrams: null },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT shipping_weight_grams AS shippingWeightGrams FROM procurement_requirement WHERE delivery_cycle_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ shippingWeightGrams: null });
+  });
   describe.each([aggregateAdminProcurementDemand, confirmAdminProcurementPurchase])(
     "%s guards",
     (execute) => {

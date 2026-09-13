@@ -1119,7 +1119,7 @@ describe("external delivery request", () => {
     },
   );
 
-  it("builds the courier request from the store profile, stop snapshot, and order weight", async () => {
+  it("builds the courier request from the store profile, stop snapshot, and fixed parcel", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
@@ -1199,7 +1199,7 @@ describe("external delivery request", () => {
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       merchantOrderId: expect.stringMatching(/^fm-/),
       serviceType: "MOTORCYCLE",
-      packages: [{ kind: "BAG", quantity: 1, weightGrams: 1000 }],
+      packages: [{ kind: "BOX", quantity: 1, weightGrams: 20_000 }],
       sender: { name: "FreshMarkets Central Cebu", phoneE164: "+639171110000" },
       recipient: { name: "Ana Customer", phoneE164: "+639171234567" },
       origin: { coordinate: { latitude: 10.3157, longitude: 123.8854 } },

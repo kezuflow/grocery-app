@@ -1,7 +1,3 @@
-import {
-  totalShippingWeightGrams,
-  MAX_ORDER_WEIGHT_GRAMS,
-} from "../../fulfillment/domain/delivery-package";
 import type {
   PaymentActionView,
   PaymentIntentCommandRequest,
@@ -105,19 +101,6 @@ export async function createCheckoutPaymentIntent(
     return failure(
       "PRICE_CHANGED",
       "Order total changed; review and accept the current total",
-      command.requestId,
-    );
-  const weight = totalShippingWeightGrams(quote.lines.map((line) => line.shippingWeightGrams));
-  if (weight === null)
-    return failure(
-      "CONFIGURATION_ERROR",
-      "Delivery weight is unavailable for one or more items",
-      command.requestId,
-    );
-  if (weight > MAX_ORDER_WEIGHT_GRAMS)
-    return failure(
-      "VALIDATION_FAILED",
-      "An order including additions cannot exceed 20 kg",
       command.requestId,
     );
   const current = await revalidateCheckoutQuote(

@@ -648,24 +648,7 @@ describe("paid-order amendments", () => {
       amendmentId: result.value.amendmentId,
       canonicalPaymentState: "SUCCEEDED" as const,
     };
-    await env.DB.prepare("UPDATE order_item SET shipping_weight_grams=19500 WHERE order_id=?")
-      .bind(fixture.orderId)
-      .run();
-    expect(await applyAmendmentPaymentReaction(env.DB, command)).toEqual({
-      applied: false,
-      reason: "CAS_CONFLICT",
-    });
-    expect(
-      await env.DB.prepare("SELECT id FROM committed_demand WHERE order_id=?")
-        .bind(fixture.orderId)
-        .first(),
-    ).toBeNull();
-    expect(
-      await env.DB.prepare("SELECT status FROM paid_order_amendment WHERE id=?")
-        .bind(result.value.amendmentId)
-        .first(),
-    ).toEqual({ status: "PENDING_PAYMENT" });
-    await env.DB.prepare("UPDATE order_item SET shipping_weight_grams=1000 WHERE order_id=?")
+    await env.DB.prepare("UPDATE order_item SET shipping_weight_grams=NULL WHERE order_id=?")
       .bind(fixture.orderId)
       .run();
     await env.DB.prepare("UPDATE payment_intent SET status='PROCESSING' WHERE id=?")
@@ -750,7 +733,7 @@ describe("paid-order amendments", () => {
     });
     await expect(resolveOrderDeliveryPackage(env.DB, fixture.orderId)).resolves.toEqual({
       ok: true,
-      value: { kind: "BAG", quantity: 1, weightGrams: 2_000 },
+      value: { kind: "BOX", quantity: 1, weightGrams: 20_000 },
     });
   });
 
@@ -817,85 +800,27 @@ describe("paid-order amendments", () => {
     expect(created.ok).toBe(true);
     expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
   });
-  it("holds the last weight allowance across competing and unknown payment outcomes", async () => {
+  it("does not derive amendment eligibility from item weight metadata", async () => {
     const f = await committedOrder();
-    await env.DB.prepare("UPDATE order_item SET shipping_weight_grams=19000 WHERE order_id=?")
+    await env.DB.prepare("UPDATE order_item SET shipping_weight_grams=NULL WHERE order_id=?")
       .bind(f.orderId)
       .run();
-    const draft = (version: number, quantity: number) =>
-      createOrderAmendment(env.DB, {
-        customerId: f.customerId,
-        orderId: f.orderId,
-        expectedOrderVersion: version,
-        additions: [{ skuId: f.skuId, quantity }],
-        idempotencyKey: crypto.randomUUID(),
-        requestId: crypto.randomUUID(),
-      });
-    expect(await draft(5, 3)).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
-    const first = await draft(5, 2);
-    if (!first.ok) throw new Error(first.error.message);
-    // Retained competing drafts exercise payment admission independently of the
-    // current one-active-addition UI/command rule.
-    const secondId = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO paid_order_amendment (id,order_id,status,currency,total_minor,merchandise_subtotal_minor,idempotency_key,created_at,updated_at) SELECT ?,order_id,status,currency,total_minor,merchandise_subtotal_minor,?,created_at,updated_at FROM paid_order_amendment WHERE id=?",
-    )
-      .bind(secondId, crypto.randomUUID(), first.value.amendmentId)
-      .run();
-    await env.DB.prepare(
-      "INSERT INTO paid_order_amendment_line (id,amendment_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,base_quantity,base_unit_code_snapshot,shipping_weight_grams,unit_price_minor,line_total_minor,created_at) SELECT ?,?,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,base_quantity,base_unit_code_snapshot,shipping_weight_grams,unit_price_minor,line_total_minor,created_at FROM paid_order_amendment_line WHERE amendment_id=?",
-    )
-      .bind(crypto.randomUUID(), secondId, first.value.amendmentId)
-      .run();
-    const second = { ok: true as const, value: { ...first.value, amendmentId: secondId } };
-    let submissions = 0;
-    const provider = createMockPaymentProvider();
-    provider.createPayment = async () => {
-      submissions++;
-      throw new Error("unknown provider response");
-    };
-    const registry = new ProviderRegistry("test", [provider]);
-    const commands = [first, second].map((a) => ({
+    const result = await createOrderAmendment(env.DB, {
       customerId: f.customerId,
-      amendmentId: a.value.amendmentId,
-      expectedAmendmentVersion: a.value.version,
-      expectedCurrency: "PHP",
-      expectedTotalMinor: a.value.financial.totalMinor,
-      returnUrl: "https://app.example/orders",
+      orderId: f.orderId,
+      expectedOrderVersion: 5,
+      additions: [{ skuId: f.skuId, quantity: 50 }],
       idempotencyKey: crypto.randomUUID(),
       requestId: crypto.randomUUID(),
-      headers: {},
-    }));
-    const results = await Promise.all(
-      commands.map((c) => createAmendmentPaymentIntent(env.DB, registry, "mock", c)),
-    );
-    expect(results.every((r) => !r.ok)).toBe(true);
-    expect(submissions).toBe(1);
-    const intents = await env.DB.prepare(
-      "SELECT id,subject_id FROM payment_intent WHERE purpose='ORDER_AMENDMENT' AND customer_id=?",
-    )
-      .bind(f.customerId)
-      .all<{ id: string; subject_id: string }>();
-    expect(intents.results).toHaveLength(1);
-    const winner = commands.find((c) => c.amendmentId === intents.results[0].subject_id)!;
-    const loser = commands.find((c) => c !== winner)!;
-    expect(await createAmendmentPaymentIntent(env.DB, registry, "mock", winner)).toMatchObject({
-      ok: false,
-      error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
     });
-    expect(await createAmendmentPaymentIntent(env.DB, registry, "mock", loser)).toMatchObject({
-      ok: false,
-    });
-    expect(submissions).toBe(1);
-    await env.DB.prepare("UPDATE payment_intent SET status='FAILED' WHERE id=?")
-      .bind(intents.results[0].id)
-      .run();
-    await createAmendmentPaymentIntent(env.DB, registry, "mock", loser);
-    expect(submissions).toBe(2);
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
     expect(
-      await env.DB.prepare("SELECT id FROM committed_demand WHERE order_id=?")
-        .bind(f.orderId)
+      await env.DB.prepare(
+        "SELECT shipping_weight_grams AS shippingWeightGrams FROM paid_order_amendment_line WHERE amendment_id=?",
+      )
+        .bind(result.value.amendmentId)
         .first(),
-    ).toBeNull();
+    ).toEqual({ shippingWeightGrams: 25_000 });
   });
 });

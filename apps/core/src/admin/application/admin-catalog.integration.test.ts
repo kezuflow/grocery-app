@@ -1318,7 +1318,7 @@ describe("catalog administration", () => {
     void unitKgId;
   });
 
-  it("requires and updates per-unit shipping grams for count-based variants", async () => {
+  it("keeps per-unit shipping grams optional and editable for count-based variants", async () => {
     const manager = await seedManager();
     const now = Date.now();
     const categoryId = crypto.randomUUID();
@@ -1355,39 +1355,36 @@ describe("catalog administration", () => {
       idempotencyKey: `sku-${crypto.randomUUID()}`,
     });
     expect(withoutWeight).toMatchObject({
-      ok: false,
-      error: { code: "VALIDATION_FAILED" },
+      ok: true,
+      value: { estimatedShippingWeightGrams: null, version: 1 },
     });
+    if (!withoutWeight.ok) return;
 
-    const created = await core.createAdminSku({
+    const withWeight = await core.updateAdminSku({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
-      productId,
-      code: `CHILI_${crypto.randomUUID().slice(0, 12)}`,
-      name: "1 pack",
-      sellableUnitId: pieceUnitId,
-      sellQuantity: 1,
-      consumptionBaseQuantity: 1,
+      skuId: withoutWeight.value.skuId,
       estimatedShippingWeightGrams: 50,
-      idempotencyKey: `sku-${crypto.randomUUID()}`,
+      expectedVersion: withoutWeight.value.version,
+      idempotencyKey: `sku-update-${crypto.randomUUID()}`,
     });
-    expect(created).toMatchObject({
+    expect(withWeight).toMatchObject({
       ok: true,
-      value: { estimatedShippingWeightGrams: 50, version: 1 },
+      value: { estimatedShippingWeightGrams: 50, version: 2 },
     });
-    if (!created.ok) return;
+    if (!withWeight.ok) return;
 
     const updated = await core.updateAdminSku({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
-      skuId: created.value.skuId,
+      skuId: withWeight.value.skuId,
       estimatedShippingWeightGrams: 60,
-      expectedVersion: created.value.version,
+      expectedVersion: withWeight.value.version,
       idempotencyKey: `sku-update-${crypto.randomUUID()}`,
     });
     expect(updated).toMatchObject({
       ok: true,
-      value: { estimatedShippingWeightGrams: 60, version: 2 },
+      value: { estimatedShippingWeightGrams: 60, version: 3 },
     });
   });
 

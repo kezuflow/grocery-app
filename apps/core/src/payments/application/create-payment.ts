@@ -1,5 +1,4 @@
 import { orderDeliveryWeightGuard } from "../../fulfillment/application/order-delivery-weight";
-import { MAX_ORDER_WEIGHT_GRAMS } from "../../fulfillment/domain/delivery-package";
 import { recordPaymentCreation, recoverPaymentCreation } from "./recover-payment-creation";
 import { requestHash } from "../../idempotency";
 import type { AppErrorCode } from "@freshmarkets/contracts";
@@ -246,10 +245,8 @@ export async function createPayment(
         database
           .prepare(`INSERT INTO commitment_abort(id) SELECT -43 WHERE NOT EXISTS (
         SELECT 1 FROM checkout_quote q WHERE q.id=? AND json_array_length(q.lines_json)>0
-        AND NOT EXISTS (SELECT 1 FROM json_each(q.lines_json) line WHERE json_type(line.value,'$.shippingWeightGrams') IS NOT 'integer' OR json_extract(line.value,'$.shippingWeightGrams')<=0)
-        AND (SELECT SUM(json_extract(line.value,'$.shippingWeightGrams')) FROM json_each(q.lines_json) line)<=?
       )`)
-          .bind(command.subjectId, MAX_ORDER_WEIGHT_GRAMS),
+          .bind(command.subjectId),
       );
     const linkAddition =
       command.purpose === "ORDER_AMENDMENT"

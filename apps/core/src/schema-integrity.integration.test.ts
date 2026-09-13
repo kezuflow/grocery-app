@@ -302,7 +302,7 @@ describe("authoritative schema integrity", () => {
     ).rejects.toThrow(/quantity > 0/);
   });
 
-  it("requires every exact Scheduled field on both INSERT and UPDATE", async () => {
+  it("requires exact Scheduled quantities and accepts optional shipping weights", async () => {
     const demand = await first("committed_demand");
     const item = await env.DB.prepare("SELECT * FROM order_item WHERE order_id=? LIMIT 1")
       .bind(demand.order_id)
@@ -329,7 +329,6 @@ describe("authoritative schema integrity", () => {
       "quantity_base_total",
       "quantity",
       "base_unit_code",
-      "shipping_weight_grams",
       "committed_at",
       "order_item_id",
     ]) {
@@ -344,6 +343,20 @@ describe("authoritative schema integrity", () => {
         /EXACT_SCHEDULED|CHECK constraint|NOT NULL/,
       );
     }
+    await insert("committed_demand", valid);
+    await expect(
+      env.DB.prepare("UPDATE committed_demand SET shipping_weight_grams=NULL WHERE id=?")
+        .bind(valid.id)
+        .run(),
+    ).resolves.toMatchObject({ success: true });
+    await env.DB.prepare("DELETE FROM committed_demand WHERE id=?").bind(valid.id).run();
+    await expect(
+      insert("committed_demand", {
+        ...valid,
+        id: crypto.randomUUID(),
+        shipping_weight_grams: null,
+      }),
+    ).resolves.toMatchObject({ success: true });
     const requirement = await first("procurement_requirement");
     const runId = crypto.randomUUID();
     await insert("procurement_run", {
@@ -374,7 +387,6 @@ describe("authoritative schema integrity", () => {
       "committed_demand_base",
       "required_base",
       "required_quantity",
-      "shipping_weight_grams",
     ]) {
       await insert("procurement_requirement", exact);
       await expect(
@@ -387,6 +399,20 @@ describe("authoritative schema integrity", () => {
         /EXACT_PROCUREMENT|CHECK constraint|NOT NULL/,
       );
     }
+    await insert("procurement_requirement", exact);
+    await expect(
+      env.DB.prepare("UPDATE procurement_requirement SET shipping_weight_grams=NULL WHERE id=?")
+        .bind(exact.id)
+        .run(),
+    ).resolves.toMatchObject({ success: true });
+    await env.DB.prepare("DELETE FROM procurement_requirement WHERE id=?").bind(exact.id).run();
+    await expect(
+      insert("procurement_requirement", {
+        ...exact,
+        id: crypto.randomUUID(),
+        shipping_weight_grams: null,
+      }),
+    ).resolves.toMatchObject({ success: true });
   });
 
   it("rejects orphan operational parents and invalid pickup phones", async () => {

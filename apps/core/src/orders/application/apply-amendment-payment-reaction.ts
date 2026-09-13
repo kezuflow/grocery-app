@@ -140,7 +140,7 @@ export async function applyAmendmentPaymentReaction(
       lines.length === 0 ||
       !amendment.cycle_id ||
       !amendment.location_id ||
-      lines.some((line) => !line.base_unit_code_snapshot || !line.shipping_weight_grams)
+      lines.some((line) => !line.base_unit_code_snapshot)
     )
       return { applied: false, reason: "CAS_CONFLICT" };
     for (const line of lines) {

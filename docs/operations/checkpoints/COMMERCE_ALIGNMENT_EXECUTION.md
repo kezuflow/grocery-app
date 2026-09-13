@@ -1,6 +1,43 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — CHECKOUT-QUOTE-RECOVERY-UX-1 (2026-09-13)
+## Current owner request — FIXED-COURIER-PARCEL-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. After Scheduled delivery became selectable, the real quotation failed because the cart
+contains count-based SKUs without estimated shipping weights. The owner approved one fixed 20 kg
+Motorcycle parcel for every courier Order. Acceptance: missing or larger line-weight metadata never
+blocks option listing, quotation, payment, paid commitment, Scheduled demand/procurement, additions,
+or booking; Instant still checks location operating hours; the actual provider fee remains mandatory;
+the order-level courier package is consistently 20,000 g; preserve exact sold/base quantities and
+optional historical line metadata. Start: `main` at `018536ba`; preserve unrelated location address,
+autofill, time-input, and location-schedule changes; no subagents.
+
+Implemented in the working tree: option listing and both quote modes no longer derive eligibility
+from SKU weights. Provider quotation and committed-Order booking resolve the same fixed BOX / 20,000 g
+parcel. Payment and paid-reaction boundaries no longer reject nullable or larger line metadata.
+Scheduled exact demand and paid additions retain nullable line shipping evidence, and procurement
+aggregates it only when all contributing lines provide it; sold/base quantities remain required and
+authoritative. Migration `0097_fixed_delivery_package.sql` updates the exact-demand and procurement
+integrity triggers for nullable reference grams. New count-based catalog variants may omit the
+estimate, while a supplied estimate must still be a positive integer. PRODUCT, API contracts, data,
+design, checkpoint, and migration guidance record the owner correction.
+
+Verification on the final working-tree scope: `pnpm check` passed, including formatting, naming and
+terminology, harness, clean/populated migration upgrades, schema integrity, commit-message,
+architecture/readiness, lint and all workspace typechecks/tests/builds. The final Core suite passed
+205 files / 1,665 tests; the explicit catalog/procurement regressions passed 58/58 and schema
+integrity passed 8/8. Local D1 had two already-present schema fragments without migration-ledger rows; they were
+reconciled in place, retained data was migrated through `0097`, and the normal migration runner then
+reported every migration current. The restarted full stack serves `/checkout` at HTTP 200. Before the
+restart, the configured real Lalamove quotation call returned `SUCCESS`; no provider booking, payment,
+shared deployment or remote-data mutation was performed.
+
+Completed implementation ID: FIXED-COURIER-PARCEL-1. Counting level: zero remaining application
+changes for the missing-SKU-weight checkout blocker. Next action: owner refreshes localhost checkout,
+selects Scheduled delivery and retries the quotation; the real provider fee remains required before
+payment. The unrelated working-tree files remain unstaged.
+
+## Prior owner request — CHECKOUT-QUOTE-RECOVERY-UX-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. After activating the complete Scheduled cycle, owner can select Scheduled delivery but cannot

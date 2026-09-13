@@ -21,7 +21,7 @@ const resultSchema = z.object({
     inventoryPoolId: z.string(),
     skuId: z.string(),
     committedQuantitySellable: z.number().int().safe().positive(),
-    shippingWeightGrams: z.number().int().safe().positive(),
+    shippingWeightGrams: z.number().int().safe().positive().nullable(),
     requiredQuantityBase: z.number().int().safe().positive(),
     acceptedBase: z.literal(0),
     rejectedBase: z.literal(0),
@@ -163,7 +163,7 @@ async function executeProcurementCommand(
       "SKU does not belong to the supplied inventory pool",
       command.requestId,
     );
-  const totalsSql = `SELECT COUNT(*) count,COALESCE(SUM(quantity_sellable),0) units,COALESCE(SUM(quantity_base_total),0) quantity,COALESCE(SUM(shipping_weight_grams),0) grams FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`;
+  const totalsSql = `SELECT COUNT(*) count,COALESCE(SUM(quantity_sellable),0) units,COALESCE(SUM(quantity_base_total),0) quantity,CASE WHEN COUNT(*)=COUNT(shipping_weight_grams) THEN SUM(shipping_weight_grams) ELSE NULL END grams FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`;
   const demandBindings = [
     command.deliveryCycleId,
     command.locationId,
@@ -173,8 +173,14 @@ async function executeProcurementCommand(
   const totals = await database
     .prepare(totalsSql)
     .bind(...demandBindings)
-    .first<{ count: number; units: number; quantity: number; grams: number }>();
-  if (!totals || Object.values(totals).some((value) => !Number.isSafeInteger(value) || value <= 0))
+    .first<{ count: number; units: number; quantity: number; grams: number | null }>();
+  if (
+    !totals ||
+    [totals.count, totals.units, totals.quantity].some(
+      (value) => !Number.isSafeInteger(value) || value <= 0,
+    ) ||
+    (totals.grams !== null && (!Number.isSafeInteger(totals.grams) || totals.grams <= 0))
+  )
     return failure(
       "CONFIGURATION_ERROR",
       "No valid exact paid demand is available for this requirement",
@@ -301,7 +307,7 @@ async function executeProcurementCommand(
       .bind(command.skuId, command.inventoryPoolId),
     database
       .prepare(
-        `INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (SELECT 1 FROM (${totalsSql}) WHERE count=? AND units=? AND quantity=? AND grams=?)`,
+        `INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (SELECT 1 FROM (${totalsSql}) WHERE count=? AND units=? AND quantity=? AND grams IS ?)`,
       )
       .bind(...demandBindings, totals.count, totals.units, totals.quantity, totals.grams),
   );

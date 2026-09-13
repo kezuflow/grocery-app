@@ -417,7 +417,6 @@ export function ProductForm({
                               min={1}
                               step={1}
                               placeholder="60"
-                              required
                               onChange={(event) =>
                                 updateVariant(variant.id, {
                                   estimatedShippingWeightGrams: event.target.value,
@@ -425,7 +424,7 @@ export function ProductForm({
                               }
                             />
                             <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-                              Used to calculate delivery weight. Stock uses actual counts.
+                              Optional logistics reference. Stock uses actual counts.
                             </span>
                           </label>
                         ) : null}

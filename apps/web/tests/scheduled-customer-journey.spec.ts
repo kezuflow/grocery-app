@@ -270,13 +270,6 @@ for (const width of [1440, 390]) {
       });
       await page.goto("/checkout");
       await page.getByRole("radio").first().check();
-      if (quantity > 40) {
-        await expect(
-          page.getByText("An order including additions cannot exceed 20 kg", { exact: true }),
-        ).toBeVisible();
-        expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
-        return "";
-      }
       const quoteResponse = page.waitForResponse(
         (r) => r.url().endsWith("/api/checkout/quote") && r.request().method() === "POST",
       );

@@ -178,18 +178,19 @@ export function NewProductWorkspace({
       const sellQuantity = Number(variant.sellQuantity);
       const convertedNumerator = sellQuantity * (unit?.conversionNumerator ?? 0);
       const consumptionBaseQuantity = unit ? convertedNumerator / unit.conversionDenominator : 0;
+      const enteredShippingWeight = variant.estimatedShippingWeightGrams?.trim() ?? "";
       const estimatedShippingWeightGrams =
-        unit?.canonicalBaseCode === "GRAM" ? null : Number(variant.estimatedShippingWeightGrams);
+        unit?.canonicalBaseCode === "GRAM" || !enteredShippingWeight
+          ? null
+          : Number(enteredShippingWeight);
       if (
         !unit ||
         !Number.isSafeInteger(sellQuantity) ||
         sellQuantity < 1 ||
         !Number.isSafeInteger(consumptionBaseQuantity) ||
         consumptionBaseQuantity < 1 ||
-        (unit.canonicalBaseCode !== "GRAM" &&
-          (typeof estimatedShippingWeightGrams !== "number" ||
-            !Number.isSafeInteger(estimatedShippingWeightGrams) ||
-            estimatedShippingWeightGrams < 1))
+        (estimatedShippingWeightGrams !== null &&
+          (!Number.isSafeInteger(estimatedShippingWeightGrams) || estimatedShippingWeightGrams < 1))
       ) {
         setError(
           `Variant ${index + 1} needs a sell quantity that converts exactly to its base unit.`,

@@ -1,5 +1,5 @@
 import type { AddressComponents, DeliveryInstructions } from "@freshmarkets/contracts";
-import { deliveryPackageKind } from "../../fulfillment/domain/delivery-package";
+import { fixedDeliveryPackage } from "../../fulfillment/domain/delivery-package";
 import type {
   DeliveryProvider,
   DeliveryProviderAddress,
@@ -141,7 +141,7 @@ export async function quoteProviderDelivery(
     now: number;
   }>,
 ): Promise<CheckoutDeliveryQuote | null> {
-  const [profile, market, weight] = await Promise.all([
+  const [profile, market, cart] = await Promise.all([
     database
       .prepare(
         `SELECT sender_name,phone_e164,email,formatted_address,address_line1,address_line2,
@@ -158,22 +158,9 @@ export async function quoteProviderDelivery(
       .bind(input.marketId)
       .first<{ currency: string }>(),
     database
-      .prepare(
-        `SELECT COUNT(*) AS line_count,
-                SUM(CASE WHEN unit.canonical_base_code='GRAM'
-                     THEN item.quantity*sku.consumption_base_quantity
-                     ELSE item.quantity*sku.estimated_shipping_weight_grams END) AS grams,
-                SUM(CASE WHEN unit.canonical_base_code<>'GRAM'
-                           AND sku.estimated_shipping_weight_grams IS NULL THEN 1 ELSE 0 END) AS missing
-         FROM cart_item item
-         JOIN sku ON sku.id=item.sku_id
-         JOIN product ON product.id=sku.product_id
-         JOIN inventory_pool pool ON pool.id=COALESCE(sku.stock_pool_id,product.inventory_pool_id)
-         JOIN unit ON unit.id=pool.base_unit_id
-         WHERE item.cart_id=?`,
-      )
+      .prepare("SELECT COUNT(*) AS line_count FROM cart_item WHERE cart_id=?")
       .bind(input.cartId)
-      .first<{ line_count: number; grams: number | null; missing: number }>(),
+      .first<{ line_count: number }>(),
   ]);
   const recipientAddress = destination(input.address);
   if (
@@ -182,14 +169,10 @@ export async function quoteProviderDelivery(
     market.currency !== "PHP" ||
     !recipientAddress ||
     !/^\+[1-9]\d{7,14}$/.test(input.address.phone) ||
-    !weight?.line_count ||
-    weight.missing > 0 ||
-    !Number.isSafeInteger(weight.grams) ||
-    weight.grams! <= 0
+    !cart?.line_count
   )
     return null;
-  const packageKind = deliveryPackageKind(weight.grams!);
-  if (!packageKind) return null;
+  const deliveryPackage = fixedDeliveryPackage();
   if (input.scheduleAt && !provider.capabilities.scheduledQuotation.supported) return null;
   const scheduleAt = input.scheduleAt ? Date.parse(input.scheduleAt) : null;
   if (
@@ -230,11 +213,11 @@ export async function quoteProviderDelivery(
     currencyExponent: 2,
     packages: [
       {
-        kind: packageKind,
+        kind: deliveryPackage.kind,
         name: "FreshMarkets grocery order",
         description: "Packed grocery order",
-        quantity: 1,
-        weightGrams: weight.grams!,
+        quantity: deliveryPackage.quantity,
+        weightGrams: deliveryPackage.weightGrams,
         priceMinor: null,
       },
     ],

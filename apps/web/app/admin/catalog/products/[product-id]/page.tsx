@@ -417,17 +417,17 @@ export default function ProductDetailPage({
                   setNotice("This amount does not convert to an exact base inventory unit.");
                   return;
                 }
+                const enteredShippingWeight = newSku.estimatedShippingWeightGrams.trim();
                 const estimatedShippingWeightGrams =
-                  variantBaseUnitCode === "GRAM"
+                  variantBaseUnitCode === "GRAM" || !enteredShippingWeight
                     ? null
-                    : Number(newSku.estimatedShippingWeightGrams);
+                    : Number(enteredShippingWeight);
                 if (
-                  variantBaseUnitCode !== "GRAM" &&
-                  (typeof estimatedShippingWeightGrams !== "number" ||
-                    !Number.isSafeInteger(estimatedShippingWeightGrams) ||
+                  estimatedShippingWeightGrams !== null &&
+                  (!Number.isSafeInteger(estimatedShippingWeightGrams) ||
                     estimatedShippingWeightGrams < 1)
                 ) {
-                  setNotice("Enter a positive shipping weight in grams for one sold unit.");
+                  setNotice("Shipping weight must be a positive whole number when provided.");
                   return;
                 }
                 void addVariant({
@@ -467,9 +467,9 @@ export default function ProductDetailPage({
                 </label>
                 {variantBaseUnitCode !== "GRAM" ? (
                   <label className="grid gap-1 text-sm font-medium">
-                    Shipping weight (g)
+                    Shipping weight (g, optional)
                     <span className="text-xs font-normal text-[var(--fm-text-muted)]">
-                      Estimate for one sold unit
+                      Logistics reference for one sold unit
                     </span>
                     <Input
                       aria-label="Estimated shipping weight"
