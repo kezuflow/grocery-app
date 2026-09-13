@@ -393,6 +393,9 @@ textarea {
 .fm-cart-drawer[open][data-state="open"]::backdrop {
   opacity: 1;
 }
+.fm-cart-confirm-dialog::backdrop {
+  background: rgb(15 23 42 / 45%);
+}
 @starting-style {
   .fm-cart-drawer[open][data-state="open"] {
     transform: translateX(100%);

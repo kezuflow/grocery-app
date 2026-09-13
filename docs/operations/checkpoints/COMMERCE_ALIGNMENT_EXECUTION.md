@@ -63,6 +63,23 @@ Earlier commerce/provider obligations remain independent and unclosed.
 Next action: profile remaining uncached media/Web/Core delays against the preserved baseline,
 then rerun the rollout gate. Staging intentionally retains the known-good baseline; main keeps HSPA.
 
+## Concurrent owner request — CART-CLEAR-CONFIRMATION-LAYER-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner reports that the Clear cart confirmation appears underneath the native Your cart
+drawer. Acceptance: the confirmation is the topmost modal, blocks interaction behind it, preserves
+cancel/clear behavior and leaves the cart drawer open after cancellation.
+
+The drawer already uses native `<dialog>.showModal()`, which enters the browser top layer; its former
+Radix confirmation portal remained in the ordinary document, where no z-index can overtake a native
+modal. The clear confirmation now uses a second native modal opened after the drawer, so browser
+top-layer ordering is authoritative. It retains labelled/described dialog semantics, Escape/backdrop
+cancel guards, pending/error actions and a dedicated scrim. Focused Web component tests pass 5/5;
+Web typecheck, focused lint and formatting pass. A managed isolated Worker/D1 Playwright case passes
+and verifies the confirmation is topmost through actual center-point hit testing, then confirms Keep
+items dismisses only the confirmation while the drawer remains visible. No deployment was authorized
+or performed. Next action: deploy Web staging only if the owner explicitly requests it.
+
 ## Concurrent owner request — CHECKOUT-PAYMENT-ROUTING-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation

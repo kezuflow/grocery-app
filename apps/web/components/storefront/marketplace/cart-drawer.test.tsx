@@ -161,19 +161,27 @@ it("confirms before clearing every cart line through authoritative mutations", a
   vi.stubGlobal("fetch", fetcher);
   await act(async () => root.render(drawer()));
   await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+  const cartDialog = document.querySelector<HTMLDialogElement>('[aria-label="Shopping cart"]');
   await vi.waitFor(() =>
     expect(
-      document.querySelector<HTMLButtonElement>("button")?.ownerDocument.body.textContent,
-    ).toContain("Clear cart"),
+      [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].some(
+        (button) => button.textContent === "Clear cart",
+      ),
+    ).toBe(true),
   );
 
   await act(async () => {
-    [...document.querySelectorAll<HTMLButtonElement>("button")]
+    [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
       .find((button) => button.textContent === "Clear cart")
       ?.click();
   });
   expect(commands).toHaveLength(0);
-  const confirmation = document.querySelector('[data-slot="alert-dialog-content"]');
+  const confirmation = document.querySelector<HTMLDialogElement>(
+    '[aria-labelledby="clear-cart-title"]',
+  );
+  expect(cartDialog?.open).toBe(true);
+  await vi.waitFor(() => expect(confirmation?.dataset.state).toBe("open"));
+  expect(confirmation?.open).toBe(true);
   expect(confirmation?.textContent).toContain("Clear your cart?");
 
   await act(async () => {
@@ -187,7 +195,7 @@ it("confirms before clearing every cart line through authoritative mutations", a
     { skuId: "sku-2", quantity: 0, expectedVersion: 2 },
   ]);
   expect(document.body.textContent).toContain("Your cart is empty");
-  expect(document.querySelector('[data-slot="alert-dialog-content"]')).toBeNull();
+  expect(confirmation?.open).toBe(false);
 });
 
 it.each([false, true])(

@@ -118,6 +118,33 @@ test("guest cart remains visible and asks for sign-in before checkout", async ({
   await expect(drawer.getByText(/minimum order/i)).toHaveCount(0);
 });
 
+test("clear-cart confirmation is topmost above the cart drawer", async ({ page }) => {
+  await page.goto("/?q=red%20onion");
+  await page.getByRole("button", { name: "Add Red onion to cart" }).first().click();
+  await page.getByRole("link", { name: "Cart, 1 item" }).click();
+
+  const drawer = page.getByRole("dialog", { name: "Shopping cart" });
+  await drawer.getByRole("button", { name: "Clear cart", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "Clear your cart?" });
+  await expect(confirmation).toBeVisible();
+  await expect
+    .poll(() =>
+      confirmation.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const topmost = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2,
+        );
+        return topmost === element || element.contains(topmost);
+      }),
+    )
+    .toBe(true);
+
+  await confirmation.getByRole("button", { name: "Keep items" }).click();
+  await expect(confirmation).toBeHidden();
+  await expect(drawer).toBeVisible();
+});
+
 test("guest cart survives client navigation after an anonymous add", async ({ page }) => {
   await page.goto("/?q=red%20onion");
   await page.getByRole("button", { name: "Add Red onion to cart" }).first().click();
