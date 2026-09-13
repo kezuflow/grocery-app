@@ -64,5 +64,9 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).not.toContain("Internal window name");
     expect(html).toContain('aria-pressed="true"');
     expect(html).not.toMatch(/hub|location-cebu/i);
+    expect(html).toContain("divide-y");
+    expect(html).not.toContain("fm-shadow-card");
+    expect(html).not.toContain("fm-radius-surface");
+    expect(html).not.toContain("fm-surface-soft");
   });
 });

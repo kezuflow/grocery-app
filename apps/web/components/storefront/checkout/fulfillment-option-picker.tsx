@@ -24,7 +24,7 @@ export function FulfillmentOptionPicker({
   selectedOptionId?: string;
 }) {
   return (
-    <fieldset disabled={disabled} className="mt-5 grid gap-3 md:grid-cols-2">
+    <fieldset disabled={disabled} className="mt-4 grid divide-y divide-[var(--fm-border)]">
       <legend className="sr-only">Fulfillment option</legend>
       {options.map((option) => (
         <button
@@ -34,25 +34,25 @@ export function FulfillmentOptionPicker({
           disabled={disabled || !option.eligible}
           aria-pressed={selectedOptionId === option.optionId}
           className={cn(
-            "group relative flex min-h-28 items-start gap-4 rounded-[var(--fm-radius-surface)] border bg-white p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
+            "group flex min-h-24 w-full items-start gap-3 bg-transparent px-0 py-4 text-left transition-[color,opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] first:pt-2 last:pb-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
             selectedOptionId === option.optionId
-              ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
-              : "border-[var(--fm-border)] hover:border-[var(--fm-primary-dark)]",
+              ? "text-[var(--fm-primary-dark)]"
+              : "text-[var(--fm-text)] hover:text-[var(--fm-primary-dark)]",
           )}
         >
           <span
             aria-hidden="true"
             className={cn(
-              "grid size-10 shrink-0 place-items-center rounded-full",
+              "mt-0.5 grid size-8 shrink-0 place-items-center",
               selectedOptionId === option.optionId
-                ? "bg-[var(--fm-primary-dark)] text-white"
-                : "bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]",
+                ? "text-[var(--fm-primary-dark)]"
+                : "text-[var(--fm-text-muted)] group-hover:text-[var(--fm-primary-dark)]",
             )}
           >
             {option.mode === "INSTANT" ? (
-              <Clock3 className="size-4" />
+              <Clock3 className="size-5" />
             ) : (
-              <CalendarDays className="size-4" />
+              <CalendarDays className="size-5" />
             )}
           </span>
           <span className="min-w-0 flex-1">
@@ -62,7 +62,14 @@ export function FulfillmentOptionPicker({
                   ? (option.deliveryPartner?.displayName ?? "Instant delivery")
                   : "Scheduled delivery"}
               </strong>
-              <span className="shrink-0 text-sm font-bold">{money(option)}</span>
+              <span className="flex shrink-0 items-center gap-2 text-sm font-bold">
+                {money(option)}
+                {selectedOptionId === option.optionId ? (
+                  <span className="grid size-5 place-items-center rounded-full bg-[var(--fm-primary-dark)] text-white">
+                    <Check className="size-3" aria-hidden="true" />
+                  </span>
+                ) : null}
+              </span>
             </span>
             <small className="mt-1.5 block text-xs leading-5 text-[var(--fm-text-muted)]">
               {option.eligible
@@ -84,11 +91,6 @@ export function FulfillmentOptionPicker({
               </span>
             ) : null}
           </span>
-          {selectedOptionId === option.optionId ? (
-            <span className="absolute bottom-3 right-3 grid size-5 place-items-center rounded-full bg-[var(--fm-primary-dark)] text-white">
-              <Check className="size-3" aria-hidden="true" />
-            </span>
-          ) : null}
         </button>
       ))}
     </fieldset>
