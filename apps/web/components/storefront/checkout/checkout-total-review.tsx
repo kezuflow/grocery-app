@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 import type { CheckoutQuoteView } from "@freshmarkets/contracts";
+import { cn } from "../../../lib/utils";
 
 function money(value: number, currency: string): string {
   return new Intl.NumberFormat("en-PH", {
@@ -31,11 +32,13 @@ export function CheckoutTotalReview({
   onAccept,
   accepting = false,
   showAction = true,
+  surface = "card",
 }: {
   quote: CheckoutQuoteView;
   onAccept: () => void;
   accepting?: boolean;
   showAction?: boolean;
+  surface?: "card" | "flat";
 }) {
   const merchandisePromotion = quote.promotionApplications.find(
     (application) => application.component === "MERCHANDISE",
@@ -43,14 +46,24 @@ export function CheckoutTotalReview({
   const deliveryPromotion = quote.promotionApplications.find(
     (application) => application.component === "DELIVERY",
   );
+  const flat = surface === "flat";
 
   return (
     <section
-      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 shadow-[var(--fm-shadow-card)] sm:p-6"
+      className={cn(
+        flat
+          ? "border-b border-[var(--fm-success-border)] pb-7 pt-7"
+          : "rounded-[var(--fm-radius-surface)] border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-5 shadow-[var(--fm-shadow-card)] sm:p-6",
+      )}
       aria-label="Order total review"
     >
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-success)] shadow-sm">
+        <span
+          className={cn(
+            "grid size-10 shrink-0 place-items-center text-[var(--fm-success)]",
+            !flat && "rounded-full bg-white shadow-sm",
+          )}
+        >
           <ShieldCheck className="size-5" aria-hidden="true" />
         </span>
         <div>

@@ -4,6 +4,7 @@ import { TicketPercent } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { PromotionCodeFeedback } from "@freshmarkets/contracts";
 import { promotionCodeMaxLength } from "@freshmarkets/validation";
+import { cn } from "../../../lib/utils";
 
 const MAX_PROMOTION_CODES = 5;
 
@@ -13,14 +14,17 @@ export function PromotionEntry({
   disabled,
   onAdd,
   onRemove,
+  surface = "card",
 }: {
   codes: readonly string[];
   feedback: readonly PromotionCodeFeedback[];
   disabled: boolean;
   onAdd: (code: string) => void | boolean | Promise<void | boolean>;
   onRemove: (code: string) => void;
+  surface?: "card" | "flat";
 }) {
   const [localStatus, setLocalStatus] = useState("");
+  const flat = surface === "flat";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,10 +62,19 @@ export function PromotionEntry({
   return (
     <section
       aria-labelledby="promotion-heading"
-      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)] sm:p-6"
+      className={cn(
+        flat
+          ? "border-b border-[var(--fm-border)] pb-7 pt-7"
+          : "rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)] sm:p-6",
+      )}
     >
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+        <span
+          className={cn(
+            "grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]",
+            !flat && "rounded-full bg-[var(--fm-surface-soft)]",
+          )}
+        >
           <TicketPercent className="size-5" aria-hidden="true" />
         </span>
         <div>
@@ -103,7 +116,12 @@ export function PromotionEntry({
           {codes.map((code) => (
             <li
               key={code}
-              className="inline-flex max-w-full items-center gap-2 rounded-full bg-[var(--fm-surface-soft)] px-3 py-2 text-xs font-semibold"
+              className={cn(
+                "inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold",
+                flat
+                  ? "border border-[var(--fm-border)] bg-transparent"
+                  : "bg-[var(--fm-surface-soft)]",
+              )}
             >
               <span className="min-w-0 break-all">{code}</span>
               <button

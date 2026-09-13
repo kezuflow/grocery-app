@@ -1,6 +1,38 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — CHECKOUT-DELIVERY-FLAT-UI-1 (2026-09-13)
+## Current owner request — CHECKOUT-FLAT-WORKSPACE-UI-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asks to remove the boxed gray treatment from the checkout page, not only from
+individual delivery choices. Acceptance: the checkout review workspace uses a white canvas with flat
+address, delivery-option, promotion, total-review and order-summary surfaces separated by simple
+rules; checkout controls and meaningful warning/error/success states remain usable, obvious and
+accessible; cart, quotation, retry, total and payment behavior are unchanged. Start: `main` at
+`7ab814ef`; preserve unrelated location address, autofill, time-input and location-schedule changes;
+no subagents.
+
+Implemented in the working tree: checkout now uses the storefront background, removes ordinary card
+radius, border, fill and shadow treatments from its review sections, and renders the checkout address
+list, promotion entry, accepted-total review and order summary through explicit flat variants. Saved
+address rows and the existing delivery-option rows use separators; status messages remain semantic and
+the existing controls, selected indicators and state colors remain intact. Shared cart/drawer and
+account address surfaces retain their card presentation through their default variants. DESIGN records
+the owner correction.
+
+Final verification on the working-tree scope: Web typecheck passed; the six focused Vitest files passed
+24 tests; the full Web suite passed 131 files / 544 tests; workspace formatting and lint passed; and
+the Web production build passed. The restarted localhost Web app loaded `/checkout`; the browser DOM
+reports flat promotion and order-summary surfaces, and the full-page render shows the saved-address
+rows, delivery section, promotion area and summary on a white canvas with separators instead of
+ordinary card shells or gray fill. The page was checked with a saved address/cart session and an
+unauthenticated empty/loading state; no provider transaction or payment was attempted.
+
+Implementation is complete in the working tree pending the scoped commit and push. Next action: stage
+only the checkout components/tests and the DESIGN/checkpoint guidance files, commit directly to `main`,
+push `origin/main`, then record the resulting revision here while leaving unrelated location and
+autofill work untouched.
+
+## Prior owner request — CHECKOUT-DELIVERY-FLAT-UI-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. The owner asks to remove the gray, boxed treatment from the checkout delivery choice.

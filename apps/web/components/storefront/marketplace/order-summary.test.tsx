@@ -37,4 +37,19 @@ describe("OrderSummary", () => {
     expect(html).toContain("text-right");
     expect(html).toContain("Items subtotal");
   });
+
+  it("supports a flat checkout presentation without a summary card", () => {
+    const html = renderToStaticMarkup(
+      <OrderSummary
+        cart={cart}
+        actionLabel="Continue"
+        showItems
+        onQuantityChange={vi.fn()}
+        surface="flat"
+      />,
+    );
+
+    expect(html).not.toContain("fm-shadow-card");
+    expect(html).not.toContain("bg-[var(--fm-surface-soft)]");
+  });
 });

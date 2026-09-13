@@ -11,6 +11,7 @@ export type AddressListProps = Readonly<{
   onCorrect: (address: CustomerAddressView) => void;
   defaultAddressId?: string | null;
   onManage?: (action: "SET_DEFAULT" | "REMOVE", address: CustomerAddressView) => void;
+  variant?: "cards" | "flat";
 }>;
 
 function displayAddress(address: CustomerAddressView): string {
@@ -32,15 +33,27 @@ export function AddressList({
   onCorrect,
   defaultAddressId,
   onManage,
+  variant = "cards",
 }: AddressListProps) {
+  const flat = variant === "flat";
+
   if (addresses.length === 0)
     return (
       <div
         role="status"
-        className="rounded-[var(--fm-radius-surface)] border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-soft)] p-5"
+        className={cn(
+          flat
+            ? "border-y border-dashed border-[var(--fm-border)] py-5"
+            : "rounded-[var(--fm-radius-surface)] border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-soft)] p-5",
+        )}
       >
         <div className="flex items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+          <span
+            className={cn(
+              "grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]",
+              !flat && "rounded-full bg-white shadow-sm",
+            )}
+          >
             <MapPin className="size-4" aria-hidden="true" />
           </span>
           <div>
@@ -57,7 +70,11 @@ export function AddressList({
     <div
       role="radiogroup"
       aria-label="Saved delivery addresses"
-      className="grid gap-3 sm:grid-cols-2"
+      className={cn(
+        flat
+          ? "grid gap-0 divide-y divide-[var(--fm-border)] border-y border-[var(--fm-border)]"
+          : "grid gap-3 sm:grid-cols-2",
+      )}
     >
       {addresses.map((address) => {
         const available = address.confirmedAt !== null;
@@ -68,11 +85,14 @@ export function AddressList({
           <div
             key={address.id}
             className={cn(
-              "relative rounded-[var(--fm-radius-surface)] border bg-white p-4 transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
-              selected
-                ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
-                : "border-[var(--fm-border)]",
-              !available && "bg-[var(--fm-surface-soft)]",
+              flat
+                ? "relative px-0 py-4 transition-[color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--fm-primary-dark)]"
+                : "relative rounded-[var(--fm-radius-surface)] border bg-white p-4 transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+              !flat &&
+                (selected
+                  ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
+                  : "border-[var(--fm-border)]"),
+              !available && (flat ? "opacity-60" : "bg-[var(--fm-surface-soft)]"),
             )}
           >
             <label
@@ -100,8 +120,12 @@ export function AddressList({
                   selected
                     ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
                     : available
-                      ? "border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)]"
-                      : "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] text-amber-800",
+                      ? flat
+                        ? "border-[var(--fm-border)] bg-transparent text-[var(--fm-primary-dark)]"
+                        : "border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)]"
+                      : flat
+                        ? "border-[var(--fm-warning-border)] bg-transparent text-amber-800"
+                        : "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] text-amber-800",
                 )}
               >
                 {selected ? (
@@ -116,7 +140,12 @@ export function AddressList({
                 <span className="flex flex-wrap items-center gap-2 font-semibold text-[var(--fm-text)]">
                   {address.label}
                   {address.id === defaultAddressId ? (
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-text-muted)]">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-text-muted)]",
+                        flat ? "border border-[var(--fm-border)] bg-transparent" : "bg-white",
+                      )}
+                    >
                       Default
                     </span>
                   ) : null}
@@ -146,7 +175,12 @@ export function AddressList({
               type="button"
               aria-label={`${available ? "Edit" : "Confirm"} ${address.label} address`}
               onClick={() => onCorrect(address)}
-              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3 text-sm font-semibold transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+              className={cn(
+                "mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-semibold transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]",
+                flat
+                  ? "text-[var(--fm-primary-dark)] underline underline-offset-4"
+                  : "rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3",
+              )}
             >
               <PencilLine className="size-3.5" aria-hidden="true" />
               {available ? "Edit address" : "Confirm address"}

@@ -77,4 +77,20 @@ describe("AddressList", () => {
     expect(markup).toContain('role="status"');
     expect(markup).toContain("No saved delivery addresses yet");
   });
+
+  it("supports a flat checkout presentation without card surfaces", () => {
+    const markup = renderToStaticMarkup(
+      <AddressList
+        addresses={[baseAddress]}
+        selectedAddressId="address-1"
+        onSelect={vi.fn()}
+        onCorrect={vi.fn()}
+        variant="flat"
+      />,
+    );
+
+    expect(markup).not.toContain("fm-shadow-card");
+    expect(markup).not.toContain("bg-[var(--fm-surface-soft)]");
+    expect(markup).toContain("Edit address");
+  });
 });

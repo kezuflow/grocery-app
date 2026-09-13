@@ -481,7 +481,7 @@ export function CheckoutClient({
   );
   return (
     <StorefrontShell>
-      <div className="min-h-[100dvh] w-full bg-[var(--fm-surface-soft)]">
+      <div className="min-h-[100dvh] w-full bg-[var(--fm-background)]">
         <header className="border-b border-[var(--fm-border)] bg-white px-4 py-6 sm:px-6 lg:px-10">
           <Link
             href="/cart"
@@ -513,7 +513,7 @@ export function CheckoutClient({
         <div className="grid gap-8 px-4 py-7 sm:px-6 lg:px-10 lg:py-10 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
           <main className="min-w-0">
             {guest ? (
-              <div className="mb-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] p-5">
+              <div className="mb-5 border-b border-[var(--fm-warning-border)] pb-5">
                 <p className="font-semibold">Sign in to continue with this saved cart.</p>
                 <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
                   Your items stay saved while you sign in. Review current availability and delivery
@@ -531,9 +531,9 @@ export function CheckoutClient({
             {showAddressEditor ? (
               <section
                 aria-label="Address setup workspace"
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]"
+                className="border-b border-[var(--fm-border)] pb-7"
               >
-                <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-4 sm:px-6">
+                <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-4">
                   <div className="flex items-center gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-primary-lime)] text-[var(--fm-primary-dark)]">
                       <MapPin className="size-4" aria-hidden="true" />
@@ -560,7 +560,7 @@ export function CheckoutClient({
                     <span className="sm:hidden">Back</span>
                   </button>
                 </div>
-                <div className="p-5 sm:p-6 lg:p-8">
+                <div className="pt-6 lg:pt-8">
                   <AddressEditor
                     key={editingAddress?.id ?? "checkout-new-address"}
                     multiStep
@@ -577,11 +577,11 @@ export function CheckoutClient({
                 </div>
               </section>
             ) : (
-              <div className="grid gap-5">
-                <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white shadow-[var(--fm-shadow-card)]">
-                  <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] p-5 sm:p-6">
+              <div className="grid gap-0">
+                <section className="border-b border-[var(--fm-border)] pb-7">
+                  <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-5">
                     <div className="flex items-start gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+                      <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         {selectedAddress ? (
                           <CheckCircle2 className="size-5" aria-hidden="true" />
                         ) : (
@@ -614,8 +614,8 @@ export function CheckoutClient({
                   </div>
 
                   {selectedAddress ? (
-                    <div className="mx-5 mt-5 flex items-start gap-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-hover)] p-4 sm:mx-6">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+                    <div className="mt-5 flex items-start gap-3 border-y border-[var(--fm-border)] py-4">
+                      <span className="grid size-9 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         <MapPin className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -660,8 +660,8 @@ export function CheckoutClient({
                   <div
                     className={
                       selectedAddress && !showSavedAddresses && addressLoadState === "ready"
-                        ? "h-5"
-                        : "p-5 sm:p-6"
+                        ? "pt-5"
+                        : "pt-5 sm:pt-6"
                     }
                   >
                     {!selectedAddress || showSavedAddresses ? (
@@ -694,14 +694,15 @@ export function CheckoutClient({
                           setEditingAddress(address);
                           setShowAddressEditor(true);
                         }}
+                        variant="flat"
                       />
                     ) : null}
                   </div>
                 </section>
 
-                <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)] sm:p-6">
-                  <div className="flex items-start gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+                <section className="border-b border-[var(--fm-border)] py-7">
+                  <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
+                    <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                       <Truck className="size-5" aria-hidden="true" />
                     </span>
                     <div>
@@ -722,7 +723,7 @@ export function CheckoutClient({
                       onSelect={(option) => void reviewTotal(option)}
                     />
                   ) : (
-                    <div className="mt-5 flex items-start gap-3 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-4 text-sm text-[var(--fm-text-muted)]">
+                    <div className="mt-4 flex items-start gap-3 border-t border-[var(--fm-border)] pt-4 text-sm text-[var(--fm-text-muted)]">
                       <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                       <div role={fulfillmentLoadState === "error" ? "alert" : "status"}>
                         <p>
@@ -755,14 +756,14 @@ export function CheckoutClient({
                   {quoteLoadState === "loading" ? (
                     <p
                       role="status"
-                      className="mt-3 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-sm text-[var(--fm-text-muted)]"
+                      className="mt-4 border-t border-[var(--fm-border)] pt-3 text-sm text-[var(--fm-text-muted)]"
                     >
                       Checking the Lalamove route and delivery fee…
                     </p>
                   ) : quoteError ? (
                     <div
                       role="alert"
-                      className="mt-3 rounded-[var(--fm-radius-control)] border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                      className="mt-4 border-t border-red-200 pt-3 text-sm text-red-800"
                     >
                       <p>{quoteError}</p>
                       {selectedFulfillmentOption ? (
@@ -780,6 +781,7 @@ export function CheckoutClient({
 
                 <div>
                   <PromotionEntry
+                    surface="flat"
                     codes={promotionCodes}
                     feedback={pendingQuote?.promotionFeedback ?? []}
                     disabled={guest || acceptingPayment}
@@ -809,6 +811,7 @@ export function CheckoutClient({
                       onAccept={confirmPayment}
                       accepting={acceptingPayment}
                       showAction={false}
+                      surface="flat"
                     />
                     <button
                       type="button"
@@ -825,7 +828,7 @@ export function CheckoutClient({
             {status ? (
               <p
                 role="status"
-                className="mt-5 flex items-start gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white p-4 text-sm shadow-sm"
+                className="mt-5 flex items-start gap-2 border-t border-[var(--fm-border)] pt-4 text-sm"
               >
                 <ShieldCheck
                   className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]"
@@ -841,6 +844,7 @@ export function CheckoutClient({
               cart={cart}
               totalMinor={pendingQuote?.totalMinor}
               quote={pendingQuote ?? undefined}
+              surface="flat"
               actionLabel={
                 guest
                   ? "Sign in to continue"

@@ -35,4 +35,20 @@ describe("PromotionEntry", () => {
 
     expect(html).toContain("No discount applied");
   });
+
+  it("supports a flat checkout presentation without a card surface", () => {
+    const html = renderToStaticMarkup(
+      <PromotionEntry
+        codes={[]}
+        feedback={[]}
+        disabled={false}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        surface="flat"
+      />,
+    );
+
+    expect(html).not.toContain("fm-shadow-card");
+    expect(html).not.toContain("bg-[var(--fm-surface-soft)]");
+  });
 });

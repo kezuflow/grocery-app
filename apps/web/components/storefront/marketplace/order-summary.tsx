@@ -24,6 +24,7 @@ export function OrderSummary({
   showItems = false,
   onQuantityChange,
   updatingSkuId,
+  surface = "card",
 }: {
   cart: CartView | null;
   actionLabel: string;
@@ -36,17 +37,23 @@ export function OrderSummary({
   showItems?: boolean;
   onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
   updatingSkuId?: string | null;
+  surface?: "card" | "flat";
 }) {
   const currency = cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
   const total = totalMinor ?? subtotal;
   const pricesAvailable = !cart?.items.some((item) => item.lineTotalMinor === null);
   const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const flat = surface === "flat";
 
   return (
     <aside
       aria-label="Order summary"
-      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)]"
+      className={cn(
+        flat
+          ? "border-y border-[var(--fm-border)] py-5"
+          : "rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 shadow-[var(--fm-shadow-card)]",
+      )}
     >
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -78,7 +85,12 @@ export function OrderSummary({
                   <ProductMedia
                     media={item.media ?? null}
                     name={item.name}
-                    className="size-14 shrink-0 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)]"
+                    className={cn(
+                      "size-14 shrink-0",
+                      flat
+                        ? "rounded-none bg-transparent"
+                        : "rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)]",
+                    )}
                   />
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>
@@ -182,7 +194,14 @@ export function OrderSummary({
         </div>
       </div>
 
-      <div className="mt-4 flex gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
+      <div
+        className={cn(
+          "mt-4 flex gap-2 text-xs leading-5 text-[var(--fm-text-muted)]",
+          flat
+            ? "border-t border-[var(--fm-border)] pt-3"
+            : "rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3",
+        )}
+      >
         <Info className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]" aria-hidden="true" />
         <span>{note ?? "Availability and delivery are confirmed at checkout."}</span>
       </div>

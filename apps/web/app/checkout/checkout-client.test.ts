@@ -31,4 +31,11 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("updatingSkuId={updatingSkuId}");
     expect(checkout).toContain("showAction={false}");
   });
+
+  it("uses flat surfaces across the checkout review workspace", () => {
+    expect(checkout).toContain("bg-[var(--fm-background)]");
+    expect(checkout).toContain('variant="flat"');
+    expect(checkout).toContain('surface="flat"');
+    expect(checkout).toContain('className="grid gap-0"');
+  });
 });

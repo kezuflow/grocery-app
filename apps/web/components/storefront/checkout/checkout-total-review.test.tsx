@@ -66,4 +66,13 @@ describe("CheckoutTotalReview", () => {
     expect(html).toContain("Payment review");
     expect(html).not.toContain("Accept total and continue to payment");
   });
+
+  it("supports a flat checkout presentation without a filled success card", () => {
+    const html = renderToStaticMarkup(
+      <CheckoutTotalReview quote={quote} onAccept={vi.fn()} surface="flat" />,
+    );
+
+    expect(html).not.toContain("fm-shadow-card");
+    expect(html).not.toContain("bg-[var(--fm-success-soft)]");
+  });
 });
