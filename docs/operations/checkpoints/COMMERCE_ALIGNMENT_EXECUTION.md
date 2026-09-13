@@ -1,5 +1,20 @@
 # Commerce alignment — active checkpoint
 
+## Owner request — ADDR-0 delivery address plan (2026-09-14)
+
+Plan: `docs/product/DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md`, ADDR-0 — Planning.
+Observed main af663a18 with existing unrelated Web/Admin/map/cart/test and
+checkpoint edits plus measurement artifacts; preserved. Owner retains Home/Work
+label and one optional delivery-instructions input, removes separate unit and
+other optional detail inputs, and requests an implementation plan. PRODUCT
+records that direction. Plan includes browsing-to-checkout carryover and Instant
+destination/cart revalidation. ADDR-0 complete; ADDR-1 through ADDR-4 remain planned.
+Verification: read actual address editor/dialog, checkout selection, contracts
+and quote-address construction; documentation diff checks only, no runtime or
+provider acceptance claimed. Next action: ADDR-1 — Simplify delivery details,
+after a fresh status and instruction-consumer audit. Existing obligations below
+remain unchanged. No application code or deployment changed for this request.
+
 ## Current owner request — HSPA-0 through HSPA-6 (2026-09-14)
 
 Active plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, **HSPA-6 — Integrated

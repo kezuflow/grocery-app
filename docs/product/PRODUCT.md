@@ -1,5 +1,7 @@
 # FreshMarkets Product Rules
 
+Owner supplement, 2026-09-14: simplify customer delivery details to retain the address label (such as Home/Work) and one optional Delivery instructions field alongside the confirmed destination, recipient name and phone. Remove separate building/unit, landmark, gate/guard, recipient-guidance and private-note inputs from the delivery flow. Useful entrance/unit details can be entered in Delivery instructions; no separate unit field is required. Preserve existing delivery information and immutable paid snapshots. The implementation plan is [DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md](DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md); this records the approved direction and planning request, not completed implementation or deployment acceptance.
+
 ## Owner-approved notification surfaces — 2026-09-13
 
 NOTIFICATION-UI-1 authorizes a customer bell immediately before Cart and an Admin header panel.
