@@ -9,8 +9,7 @@ Acceptance: submitted rows remain payment evidence; one empty successor Cart is 
 shows owned incomplete checkouts and fresh continuation actions; expired actions are not advertised;
 retained locked carts do not offer Clear or quantity mutations.
 
-Implementation staged for owner-authorized release: payment-creation adoption atomically moves the
-quoted Cart to
+Implementation released: payment-creation adoption atomically moves the quoted Cart to
 `PAYMENT_PENDING` and creates its empty successor; paid commitment completes either the new state or
 the retained pre-upgrade active state without touching the successor. Migration 0098 upgrades
 existing unsettled submitted carts. A no-store Core/Web read supplies the new Needs payment Orders
@@ -18,8 +17,7 @@ view from payment/quote evidence, and notifications link there only while an act
 provider action exists. Checkout clears the shared Cart projection before redirecting. Relevant
 contracts, state/API/data specifications, migration verification and focused Core/Web tests were
 updated. Existing unrelated Admin/address/inventory/provider/HSPA work and local logs remain
-preserved. The owner authorized commit, push and deployment; no real payment/provider transaction is
-authorized.
+preserved. No real payment/provider transaction was performed.
 
 Verification: intended-file format/lint/diff checks, migration verification, Contracts (20 files / 69
 tests), final focused Core (5 files / 60 tests), focused provider recovery (3 / 55), focused Web (3 / 21),
@@ -27,9 +25,18 @@ Core typecheck and both Worker builds passed. The complete Web suite passed 138 
 The complete Core suite passed 205 files / 1,670 tests and has one failure in the concurrent
 over-quantity availability slice; it is outside this task. A later Web typecheck is likewise blocked
 by a duplicate property in concurrent `tests/address-map.spec.ts`; Web typecheck had passed before
-that edit appeared. No browser or deployed acceptance is claimed yet. Current observed main is
-f6cb30f4. Next action: commit and push the isolated CHECKOUT-PENDING-HANDOFF-1 changes, deploy Core,
-apply migration 0098, deploy Web from the committed clean tree, and verify live health/schema state.
+that edit appeared. Commit `9b9310a0` is pushed to `origin/main`. A clean detached checkout of that
+exact revision repeated migration verification, Contracts (20 / 69), focused Core (3 / 41), focused
+Web (3 / 12), both package typechecks and both builds successfully. A private pre-migration D1 export
+was created outside the repository. Core version `72f75d8c-7920-42c1-95e8-d68bf9a790a0`, migration
+`0098_pending_checkout_carts.sql`, and Web version `09512738-0c8f-453f-a275-38e3d0a3fda0` were
+deployed in that order. Core health/readiness, Web Core health and the public Needs payment route all
+returned HTTP 200; the unauthenticated no-store API returned the expected authentication envelope.
+Remote D1 reports 0098 current, one upgraded pending Cart, zero customers with duplicate active Carts,
+zero pending Carts without an active successor and zero foreign-key violations. This is deployed
+infrastructure/schema acceptance, not an actual paid/customer browser journey. Completed ID:
+CHECKOUT-PENDING-HANDOFF-1. Remaining at this request level: zero implementation/deployment actions;
+an owner-controlled in-flight payment can provide optional end-user continuation acceptance.
 
 ## Latest owner request — LOCATION-UX-FINISH-1 (2026-09-14)
 
