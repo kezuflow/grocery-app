@@ -227,15 +227,15 @@ and authenticated measurements remain to be completed in HSPA-0/HSPA-6.
 
 ## Recommended orchestrator and implementer subagents
 
-Recommendation based on the models available in this session and the work's responsibilities;
-this is not a comparative model benchmark. No agents are launched by this plan.
+Model roles use the owner's corrected effort preferences: Astra medium and Sol low.
+This is not a comparative model benchmark. No agents are launched by this plan.
 
 | Role | Recommended model / effort | Responsibility |
 | --- | --- | --- |
-| Orchestrator | GPT-6 Astra / high | Own boundaries, sequence, task packets, shared contracts/layout foundation, integration, evidence, checkpoint and Git/deployment operations |
-| Implementer | GPT-5.6 Sol / high | Execute one bounded vertical slice, including focused tests and browser evidence; return a reviewed diff and limitations |
-| Second implementer, only when independent | GPT-5.6 Sol / high | Work on disjoint files, such as HSPA-5 media work after its inputs are fixed |
-| Independent reviewer | GPT-6 Astra / high | Review isolation, routing/hydration, command correctness and actual acceptance evidence before integration |
+| Orchestrator | GPT-6 Astra / medium | Own boundaries, sequence, task packets, shared contracts/layout foundation, integration, evidence, checkpoint and Git/deployment operations |
+| Implementer | GPT-5.6 Sol / low | Execute one bounded vertical slice, including focused tests and browser evidence; return a reviewed diff and limitations |
+| Second implementer, only when independent | GPT-5.6 Sol / low | Work on disjoint files, such as HSPA-5 media work after its inputs are fixed |
+| Independent reviewer | GPT-6 Astra / medium | Review isolation, routing/hydration, command correctness and actual acceptance evidence before integration |
 
 Start with the orchestrator and one implementer. Maximum four active agents including the
 orchestrator; add concurrency only for independent work. HSPA-1 is coordinated serially because
@@ -254,7 +254,7 @@ future instruction. No personal settings or default models are changed.
 Suggested execution prompt:
 
 > Implement docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md in HSPA-0 through HSPA-6 order.
-> Use GPT-6 Astra at high effort as orchestrator and GPT-5.6 Sol at high effort for bounded
+> Use GPT-6 Astra at medium effort as orchestrator and GPT-5.6 Sol at low effort for bounded
 > implementer subagents. I authorize this scoped delegation for the hybrid SPA work. Preserve
 > unrelated changes and Core authority. Have the orchestrator own shared files, integration,
 > checkpoint, commits and staging deployment. Validate each slice, deploy staging, and report the

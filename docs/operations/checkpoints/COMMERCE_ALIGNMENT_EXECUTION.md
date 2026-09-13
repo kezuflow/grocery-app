@@ -9,7 +9,9 @@ client navigation/data ownership and SSR entry behavior on vinext/Cloudflare; pr
 provide ordered implementation slices, measurable checks and scoped agent responsibilities.
 
 Delivered the plan with seven implementation slices, HSPA-0 through HSPA-6, and a recommended
-GPT-6 Astra/high orchestrator, GPT-5.6 Sol/high implementer and optional independent review.
+GPT-6 Astra/medium orchestrator, GPT-5.6 Sol/low implementer and optional Astra/medium review.
+Owner correction after planning commit `bd045cad`: replace the original high-effort recommendations
+with Astra medium and Sol low throughout the role table and reusable execution prompt.
 No implementation agents were launched, application architecture changed, or model settings edited.
 The earlier staging deployment is recorded below; no subsequent deployment occurred for this plan.
 
