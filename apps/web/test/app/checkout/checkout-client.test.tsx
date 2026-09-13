@@ -229,7 +229,7 @@ function successfulFetch(options?: {
             quoteId: `quote-${optionId}`,
             attemptVersion: 1,
             priceAcceptanceVersion: 1,
-            expiresAt: "2026-09-01T00:00:00.000Z",
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
             currency: "PHP",
             merchandiseSubtotalMinor: 30000,
             itemDiscountMinor: 0,
@@ -295,6 +295,64 @@ describe("CheckoutClient delivery inputs", () => {
     vi.unstubAllGlobals();
     addressEditorPropsMock.mockReset();
     fetchCartMock.mockReset();
+    vi.useRealTimers();
+  });
+
+  it("automatically quotes the sole Scheduled option and refreshes it after four and a half minutes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-14T00:00:00.000Z"));
+    let quoteCalls = 0;
+    let abandonCalls = 0;
+    const base = successfulFetch({ onQuote: () => (quoteCalls += 1) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        const path = String(url);
+        if (path === "/api/checkout/fulfillment-options")
+          return Promise.resolve(
+            json({
+              ok: true,
+              value: [
+                {
+                  optionId: "option-scheduled",
+                  mode: "SCHEDULED",
+                  eligible: true,
+                  unavailableReason: null,
+                  promisedAt: null,
+                  deliveryWindow: {
+                    windowId: "window-1",
+                    name: "Scheduled delivery",
+                    startsAt: "2026-09-20T00:00:00Z",
+                    endsAt: "2026-09-20T14:00:00Z",
+                  },
+                  feePreview: null,
+                  cycleId: "cycle-2",
+                  cutoffAt: "2026-09-19T00:00:00Z",
+                  provisional: true,
+                },
+              ],
+            }),
+          );
+        if (path.endsWith("/abandon")) abandonCalls += 1;
+        return base(url, init);
+      }),
+    );
+
+    act(() => root.render(<CheckoutClient />));
+    await flush();
+    choose(container, "Home");
+    await flush();
+
+    expect(quoteCalls).toBe(1);
+    expect(container.textContent).toContain("₱30.00");
+    expect(container.textContent).not.toContain("Calculated on review");
+
+    await act(async () => vi.advanceTimersByTimeAsync(4.5 * 60_000));
+    await flush();
+
+    expect(abandonCalls).toBe(1);
+    expect(quoteCalls).toBe(2);
+    expect(container.textContent).toContain("₱30.00");
   });
 
   it("invalidates the quote and rotates idempotency when a different address is selected", async () => {

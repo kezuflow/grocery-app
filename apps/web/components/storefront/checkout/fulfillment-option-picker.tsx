@@ -2,14 +2,27 @@ import { CalendarDays, Check, Clock3, Truck } from "lucide-react";
 import type { FulfillmentOptionView } from "@freshmarkets/contracts";
 import { cn } from "../../../lib/utils";
 
-function money(option: FulfillmentOptionView) {
+type QuotedFee = Readonly<{
+  optionId: string;
+  amountMinor: number;
+  currency: string;
+}>;
+
+function formattedMoney(amountMinor: number, currency: string) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+  }).format(amountMinor / 100);
+}
+
+function money(option: FulfillmentOptionView, quotedFee?: QuotedFee, loadingOptionId?: string) {
+  if (quotedFee?.optionId === option.optionId)
+    return formattedMoney(quotedFee.amountMinor, quotedFee.currency);
+  if (loadingOptionId === option.optionId) return "Checking fee…";
   return option.feePreview
-    ? new Intl.NumberFormat("en-PH", {
-        style: "currency",
-        currency: option.feePreview.currency,
-      }).format(option.feePreview.totalMinor / 100)
+    ? formattedMoney(option.feePreview.totalMinor, option.feePreview.currency)
     : option.eligible
-      ? "Calculated on review"
+      ? "Select to calculate"
       : "Unavailable";
 }
 export function FulfillmentOptionPicker({
@@ -17,11 +30,15 @@ export function FulfillmentOptionPicker({
   disabled,
   onSelect,
   selectedOptionId,
+  quotedFee,
+  loadingOptionId,
 }: {
   options: readonly FulfillmentOptionView[];
   disabled: boolean;
   onSelect: (option: FulfillmentOptionView) => void;
   selectedOptionId?: string;
+  quotedFee?: QuotedFee;
+  loadingOptionId?: string;
 }) {
   return (
     <fieldset disabled={disabled} className="mt-4 grid divide-y divide-[var(--fm-border)]">
@@ -63,7 +80,7 @@ export function FulfillmentOptionPicker({
                   : "Scheduled delivery"}
               </strong>
               <span className="flex shrink-0 items-center gap-2 text-sm font-bold">
-                {money(option)}
+                {money(option, quotedFee, loadingOptionId)}
                 {selectedOptionId === option.optionId ? (
                   <span className="grid size-5 place-items-center rounded-full bg-[var(--fm-primary-dark)] text-white">
                     <Check className="size-3" aria-hidden="true" />

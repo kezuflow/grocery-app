@@ -30,6 +30,9 @@ import { FulfillmentOptionPicker } from "../../components/storefront/checkout/fu
 import { addToCart, fetchCart } from "../../lib/storefront/cart-client";
 import { readJson } from "../../lib/http/read-deadline";
 
+const COURIER_QUOTE_REFRESH_INTERVAL_MS = 4.5 * 60_000;
+const COURIER_QUOTE_EXPIRY_BUFFER_MS = 30_000;
+
 function displayAddress(address: CustomerAddressView): string {
   return [
     address.components.addressLine1,
@@ -90,7 +93,10 @@ export function CheckoutClient({
   >(null);
   const pendingQuoteRef = useRef(pendingQuote);
   pendingQuoteRef.current = pendingQuote;
+  const fulfillmentOptionsRef = useRef(fulfillmentOptions);
+  fulfillmentOptionsRef.current = fulfillmentOptions;
   const releaseInFlight = useRef<Promise<boolean> | null>(null);
+  const quoteRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
@@ -117,6 +123,37 @@ export function CheckoutClient({
       addressLoadGeneration.current += 1;
     };
   }, []);
+  useEffect(
+    () => () => {
+      clearQuoteRefreshTimer();
+    },
+    [],
+  );
+
+  function clearQuoteRefreshTimer() {
+    if (quoteRefreshTimer.current !== null) {
+      clearTimeout(quoteRefreshTimer.current);
+      quoteRefreshTimer.current = null;
+    }
+  }
+
+  function scheduleQuoteRefresh(quote: NonNullable<typeof pendingQuote>) {
+    clearQuoteRefreshTimer();
+    const staleAt = Date.parse(quote.expiresAt) - COURIER_QUOTE_EXPIRY_BUFFER_MS;
+    const untilStale = staleAt - Date.now();
+    const delay = Number.isFinite(untilStale)
+      ? Math.max(0, Math.min(COURIER_QUOTE_REFRESH_INTERVAL_MS, untilStale))
+      : COURIER_QUOTE_REFRESH_INTERVAL_MS;
+    quoteRefreshTimer.current = setTimeout(() => {
+      quoteRefreshTimer.current = null;
+      if (pendingQuoteRef.current?.quoteId !== quote.quoteId || !quoteInputIsCurrent(quote.input))
+        return;
+      const option = fulfillmentOptionsRef.current.find(
+        (candidate) => candidate.optionId === quote.input.fulfillmentOptionId,
+      );
+      if (option) void reviewTotal(option);
+    }, delay);
+  }
 
   async function loadAddresses(preferredAddressId?: string, refreshedCart?: CartView | null) {
     const generation = ++addressLoadGeneration.current;
@@ -189,6 +226,7 @@ export function CheckoutClient({
   async function invalidatePendingQuote(): Promise<boolean> {
     if (releaseInFlight.current) return releaseInFlight.current;
     const quote = pendingQuoteRef.current;
+    clearQuoteRefreshTimer();
     if (!quote) {
       attemptKey.current = `checkout-${crypto.randomUUID()}`;
       setQuoteLoadState("idle");
@@ -244,7 +282,11 @@ export function CheckoutClient({
       if (generation !== fulfillmentLoadGeneration.current) return;
       if (result.ok) {
         setFulfillmentOptions(result.value);
+        fulfillmentOptionsRef.current = result.value;
         setFulfillmentLoadState("ready");
+        const eligible = result.value.filter((option) => option.eligible);
+        if (eligible.length === 1 && eligible[0]?.mode === "SCHEDULED")
+          void reviewTotal(eligible[0]);
         return;
       }
       setFulfillmentLoadState("error");
@@ -367,7 +409,14 @@ export function CheckoutClient({
         setStatus("");
         return;
       }
-      setPendingQuote({ ...quoteResult.value, input: quoteInput, attemptKey: quoteAttemptKey });
+      const acceptedQuote = {
+        ...quoteResult.value,
+        input: quoteInput,
+        attemptKey: quoteAttemptKey,
+      };
+      pendingQuoteRef.current = acceptedQuote;
+      setPendingQuote(acceptedQuote);
+      scheduleQuoteRefresh(acceptedQuote);
       setQuoteLoadState("idle");
       setStatus(
         `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
@@ -427,6 +476,7 @@ export function CheckoutClient({
     }
     // 2) Canonical payment intent. Order commitment happens in Core from the
     // provider-confirmed payment reaction — never from this browser.
+    clearQuoteRefreshTimer();
     setAcceptingPayment(true);
     const paymentResponse = await fetch("/api/checkout/payment", {
       method: "POST",
@@ -470,6 +520,8 @@ export function CheckoutClient({
         setPendingQuote(null);
         attemptKey.current = `checkout-${crypto.randomUUID()}`;
       }
+      if (paymentResult.error?.code !== "PRICE_CHANGED" && pendingQuoteRef.current)
+        scheduleQuoteRefresh(pendingQuoteRef.current);
       setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
@@ -720,6 +772,18 @@ export function CheckoutClient({
                       options={fulfillmentOptions}
                       disabled={!canReview || quoteLoadState === "loading"}
                       selectedOptionId={fulfillmentOptionId}
+                      loadingOptionId={
+                        quoteLoadState === "loading" ? fulfillmentOptionId : undefined
+                      }
+                      quotedFee={
+                        pendingQuote
+                          ? {
+                              optionId: pendingQuote.input.fulfillmentOptionId,
+                              amountMinor: pendingQuote.deliverySubtotalMinor,
+                              currency: pendingQuote.currency,
+                            }
+                          : undefined
+                      }
                       onSelect={(option) => void reviewTotal(option)}
                     />
                   ) : (

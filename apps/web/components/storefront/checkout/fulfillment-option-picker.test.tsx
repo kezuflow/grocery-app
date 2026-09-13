@@ -7,6 +7,8 @@ describe("FulfillmentOptionPicker", () => {
       <FulfillmentOptionPicker
         disabled={false}
         selectedOptionId="opaque"
+        loadingOptionId="opaque-2"
+        quotedFee={{ optionId: "opaque", amountMinor: 5000, currency: "PHP" }}
         onSelect={() => undefined}
         options={[
           {
@@ -60,6 +62,9 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("Lalamove");
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Scheduled delivery");
+    expect(html).toContain("₱50.00");
+    expect(html).toContain("Checking fee…");
+    expect(html).not.toContain("Calculated on review");
     expect(html).toContain("9/8/2026");
     expect(html).not.toContain("Internal window name");
     expect(html).toContain('aria-pressed="true"');
