@@ -13,6 +13,13 @@ import {
 } from "../../../lib/storefront/cart-client";
 import { OrderSummary } from "./order-summary";
 import { CheckoutAuthDialog } from "./checkout-auth-dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
 
 const money = (value: number, currency: string) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -24,12 +31,16 @@ export function CartDrawer() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [error, setError] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearError, setClearError] = useState("");
   const checkoutAfterClose = useRef(false);
 
   useEffect(() => {
     const requestOpen = () => {
       setOpen(true);
       setLoading(true);
+      setClearError("");
       void fetchCart()
         .then((next) => {
           setCart(next);
@@ -93,6 +104,51 @@ export function CartDrawer() {
     setError("");
   }
 
+  async function clearCart() {
+    if (!cart?.items.length || clearing) return;
+    const items = [...cart.items];
+    setClearing(true);
+    setClearError("");
+    let removed = 0;
+    let latest = cart;
+    try {
+      for (const item of items) {
+        const result = await addToCart(item.skuId, 0, {
+          name: item.name,
+          media: item.media,
+          unitPriceMinor: item.unitPriceMinor,
+          currency: cart.currency,
+        });
+        if (!result.ok) {
+          setClearError(
+            removed > 0
+              ? `Some items were removed, but the cart could not be fully cleared. ${result.message}`
+              : result.message,
+          );
+          return;
+        }
+        removed++;
+        latest = result.view;
+        setCart(result.view);
+      }
+      if (latest.items.length > 0) {
+        setClearError(
+          "Your cart changed while it was being cleared. Review the remaining items and try again.",
+        );
+        return;
+      }
+      setConfirmingClear(false);
+    } catch {
+      setClearError(
+        removed > 0
+          ? "Some items were removed, but the cart could not be fully cleared. Try again."
+          : "Your cart could not be cleared right now. Try again.",
+      );
+    } finally {
+      setClearing(false);
+    }
+  }
+
   useEffect(() => {
     const changed = (event: Event) => {
       const { view } = (event as CustomEvent<{ view: CartView | null }>).detail;
@@ -105,6 +161,7 @@ export function CartDrawer() {
 
   const guest = cart?.id === "guest-cart";
   const hasItems = Boolean(cart?.items.length);
+  const canClear = hasItems && !loading && !error;
 
   return (
     <>
@@ -136,14 +193,28 @@ export function CartDrawer() {
               </p>
               <h2 className="mt-1 text-xl font-bold">Your cart</h2>
             </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              aria-label="Close cart"
-              className="inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-            >
-              <X className="size-5" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-1">
+              {canClear ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearError("");
+                    setConfirmingClear(true);
+                  }}
+                  className="min-h-11 px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
+                >
+                  Clear cart
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close cart"
+                className="inline-flex size-11 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
@@ -210,6 +281,7 @@ export function CartDrawer() {
                             type="button"
                             aria-label={`Decrease ${item.name}`}
                             onClick={() => void update(item, item.quantity - 1)}
+                            disabled={clearing}
                             className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
                             <Minus className="size-3.5" aria-hidden="true" />
@@ -221,7 +293,7 @@ export function CartDrawer() {
                             type="button"
                             aria-label={`Increase ${item.name}`}
                             onClick={() => void update(item, item.quantity + 1)}
-                            disabled={item.availability !== "AVAILABLE"}
+                            disabled={clearing || item.availability !== "AVAILABLE"}
                             className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
                             <Plus className="size-3.5" aria-hidden="true" />
@@ -271,12 +343,52 @@ export function CartDrawer() {
                     : undefined
                 }
                 note="Availability and delivery are confirmed at checkout."
-                disabled={cart?.checkoutBlocked}
+                disabled={clearing || cart?.checkoutBlocked}
               />
             </div>
           ) : null}
         </div>
       </dialog>
+      <AlertDialog
+        open={confirmingClear}
+        onOpenChange={(next) => {
+          if (!next && !clearing) setConfirmingClear(false);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogTitle>Clear your cart?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This removes every item from your cart. You can add them again later.
+          </AlertDialogDescription>
+          {clearError ? (
+            <p
+              role="alert"
+              className="rounded-[var(--fm-radius-control)] bg-[var(--fm-danger-soft)] p-3 text-sm text-[var(--fm-destructive)]"
+            >
+              {clearError}
+            </p>
+          ) : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel asChild>
+              <button
+                type="button"
+                disabled={clearing}
+                className="min-h-11 rounded-[var(--fm-radius-control)] px-4 text-sm font-semibold hover:bg-[var(--fm-hover)] disabled:opacity-50"
+              >
+                {clearError ? "Close" : "Keep items"}
+              </button>
+            </AlertDialogCancel>
+            <button
+              type="button"
+              onClick={() => void clearCart()}
+              disabled={clearing || !hasItems}
+              className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-destructive)] px-4 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {clearing ? "Clearing…" : clearError ? "Try clearing again" : "Clear cart"}
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
       {authOpen ? <CheckoutAuthDialog onClose={() => setAuthOpen(false)} /> : null}
     </>
   );

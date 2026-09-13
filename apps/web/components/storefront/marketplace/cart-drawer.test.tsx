@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CartView } from "@freshmarkets/contracts";
 import { CartDrawer } from "./cart-drawer";
-import { CART_DRAWER_REQUEST_EVENT } from "../../../lib/storefront/cart-client";
+import { CART_DRAWER_REQUEST_EVENT, clearGuestCart } from "../../../lib/storefront/cart-client";
 import { rememberBrowsingPoint } from "../../../lib/storefront/browsing-location";
 vi.mock("./checkout-auth-dialog", () => ({ CheckoutAuthDialog: () => null }));
 vi.mock("./order-summary", () => ({
@@ -14,6 +14,7 @@ let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   localStorage.clear();
+  clearGuestCart();
   rememberBrowsingPoint({ latitude: 10, longitude: 123 });
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -97,6 +98,81 @@ it("uses the mutation response without repeating coverage and cart reads", async
     ["/api/commerce/cart", "POST"],
   ]);
   expect(document.body.textContent).toContain("Total 200");
+});
+
+it("confirms before clearing every cart line through authoritative mutations", async () => {
+  let authoritative: CartView = {
+    id: "cart-1",
+    locationId: "location-1",
+    version: 1,
+    currency: "PHP",
+    items: [
+      {
+        skuId: "sku-1",
+        name: "Test fruit",
+        quantity: 1,
+        unitPriceMinor: 100,
+        lineTotalMinor: 100,
+        availability: "AVAILABLE",
+      },
+      {
+        skuId: "sku-2",
+        name: "Test vegetable",
+        quantity: 2,
+        unitPriceMinor: 75,
+        lineTotalMinor: 150,
+        availability: "AVAILABLE",
+      },
+    ],
+    totalMinor: 250,
+    checkoutBlocked: false,
+    blockingReasons: [],
+  };
+  const commands: Array<{ skuId: string; quantity: number; expectedVersion: number }> = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/serviceability")
+      return Response.json({
+        ok: true,
+        value: { serviceable: true, fulfillmentLocation: { id: "location-1" } },
+      });
+    if (init?.method === "POST") {
+      const body = JSON.parse(String(init.body)) as (typeof commands)[number];
+      commands.push(body);
+      const items = authoritative.items.filter((item) => item.skuId !== body.skuId);
+      authoritative = {
+        ...authoritative,
+        version: authoritative.version + 1,
+        items,
+        totalMinor: items.reduce((total, item) => total + (item.lineTotalMinor ?? 0), 0),
+      };
+    }
+    return Response.json({ ok: true, value: authoritative });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  await act(async () => root.render(<CartDrawer />));
+  await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+
+  await act(async () => {
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Clear cart")
+      ?.click();
+  });
+  expect(commands).toHaveLength(0);
+  const confirmation = document.querySelector('[data-slot="alert-dialog-content"]');
+  expect(confirmation?.textContent).toContain("Clear your cart?");
+
+  await act(async () => {
+    [...(confirmation?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
+      .find((button) => button.textContent === "Clear cart")
+      ?.click();
+    await vi.waitFor(() => expect(commands).toHaveLength(2));
+  });
+  expect(commands).toMatchObject([
+    { skuId: "sku-1", quantity: 0, expectedVersion: 1 },
+    { skuId: "sku-2", quantity: 0, expectedVersion: 2 },
+  ]);
+  expect(document.body.textContent).toContain("Your cart is empty");
+  expect(document.querySelector('[data-slot="alert-dialog-content"]')).toBeNull();
 });
 
 it.each([false, true])(
