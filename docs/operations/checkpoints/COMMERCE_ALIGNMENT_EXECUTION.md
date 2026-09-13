@@ -63,6 +63,35 @@ Earlier commerce/provider obligations remain independent and unclosed.
 Next action: profile remaining uncached media/Web/Core delays against the preserved baseline,
 then rerun the rollout gate. Staging intentionally retains the known-good baseline; main keeps HSPA.
 
+## Concurrent owner request — CHECKOUT-PAYMENT-ROUTING-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner reports that returning to checkout after clicking Pay leaves the Cart visible,
+causes Scheduled auto-quotation to collide with the settling Payment, and then clarifies that a Cart
+with a started Payment must not remain in `/checkout`. Acceptance: Core identifies and atomically
+locks a Cart whose accepted Quote has a Payment that may still settle; Web requests no new delivery
+quotation and leaves `/checkout`, resuming an unexpired same-browser payment action when available
+or routing to payment/Order status otherwise; the Cart converts only after canonical payment success
+commits the Order.
+
+Commit `5e6923b2` is pushed to `origin/main` on top of the Hybrid SPA route migration. `CartView`
+exposes Core-authoritative `paymentInProgress`; quote rejection also carries the stable
+`CHECKOUT_PAYMENT_IN_PROGRESS` reason. Item changes, batch reorder, guest merge and location changes
+check the lock before work and again inside their D1 transaction. Web persists REDIRECT as well as
+SDK continuations, uses history replacement to leave checkout, and the PayMongo card page returns to
+payment/Order status instead of the stale checkout. Existing canonical successful payment reaction
+continues to convert the Cart and retain its rows as history; Pay initiation never clears it.
+
+Verification on the pre-HSPA source: full Core 205 files / 1,667 tests, Web 130 / 540 and contracts
+20 / 69 passed. Rebased Hybrid SPA verification passed focused Core 2 files / 30 tests, Core/Web/
+contracts typechecks, contracts 20 / 69, focused checkout 2 / 15, both production builds, format,
+architecture, readiness and naming checks. The migrated QueryClient test fixture was corrected after
+its initial failure; the focused checkout suite then passed, and the current shared main working tree's
+complete Web suite passed 138 files / 568 tests while preserving unrelated location-workspace changes.
+No payment, courier request, database migration or deployment was performed. Next action: deploy the
+Core and Web staging revisions and verify an authenticated started-payment redirect only if the owner
+explicitly authorizes this new deployment.
+
 ## Concurrent owner request — CHECKOUT-SCHEDULED-FEE-REFRESH-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
