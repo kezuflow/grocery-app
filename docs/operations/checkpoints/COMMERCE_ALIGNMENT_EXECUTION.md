@@ -94,18 +94,17 @@ while preserving minute-since-midnight, end-of-day and retry semantics; current 
 commit only this slice directly to `main` and push. No provider transaction, deployment, schema or
 contract change is authorized. No subagents.
 
-Start: `main` and `origin/main` at `64bfb27e`; concurrent checkpoint commit `42b8893d` was incorporated
-before integration. Eight intended Web files were unstaged; unrelated HSPA artifacts were untracked.
-During execution, separate delivery-address/Core/contracts/Web edits and a full test process appeared
-in the shared checkout; preserve them and exclude them from this slice. Implementation is staged:
-Admin pickup pin click/drag/device selection uses the existing bounded reverse-address route, retains
-the exact chosen pin, rejects stale/manual-edit-overwriting results and keeps manual recovery on
-lookup failure. Operating intervals and closure timestamps use a shared hour/minute/AM-PM control,
-including 1440 end-of-day conversion. The schedule browser test follows the current setup wizard's
-Save and continue action and retains lost-response replay assertions.
+Start: `main` and `origin/main` at `64bfb27e`. Eight intended Web files were unstaged; unrelated HSPA
+artifacts were untracked. During execution, separate delivery-address/Core/contracts/Web edits and a
+full test process appeared in the shared checkout; preserve them and exclude them from this slice.
+Implementation is staged: Admin pickup pin click/drag/device selection uses the existing bounded
+reverse-address route, retains the exact chosen pin, rejects stale/manual-edit-overwriting results and
+keeps manual recovery on lookup failure. Operating intervals and closure timestamps use a shared
+hour/minute/AM-PM control, including 1440 end-of-day conversion. The schedule browser test follows
+the current setup wizard's Save and continue action and retains lost-response replay assertions.
 
-Verification: focused location/time controls pass 2 files / 10 tests; intended-file format, lint and
-diff checks pass. A detached location-only tree passes migrations, commit-message,
+Verification milestone: focused location/time controls pass 2 files / 10 tests; intended-file format,
+lint and diff checks pass. A detached location-only tree passes migrations, commit-message,
 architecture/readiness, lint, workspace typechecks, 138 Web files / 568 tests, 205 Core files / 1,667
 tests and both Worker builds. Root `pnpm check` stops only at the pre-existing staging binding harness
 expecting `disabled` while `main` configures `lalamove`; the remaining stages passed when run directly.
@@ -120,10 +119,19 @@ response, Review navigation and persisted closure/hour values. Both full-page sc
 inspected; controls remain legible and wrap without horizontal overflow. This proves local
 Worker/D1/browser behavior with test configuration, not actual Google Maps/provider or deployed
 acceptance. Completed ID: LOCATION-UX-FINISH-1. Counting level: zero remaining implementation slices
-for this request. Commit `32ee796c` is pushed to `origin/main`; all concurrent delivery-address work
-and local artifacts remain outside that commit. Next action: owner reviews the real Admin location
-pin and operating hours with actual location values; earlier provider/deployment obligations remain
-open.
+for this request. Commits `32ee796c` and `f6cb30f4` are pushed to `origin/main`; all concurrent work and
+local artifacts remain outside those commits. The owner then authorized deployment. A clean worktree
+pinned to `f6cb30f4` installed the frozen lockfile, built with `CLOUDFLARE_ENV=staging`, and confirmed
+the generated `freshmarkets-web-staging` worker, `https://freshmarkets.ph` origin and
+`freshmarkets-core-staging#CoreEntrypoint` binding; generated-config Wrangler dry run passed. Web
+version `22e1f1cb-70be-4d7f-bf83-f1a8872223cd` was activated at 100%. Public homepage, Web liveness,
+Web-to-Core health, direct Core health and Core readiness returned HTTP 200/ready. The public hashed
+Admin asset contains both reverse-address and 12-hour-control markers. Core/D1 were unchanged; no
+provider transaction was performed. A read-only 2026-09-14 recheck confirms that version and its
+expected staging bindings remain in Cloudflare history; the later authorized checkout rollout's Web
+version `09512738-0c8f-453f-a275-38e3d0a3fda0` now serves 100% of staging traffic, with the public
+homepage and Web-to-Core health returning HTTP 200. Next action: owner reviews the real Admin location
+pin and operating hours with actual location values; earlier actual-provider obligations remain open.
 
 ## Owner request — ADDR-0 delivery address plan (2026-09-14)
 
@@ -1043,6 +1051,7 @@ PRODUCT/API_CONTRACTS require no change because this slice changes presentation 
 emil-design-eng guidance applies; no new motion or delegation was introduced.
 
 Verification on this working-tree slice:
+
 - `pnpm.cmd --filter @freshmarkets/web test components/storefront/marketplace/customer-notifications.test.tsx components/admin/admin-notifications.test.tsx`: 2 files / 11 tests pass.
 - `pnpm.cmd --filter @freshmarkets/web typecheck`, `pnpm.cmd lint`, focused `pnpm.cmd exec oxfmt --check` and `git diff --check`: pass.
 - `pnpm.cmd --filter @freshmarkets/web build`: passes.
@@ -1082,6 +1091,7 @@ Admin shared Overview/bell data and row component, immediate Popover with explic
 focus and separate design scopes. No schema/KV/read-state/delivery authority is added.
 
 Verification:
+
 - `pnpm.cmd check` passes formatting, naming, terminology, 31 harness tests, migrations/schema,
   commit convention, architecture, readiness, lint, typechecks, all package tests and both builds:
   Core 205 files / 1,658 tests; Web 126 / 510; contracts 20 / 69; other shared packages each 1 / 2.
@@ -1166,6 +1176,7 @@ refreshes and changed terms require customer acceptance. Final booking remains a
 separate provider operation.
 
 Verification at final application-source scope:
+
 - `pnpm.cmd check` passes formatting, naming, terminology, 31 harness tests, fresh/retained migration
   and schema checks, commit convention, architecture/readiness, lint, all workspace typechecks and
   package tests: Core 203 files / 1,653 tests; Web 122 / 497; contracts 19 / 68; each other shared
@@ -1233,6 +1244,7 @@ and store pickup instructions are not sent. Provider mutation is preceded by dur
 ambiguous response cannot be blindly retried.
 
 Verification at the final working-tree scope:
+
 - Complete Core: 202 files / 1,650 tests pass. An aggregate run had first reached 201 files / 1,649
   tests with one stale pre-area browsing expectation; its test-only correction passed focused and in
   the complete rerun. Focused Global-area/checkout coverage also passes 7 files / 83 tests.
@@ -1270,6 +1282,7 @@ Ignored credentials, local databases, generated builds and provider payloads rem
 Published history is preserved; no force push, deployment, provider transaction or outbound message.
 
 Implementation integration is committed through `6f5855e7`, in eight cohesive groups:
+
 - `2f7b3a89`: agent skills/guidance and existing config removal.
 - `62889c4b`: superseded implementation plans and reports.
 - `25b819f8`: Locations navigation in Global and location scopes (ADMIN-LOCATIONS-NAV-1).
@@ -1285,6 +1298,7 @@ ninth documentation commit. Shared checkout browser-configuration props were sta
 the rest of checkout was committed separately without rewriting working files or published commits.
 
 Verification on the integrated source represented by `6f5855e7`:
+
 - `pnpm.cmd check`: formatting, naming, terminology, 31 harness tests, migrations, commit convention,
   architecture, readiness, lint and all workspace typechecks passed. Web passed 122 files / 496 tests;
   contracts passed 19 files / 68 tests; config/domain-shared/validation each passed 1 file / 2 tests.
@@ -1343,6 +1357,7 @@ saving the public-landmark test pin. No customer address was saved and no provid
 deployment was performed. The local dev server is running at localhost:3000.
 
 Verification on this working tree:
+
 - `pnpm --filter @freshmarkets/core test src/geography/infrastructure/google-places.test.ts src/geography/infrastructure/provider-telemetry.test.ts`: 2 files / 10 tests pass.
 - `pnpm --filter @freshmarkets/web test components/storefront/address/address-editor.test.tsx components/admin/locations-workspace.test.tsx test/app/google-maps-key-security.test.ts`: 3 files / 26 tests pass, including selected-detail/session behavior and a late-detail/manual-pin race.
 - `pnpm --filter @freshmarkets/contracts test`: 19 files / 68 tests pass.
@@ -1364,7 +1379,6 @@ files and would not represent the verified tree. MAPS-AUTOCOMPLETE-1 local imple
 provider/browser acceptance are complete; release integration remains open. One next action: integrate
 and verify the existing map migration together with this slice before committing/pushing and performing
 any separately authorized deployment. Earlier commerce acceptance obligations remain open.
-
 
 ## Latest owner request — ADMIN-LOCATIONS-NAV-1 expose Locations (2026-09-12)
 
