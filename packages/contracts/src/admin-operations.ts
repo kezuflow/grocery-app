@@ -171,6 +171,8 @@ export type LocationDeliveryProfileView = {
 };
 
 export type UpsertLocationDeliveryProfileRequest = AdminOperationsLocationRequest & {
+  /** Wizard address comes from this reviewed location version. */
+  expectedLocationVersion?: number;
   senderName: string;
   phoneE164: string;
   email?: string | null;

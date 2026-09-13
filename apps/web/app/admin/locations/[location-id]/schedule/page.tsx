@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
-import { LocationScheduleWorkspace } from "@/components/admin/location-schedule-workspace";
+import { LocationHoursStep } from "@/components/admin/location-setup-steps";
 export default async function LocationSchedulePage({
   params,
 }: {
@@ -14,5 +14,5 @@ export default async function LocationSchedulePage({
     requestId: crypto.randomUUID(),
     locationId,
   });
-  return <LocationScheduleWorkspace initial={initial} locationId={locationId} />;
+  return <LocationHoursStep initial={initial} locationId={locationId} />;
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { LocationSetupNavigation } from "@/components/admin/location-setup-navigation";
+import { LocationSetupProvider } from "@/components/admin/location-setup-state";
 
 export default async function LocationLayout({
   children,
@@ -10,9 +11,11 @@ export default async function LocationLayout({
 }) {
   const { "location-id": locationId } = await params;
   return (
-    <div className="space-y-4">
-      <LocationSetupNavigation locationId={locationId} />
-      {children}
-    </div>
+    <LocationSetupProvider key={locationId} locationId={locationId}>
+      <div className="space-y-4">
+        <LocationSetupNavigation locationId={locationId} />
+        {children}
+      </div>
+    </LocationSetupProvider>
   );
 }

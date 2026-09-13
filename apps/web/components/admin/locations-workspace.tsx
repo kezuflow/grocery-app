@@ -27,6 +27,7 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
 import { LocationAddressMap } from "./location-address-map";
+import { useSetupNavigationLock } from "./location-setup-state";
 
 const failed = z.object({
   ok: z.literal(false),
@@ -81,11 +82,15 @@ export function LocationsWorkspace({
   browserApiKey,
   mapId,
   detailLocationId,
+  onSaved,
+  saveLabel,
 }: {
   initial: RpcResult<AdminLocationsView>;
   browserApiKey?: string;
   mapId?: string;
   detailLocationId?: string;
+  onSaved?: (location: AdminLocationView) => void;
+  saveLabel?: string;
 }) {
   const [result, setResult] = useState(initial);
   const selected = initial.ok
@@ -99,6 +104,7 @@ export function LocationsWorkspace({
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const intent = useAdminCommandIntent();
   const locked = intent.pending || pendingPayload !== null;
+  useSetupNavigationLock(locked);
   async function load(cursor?: string, resetEditor = false) {
     setLoading(true);
     try {
@@ -138,6 +144,10 @@ export function LocationsWorkspace({
         if (detailLocationId) edit(response.value);
         else setEditing(undefined);
         setNotice("Location saved.");
+        if (onSaved && (payload.action === "UPDATE" || payload.action === "CREATE")) {
+          onSaved(response.value);
+          return;
+        }
         await load();
       } else {
         setNotice(response.error.message);
@@ -522,8 +532,10 @@ export function LocationsWorkspace({
                     {pendingPayload
                       ? "Retry saved command"
                       : editing
-                        ? "Save details"
-                        : "Create inactive location"}
+                        ? (saveLabel ?? "Save details")
+                        : saveLabel
+                          ? "Create and continue"
+                          : "Create inactive location"}
                   </Button>
                   {editing && (
                     <Button

@@ -802,6 +802,7 @@ const adminOperationsCycleSchema = adminOperationsLocationSchema.extend({
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 const locationDeliveryProfileSchema = adminOperationsLocationSchema.extend({
+  expectedLocationVersion: validationSchema.number().int().positive().optional(),
   senderName: validationSchema.string().trim().min(1).max(120),
   phoneE164: validationSchema
     .string()

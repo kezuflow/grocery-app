@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
-import { LocationsWorkspace } from "@/components/admin/locations-workspace";
+import { LocationAddressStep } from "@/components/admin/location-setup-steps";
 import { googleMapsBrowserConfiguration } from "@/lib/maps/google-maps-runtime";
 
 export default async function LocationsPage() {
@@ -12,7 +12,7 @@ export default async function LocationsPage() {
     requestId: crypto.randomUUID(),
   });
   return (
-    <LocationsWorkspace
+    <LocationAddressStep
       initial={result}
       browserApiKey={googleMaps.browserApiKey}
       mapId={googleMaps.mapId}

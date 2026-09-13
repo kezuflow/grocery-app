@@ -13,6 +13,7 @@ import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { useSetupNavigationLock } from "./location-setup-state";
 
 const responseSchema = z.union([
   z.object({ ok: z.literal(true), requestId: z.string(), value: adminLocationScheduleViewSchema }),
@@ -43,9 +44,13 @@ type Payload = {
 export function LocationScheduleWorkspace({
   initial,
   locationId,
+  onSaved,
+  saveLabel,
 }: {
   initial: RpcResult<AdminLocationScheduleView>;
   locationId: string;
+  onSaved?: () => void;
+  saveLabel?: string;
 }) {
   const [result, setResult] = useState(initial);
   const [schedule, setSchedule] = useState<LocationOperatingSchedule>(
@@ -57,6 +62,7 @@ export function LocationScheduleWorkspace({
   const [loading, setLoading] = useState(false);
   const intent = useAdminCommandIntent();
   const locked = pending !== null || intent.pending || loading;
+  useSetupNavigationLock(pending !== null || intent.pending);
   async function refresh() {
     setLoading(true);
     try {
@@ -102,6 +108,7 @@ export function LocationScheduleWorkspace({
         setResult(next);
         setSchedule(next.value.schedule ?? { weekly: [], closures: [] });
         setNotice("Operating schedule saved. Existing orders keep their accepted promises.");
+        onSaved?.();
       } else setNotice(next.error.message);
     } catch {
       setNotice("Response not confirmed. Retry the same schedule request.");
@@ -306,7 +313,7 @@ export function LocationScheduleWorkspace({
                 />
               </label>
               <Button disabled={locked || !reason.trim()} onClick={() => void save()}>
-                Save operating schedule
+                {saveLabel ?? "Save operating schedule"}
               </Button>
             </>
           )}

@@ -1,58 +1,52 @@
-import { test, expect } from "./admin-authenticated-fixture";
+import { expect, test } from "./admin-authenticated-fixture";
 
-for (const width of [1440, 390]) {
-  test(`Global location creation and activation at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 1000 });
-    await page.goto("/admin/locations");
-    await expect(page.getByRole("heading", { name: "Locations", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Add location", exact: true }).click();
-    const name = `Warehouse ${width} ${crypto.randomUUID().slice(0, 8)}`;
-    await page.getByLabel("Location name", { exact: true }).fill(name);
-    await page
-      .getByLabel("Location code", { exact: true })
-      .fill(`warehouse-${crypto.randomUUID()}`);
-    await page.getByRole("combobox", { name: "Market", exact: true }).click();
-    await page.getByRole("option").first().click();
-    await page.getByRole("combobox", { name: "Purpose", exact: true }).click();
-    await page.getByRole("option", { name: "Central warehouse", exact: true }).click();
-    for (const [field, value] of [
-      ["Address line 1", "Test receiving road"],
-      ["City", "Cebu"],
-      ["Region", "Cebu"],
-      ["Pickup pin latitude", "10.32"],
-      ["Pickup pin longitude", "123.91"],
-      ["Reason for this change", "Set up receiving warehouse"],
-    ]) {
-      await page.getByLabel(field, { exact: true }).fill(value);
-    }
-    await page.getByRole("checkbox", { name: "receiving", exact: true }).check();
-    await page.getByRole("checkbox", { name: "storage", exact: true }).check();
-    await page.getByRole("button", { name: "Create inactive location", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Location saved.");
-    await page.getByRole("button", { name: `Review ${name}`, exact: true }).click();
-    await page
-      .getByLabel("Reason for this change", { exact: true })
-      .fill("Receiving address and capabilities checked");
+test("desktop location setup saves each step and explicitly enables dispatch", async ({
+  adminPage: page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/admin/locations/location-cebu-central");
+  await expect(page.getByText(/Step 1 of 4/)).toBeVisible();
+  await page.locator("#location-addressLine1").fill("Test pickup entrance");
+  await page.locator("#location-city").fill("Cebu");
+  await page.locator("#location-region").fill("Cebu");
+  await page.locator("#location-countryCode").fill("PH");
+  await page.locator("#location-reason").fill("Review local test setup");
+  await page.getByRole("button", { name: "Save and continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/pickup$/);
+  await expect(page.getByText(/Step 2 of 4/)).toBeVisible();
+  await expect(page.getByText("Pickup location from step 1")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Address line 1", exact: true })).toHaveCount(0);
+  await page.getByLabel("Sender name", { exact: true }).fill("Test pickup contact");
+  await page.getByLabel("Sender phone (+63…)", { exact: true }).fill("+639171234567");
+  await page.getByRole("button", { name: "Save and continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/schedule$/);
+  await expect(page.getByText(/Step 3 of 4/)).toBeVisible();
+  if ((await page.getByRole("button", { name: /Remove interval/ }).count()) === 0)
+    await page.getByRole("button", { name: "Add operating interval", exact: true }).click();
+  await page.getByLabel("Reason for schedule change", { exact: true }).fill("Review test hours");
+  await page.getByRole("button", { name: "Save and continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/fulfillment$/);
+  await expect(page.getByText(/Step 4 of 4/)).toBeVisible();
+  if (await page.getByRole("button", { name: "Activate location", exact: true }).count()) {
+    await page.getByLabel("Reason for activation", { exact: true }).fill("Test setup reviewed");
     await page.getByRole("button", { name: "Activate location", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Location saved.");
-    await page.reload();
-    const row = page.getByRole("heading", { name, exact: true }).locator("../..");
-    await expect(row).toContainText("Central warehouse · active");
-    await expect(row).toContainText("Pickup pin · 10.320000, 123.910000");
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-      .toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("locations.png"), fullPage: true });
-    await page.getByRole("button", { name: `Review ${name}`, exact: true }).click();
-    await page
-      .getByLabel("Reason for this change", { exact: true })
-      .fill("Close test receiving site");
-    await page.getByRole("button", { name: "Deactivate location", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Location saved.");
-    await expect(page.getByRole("heading", { name, exact: true }).locator("../..")).toContainText(
-      "Central warehouse · inactive",
+    await expect(page.getByRole("button", { name: "Activate location", exact: true })).toHaveCount(
+      0,
     );
+  }
+  const readiness = page.getByRole("checkbox", {
+    name: "Ready to dispatch customer orders",
+    exact: true,
   });
-}
+  if ((await readiness.getAttribute("aria-checked")) !== "true") {
+    await readiness.check();
+    await page
+      .getByLabel("Reason for change (required)", { exact: true })
+      .fill("Test dispatch ready");
+    await page.getByRole("button", { name: "Save fulfillment settings", exact: true }).click();
+  }
+  await expect(page.getByText("Saved dispatch status: Ready", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Saved dispatch status: Ready", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("location-setup-review.png"), fullPage: true });
+});

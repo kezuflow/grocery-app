@@ -45,11 +45,15 @@ Location fulfillment forms distinguish saved readiness from unsaved edits, requi
 saving, show pending/rejected/unconfirmed saves inline, and toast only confirmed success. Dispatch
 readiness applies to both modes; the minutes promise applies only to Instant.
 
-Owner follow-up, 2026-09-13: opening a location uses one location setup navigation: Address and pin,
-Courier pickup, Operating hours, Dispatch readiness. Each destination uses the location in the URL;
+Owner follow-up, 2026-09-13: location setup uses four numbered steps: Location (address and map pin),
+Pickup contact, Operating hours, Review and enable. Each destination uses the location in the URL;
 pickup configuration no longer lives above the Delivery queue or depends on the header scope.
-Delivery remains the operational queue. The address editor stays open after a confirmed save;
-view-only access does not enable its writes. Scheduled weeks remain separate from location hours.
+Delivery remains the operational queue. Confirmed saves advance to the next step; failed or unknown
+saves retain the step and original intent. Navigation shows saved progress and allows returning to
+existing steps, with step links locked while a write is pending or unconfirmed. Pickup reuses the saved
+location address and coordinate, asking only for contact and instructions. The final review explicitly
+activates an inactive location and separately saves dispatch readiness under Core's existing guards.
+View-only access does not enable writes. Scheduled weeks remain separate from location hours.
 
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.

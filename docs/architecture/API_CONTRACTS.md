@@ -627,7 +627,10 @@ Admin exposes three purpose-built, location-scoped Service Binding operations ar
 `getLocationDeliveryProfile(locationId)` returns the authoritative store coordinate and either its
 sender/pickup profile or `profile: null`. `upsertLocationDeliveryProfile` requires `delivery.manage`,
 a stable idempotency key, and `expectedVersion` (`0` for the first profile); it never accepts another
-coordinate. `requestExternalDelivery` requires one `jobId`, its expected Delivery Job version, the
+coordinate. The setup guide also supplies optional `expectedLocationVersion`: Core requires the
+submitted pickup address to match that saved location address and atomically fences its version.
+An exact successful replay precedes this current-state check; older callers without the optional
+field retain their existing contract. `requestExternalDelivery` requires one `jobId`, its expected Delivery Job version, the
 closed provider code, and either `IMMEDIATE` or an RFC 3339 `SCHEDULED` pickup. Core derives the
 service type for Scheduled work from provider configuration. Instant uses the accepted provider/service snapshot; only verified enabled providers are available under PRODUCT GD-D03.
 

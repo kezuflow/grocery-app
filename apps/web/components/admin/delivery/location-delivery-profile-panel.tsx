@@ -1,8 +1,13 @@
 "use client";
 
-import type { LocationDeliveryProfileView } from "@freshmarkets/contracts";
+import type { LocationDeliveryProfileView, AdminLocationView } from "@freshmarkets/contracts";
+import Link from "next/link";
 import { appErrorCodes } from "@freshmarkets/contracts";
-import { z, locationDeliveryProfileViewSchema } from "@freshmarkets/validation";
+import {
+  z,
+  locationDeliveryProfileViewSchema,
+  adminLocationsViewSchema,
+} from "@freshmarkets/validation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAdminContext } from "../../../app/admin/admin-context-provider";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
@@ -11,6 +16,7 @@ import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { useAdminCommandIntent } from "../admin-command-state";
 import { notifyCommandSuccess } from "../admin-feedback";
+import { useSetupNavigationLock } from "../location-setup-state";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -45,9 +51,13 @@ async function readResult(response: Response | Promise<Response>) {
 export function LocationDeliveryProfilePanel({
   locationId,
   fetchImpl = fetch,
+  reuseLocationAddress = false,
+  onSaved,
 }: {
   locationId: string;
   fetchImpl?: FetchLike;
+  reuseLocationAddress?: boolean;
+  onSaved?: () => void;
 }) {
   const admin = useAdminContext();
   const command = useAdminCommandIntent();
@@ -55,14 +65,17 @@ export function LocationDeliveryProfilePanel({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
+  useSetupNavigationLock(pendingPayload !== null || command.pending);
   const loadGeneration = useRef(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [savedLocation, setSavedLocation] = useState<AdminLocationView | null>(null);
   const canManage =
     admin.state.phase === "ready" && admin.state.context.capabilities.includes("delivery.manage");
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
     setView(null);
+    setSavedLocation(null);
     setMessage(null);
     command.reset();
     if (!locationId) return;
@@ -77,8 +90,23 @@ export function LocationDeliveryProfilePanel({
         },
       ),
     )
-      .then((result) => {
+      .then(async (result) => {
+        let location: AdminLocationView | null = null;
+        if (result.ok && reuseLocationAddress) {
+          const response = await fetchImpl(
+            `/api/admin/locations?locationId=${encodeURIComponent(locationId)}`,
+            {
+              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+            },
+          );
+          const parsed = z
+            .object({ ok: z.literal(true), value: adminLocationsViewSchema })
+            .safeParse(await response.json());
+          if (!parsed.success) throw new Error("Location address unavailable");
+          location = parsed.data.value.items.find((item) => item.locationId === locationId) ?? null;
+        }
         if (generation !== loadGeneration.current) return;
+        setSavedLocation(location);
         if (result.ok) setView(result.value);
         else setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
       })
@@ -94,11 +122,12 @@ export function LocationDeliveryProfilePanel({
       loadGeneration.current += 1;
       controller.abort();
     };
-  }, [fetchImpl, locationId, refreshVersion]);
+  }, [fetchImpl, locationId, refreshVersion, reuseLocationAddress]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!view || !canManage || command.pending) return;
+    if (reuseLocationAddress && !savedLocation?.address) return;
     const data = new FormData(event.currentTarget);
     const optional = (name: string) => String(data.get(name) ?? "").trim() || null;
     const payload = pendingPayload ?? {
@@ -116,6 +145,23 @@ export function LocationDeliveryProfilePanel({
       countryCode: String(data.get("countryCode") ?? "PH"),
       pickupInstructions: optional("pickupInstructions"),
       expectedVersion: view.profile?.version ?? 0,
+      ...(reuseLocationAddress && savedLocation?.address
+        ? {
+            ...savedLocation.address,
+            formattedAddress: [
+              savedLocation.address.addressLine1,
+              savedLocation.address.addressLine2,
+              savedLocation.address.barangay,
+              savedLocation.address.city,
+              savedLocation.address.region,
+              savedLocation.address.postalCode,
+              savedLocation.address.countryCode,
+            ]
+              .filter(Boolean)
+              .join(", "),
+            expectedLocationVersion: savedLocation.version,
+          }
+        : {}),
     };
     await save(payload);
   }
@@ -140,6 +186,7 @@ export function LocationDeliveryProfilePanel({
       if (result.ok) {
         setView(result.value);
         notifyCommandSuccess("Courier pickup details saved");
+        onSaved?.();
       } else {
         setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
       }
@@ -155,6 +202,27 @@ export function LocationDeliveryProfilePanel({
         Coordinates come from this location's saved pin; these fields identify the sender and pickup
         address sent to the courier.
       </p>
+      {reuseLocationAddress && view && (
+        <div className="mt-3 rounded border p-3 text-sm">
+          <h2 className="font-medium">Pickup location from step 1</h2>
+          <p>
+            {savedLocation?.address
+              ? [
+                  savedLocation.address.addressLine1,
+                  savedLocation.address.addressLine2,
+                  savedLocation.address.barangay,
+                  savedLocation.address.city,
+                  savedLocation.address.region,
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+              : "Save the location address and pin before completing pickup contact."}
+          </p>
+          <Link href={`/admin/locations/${encodeURIComponent(locationId)}`} className="underline">
+            Edit address and map pin
+          </Link>
+        </div>
+      )}
       {loading ? <p className="mt-3 text-sm">Loading pickup profile…</p> : null}
       {message ? (
         <Alert className="mt-3" variant="warning">
@@ -171,13 +239,13 @@ export function LocationDeliveryProfilePanel({
       >
         {loading ? "Refreshing…" : "Refresh pickup details"}
       </Button>
-      {view ? (
+      {view && (!reuseLocationAddress || savedLocation?.address) ? (
         <form
           key={`${view.locationId}:${view.profile?.version ?? 0}`}
           className="mt-4 grid gap-4 sm:grid-cols-2"
           onSubmit={submit}
         >
-          {fields.map(([name, label, required]) => (
+          {(reuseLocationAddress ? fields.slice(0, 3) : fields).map(([name, label, required]) => (
             <div className={name === "formattedAddress" ? "sm:col-span-2" : ""} key={name}>
               <Label htmlFor={`delivery-profile-${name}`}>{label}</Label>
               <Input
@@ -191,18 +259,20 @@ export function LocationDeliveryProfilePanel({
               />
             </div>
           ))}
-          <div>
-            <Label htmlFor="delivery-profile-country">Country code</Label>
-            <Input
-              id="delivery-profile-country"
-              name="countryCode"
-              required
-              disabled={!canManage || command.pending || pendingPayload !== null}
-              maxLength={2}
-              defaultValue={view.profile?.countryCode ?? "PH"}
-              className="mt-1"
-            />
-          </div>
+          {!reuseLocationAddress && (
+            <div>
+              <Label htmlFor="delivery-profile-country">Country code</Label>
+              <Input
+                id="delivery-profile-country"
+                name="countryCode"
+                required
+                disabled={!canManage || command.pending || pendingPayload !== null}
+                maxLength={2}
+                defaultValue={view.profile?.countryCode ?? "PH"}
+                className="mt-1"
+              />
+            </div>
+          )}
           <div className="sm:col-span-2">
             <Label htmlFor="delivery-profile-instructions">Pickup instructions</Label>
             <textarea
@@ -228,9 +298,11 @@ export function LocationDeliveryProfilePanel({
                   ? "Saving…"
                   : pendingPayload
                     ? "Retry saving"
-                    : view.profile
-                      ? "Update pickup profile"
-                      : "Save pickup profile"}
+                    : onSaved
+                      ? "Save and continue"
+                      : view.profile
+                        ? "Update pickup profile"
+                        : "Save pickup profile"}
               </Button>
             ) : (
               <span className="text-xs text-[var(--fm-text-muted)]">Read-only access</span>

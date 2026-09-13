@@ -38,6 +38,31 @@ const view: LocationDeliveryProfileView = {
 };
 const response = () => Response.json({ ok: true, requestId: "test", value: view });
 const fetchMock = vi.fn<typeof fetch>();
+const savedLocation = {
+  locationId: view.locationId,
+  marketId: "market",
+  marketName: "Cebu",
+  currency: "PHP",
+  timezone: "Asia/Manila",
+  code: "central",
+  name: "Central Cebu",
+  purpose: "CUSTOMER_FULFILLMENT",
+  status: "active",
+  version: 8,
+  addressProviderDerived: false,
+  latitude: 10.3,
+  longitude: 123.9,
+  capabilities: ["PICKING", "PACKING", "DISPATCH"],
+  address: {
+    addressLine1: "Saved entrance",
+    addressLine2: null,
+    barangay: null,
+    city: "Cebu",
+    region: "Cebu",
+    postalCode: null,
+    countryCode: "PH",
+  },
+};
 let host: HTMLDivElement;
 let root: Root;
 function button(name: string) {
@@ -103,4 +128,42 @@ it("offers retry after a failed initial read", async () => {
   expect(host.textContent).toContain("Store pickup profile could not be loaded");
   await act(async () => button("Refresh pickup details").click());
   expect(host.querySelector<HTMLInputElement>('[name="senderName"]')?.value).toBe("Test store");
+});
+it("the guided step reuses the saved address and advances only after confirmed contact save", async () => {
+  const onSaved = vi.fn();
+  fetchMock.mockImplementation(async (url, init) => {
+    if (String(url).includes("/locations?"))
+      return Response.json({
+        ok: true,
+        value: { items: [savedLocation], canManage: true, markets: [], nextCursor: null },
+      });
+    if (init?.method === "PUT")
+      return Response.json({
+        ok: false,
+        error: { code: "STALE_VERSION", message: "Location changed", requestId: "test" },
+      });
+    return response();
+  });
+  await act(async () =>
+    root.render(
+      <LocationDeliveryProfilePanel
+        locationId={view.locationId}
+        fetchImpl={fetchMock}
+        reuseLocationAddress
+        onSaved={onSaved}
+      />,
+    ),
+  );
+  expect(host.textContent).toContain("Saved entrance");
+  expect(host.querySelector('[name="addressLine1"]')).toBeNull();
+  await act(async () => button("Save and continue").click());
+  const write = fetchMock.mock.calls.find((call) => call[1]?.method === "PUT");
+  expect(JSON.parse(String(write?.[1]?.body))).toMatchObject({
+    addressLine1: "Saved entrance",
+    expectedLocationVersion: 8,
+  });
+  expect(onSaved).not.toHaveBeenCalled();
+  fetchMock.mockResolvedValue(response());
+  await act(async () => button("Save and continue").click());
+  expect(onSaved).toHaveBeenCalledTimes(1);
 });

@@ -1,4 +1,4 @@
-import { LocationDeliveryProfilePanel } from "@/components/admin/delivery/location-delivery-profile-panel";
+import { LocationPickupStep } from "@/components/admin/location-setup-steps";
 
 export default async function LocationPickupPage({
   params,
@@ -6,5 +6,5 @@ export default async function LocationPickupPage({
   params: Promise<{ "location-id": string }>;
 }) {
   const { "location-id": locationId } = await params;
-  return <LocationDeliveryProfilePanel key={locationId} locationId={locationId} />;
+  return <LocationPickupStep key={locationId} locationId={locationId} reuseLocationAddress />;
 }

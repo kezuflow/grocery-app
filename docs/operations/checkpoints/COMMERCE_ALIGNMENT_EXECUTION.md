@@ -1,6 +1,52 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — LOCATION-SETUP-2 / SERVICE-AREA-DRAW-1 (2026-09-13)
+## Current owner request — LOCATION-WIZARD-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner authorizes making location setup multi-step. Acceptance: four targeted steps with
+confirmed-save progression, saved progress, pickup reuse of the location address, and explicit final
+activation/readiness. Start: main at `4e4274ed`. Preserve existing address-map/autofill, schedule/time
+input and related tests/logs; no subagents or mobile tests. Shared staging configuration and actual
+provider transactions remain untouched.
+
+Implemented: Location -> Pickup contact -> Operating hours -> Review and enable. Creation continues
+to pickup after confirmed save; existing locations can revisit steps. Pending/unknown writes retain
+their payload/key and lock setup navigation. Unavailable reads are distinct from incomplete setup.
+Pickup reuses the saved address/pin and sends the reviewed location version; Core validates the
+canonical address and atomically fences that version, while exact replay and older callers remain
+compatible. Final review exposes explicit activation and dispatch save under existing Core rules.
+Scheduled cycle dates/cutoffs remain separate. DESIGN and API_CONTRACTS updated.
+
+Verified working-tree scope: full Web suite 131 files / 538 tests; Core pickup-profile integration
+11/11 and delivery/readiness regression 48/48. Workspace typecheck, lint, architecture guard and Web
+production build passed. Commands: `pnpm.cmd --filter @freshmarkets/web test`, `pnpm.cmd typecheck`,
+`pnpm.cmd lint`, `pnpm.cmd architecture:check`, `pnpm.cmd --filter @freshmarkets/web build`,
+`pnpm.cmd --filter @freshmarkets/core test src/admin/application/location-delivery-profile.integration.test.ts --maxWorkers=1`,
+and the Core test command for delivery-provider-operations.integration.test.ts plus
+location-fulfillment-readiness.integration.test.ts. Tests cover canonical-address mismatch, transaction
+version races, immutable replay, unknown activation retry, navigation locking and confirmed progression.
+
+Executed desktop acceptance: `pnpm.cmd --filter @freshmarkets/web exec playwright test
+location-setup.spec.ts --grep 'desktop location setup' --workers=1`, 1/1 passed (15.1s), at 1440px.
+Used localhost:3100, E2E_AUTHENTICATED=1, E2E_START_STACK=0 and isolated local D1 state
+e2e-notifications-20260913. Saved each step, explicitly confirmed dispatch, reloaded and observed
+persisted Ready. Screenshot reviewed in apps/web/test-results/location-setup-desktop-loc-bccd0-explicitly-enables-dispatch/location-setup-review.png.
+Initial broad filename selection also selected the customer-location test and was interrupted without
+an acceptance result; the rerun selected only this desktop journey. Owned test stack stopped afterward.
+This proves local Worker/D1/browser behavior, not actual Maps/provider acceptance or shared setup.
+
+Final review also locks the review refresh/edit/activation controls when a child save is unconfirmed,
+preventing remount from discarding its retained intent. The targeted setup-state suite then passed
+4/4, Web typecheck and lint passed. Desktop/build evidence above precedes this small guard change.
+Staged diff checks pass; only this slice's additions to the overlapping location/schedule workspaces
+are staged through three-way index patches, preserving other working-tree changes.
+
+Completed ID: LOCATION-WIZARD-1. Counting level: zero remaining requested implementation slices;
+earlier Phase 7 external/provider acceptance remains open. Selective staging excludes the owner's
+pre-existing work. Integration target: commit and push main. Next action: review the real location's
+four saved steps with the owner's actual operating/contact values before explicitly enabling it.
+
+## Prior owner request — LOCATION-SETUP-2 / SERVICE-AREA-DRAW-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner authorizes the proposed location consolidation first, then repairing Service Areas

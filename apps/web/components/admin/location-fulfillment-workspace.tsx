@@ -13,6 +13,7 @@ import { Checkbox } from "../ui/checkbox";
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
+import { useSetupNavigationLock } from "./location-setup-state";
 const responseSchema = z.union([
   z.object({
     ok: z.literal(true),
@@ -34,9 +35,13 @@ type Payload = {
 export function LocationFulfillmentWorkspace({
   initial,
   locationId,
+  onSaved,
+  embedded = false,
 }: {
   initial: RpcResult<AdminLocationFulfillmentView>;
   locationId: string;
+  onSaved?: () => void;
+  embedded?: boolean;
 }) {
   const [result, setResult] = useState(initial);
   const [ready, setReady] = useState(initial.ok && initial.value.dispatchReady);
@@ -49,6 +54,7 @@ export function LocationFulfillmentWorkspace({
   const [loading, setLoading] = useState(false);
   const intent = useAdminCommandIntent();
   const locked = pending !== null || intent.pending || loading;
+  useSetupNavigationLock(pending !== null || intent.pending);
   const changed =
     result.ok &&
     (ready !== result.value.dispatchReady ||
@@ -109,6 +115,7 @@ export function LocationFulfillmentWorkspace({
         accept(next);
         setReason("");
         notifyCommandSuccess("Fulfillment settings saved");
+        onSaved?.();
       } else
         setNotice(
           next.error.code === "STALE_VERSION"
@@ -121,15 +128,23 @@ export function LocationFulfillmentWorkspace({
   }
   return (
     <div className="space-y-4">
-      <Link href="/admin/locations" className="underline">
-        Locations
-      </Link>
-      <PageHeader
-        title={
-          result.ok ? `${result.value.locationName} fulfillment readiness` : "Fulfillment readiness"
-        }
-        description="Dispatch readiness applies to Instant and Scheduled orders. The delivery promise below applies only to Instant."
-      />
+      {!embedded && (
+        <Link href="/admin/locations" className="underline">
+          Locations
+        </Link>
+      )}
+      {embedded ? (
+        <h2 className="font-semibold">Enable dispatch</h2>
+      ) : (
+        <PageHeader
+          title={
+            result.ok
+              ? `${result.value.locationName} fulfillment readiness`
+              : "Fulfillment readiness"
+          }
+          description="Dispatch readiness applies to Instant and Scheduled orders. The delivery promise below applies only to Instant."
+        />
+      )}
       {!result.ok && <p role="alert">{notice || result.error.message}</p>}
       <Button variant="outline" disabled={locked} onClick={() => void refresh()}>
         {loading ? "Refreshing…" : "Refresh settings"}

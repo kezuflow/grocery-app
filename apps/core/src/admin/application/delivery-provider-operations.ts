@@ -11,7 +11,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { claimCommandIdempotency, findIdempotencyRecord, requestHash } from "../../idempotency";
-import { locationDeliveryProfileViewSchema } from "@freshmarkets/validation";
+import { locationDeliveryProfileViewSchema, locationAddressSchema } from "@freshmarkets/validation";
 import { bookOrderDelivery } from "../../delivery/application/book-order-delivery";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import type { ProviderDelivery } from "../../delivery/ports/delivery-provider";
@@ -172,12 +172,18 @@ export async function upsertLocationDeliveryProfile(
     pickupInstructions: cleanOptional(request.pickupInstructions),
   };
   const scope = "admin.delivery.locationProfile";
+  const locationRevision =
+    request.expectedLocationVersion === undefined
+      ? {}
+      : { expectedLocationVersion: request.expectedLocationVersion };
   const legacyHash = await requestHash({
+    ...locationRevision,
     locationId: request.locationId,
     expectedVersion: request.expectedVersion,
     ...normalized,
   });
   const hash = await requestHash({
+    ...locationRevision,
     actorAuthUserId: access.value.authUserId,
     locationId: request.locationId,
     expectedVersion: request.expectedVersion,
@@ -212,6 +218,61 @@ export async function upsertLocationDeliveryProfile(
   }
   const prior = await replay();
   if (prior) return prior;
+  if (request.expectedLocationVersion !== undefined) {
+    const location = await deps.db
+      .prepare("SELECT version,address_json FROM fulfillment_location WHERE id=?")
+      .bind(request.locationId)
+      .first<{ version: number; address_json: string | null }>();
+    if (!location || location.version !== request.expectedLocationVersion)
+      return failure(
+        "STALE_VERSION",
+        "The location changed. Refresh pickup details and review its saved address.",
+        request.requestId,
+      );
+    let rawAddress: unknown;
+    try {
+      rawAddress = JSON.parse(location.address_json ?? "null");
+    } catch {
+      rawAddress = null;
+    }
+    const parsedAddress = locationAddressSchema.safeParse(rawAddress);
+    if (!parsedAddress.success)
+      return failure(
+        "VALIDATION_FAILED",
+        "Save the location address in step 1 first",
+        request.requestId,
+      );
+    const address = parsedAddress.data;
+    const formatted = [
+      address.addressLine1,
+      address.addressLine2,
+      address.barangay,
+      address.city,
+      address.region,
+      address.postalCode,
+      address.countryCode,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const fields = [
+      "addressLine1",
+      "addressLine2",
+      "barangay",
+      "city",
+      "region",
+      "postalCode",
+      "countryCode",
+    ] as const;
+    if (
+      normalized.formattedAddress !== formatted ||
+      fields.some((field) => cleanOptional(normalized[field]) !== cleanOptional(address[field]))
+    )
+      return failure(
+        "VALIDATION_FAILED",
+        "Pickup address must match the saved location address. Refresh pickup details.",
+        request.requestId,
+      );
+  }
   const before = await loadProfile(deps.db, request.locationId);
   if (!before) return failure("NOT_FOUND", "Fulfillment location not found", request.requestId);
   const current = before.profile;
@@ -288,7 +349,7 @@ export async function upsertLocationDeliveryProfile(
         JOIN staff_scope sc ON sc.staff_id=s.id JOIN fulfillment_location l ON l.id=?
         WHERE s.id=? AND s.auth_user_id=? AND s.status='active' AND p.code='delivery.manage'
         AND (sc.scope_kind='global' OR (sc.scope_kind='location' AND sc.location_id=l.id) OR (sc.scope_kind='market' AND sc.market_id=l.market_id))
-        AND l.name=? AND l.latitude=? AND l.longitude=?)`)
+        AND l.name=? AND l.latitude=? AND l.longitude=? AND (? IS NULL OR l.version=?))`)
         .bind(
           request.locationId,
           access.value.staffId,
@@ -296,6 +357,8 @@ export async function upsertLocationDeliveryProfile(
           before.locationName,
           before.coordinate.latitude,
           before.coordinate.longitude,
+          request.expectedLocationVersion ?? null,
+          request.expectedLocationVersion ?? null,
         ),
       deps.db
         .prepare(`INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at)

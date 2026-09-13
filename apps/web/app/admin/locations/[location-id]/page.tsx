@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { coreClient } from "@/lib/core-client/core";
 import { coreRequestHeaders } from "@/lib/core-client/request";
 import { googleMapsBrowserConfiguration } from "@/lib/maps/google-maps-runtime";
-import { LocationsWorkspace } from "@/components/admin/locations-workspace";
+import { LocationAddressStep } from "@/components/admin/location-setup-steps";
 
 export default async function LocationPage({
   params,
@@ -17,7 +17,7 @@ export default async function LocationPage({
     locationId,
   });
   return (
-    <LocationsWorkspace
+    <LocationAddressStep
       initial={initial}
       detailLocationId={locationId}
       {...googleMapsBrowserConfiguration(env)}

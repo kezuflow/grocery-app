@@ -8,6 +8,7 @@ import { webRequestId } from "@/lib/http/request-context";
 import { invalid, requiredLocation } from "../operations-route-utils";
 
 const bodySchema = z.object({
+  expectedLocationVersion: z.number().int().positive().optional(),
   locationId: z.string().trim().min(1),
   senderName: z.string().trim().min(1).max(120),
   phoneE164: z

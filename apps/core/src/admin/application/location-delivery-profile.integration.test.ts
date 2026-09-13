@@ -6,6 +6,93 @@ import { createAuth } from "../../auth/service";
 import { requestHash } from "../../idempotency";
 
 const core = exports.default;
+const wizardAddress = {
+  addressLine1: "Saved entrance",
+  addressLine2: null,
+  barangay: null,
+  city: "Cebu",
+  region: "Cebu",
+  postalCode: null,
+  countryCode: "PH",
+};
+async function wizardFixture() {
+  const { request } = await fixture();
+  await env.DB.prepare(
+    "UPDATE fulfillment_location SET address_json=?,version=version+1 WHERE id=?",
+  )
+    .bind(JSON.stringify(wizardAddress), request.locationId)
+    .run();
+  const row = await env.DB.prepare("SELECT version FROM fulfillment_location WHERE id=?")
+    .bind(request.locationId)
+    .first<{ version: number }>();
+  if (!row) throw new Error("Location missing");
+  return {
+    ...request,
+    ...wizardAddress,
+    formattedAddress: "Saved entrance, Cebu, Cebu, PH",
+    expectedLocationVersion: row.version,
+  };
+}
+it("saves the reviewed location address and replays it after the location changes", async () => {
+  const request = await wizardFixture();
+  const saved = await core.upsertLocationDeliveryProfile(request);
+  expect(saved).toMatchObject({ ok: true, value: { profile: { addressLine1: "Saved entrance" } } });
+  await env.DB.prepare("UPDATE fulfillment_location SET version=version+1 WHERE id=?")
+    .bind(request.locationId)
+    .run();
+  expect(await core.upsertLocationDeliveryProfile(request)).toEqual(saved);
+  expect(
+    await core.upsertLocationDeliveryProfile({
+      ...request,
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 1,
+    }),
+  ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+});
+it("rejects a different pickup address in the guided setup", async () => {
+  const request = await wizardFixture();
+  expect(
+    await core.upsertLocationDeliveryProfile({ ...request, addressLine1: "Different entrance" }),
+  ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  expect(
+    await env.DB.prepare(
+      "SELECT COUNT(*) count FROM fulfillment_location_delivery_profile WHERE location_id=?",
+    )
+      .bind(request.locationId)
+      .first(),
+  ).toEqual({ count: 0 });
+});
+it("rechecks the reviewed location version inside the pickup write transaction", async () => {
+  const request = await wizardFixture();
+  const db = new Proxy(env.DB, {
+    get(target, property) {
+      if (property === "batch")
+        return async (statements: D1PreparedStatement[]) => {
+          await env.DB.prepare("UPDATE fulfillment_location SET version=version+1 WHERE id=?")
+            .bind(request.locationId)
+            .run();
+          return target.batch(statements);
+        };
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  expect(await upsertLocationDeliveryProfile({ db, auth: createAuth(env) }, request)).toMatchObject(
+    { ok: false },
+  );
+  expect(
+    await env.DB.prepare(
+      "SELECT COUNT(*) count FROM fulfillment_location_delivery_profile WHERE location_id=?",
+    )
+      .bind(request.locationId)
+      .first(),
+  ).toEqual({ count: 0 });
+  expect(
+    await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+      .bind(request.idempotencyKey)
+      .first(),
+  ).toEqual({ count: 0 });
+});
 async function fixture() {
   const manager = await locationManager();
   await env.DB.prepare(
