@@ -1,54 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit-LatinExt-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Outfit";
-  src: url("/fonts/Outfit-Latin-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Open Sans";
-  src: url("/fonts/OpenSans-LatinExt-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300 800;
-  font-stretch: 75% 100%;
-  font-display: swap;
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Open Sans";
-  src: url("/fonts/OpenSans-Latin-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300 800;
-  font-stretch: 75% 100%;
-  font-display: swap;
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
 .fm-scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -64,6 +16,8 @@
  * reference at the point of use so .fm-admin and .fm-admin-dark scoping wins.
  */
 @theme inline {
+  --font-sans: var(--fm-font-body);
+  --font-mono: var(--fm-font-mono);
   --color-background: var(--fm-background);
   --color-foreground: var(--fm-text);
   --color-card: var(--fm-background);
@@ -128,18 +82,12 @@
   --fm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --fm-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --fm-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --fm-font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --fm-font-body: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+  --fm-font-display: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --fm-font-body: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --fm-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
   background: var(--fm-background);
   color: var(--fm-text);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--fm-font-body);
 }
 
 .fm-scrollbar-none {
@@ -155,6 +103,7 @@ body {
   min-width: 320px;
   background: var(--fm-background);
   color: var(--fm-text);
+  font-family: var(--fm-font-body);
 }
 
 .fm-storefront {
@@ -162,13 +111,44 @@ body {
   font-weight: 400;
 }
 
-.fm-storefront :is(h1, h2, h3) {
+.fm-storefront :is(h1, h2, h3),
+.fm-admin :is(h1, h2, h3) {
   font-family: var(--fm-font-display);
-  letter-spacing: normal;
+  text-wrap: balance;
+}
+
+.fm-storefront h1,
+.fm-admin h1 {
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.fm-storefront h2,
+.fm-admin h2 {
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.fm-storefront h3,
+.fm-admin h3 {
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.fm-storefront :is(.uppercase, code, kbd, pre),
+.fm-admin :is(.uppercase, code, kbd, pre) {
+  font-family: var(--fm-font-mono);
 }
 
 .fm-font-display {
   font-family: var(--fm-font-display);
+}
+
+.fm-font-mono {
+  font-family: var(--fm-font-mono);
 }
 
 .fm-storefront .fm-font-body {
@@ -211,7 +191,7 @@ body {
   --fm-shadow-shell: 0 1px 3px rgb(15 23 42 / 10%), 0 1px 2px -1px rgb(15 23 42 / 10%);
   background: var(--fm-admin-canvas);
   color: var(--fm-text);
-  font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--fm-font-body);
 }
 
 html.fm-admin-dark,

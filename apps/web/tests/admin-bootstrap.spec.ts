@@ -29,6 +29,6 @@ test("Admin overview reaches useful data through one browser bootstrap request",
 
   expect(adminReads).toEqual(["/api/admin/bootstrap"]);
   expect(chartScripts).toEqual([]);
-  expect(fontRequests.some((path) => /dm-sans-latin-wght-normal/i.test(path))).toBe(true);
-  expect(fontRequests.some((path) => /(?:OpenSans|Outfit)-Latin/i.test(path))).toBe(false);
+  expect(fontRequests.some((path) => /geist-latin-wght-normal/i.test(path))).toBe(true);
+  expect(fontRequests.some((path) => /(?:dm-sans|OpenSans|Outfit)-Latin/i.test(path))).toBe(false);
 });

@@ -127,11 +127,18 @@ describe("shared Admin accessibility contract", () => {
 
   it("keeps the Admin visual scope on the Admin layout boundary", () => {
     const layout = readFileSync(new URL("../../app/admin/layout.tsx", import.meta.url), "utf8");
+    const rootLayout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
     expect(layout).toMatch(/className="fm-admin/);
-    expect(layout).toContain('import "@fontsource-variable/dm-sans/wght.css"');
-    expect(globals).toMatch(
-      /\.fm-admin \{[\s\S]*font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;/,
+    expect(layout).not.toContain("dm-sans");
+    expect(rootLayout).toContain('import "@fontsource-variable/geist/wght.css"');
+    expect(rootLayout).toContain('import "@fontsource-variable/geist-mono/wght.css"');
+    expect(globals).toContain(
+      '--fm-font-display: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;',
     );
+    expect(globals).toContain(
+      '--fm-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;',
+    );
+    expect(globals).toMatch(/\.fm-admin \{[\s\S]*font-family: var\(--fm-font-body\);/);
     expect(globals).toContain(".fm-admin-sidebar-tooltip svg");
     expect(shell).toContain('className="fm-admin-sidebar-tooltip rounded-lg"');
     expect(shell).toContain('className="text-2xl font-bold tracking-[-0.025em]"');

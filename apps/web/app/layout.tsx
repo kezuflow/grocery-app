@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { env } from "cloudflare:workers";
+import "@fontsource-variable/geist/wght.css";
+import "@fontsource-variable/geist-mono/wght.css";
 import { StorefrontRuntimeProvider } from "../components/storefront/storefront-runtime";
 import { googleMapsBrowserConfiguration } from "../lib/maps/google-maps-runtime";
 import "./globals.css";
