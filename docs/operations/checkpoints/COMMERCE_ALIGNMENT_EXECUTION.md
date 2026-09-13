@@ -27,10 +27,9 @@ rows, delivery section, promotion area and summary on a white canvas with separa
 ordinary card shells or gray fill. The page was checked with a saved address/cart session and an
 unauthenticated empty/loading state; no provider transaction or payment was attempted.
 
-Implementation is complete in the working tree pending the scoped commit and push. Next action: stage
-only the checkout components/tests and the DESIGN/checkpoint guidance files, commit directly to `main`,
-push `origin/main`, then record the resulting revision here while leaving unrelated location and
-autofill work untouched.
+Implementation is complete in commit `3a030995` on `main`; the checkpoint needs this final revision
+update before the paired push. Next action: commit this checkpoint-only update, push both commits to
+`origin/main`, and leave unrelated location and autofill work untouched.
 
 ## Prior owner request — CHECKOUT-DELIVERY-FLAT-UI-1 (2026-09-13)
 
