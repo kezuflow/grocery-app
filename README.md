@@ -45,18 +45,11 @@ Google's configuration. Localhost has its own login session.
 
 For isolated local data in PowerShell, run
 `$env:FRESHMARKETS_DEV_DATA='local'; pnpm dev`; remove the override afterward with
-`Remove-Item Env:FRESHMARKETS_DEV_DATA`. This mode, `pnpm dev:core`, and
-`pnpm dev:stack` use `apps/core/.wrangler/state`. Builds do not enable shared dev
+`Remove-Item Env:FRESHMARKETS_DEV_DATA`. This isolated mode and `pnpm dev:core` use
+`apps/core/.wrangler/state`. Builds do not enable shared dev
 bindings. Explicit `CLOUDFLARE_ENV` selection retains Wrangler environment behavior.
 
-For the production-built Web Worker plus Core in one Cloudflare local runtime, first build Web, then run the multi-config Wrangler smoke stack:
-
-```sh
-pnpm --filter @freshmarkets/web build
-pnpm dev:stack
-```
-
-The combined stack also uses `http://localhost:3000` as its public origin.
+The normal `pnpm dev` runtime uses `http://localhost:3000` as its public origin.
 
 Open `http://localhost:3000/api/core-health` to verify
 `Web -> CORE Service Binding -> Core`.

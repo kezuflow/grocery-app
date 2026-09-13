@@ -31,8 +31,8 @@ processing. Only verified provider observations establish canonical success.
 
 For local test-mode development, keep Core's source-controlled default on `disabled` and place the
 test credentials and `PAYMENT_PROVIDER=paymongo` in the Git-ignored `apps/core/.dev.vars`. Put only
-browser-safe public keys in Web's local Worker variables, then start the stack with
-`pnpm dev:stack`. This runs real PayMongo test-sandbox API calls, so test Customers, Payments and Refunds appear
+browser-safe public keys in Web's local Worker variables, then start local development with
+`pnpm dev`. This runs real PayMongo test-sandbox API calls, so test Customers, Payments and Refunds appear
 in the PayMongo test dashboard. Automated Core tests
 override the provider back to `mock` and never call PayMongo.
 

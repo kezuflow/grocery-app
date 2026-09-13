@@ -53,7 +53,7 @@ service-area and delivery-zone codes.
 
 Every D1 schema change uses a numbered Wrangler migration. Better Auth-owned tables must remain compatible with Better Auth's supported schema/adapter workflow; application tables remain separately owned by Core. Do not edit deployed rows manually as part of application behavior.
 
-For the combined local Web/Core stack, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; the root `dev:stack` script uses that stable persistence directory so Web rebuilds do not erase the local D1 database.
+For the local Web/Core runtime, apply local migrations from `apps/core` and use `apps/core/.wrangler/state`; `pnpm dev` uses that stable persistence directory so Web rebuilds do not erase the local D1 database.
 
 After migrations, `pnpm seed:development` loads the repeatable local-only dataset in `apps/core/seeds/development.sql`. It populates linked Customer, Membership, Checkout, Order, Payment, Refund, Fulfillment, Delivery, issue, supply, notification, and Audit examples with stable `seed-*` identities. The seed uses `INSERT OR IGNORE`, does not replace an existing login or business row, and deliberately creates neither `product_media` rows nor R2 objects.
 

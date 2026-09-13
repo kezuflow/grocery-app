@@ -29,7 +29,7 @@ node scripts/verify-worker-readiness.mjs
 ```
 
 `node scripts/verify-worker-readiness.mjs --probe-local` is local-only and
-requires the Web/Core stack started with `pnpm dev:stack`.
+requires the Web/Core stack started with `pnpm dev`.
 
 The local probe treats `/health` as liveness and `/ready` as dependency
 readiness. A release cannot receive traffic unless `/ready` reports ready for
