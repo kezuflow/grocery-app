@@ -1,6 +1,39 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — CART-DRAWER-CLEAR-1 (2026-09-13)
+## Current owner request — GEIST-TYPOGRAPHY-UI-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asks for a sent.dm-inspired UI typography pass using Geist and Geist Mono for
+titles and supporting labels. Acceptance: storefront and Admin use self-hosted Geist Variable for
+interface and display text; code, identifiers and uppercase micro-labels use Geist Mono Variable;
+h1/h2/h3 gain a consistent restrained hierarchy without changing existing responsive sizes or
+business behavior; Admin/storefront color-token boundaries remain separate; no proprietary sent.dm
+font or brand treatment is copied. Start: `main` at `38f277e3`; preserve unrelated location address,
+autofill, time-input and location-schedule changes; do not start or replace the owner's development
+server; no subagents.
+
+Implemented in `201b2bce`: the root layout now self-hosts the Fontsource Geist and Geist Mono
+variable families, replacing the loaded Outfit/Open Sans storefront stack and Admin DM Sans import.
+Shared font tokens drive Tailwind sans/mono utilities, both visual scopes and the document fallback.
+Storefront and Admin headings use weight 600, balanced wrapping, compact line heights and
+progressively tighter tracking; existing uppercase labels and technical/code text use Geist Mono.
+The package manifest/lockfile, Admin font contract and browser font-request expectation were updated.
+DESIGN records the owner correction and keeps the reference as hierarchy inspiration only.
+
+Verification on the intended change: the focused Admin visual-contract suite passed 15/15 tests; Web
+typecheck, focused lint and targeted formatting passed; the full Web suite passed 131 files / 545
+tests; and the Web production build passed on the combined working tree. The owner's running
+localhost app hot-reloaded without starting another server. Browser inspection confirmed the home
+body and section headings render with loaded Geist Variable. Checkout confirmed its 36px h1 renders
+at weight 600, 1.08 line-height and `-0.04em` tracking, while the uppercase 12px checkout label renders
+with loaded Geist Mono Variable. Desktop home and checkout screenshots were visually inspected; no
+commerce/provider mutation was attempted. At the 390px reference viewport, the checkout h1 correctly
+resolves to 30px, wraps cleanly and the page has no horizontal overflow. Completed implementation ID:
+GEIST-TYPOGRAPHY-UI-1. Counting level: zero remaining application changes for the requested shared
+Geist typography pass. Next action: owner reviews the live storefront and identifies the next UI
+surface to refine.
+
+## Prior owner request — CART-DRAWER-CLEAR-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. The owner asks for a clear-cart action when opening the cart. Acceptance: the cart button
