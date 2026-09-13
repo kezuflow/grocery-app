@@ -42,8 +42,9 @@ environment declaration is out of date; Web's check passes. Local fakes do not e
 Lalamove/Grab acceptance.
 
 Completed IDs: ADDR-1, ADDR-2, ADDR-3 and ADDR-4 at application-source/local-acceptance level.
-Counting level: zero remaining ADDR implementation phases. Next action: perform separately authorized
-deployment and actual-provider acceptance; earlier independent commerce/HSPA gates remain open.
+Counting level: zero remaining ADDR implementation phases. Implementation commit `da0544ad` is
+pushed to `origin/main`. Next action: perform separately authorized deployment and actual-provider
+acceptance; earlier independent commerce/HSPA gates remain open.
 
 ## Concurrent owner request — CHECKOUT-PENDING-HANDOFF-1 (2026-09-14)
 
