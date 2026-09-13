@@ -20,7 +20,7 @@ quotation host also returned HTTP 502 to an independent unsigned connectivity pr
 provider/sandbox-path outage at the time of observation; it does not authorize a fee bypass or prove a
 global Lalamove outage.
 
-Implemented in the working tree: checkout now exposes courier-quotation loading and failure directly
+Implemented and pushed on main as `55709e57`: checkout now exposes courier-quotation loading and failure directly
 under Delivery option. A failed application response or lost/network response retains the selected
 option, clears no real quote as accepted, and offers both an inline retry and an enabled summary retry.
 The retry preserves the same request identity when the prior outcome may be unknown. Option controls
@@ -42,6 +42,7 @@ changes for the selected/quoting/failed/retry mismatch; one external acceptance 
 actual-provider level. Next action: owner refreshes checkout and selects Scheduled delivery to see the
 specific live quotation result; a successful Lalamove response will reveal and enable the existing
 accepted-total payment action, while another provider failure will now remain visible and retryable.
+The unrelated location address/autofill/schedule and time-input working-tree changes remain unstaged.
 
 ## Prior owner request — SCHEDULED-CYCLE-ACTIVATION-UX-1 (2026-09-13)
 
