@@ -205,9 +205,7 @@ Indexes: customer/committed time, unique payment intent/attempt commitment, opti
 
 Forward migration `0074_reconciliation_case_versions.sql` adds a positive safe-integer version to retained `payment_reconciliation_case` rows, defaulting to one without rewriting their identity, financial linkage, status, protected evidence or timestamps. Resolution and reopening advance that version. Apply the forward migration before the updated Core, then publish the Web consumer that sends expected versions; older unversioned resolution requests fail validation. No retained deployment has been migrated by this implementation work.
 
-
 Refund recovery uses the existing `payment_refund` version, `attempt_count`, `processing_started_at`, `next_retry_at`, `provider_observed_at`, controlled `last_error_code`, and linked `reconciliation_case_id`. Claiming due work advances the version and leases the identity. A lookup may atomically bind an absent provider refund reference only to exact application-key/captured-payment evidence; it cannot overwrite a different reference. The successful Refund and derived Payment total commit together with required audit. Due terminal rows retain unfinished dependent projection work until explicitly completed; bounded exhaustion remains linked to a review case. Recheck command receipts are immutable JSON in the existing idempotency store. No new table or migration is required for this recovery path.
-
 
 - `payment_intents(id PK, purpose, subject_type, subject_id, customer_id FK, amount_minor, currency, status, idempotency_key UNIQUE, version, created_at, updated_at)`
 - `payment_attempts(id PK, payment_intent_id FK, provider, provider_reference NULL, status, idempotency_key UNIQUE, version, created_at, updated_at)`
@@ -451,7 +449,6 @@ The existing delivery_provider_dispatch storage name now represents an execution
 One procurement requirement exists per non-null (procurement_run_id, sku_id), including closed requirements: closing does not authorize another requirement with the same run/SKU identity. The redundant narrower active index is removed. Historical pool-level compatibility rows are not the exact-demand authority.
 
 Migration 0069 copies all application rows and row IDs before rebuilding parents, restores data before enabling mutation triggers, and restores indexes/constraints. Better Auth tables are unchanged. Fresh and populated 0068 upgrades are verified; invalid retained rows or duplicate provider identities abort the transaction without silent deletion/coercion. Retained deployment rollout requires a verified backup, sufficient temporary space for the copies, and validation on a copy of that deployment. No reset/deployment is implied. The catalog generator explicitly targets historical migration 0025, before pool-pointer removal; its output must match that boundary.
-
 
 Draft audience authoring uses the existing `promotion_rule` table. Core validates closed parameter schemas and replaces the rule set atomically with the owning Promotion version, audit and immutable command result; no new schema is required. Rules combine by conjunction. Unknown or malformed retained conditions remain stored until an explicit draft replacement and fail closed for new checkout. Customer/segment reference eligibility is enforced in the owning command transaction, not with cross-table lifecycle triggers. Paid benefit/rule snapshots remain unchanged.
 
