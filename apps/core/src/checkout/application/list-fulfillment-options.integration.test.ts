@@ -31,7 +31,7 @@ describe("listFulfillmentOptions", () => {
       ).bind(cartId),
     ]);
     await env.DB.prepare(`INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at)
-      SELECT 'second-options-window',id,'Evening',delivery_date+14400000,delivery_date+21600000,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`).run();
+      SELECT 'retained-options-window',id,'Retained later range',delivery_date+14400000,delivery_date+21600000,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`).run();
     const query = {
       customerId,
       addressId,
@@ -56,11 +56,10 @@ describe("listFulfillmentOptions", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.map((option) => option.mode)).toEqual(["SCHEDULED", "SCHEDULED"]);
-    expect(new Set(result.value.map((option) => option.optionId)).size).toBe(2);
+    expect(result.value.map((option) => option.mode)).toEqual(["SCHEDULED"]);
+    expect(new Set(result.value.map((option) => option.optionId)).size).toBe(1);
     expect(result.value.map((option) => option.deliveryWindow?.name)).toEqual([
       "Test delivery window",
-      "Evening",
     ]);
     expect(result.value.every((option) => option.eligible)).toBe(true);
     for (const option of result.value) {

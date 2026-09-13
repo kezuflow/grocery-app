@@ -57,6 +57,13 @@ View-only access does not enable writes. Scheduled weeks remain separate from In
 their checkout eligibility follows the cycle opening and cutoff while the customer total still requires
 a supported future courier quotation for the planned pickup.
 
+Owner follow-up, 2026-09-13: the Scheduled cycles workspace presents one cycle as an ordering period,
+one fulfillment plan and one customer arrival range. It hides the internal Market and delivery-zone
+layers, labels participating customer-fulfillment locations by their location names, and omits the
+obsolete window-name and add/remove-window controls. A different pickup or arrival plan is a separate
+cycle. Cycle summaries retain status, timezone, operational times, arrival range and fulfillment
+locations. Customer checkout and Order detail show the arrival range without an internal window label.
+
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.
 At least three points form the shaded draft; the last joins the first. Coordinates are a secondary

@@ -518,10 +518,7 @@ describe("order commitment from canonical payment reactions", () => {
       procurementAt: at(25),
       preparationAt: at(28),
       pickupAt: at(30),
-      windows: [
-        { name: "Morning delivery", startsAt: at(31), endsAt: at(33) },
-        { name: "Afternoon delivery", startsAt: at(34), endsAt: at(36) },
-      ],
+      windows: [{ name: "Scheduled delivery", startsAt: at(31), endsAt: at(33) }],
       participation: [{ zoneId: "zone-cebu-city-core", locationId: "location-cebu-central" }],
     });
     if (!draft.ok) throw new Error(draft.error.message);
@@ -536,8 +533,8 @@ describe("order commitment from canonical payment reactions", () => {
       }),
     ).toMatchObject({ ok: true });
     expect(await openDueDeliveryCycles(env.DB, now)).toBe(1);
-    const window = draft.value.windows[1];
-    if (!window) throw new Error("Missing afternoon window");
+    const window = draft.value.windows[0];
+    if (!window) throw new Error("Missing delivery range");
     const fixture = await seededCheckout({ onHand: 0 });
     const quoteCommand = {
       ...fixture,
@@ -553,7 +550,7 @@ describe("order commitment from canonical payment reactions", () => {
     expect(
       await createCheckoutQuote(
         env.DB,
-        { ...quoteCommand, deliveryWindowId: draft.value.windows[0]?.windowId },
+        { ...quoteCommand, deliveryWindowId: "different-delivery-range" },
         quoteDependencies,
       ),
     ).toMatchObject({ ok: false });

@@ -237,6 +237,20 @@ describe("Global cycle administration", () => {
     expect(
       await core.saveAdminDeliveryCycleDraft({
         ...request,
+        windows: [
+          ...request.windows,
+          {
+            name: "Later delivery",
+            startsAt: request.windows[0]!.startsAt,
+            endsAt: request.windows[0]!.endsAt,
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await noEffects(request);
+    expect(
+      await core.saveAdminDeliveryCycleDraft({
+        ...request,
         participation: [{ zoneId: "zone-cebu-city-core", locationId: "missing-warehouse" }],
       }),
     ).toMatchObject({ ok: false });

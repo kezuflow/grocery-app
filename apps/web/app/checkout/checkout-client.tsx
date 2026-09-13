@@ -315,7 +315,7 @@ export function CheckoutClient({
       if (!(await invalidatePendingQuote())) return;
       selectedFulfillmentOptionId.current = option.optionId;
       setFulfillmentOptionId(option.optionId);
-      setStatus("Checking the selected delivery window and current total.");
+      setStatus("Checking the selected delivery range and current total.");
     }
     const quoteInput = {
       addressId: selectedAddressId.current,

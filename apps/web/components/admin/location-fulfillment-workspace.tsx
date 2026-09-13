@@ -219,7 +219,7 @@ export function LocationFulfillmentWorkspace({
               </label>
               <p className="text-sm text-muted-foreground">
                 An Instant promise is required before opening Instant commerce. Scheduled orders use
-                their accepted delivery window.
+                their accepted delivery range.
               </p>
               <label className="block">
                 Reason for change (required)

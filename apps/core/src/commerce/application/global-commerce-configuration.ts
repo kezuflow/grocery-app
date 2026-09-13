@@ -136,7 +136,7 @@ async function readinessBlockers(
     if (!cycle)
       blockers.push({
         code: "SCHEDULED_WINDOW_NOT_READY",
-        message: "An open pre-cutoff Scheduled delivery window is required",
+        message: "An open pre-cutoff Scheduled delivery range is required",
       });
   }
   return blockers;

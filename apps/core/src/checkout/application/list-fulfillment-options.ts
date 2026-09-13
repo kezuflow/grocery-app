@@ -189,10 +189,10 @@ export async function listFulfillmentOptions(
           .all<CycleWindow>();
         if (availableCycles.results.length) {
           candidate = operationalCandidate;
-          // Present every configured window of the next eligible cycle, as one offering.
-          cycles = availableCycles.results.filter(
-            (window) => window.id === availableCycles.results[0]?.id,
-          );
+          // One cycle presents one arrival range. Retained extra rows stay historical/committed evidence.
+          cycles = availableCycles.results
+            .filter((window) => window.id === availableCycles.results[0]?.id)
+            .slice(0, 1);
           break;
         }
       }

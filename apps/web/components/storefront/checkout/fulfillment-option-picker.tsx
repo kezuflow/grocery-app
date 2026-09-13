@@ -68,12 +68,12 @@ export function FulfillmentOptionPicker({
               {option.eligible
                 ? option.mode === "SCHEDULED"
                   ? option.deliveryWindow
-                    ? `${option.deliveryWindow.name ? `${option.deliveryWindow.name} · ` : ""}${new Date(option.deliveryWindow.startsAt).toLocaleString()} – ${new Date(option.deliveryWindow.endsAt).toLocaleString()}`
+                    ? `${new Date(option.deliveryWindow.startsAt).toLocaleString()} – ${new Date(option.deliveryWindow.endsAt).toLocaleString()}`
                     : "Delivery assigned by store"
                   : option.promisedAt
                     ? `${option.deliveryPartner?.serviceLabel ?? "Instant"} · Expected ${new Date(option.promisedAt).toLocaleString()}`
                     : option.deliveryWindow
-                      ? `${new Date(option.deliveryWindow.startsAt).toLocaleDateString()} delivery window`
+                      ? `${new Date(option.deliveryWindow.startsAt).toLocaleDateString()} delivery range`
                       : "Available"
                 : (option.unavailableReason ?? "Unavailable").toLowerCase().replaceAll("_", " ")}
             </small>

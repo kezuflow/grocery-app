@@ -123,7 +123,7 @@ export async function listAdminDeliveryCycles(
     access(deps, parsed.data, "fulfillment.manage"),
     deps.db
       .prepare(
-        "SELECT id marketId,name,timezone FROM market WHERE status='active' ORDER BY name,id LIMIT 100",
+        "SELECT id marketId,name,timezone FROM market WHERE status='active' ORDER BY is_default DESC,name,id LIMIT 100",
       )
       .all<AdminDeliveryCyclePage["markets"][number]>(),
   ]);

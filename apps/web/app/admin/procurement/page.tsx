@@ -217,7 +217,7 @@ export default function ProcurementPage() {
                 </dl>
                 {view.week.windows.map((window) => (
                   <p className="mt-3 text-sm" key={window.name}>
-                    {window.name}: {date(window.startsAt)} – {date(window.endsAt)}
+                    Customer delivery: {date(window.startsAt)} – {date(window.endsAt)}
                   </p>
                 ))}
               </section>

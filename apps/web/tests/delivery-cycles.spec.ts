@@ -1,7 +1,7 @@
 import { test, expect } from "./admin-authenticated-fixture";
 
 for (const width of [1440, 390]) {
-  test(`operator creates and schedules delivery windows with response recovery at ${width}px`, async ({
+  test(`operator creates and schedules one delivery range with response recovery at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
@@ -29,18 +29,14 @@ for (const width of [1440, 390]) {
       ["Planned courier pickup", 30],
     ] as const)
       await page.getByLabel(label, { exact: true }).fill(local(hours));
-    await page.getByLabel("Window 1 name", { exact: true }).fill("Morning");
-    await page.getByLabel("Window 1 starts", { exact: true }).fill(local(31));
-    await page.getByLabel("Window 1 ends", { exact: true }).fill(local(33));
-    await page.getByRole("button", { name: "Add delivery window" }).click();
-    await page.getByLabel("Window 2 name", { exact: true }).fill("Afternoon");
-    await page.getByLabel("Window 2 starts", { exact: true }).fill(local(34));
-    await page.getByLabel("Window 2 ends", { exact: true }).fill(local(36));
-    await page
-      .getByRole("checkbox", { name: /Central Cebu/ })
-      .first()
-      .check();
+    await page.getByLabel("Customer delivery starts", { exact: true }).fill(local(31));
+    await page.getByLabel("Customer delivery ends", { exact: true }).fill(local(33));
+    await page.getByRole("checkbox", { name: "Central Cebu", exact: true }).first().check();
     await page.getByLabel("Reason", { exact: true }).fill("Prepare weekly service");
+    await page.screenshot({
+      path: testInfo.outputPath("scheduled-cycle-form.png"),
+      fullPage: true,
+    });
     const attempts: { key: string | undefined; body: string | null }[] = [];
     await page.route("**/api/admin/delivery-cycles", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
@@ -63,12 +59,13 @@ for (const width of [1440, 390]) {
     await expect(cycle).toContainText("DRAFT");
     await cycle
       .getByLabel(`Scheduling reason for ${name}`)
-      .fill("Reviewed procurement and customer windows");
+      .fill("Reviewed procurement and customer delivery");
     await cycle.getByRole("button", { name: `Schedule ${name}`, exact: true }).click();
     await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
     await expect(cycle).toContainText("SCHEDULED");
-    await expect(cycle).toContainText("Morning");
-    await expect(cycle).toContainText("Afternoon");
+    await expect(cycle).toContainText("Customer delivery");
+    await expect(page.getByLabel("Market", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add delivery window" })).toHaveCount(0);
     expect(attempts).toHaveLength(4);
     expect(attempts[1]).toEqual(attempts[0]);
     expect(attempts[3]).toEqual(attempts[2]);

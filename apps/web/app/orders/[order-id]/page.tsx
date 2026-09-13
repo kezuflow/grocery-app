@@ -122,7 +122,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                       ? new Date(order.fulfillment.promisedAt).toLocaleString()
                       : "Unavailable"
                     : order.fulfillment.deliveryWindow
-                      ? `${order.fulfillment.deliveryWindow.name} · ${new Date(order.fulfillment.deliveryWindow.startsAt).toLocaleString("en-PH", { timeZone: order.fulfillment.deliveryWindow.timezone })} – ${new Date(order.fulfillment.deliveryWindow.endsAt).toLocaleString("en-PH", { timeZone: order.fulfillment.deliveryWindow.timezone })} (${order.fulfillment.deliveryWindow.timezone})`
+                      ? `${new Date(order.fulfillment.deliveryWindow.startsAt).toLocaleString("en-PH", { timeZone: order.fulfillment.deliveryWindow.timezone })} – ${new Date(order.fulfillment.deliveryWindow.endsAt).toLocaleString("en-PH", { timeZone: order.fulfillment.deliveryWindow.timezone })} (${order.fulfillment.deliveryWindow.timezone})`
                       : order.fulfillment.deliveryDate
                         ? new Date(order.fulfillment.deliveryDate).toLocaleDateString()
                         : "Unavailable"}

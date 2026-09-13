@@ -17,7 +17,7 @@ export const deliveryCycleDraftSchema = z
     procurementAt: instant,
     preparationAt: instant,
     pickupAt: instant,
-    windows: z.array(window).min(1).max(30),
+    windows: z.array(window).length(1),
     participation: z
       .array(z.object({ zoneId: id, locationId: id }))
       .min(1)

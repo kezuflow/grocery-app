@@ -118,7 +118,7 @@ export function ExternalDeliveryBooking({
         <p className="text-xs text-[var(--fm-text-muted)]">
           {fulfillmentMode === "INSTANT"
             ? "Request the courier the customer chose at checkout."
-            : "Set pickup for when packing will be ready, within the customer’s delivery window. Request a driver now once packing is complete."}
+            : "Set pickup for when packing will be ready, within the customer’s delivery range. Request a driver now once packing is complete."}
         </p>
       </div>
       {fulfillmentMode === "SCHEDULED" ? (

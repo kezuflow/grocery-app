@@ -22,7 +22,6 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 const failure = z.object({
   ok: z.literal(false),
@@ -60,7 +59,7 @@ function blank(marketId: string): DeliveryCycleDraft {
     procurementAt: "",
     preparationAt: "",
     pickupAt: "",
-    windows: [{ name: "", startsAt: "", endsAt: "" }],
+    windows: [{ name: "Scheduled delivery", startsAt: "", endsAt: "" }],
     participation: [],
     expectedVersion: 0,
     reason: "",
@@ -218,6 +217,7 @@ export function DeliveryCyclesWorkspace({
     }
   }
   const disabled = pending !== null || intent.pending || loading;
+  const deliveryWindow = draft?.windows[0];
   const format = (value: string | null, timezone: string) =>
     value
       ? new Intl.DateTimeFormat("en-PH", {
@@ -232,7 +232,7 @@ export function DeliveryCyclesWorkspace({
     <div className="space-y-4">
       <PageHeader
         title="Scheduled cycles"
-        description="Plan order opening, procurement, preparation and customer delivery windows."
+        description="Publish one ordering and fulfillment plan for participating locations."
       />
       <WorkspaceNavigation parentCode="settings" label="Settings administration" />
       {notice && (
@@ -266,7 +266,7 @@ export function DeliveryCyclesWorkspace({
             const parsed = deliveryCycleDraftSchema.safeParse(draft);
             if (!parsed.success) {
               setNotice(
-                "Complete the schedule, at least one delivery window, destinations and reason.",
+                "Complete the schedule, customer delivery range, fulfillment locations and reason.",
               );
               return;
             }
@@ -277,23 +277,6 @@ export function DeliveryCyclesWorkspace({
             <legend className="text-lg font-semibold">
               {draft.cycleId ? "Edit draft" : "New cycle"}
             </legend>
-            <Label htmlFor="cycle-market">Market</Label>
-            <Select
-              value={draft.marketId}
-              disabled={!!draft.cycleId || disabled}
-              onValueChange={(value) => setDraft({ ...draft, marketId: value, participation: [] })}
-            >
-              <SelectTrigger id="cycle-market">
-                <SelectValue placeholder="Choose market" />
-              </SelectTrigger>
-              <SelectContent>
-                {page?.markets.map((market) => (
-                  <SelectItem key={market.marketId} value={market.marketId}>
-                    {market.name} · {market.timezone}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Label htmlFor="cycle-name">Cycle name</Label>
             <Input
               id="cycle-name"
@@ -304,97 +287,88 @@ export function DeliveryCyclesWorkspace({
             />
             <p className="text-sm text-muted-foreground">
               Enter times in your device timezone (
-              {Intl.DateTimeFormat().resolvedOptions().timeZone}). Saved plans below display the
-              market timezone.
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}). Saved plans display the business
+              timezone.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {times.map((field) => (
-                <div key={field} className="space-y-1">
-                  <Label htmlFor={`cycle-${field}`}>{timeLabels[field]}</Label>
-                  <Input
-                    id={`cycle-${field}`}
-                    type="datetime-local"
-                    required
-                    value={localTime(draft[field])}
-                    onChange={(event) =>
-                      setDraft({ ...draft, [field]: toInstant(event.target.value) })
-                    }
-                  />
-                </div>
-              ))}
-            </div>
             <fieldset className="space-y-3">
-              <legend className="font-medium">Customer delivery windows</legend>
-              {draft.windows.map((window, index) => (
-                <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-3">
-                  <div>
-                    <Label htmlFor={`window-name-${index}`}>Window {index + 1} name</Label>
+              <legend className="font-medium">Ordering period</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(["orderOpensAt", "cutoffAt"] as const).map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label htmlFor={`cycle-${field}`}>{timeLabels[field]}</Label>
                     <Input
-                      id={`window-name-${index}`}
+                      id={`cycle-${field}`}
+                      type="datetime-local"
                       required
-                      maxLength={120}
-                      value={window.name}
+                      value={localTime(draft[field])}
+                      onChange={(event) =>
+                        setDraft({ ...draft, [field]: toInstant(event.target.value) })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3">
+              <legend className="font-medium">Fulfillment plan</legend>
+              <p className="text-sm text-muted-foreground">
+                Each selected fulfillment location follows this procurement, preparation and courier
+                pickup plan for its assigned orders.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(["procurementAt", "preparationAt", "pickupAt"] as const).map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label htmlFor={`cycle-${field}`}>{timeLabels[field]}</Label>
+                    <Input
+                      id={`cycle-${field}`}
+                      type="datetime-local"
+                      required
+                      value={localTime(draft[field])}
+                      onChange={(event) =>
+                        setDraft({ ...draft, [field]: toInstant(event.target.value) })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3">
+              <legend className="font-medium">Customer delivery</legend>
+              <p className="text-sm text-muted-foreground">
+                This is the arrival range customers see at checkout. It must start at or after the
+                planned courier pickup.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(["startsAt", "endsAt"] as const).map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label htmlFor={`delivery-${field}`}>
+                      Customer delivery {field === "startsAt" ? "starts" : "ends"}
+                    </Label>
+                    <Input
+                      id={`delivery-${field}`}
+                      type="datetime-local"
+                      required
+                      value={localTime(deliveryWindow?.[field] ?? "")}
                       onChange={(event) =>
                         setDraft({
                           ...draft,
-                          windows: draft.windows.map((item, i) =>
-                            i === index ? { ...item, name: event.target.value } : item,
-                          ),
+                          windows: [
+                            {
+                              name: deliveryWindow?.name ?? "Scheduled delivery",
+                              startsAt: deliveryWindow?.startsAt ?? "",
+                              endsAt: deliveryWindow?.endsAt ?? "",
+                              [field]: toInstant(event.target.value),
+                            },
+                          ],
                         })
                       }
                     />
                   </div>
-                  {(["startsAt", "endsAt"] as const).map((field) => (
-                    <div key={field}>
-                      <Label htmlFor={`window-${field}-${index}`}>
-                        Window {index + 1} {field === "startsAt" ? "starts" : "ends"}
-                      </Label>
-                      <Input
-                        id={`window-${field}-${index}`}
-                        type="datetime-local"
-                        required
-                        value={localTime(window[field])}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            windows: draft.windows.map((item, i) =>
-                              i === index
-                                ? { ...item, [field]: toInstant(event.target.value) }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={draft.windows.length === 1}
-                    onClick={() =>
-                      setDraft({ ...draft, windows: draft.windows.filter((_, i) => i !== index) })
-                    }
-                  >
-                    Remove window {index + 1}
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={draft.windows.length >= 30}
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    windows: [...draft.windows, { name: "", startsAt: "", endsAt: "" }],
-                  })
-                }
-              >
-                Add delivery window
-              </Button>
+                ))}
+              </div>
             </fieldset>
             <fieldset className="space-y-2">
-              <legend className="font-medium">Participating destinations</legend>
+              <legend className="font-medium">Fulfillment locations</legend>
               {destinationError && <p role="alert">{destinationError}</p>}
               {destinations.items.map((item) => (
                 <Label
@@ -422,7 +396,7 @@ export function DeliveryCyclesWorkspace({
                       })
                     }
                   />
-                  {item.zoneName} · {item.locationName}
+                  {item.locationName}
                 </Label>
               ))}
               {!destinations.items.length && !destinationError && (
@@ -465,7 +439,7 @@ export function DeliveryCyclesWorkspace({
         <article key={cycle.cycleId} className="space-y-3 rounded-lg border p-4">
           <h2 className="text-lg font-semibold">{cycle.name}</h2>
           <p>
-            {cycle.status.replaceAll("_", " ")} · {cycle.marketName} · {cycle.timezone}
+            {cycle.status.replaceAll("_", " ")} · {cycle.timezone}
           </p>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             {times.map((field) => (
@@ -475,18 +449,31 @@ export function DeliveryCyclesWorkspace({
               </div>
             ))}
           </dl>
-          <ul className="text-sm">
-            {cycle.windows.map((window) => (
-              <li key={window.windowId}>
-                {window.name}: {format(window.startsAt, cycle.timezone)} –{" "}
-                {format(window.endsAt, cycle.timezone)}
-              </li>
-            ))}
-          </ul>
+          {cycle.windows.length === 1 ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Customer delivery</span>
+              <br />
+              {format(cycle.windows[0]?.startsAt ?? null, cycle.timezone)} –{" "}
+              {format(cycle.windows[0]?.endsAt ?? null, cycle.timezone)}
+            </p>
+          ) : cycle.windows.length > 1 ? (
+            <div className="text-sm">
+              <p className="text-muted-foreground">Legacy customer delivery windows</p>
+              <ul>
+                {cycle.windows.map((window) => (
+                  <li key={window.windowId}>
+                    {format(window.startsAt, cycle.timezone)} –{" "}
+                    {format(window.endsAt, cycle.timezone)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <p className="text-sm">
-            {cycle.participation
-              .map((item) => `${item.zoneName} · ${item.locationName}`)
-              .join("; ") || "No participating destinations"}
+            <span className="text-muted-foreground">Fulfillment locations</span>
+            <br />
+            {[...new Set(cycle.participation.map((item) => item.locationName))].join("; ") ||
+              "No fulfillment locations"}
           </p>
           {page.canManage && cycle.status === "DRAFT" && (
             <div className="flex flex-wrap gap-2">
@@ -503,13 +490,15 @@ export function DeliveryCyclesWorkspace({
                     procurementAt: cycle.procurementAt ?? "",
                     preparationAt: cycle.preparationAt ?? "",
                     pickupAt: cycle.pickupAt ?? "",
-                    windows: cycle.windows.length
-                      ? cycle.windows.map(({ name, startsAt, endsAt }) => ({
-                          name,
-                          startsAt,
-                          endsAt,
-                        }))
-                      : [{ name: "", startsAt: "", endsAt: "" }],
+                    windows: [
+                      cycle.windows[0]
+                        ? {
+                            name: cycle.windows[0].name,
+                            startsAt: cycle.windows[0].startsAt,
+                            endsAt: cycle.windows[0].endsAt,
+                          }
+                        : { name: "Scheduled delivery", startsAt: "", endsAt: "" },
+                    ],
                     participation: cycle.participation.map(({ zoneId, locationId }) => ({
                       zoneId,
                       locationId,
@@ -525,7 +514,7 @@ export function DeliveryCyclesWorkspace({
                 disabled={
                   disabled ||
                   !cycle.pickupAt ||
-                  !cycle.windows.length ||
+                  cycle.windows.length !== 1 ||
                   !scheduleReasons[cycle.cycleId]?.trim()
                 }
                 onClick={() =>

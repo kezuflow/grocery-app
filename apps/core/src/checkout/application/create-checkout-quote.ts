@@ -42,7 +42,7 @@ export type CreateCheckoutQuoteCommand = {
   addressId: string;
   /** Null selects the INSTANT path; a cycle id selects SCHEDULED. */
   deliveryCycleId: string | null;
-  /** Server-resolved configured window. A sole window is unambiguous for internal callers. */
+  /** Server-resolved configured customer delivery range. */
   deliveryWindowId?: string;
   /** Opaque customer selection resolved by the RPC adapter. */
   fulfillmentOptionId?: string;
@@ -261,7 +261,7 @@ async function createScheduledQuote(
   if (!window)
     return failure(
       "CYCLE_CLOSED",
-      "Choose an available configured delivery window",
+      "Choose the available configured customer delivery range",
       command.requestId,
     );
 

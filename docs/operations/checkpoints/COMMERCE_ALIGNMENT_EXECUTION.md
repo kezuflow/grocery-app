@@ -1,6 +1,42 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — SCHEDULED-HOURS-QUOTE-1 (2026-09-13)
+## Current owner request — SCHEDULED-CYCLE-SIMPLIFICATION-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner asks to simplify Scheduled cycle setup after confirming that Global publishes the plan
+and each participating customer-fulfillment location executes its assigned Orders. Acceptance: hide
+the internal Market/zone concepts; present one ordering period, one fulfillment plan and one customer
+arrival range; require exactly one range for new/edited cycles; identify fulfillment locations by
+their names; preserve planned pickup, courier quotation, immutable committed evidence, command replay
+and the Instant-only operating-hours correction. Start: main at `e4f9a111`; preserve unrelated
+address-map/autofill and time-input/location-schedule work; no subagents.
+
+Implemented in the working tree: the form now groups ordering, fulfillment and customer delivery,
+hides Market, removes delivery-range naming/add/remove controls, and shows fulfillment-location names
+without internal zones. Cycle/customer/Order/procurement presentation omits the retained window label.
+Validation and Core policy admit exactly one range for new or edited cycles; customer option discovery
+chooses only the earliest valid range if a retained cycle has multiple rows, while existing immutable
+Order snapshots remain unchanged. The default internal market is selected first deterministically.
+PRODUCT, DESIGN, API_CONTRACTS, DATA_MODEL and the Phase 7 plan record the approved simplification.
+
+Verification on the final working-tree scope: `pnpm.cmd check` passed, including 1,664 Core tests,
+539 Web tests, contracts/shared suites, formatting, naming/terminology, harness, migrations,
+architecture/readiness, lint/types and both builds. Earlier focused Core cycle, option and
+Order/payment suites passed 3 files/56 tests after correcting one obsolete two-window test
+assumption; the cycle suite reran 16/16 after the default-market ordering change. The option/global
+configuration suites passed 16 tests and the Web fulfillment-option presentation test passed.
+Managed Playwright with isolated `e2e-scheduled-simplify-20260913` passed the complete create,
+save-response recovery, schedule-response recovery, reload and cancellation-response recovery journey
+at 1440px and 390px, 2/2 twice. The form and resulting cards were inspected at both sizes: Market,
+zones, window names and add/remove controls are absent; the single arrival range and Central Cebu
+location remain clear. These prove local Worker/D1/browser behavior with the test provider, not actual
+Lalamove quotation/booking, deployment or owner production data. No shared configuration changed.
+
+Completed ID: SCHEDULED-CYCLE-SIMPLIFICATION-1. Counting level: zero remaining implementation slices
+for this correction. Next action: owner reviews `/admin/settings/scheduled-cycles` on localhost; actual
+Lalamove future-quotation acceptance remains a separate existing Phase 7 obligation.
+
+## Prior owner request — SCHEDULED-HOURS-QUOTE-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner confirms location operating hours apply only to Instant; Scheduled ordering runs from

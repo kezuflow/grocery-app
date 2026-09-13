@@ -31,8 +31,8 @@ export function validateDeliveryCycleSchedule(
     )
   )
     return "Order opening, future cutoff, procurement, preparation and pickup must be in order";
+  if (draft.windows.length !== 1) return "A Scheduled cycle must have one customer delivery range";
   if (
-    draft.windows.length === 0 ||
     draft.windows.some((window) => {
       const starts = Date.parse(window.startsAt),
         ends = Date.parse(window.endsAt);
@@ -44,9 +44,7 @@ export function validateDeliveryCycleSchedule(
       );
     })
   )
-    return "Each delivery window must follow pickup and end after it starts";
-  if (new Set(draft.windows.map((window) => window.name)).size !== draft.windows.length)
-    return "Delivery window names must be distinct";
+    return "The customer delivery range must follow pickup and end after it starts";
   if (
     draft.participation.length === 0 ||
     new Set(draft.participation.map((item) => JSON.stringify([item.zoneId, item.locationId])))

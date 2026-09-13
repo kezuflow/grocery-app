@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FulfillmentOptionPicker } from "./fulfillment-option-picker";
 describe("FulfillmentOptionPicker", () => {
-  it("presents modes and controlled unavailable reasons without a hub", () => {
+  it("presents delivery promises without internal location or window labels", () => {
     const html = renderToStaticMarkup(
       <FulfillmentOptionPicker
         disabled={false}
@@ -35,13 +35,23 @@ describe("FulfillmentOptionPicker", () => {
           {
             optionId: "opaque-2",
             mode: "SCHEDULED",
-            eligible: false,
-            unavailableReason: "CYCLE_UNAVAILABLE",
+            eligible: true,
+            unavailableReason: null,
             promisedAt: null,
-            deliveryWindow: null,
-            feePreview: null,
-            cycleId: null,
-            cutoffAt: null,
+            deliveryWindow: {
+              windowId: "internal-window",
+              name: "Internal window name",
+              startsAt: "2026-09-08T02:00:00Z",
+              endsAt: "2026-09-08T04:00:00Z",
+            },
+            feePreview: {
+              subtotalMinor: 5000,
+              discountMinor: 0,
+              totalMinor: 5000,
+              currency: "PHP",
+            },
+            cycleId: "scheduled-cycle",
+            cutoffAt: "2026-09-07T00:00:00Z",
             provisional: true,
           },
         ]}
@@ -50,7 +60,8 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("Lalamove");
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Scheduled delivery");
-    expect(html).toContain("cycle unavailable");
+    expect(html).toContain("9/8/2026");
+    expect(html).not.toContain("Internal window name");
     expect(html).toContain('aria-pressed="true"');
     expect(html).not.toMatch(/hub|location-cebu/i);
   });
