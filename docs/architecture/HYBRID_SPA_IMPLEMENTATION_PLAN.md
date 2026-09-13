@@ -3,10 +3,11 @@
 ## Hybrid SPA design and execution plan
 
 Owner request: 2026-09-14. Planning task: **HYBRID-SPA-PLAN-1**.
-Status: owner-authorized execution in progress. HSPA-0 through HSPA-5 are implemented;
-HSPA-6 integrated verification, staging rollout and matched measurements are in progress.
-The active checkpoint records executed evidence and remaining acceptance gaps; implementation
-status alone does not establish runtime or performance acceptance.
+Status: HSPA-0 through HSPA-5 implemented and verified. HSPA-6 regression, staging deployment
+and matched measurements were executed, but rollout acceptance remains open: desktop LCP regressed
+and the known-good staging Web was restored. Implementation is committed on main at 5e237183,
+with the visible-banner priority correction at 7efacb4f. See [actual results](HYBRID_SPA_RESULTS.md)
+for measured gains, failed budgets, deployment/rollback versions and remaining obligations.
 
 This is a focused Web architecture change alongside
 [commerce Phase 7](../product/COMMERCE_ALIGNMENT_E2E_PLAN.md).

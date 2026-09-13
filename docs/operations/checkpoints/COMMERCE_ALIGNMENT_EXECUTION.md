@@ -2,77 +2,66 @@
 
 ## Current owner request — HSPA-0 through HSPA-6 (2026-09-14)
 
-Plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, ordered phases HSPA-0
-through HSPA-6. Owner authorizes scoped Sol/low implementation delegation, Astra/medium
-orchestration/review, commits/push to main and staging deployment, followed by matched measurements.
-No production deployment, real provider transactions, migration or personal settings changes.
-Acceptance: SSR entry pages, persistent vinext shells, client navigation, scoped shared query cache,
-targeted invalidation, unchanged Core authority, integrated runtime/browser checks and measured results.
+Active plan: `docs/architecture/HYBRID_SPA_IMPLEMENTATION_PLAN.md`, **HSPA-6 — Integrated
+regression, staging and comparison**. Owner authorized Astra/medium orchestration/review and scoped
+Sol/low implementation, main commits/push and staging deployment. The owner subsequently chose
+localhost for authenticated measurement. No production, real provider transactions, migrations or
+personal setting changes. Acceptance: SSR entry, persistent vinext shells, scoped caching/targeted
+invalidation, unchanged Core authority, runtime/browser verification and matched lab results.
 
-Start: main at c9775b1bfca0a549bf9f2a939a5b96bdda494182. Preserve the existing changes in
-location-address-map, location-schedule-workspace, locations-workspace and its tests,
-address-predictions, location-schedule.spec, untracked time-of-day-input files and local logs.
-These files are excluded from hybrid SPA ownership and staging deployment.
+Outcome: HSPA-0 through HSPA-5 implemented and verified; HSPA-6 executed but rollout acceptance
+remains open. Main commits 5e237183 and 7efacb4f contain the implementation and visible-banner
+priority correction. The known-good staging Web was restored after both measured staged builds
+missed the desktop LCP non-regression gate. Full evidence, raw samples and remaining obligations:
+`docs/architecture/HYBRID_SPA_RESULTS.md` and `docs/architecture/hybrid-spa-measurements.json`.
 
-Working-tree milestone: HSPA-0 pointer fix/inventory and HSPA-1 persistent route-group/query
-foundation are implemented. HSPA-2 uses SSR bootstrap with native-history JSON catalog navigation,
-infinite-page caching and aborts. HSPA-3 shares accepted cart DTOs and targeted address/checkout
-reads; only safe address/promotion drafts survive navigation. HSPA-4 migrates Admin Products
-list/preview/filter/pagination and accepted-write invalidation across affected scopes. HSPA-5 adds
-bounded responsive banner WebP transformations through Web Images, a 96px brand WebP (4,924 bytes
-vs 89,198-byte source) and lazy address editor code. No Core business/schema changes.
+Preservation: started main c9775b1b; excluded existing location-address-map, location-schedule-workspace,
+locations-workspace/tests, address-predictions, location-schedule.spec, untracked time-of-day-input
+files and local logs. Concurrent commits a63b5b9c, b76165ae and adca01ad were preserved. The moved
+checkout page includes adca01ad's fee interface. No Core source/configuration was deployed by HSPA.
 
-Astra review corrections applied: close persistent drawer on pathname change; gate/clear private
-state and reload on resolved identity replacement to replace private RSC props; prevent SSR bootstrap
-reuse after any epoch change, including remount; hide Admin transient selections on scope changes;
-invalidate product queries after standalone writes; force address refresh after accepted commands;
-return typed rejection for a queued cart command superseded by a session/location change.
+Implemented: category tap/drag fix and route inventory; persistent storefront route-group shell;
+request-safe query provider/session/context epochs; SSR-seeded native-history catalog JSON reads;
+shared accepted cart DTOs and checkout/account invalidation; scoped Admin list/detail caching and
+URL state; synchronous private-data/dialog gates that retain uncertain image/price recovery;
+responsive banner WebP, small brand WebP, lazy address editor and hashed-asset cache configuration.
+Core still authenticates, authorizes, prices and executes all business commands. Session replacement
+clears private data and reloads private server-rendered props.
 
-Executed local working-tree checks: Web typecheck; vinext check 16 supported / zero issues;
-initial Web full suite 133 files / 550 tests before subsequent data work; Web production build passed.
-HSPA-3 final focused run passed 6 files / 35 tests; HSPA-4 focused 5/5; public image cache/brand/banner
-focused 10/10. These are local tests, not staging/provider acceptance. Images binding types regenerated.
-The finalized baseline harness collects five desktop and five mobile samples on existing staging;
-no architecture performance claim or new deployment yet. Earlier invalid keyboard probes were
-rejected because the first-visit modal held focus; the harness now uses the existing dismiss preference
-and confirms focus. DevTools profile remains occupied; isolated Chrome does not disturb it.
+Verification: isolated `pnpm check` on the c9775b1b Core baseline passed aggregate checks, package
+suites, 137 Web files / 557 tests, 205 Core files / 1,665 tests and both builds. Final integrated Web
+`typecheck`, 137 files / 560 tests and build passed with the concurrent picker interface. Both
+`wrangler types ... --check`, `vinext check` (16 supported, zero issues), worker-readiness config,
+final root format/naming/typecheck passed. Correction: three banner tests plus clean staging build.
+All 17 selected browser cases passed across corrected runs: five hybrid, ten Admin catalog, two
+lost-response checkout releases. Browser tests use isolated Core/D1/mock providers. Updated stale
+selectors to actual controls and persisted media/price results; supplied explicit local operating
+hours to the checkout fixture. Current-main `pnpm check` remains blocked by the unrelated harness
+expecting disabled staging delivery after a63b5b9c enabled it; do not describe it as fully green.
 
-HSPA-6 integrated verification is active. The owner approved localhost for authenticated
-measurements. Five catalog and five Admin baseline samples were captured against the old Web
-revision fc763e7 using isolated test Core/D1 at localhost:3100; no real provider transactions.
-A separate owner task committed a63b5b9c and deployed Core 730f486c-8188-4e20-bb3e-01183d99020a
-while this work was running. Preserve that configuration and its evidence below; this task will
-deploy Web only. Refresh the public baseline with that Core version held constant.
+Staging evidence: clean build/deploy 5e237183 -> Web 83768065-b400-46ca-979a-07032400e7a1;
+corrected 7efacb4f -> d9b49692-c4dd-4386-aa18-1516274fd35e. Both rolled back to compatible Web
+402f12e4-ffef-4813-854c-c5f0157548bb at 100%. Core remained
+730f486c-8188-4e20-bb3e-01183d99020a. Final rollback Web health and Core ready returned 200/ready.
+During HSPA deployment, SSR category response contained 24 articles and no-store HTML; Images
+returned real WebP/variant ETag, and desktop/mobile visual inspection passed. Cached revisits were
+12 ms desktop / 46 ms mobile median with zero catalog reads or page errors.
 
-Root pnpm check is blocked by the unrelated staging-provider binding harness expecting disabled
-selectors after a63b5b9c enabled them. An isolated intended-change checkout based on c9775b1 excludes
-that change and all pre-existing location edits. Its Web suite passes 137 files / 557 tests; Core
-aggregate passed 205 files / 1,665 tests. Both generated binding freshness checks pass, vinext reports 16 supported /
-zero issues, and worker-readiness configuration passes. Final review found and fixed the reverse
-checkout-address-save -> account-addresses invalidation; its 12 focused tests and typecheck pass.
-Final integrated Web validation: 137 files / 560 tests, typecheck and build pass, including
-concurrent adca01ad checkout picker interface. All 17 selected browser cases passed across corrected
-runs (5 hybrid, 10 Admin catalog, 2 lost-response checkout releases). Test setup explicitly provides
-local dispatch hours; selectors now target real buttons/edit panels and persisted media/price state.
-Astra-reviewed scope gates preserve uncertain image and price command recovery while hiding old
-records, permissions, selections and portaled confirmations. Core c9775b1b was pinned for the final
-localhost comparison: ready-state catalog median 162 -> 150 ms; Admin preview 96 -> 168 ms. The
-catalog 30% target is unmet and Admin latency regressed. An earlier immediate-post-load run showed
-310 -> 900 ms catalog interaction and remains a hydration/readiness concern. Public baseline has five
-valid samples per device with Core 730f486c held constant; one failed keyboard attempt is recorded.
-See docs/architecture/HYBRID_SPA_RESULTS.md for method and acceptance limits.
-Committed/pushed implementation 5e237183. Clean staging build resolved Web-only target, Images,
-private Core binding and no SPA fallback; deployed Web 83768065-b400-46ca-979a-07032400e7a1.
-Core stayed 730f486c-8188-4e20-bb3e-01183d99020a; health/ready/Web health returned 200. Images
-returned real WebP and all desktop/mobile banners rendered. Cached revisit medians were 12/46 ms
-with zero catalog reads. Public after measurements reduced bytes substantially but desktop LCP
-regressed (2,528 -> 3,148 ms median). Diagnostic LCP entries identified the second visible banner,
-which was loading at low priority. Per rollback rule, Web was restored to compatible baseline
-402f12e4-ffef-4813-854c-c5f0157548bb at 100%; Core and data untouched.
-Correction: prioritize/eager-load the first three banners visible on desktop, retaining lazy low
-priority for the offscreen remainder. Next action: verify this bounded correction, commit/push,
-rebuild/deploy Web staging and repeat the identical public performance harness.
+Matched public baseline -> corrected HSPA medians: desktop LCP 2,528 -> 2,692 ms, mobile LCP
+4,936 -> 4,212 ms; bytes 9,413,685 -> 1,463,016 and 8,957,745 -> 1,040,588; uncached navigation
+921 -> 830 ms and 1,121 -> 882 ms; feedback 913 -> 15 ms and 1,092 -> 56 ms. Desktop LCP p75
+2,640 -> 3,240 ms triggered the final rollback. One baseline keyboard failure is recorded separately.
+All valid measured transitions preserved shell/document. Five samples/profile; lab, not field CWV.
+Pinned-Core ready-state localhost catalog median 162 -> 150 ms; Admin preview 96 -> 168 ms.
+Earlier immediate-post-load pinned catalog 310 -> 900 ms remains an interaction-readiness concern.
 
+Open acceptance groups (four): entry LCP/FCP non-regression/mobile LCP budget; uncached >=30%
+latency improvement plus Admin/readiness regressions; authenticated staging/protocol acceptance
+(localhost was owner-selected, real providers excluded); unrelated binding harness and observed
+public cache TTL override (14,400 seconds vs helper 300), plus deployed hashed-asset header proof.
+Earlier commerce/provider obligations remain independent and unclosed.
+Next action: profile remaining uncached media/Web/Core delays against the preserved baseline,
+then rerun the rollout gate. Staging intentionally retains the known-good baseline; main keeps HSPA.
 
 ## Concurrent owner request — CHECKOUT-SCHEDULED-FEE-REFRESH-1 (2026-09-14)
 
