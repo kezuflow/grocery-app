@@ -1,6 +1,32 @@
 # Commerce alignment — active checkpoint
 
-## Current owner request — FIXED-COURIER-PARCEL-1 (2026-09-13)
+## Current owner request — CHECKOUT-DELIVERY-FLAT-UI-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. The owner asks to remove the gray, boxed treatment from the checkout delivery choice.
+Acceptance: delivery choices render as flat full-width rows with simple separators, no gray/soft fill,
+rounded card container or card shadow; selected and unavailable states remain obvious and accessible;
+quotation/retry behavior is unchanged. Start: `main` at `e61dfc2c`; preserve unrelated location
+address, autofill, time-input and location-schedule changes; no subagents.
+
+Implemented in `3113fbd`: the delivery option picker now uses transparent rows and dividers. The
+standalone calendar/clock icon and selected check preserve visual state without a filled option card;
+an explicit focus-visible outline keeps keyboard selection clear. The component contract test rejects
+the removed surface, radius and shadow treatments. DESIGN records the owner correction.
+
+Final verification on `3113fbd`: focused picker Vitest passed (1 file/1 test), Web typecheck passed and
+the Web production build passed. Before the final focus-outline-only class addition, the full Web suite
+passed (131 files/539 tests) and the deterministic checkout Playwright flow passed at 1440 px and 390
+px (2/2), including selection, quotation retry, total review and horizontal-overflow checks. Both
+captured renders show flat options with a single divider and no option-level fill, radius or shadow.
+The ordinary in-app browser also loaded `/checkout`, but its unauthenticated session could not supply
+saved addresses/options; no real provider transaction was attempted. Completed task ID:
+`CHECKOUT-DELIVERY-FLAT-UI-1`.
+
+Next action: commit this checkpoint, push `main`, restart the ordinary local development stack on port
+3000, and leave it ready for owner confirmation.
+
+## Prior owner request — FIXED-COURIER-PARCEL-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. After Scheduled delivery became selectable, the real quotation failed because the cart
