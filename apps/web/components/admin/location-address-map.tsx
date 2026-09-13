@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   addressPredictionsSchema,
+  addressCandidateSchema,
   resolveAddressPrediction,
 } from "../../lib/maps/address-predictions";
 import type {
@@ -13,6 +14,7 @@ import { GoogleMap } from "../maps/google-map";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { readJson } from "../../lib/http/read-deadline";
 
 const center = { latitude: 10.3157, longitude: 123.8854 };
 export function LocationAddressMap({
@@ -27,7 +29,7 @@ export function LocationAddressMap({
   mapId?: string;
   coordinate: Coordinate | null;
   disabled: boolean;
-  onCandidate: (candidate: AddressSearchCandidate) => void;
+  onCandidate: (candidate: AddressSearchCandidate, source?: "USER_PIN" | "DEVICE_LOCATION") => void;
   onCoordinate: (point: Coordinate, source: "USER_PIN" | "DEVICE_LOCATION") => void;
 }) {
   const [query, setQuery] = useState("");
@@ -50,7 +52,7 @@ export function LocationAddressMap({
     };
   }, []);
   useEffect(() => {
-    if (disabled || query.trim().length < 2) return;
+    if (disabled || query.trim().length < 3) return;
     const timer = window.setTimeout(() => void search(), 300);
     searchTimer.current = timer;
     return () => {
@@ -60,7 +62,7 @@ export function LocationAddressMap({
   }, [query, disabled]);
   async function search() {
     if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
-    if (disabled || query.trim().length < 2) return;
+    if (disabled || query.trim().length < 3) return;
     sessionToken.current ??= crypto.randomUUID();
     const generation = ++searchGeneration.current;
     setSearching(true);
@@ -121,6 +123,48 @@ export function LocationAddressMap({
         setNotice("Address details could not be loaded. Search again or place the pin manually.");
     }
   }
+  async function selectCoordinate(point: Coordinate, source: "USER_PIN" | "DEVICE_LOCATION") {
+    if (disabled) return;
+    if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
+    const generation = ++searchGeneration.current;
+    detailAbort.current?.abort();
+    const controller = new AbortController();
+    detailAbort.current = controller;
+    setResults([]);
+    setSearching(false);
+    onCoordinate(point, source);
+    setNotice("Finding the address for this pin…");
+    try {
+      const result = addressCandidateSchema.parse(
+        await readJson("/api/commerce/address-reverse", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ coordinate: point }),
+          cache: "no-store",
+          signal: controller.signal,
+        }),
+      );
+      if (
+        controller.signal.aborted ||
+        generation !== searchGeneration.current ||
+        !live.current.mounted ||
+        live.current.disabled
+      )
+        return;
+      // Reverse lookup supplies address text, never a replacement for the chosen entrance pin.
+      onCandidate({ ...result.value, coordinate: point }, source);
+      setNotice("Review the address for this pin before saving.");
+    } catch {
+      if (
+        !controller.signal.aborted &&
+        generation === searchGeneration.current &&
+        live.current.mounted
+      )
+        setNotice(
+          "The pin is set, but its address could not be found. Enter the address manually or move the pin to retry.",
+        );
+    }
+  }
   function device() {
     if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
     const generation = ++searchGeneration.current;
@@ -137,11 +181,10 @@ export function LocationAddressMap({
           generation !== searchGeneration.current
         )
           return;
-        live.current.onCoordinate(
+        void selectCoordinate(
           { latitude: position.coords.latitude, longitude: position.coords.longitude },
           "DEVICE_LOCATION",
         );
-        setNotice("Review the device pin and address before saving.");
       },
       () => {
         if (live.current.mounted && generation === searchGeneration.current)
@@ -194,7 +237,7 @@ export function LocationAddressMap({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || searching || query.trim().length < 2}
+            disabled={disabled || searching || query.trim().length < 3}
             onClick={() => void search()}
           >
             {searching ? "Searching…" : "Search"}
@@ -245,18 +288,8 @@ export function LocationAddressMap({
               ? [{ id: "origin", position: coordinate, label: "Fulfillment pickup pin" }]
               : [],
         }}
-        onPinMove={(point) => {
-          if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
-          searchGeneration.current += 1;
-          detailAbort.current?.abort();
-          if (!disabled) onCoordinate(point, "USER_PIN");
-        }}
-        onMapClick={(point) => {
-          if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
-          searchGeneration.current += 1;
-          detailAbort.current?.abort();
-          if (!disabled) onCoordinate(point, "USER_PIN");
-        }}
+        onPinMove={(point) => void selectCoordinate(point, "USER_PIN")}
+        onMapClick={(point) => void selectCoordinate(point, "USER_PIN")}
         fallback={<p className="text-sm">Enter the confirmed latitude and longitude below.</p>}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">

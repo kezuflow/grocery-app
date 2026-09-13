@@ -5,7 +5,7 @@ export const addressPredictionsSchema = z.object({
   value: z.array(z.object({ candidateKey: z.string(), displayAddress: z.string() })),
 });
 const nullableText = z.string().nullable();
-const candidateSchema = z.object({
+export const addressCandidateSchema = z.object({
   ok: z.literal(true),
   value: z.object({
     candidateKey: z.string(),
@@ -40,7 +40,7 @@ export async function resolveAddressPrediction(
     credentials: "same-origin",
     signal,
   });
-  const parsed = candidateSchema.safeParse(await response.json());
+  const parsed = addressCandidateSchema.safeParse(await response.json());
   if (!response.ok || !parsed.success)
     throw new Error("Address details could not be loaded. Try the suggestion again.");
   return parsed.data.value;

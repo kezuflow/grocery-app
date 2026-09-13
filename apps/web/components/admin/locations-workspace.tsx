@@ -307,6 +307,7 @@ export function LocationsWorkspace({
                   className="grid gap-4 sm:grid-cols-2"
                 >
                   <LocationAddressMap
+                    key={editing?.locationId ?? "new-location"}
                     browserApiKey={browserApiKey}
                     mapId={mapId}
                     disabled={locked}
@@ -320,26 +321,36 @@ export function LocationsWorkspace({
                         ? { latitude: Number(draft.latitude), longitude: Number(draft.longitude) }
                         : null
                     }
-                    onCandidate={(candidate) =>
-                      setDraft({
-                        ...draft,
-                        address: {
-                          ...candidate.components,
-                          region: candidate.components.region ?? draft.address.region,
-                        },
-                        latitude: String(candidate.coordinate.latitude),
-                        longitude: String(candidate.coordinate.longitude),
-                        componentsSource: "TEMPORARY_GEOCODER",
-                        confirmationSource: "GEOCODER",
+                    onCandidate={(candidate, source) =>
+                      setDraft((current) => {
+                        // A lookup must not overwrite manual address edits or a newer pin.
+                        if (
+                          current.address !== draft.address ||
+                          (source &&
+                            (Number(current.latitude) !== candidate.coordinate.latitude ||
+                              Number(current.longitude) !== candidate.coordinate.longitude))
+                        )
+                          return current;
+                        return {
+                          ...current,
+                          address: {
+                            ...candidate.components,
+                            region: candidate.components.region ?? current.address.region,
+                          },
+                          latitude: String(candidate.coordinate.latitude),
+                          longitude: String(candidate.coordinate.longitude),
+                          componentsSource: "TEMPORARY_GEOCODER",
+                          confirmationSource: source ?? "GEOCODER",
+                        };
                       })
                     }
                     onCoordinate={(point, source) =>
-                      setDraft({
-                        ...draft,
+                      setDraft((current) => ({
+                        ...current,
                         latitude: String(point.latitude),
                         longitude: String(point.longitude),
                         confirmationSource: source,
-                      })
+                      }))
                     }
                   />
                   <div>

@@ -97,10 +97,102 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("location workspace", () => {
+  it("fills the moved pin address without snapping to the geocoder coordinate", async () => {
+    fetchMock.mockResolvedValue(
+      response({
+        candidateKey: "reverse",
+        displayAddress: "Pickup street, Cebu",
+        accuracy: null,
+        coordinate: { latitude: 10.3, longitude: 123.9 },
+        components: {
+          ...view.items[0].address,
+          addressLine1: "Pickup street",
+          barangay: "Luz",
+          postalCode: "6000",
+        },
+      }),
+    );
+    await act(async () =>
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
+    );
+    await act(async () => button("Move test pin").click());
+    expect(container.querySelector<HTMLInputElement>("#location-addressLine1")?.value).toBe(
+      "Pickup street",
+    );
+    expect(container.querySelector<HTMLInputElement>("#location-barangay")?.value).toBe("Luz");
+    expect(container.querySelector<HTMLInputElement>("#location-latitude")?.value).toBe("10.35");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/commerce/address-reverse",
+      expect.objectContaining({
+        body: JSON.stringify({ coordinate: { latitude: 10.35, longitude: 123.92 } }),
+      }),
+    );
+  });
+
+  it("does not replace manual address edits with a late lookup", async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await act(async () =>
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
+    );
+    await act(async () => button("Move test pin").click());
+    const input = container.querySelector<HTMLInputElement>("#location-addressLine1")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "Manual entrance",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      finish(
+        response({
+          candidateKey: "late",
+          displayAddress: "Old address",
+          accuracy: null,
+          coordinate: { latitude: 10.35, longitude: 123.92 },
+          components: view.items[0].address,
+        }),
+      ),
+    );
+    expect(input.value).toBe("Manual entrance");
+  });
+
+  it("keeps the chosen pin and allows manual address entry when lookup fails", async () => {
+    fetchMock.mockRejectedValue(new Error("offline"));
+    await act(async () =>
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
+    );
+    await act(async () => button("Move test pin").click());
+    expect(container.textContent).toContain("Enter the address manually");
+    expect(container.querySelector<HTMLInputElement>("#location-latitude")?.value).toBe("10.35");
+    expect(container.querySelector<HTMLInputElement>("#location-addressLine1")?.value).toBe(
+      "Test street",
+    );
+  });
   it("keeps temporary provider provenance when an operator moves the search-result pin", async () => {
     const writes: RequestInit[] = [];
     fetchMock.mockImplementation(async (url, options) => {
-      if (String(url).includes("address-prediction"))
+      if (String(url).includes("address-prediction") || String(url).includes("address-reverse"))
         return response({
           candidateKey: "candidate",
           displayAddress: "Search result",

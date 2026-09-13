@@ -1,5 +1,46 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — LOCATION-UX-FINISH-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner asks to finish the preserved, uncommitted Admin location edits. Acceptance: moving
+or choosing the pickup pin reverse-fills its address without moving the chosen coordinate or
+overwriting later manual edits; operating hours and dated closures use accessible 12-hour controls
+while preserving minute-since-midnight, end-of-day and retry semantics; current tests/builds pass;
+commit only this slice directly to `main` and push. No provider transaction, deployment, schema or
+contract change is authorized. No subagents.
+
+Start: `main` and `origin/main` at `64bfb27e`; concurrent checkpoint commit `42b8893d` was incorporated
+before integration. Eight intended Web files were unstaged; unrelated HSPA artifacts were untracked.
+During execution, separate delivery-address/Core/contracts/Web edits and a full test process appeared
+in the shared checkout; preserve them and exclude them from this slice. Implementation is staged:
+Admin pickup pin click/drag/device selection uses the existing bounded reverse-address route, retains
+the exact chosen pin, rejects stale/manual-edit-overwriting results and keeps manual recovery on
+lookup failure. Operating intervals and closure timestamps use a shared hour/minute/AM-PM control,
+including 1440 end-of-day conversion. The schedule browser test follows the current setup wizard's
+Save and continue action and retains lost-response replay assertions.
+
+Verification: focused location/time controls pass 2 files / 10 tests; intended-file format, lint and
+diff checks pass. A detached location-only tree passes migrations, commit-message,
+architecture/readiness, lint, workspace typechecks, 138 Web files / 568 tests, 205 Core files / 1,667
+tests and both Worker builds. Root `pnpm check` stops only at the pre-existing staging binding harness
+expecting `disabled` while `main` configures `lalamove`; the remaining stages passed when run directly.
+The first two-viewport managed browser run exposed stale assumptions after the location wizard
+integration: the action is Save and continue, and confirmed retry advances to Review rather than
+leaving the schedule success text mounted. The test now asserts that workflow and returns through
+Review hours to verify persistence. One immediate rerun did not start because its disposable Wrangler
+SQLite file returned `SQLITE_CANTOPEN`; retrying the already-created safe state started normally.
+Final managed Playwright evidence passes 2/2 at 1440px and 390px against isolated D1 state, including
+12-hour entry, exact 480/1080 persisted minutes, retained idempotency key/body after an aborted first
+response, Review navigation and persisted closure/hour values. Both full-page screenshots were
+inspected; controls remain legible and wrap without horizontal overflow. This proves local
+Worker/D1/browser behavior with test configuration, not actual Google Maps/provider or deployed
+acceptance. Completed ID: LOCATION-UX-FINISH-1. Counting level: zero remaining implementation slices
+for this request. Integration target: commit and push the staged location/checkpoint files while
+preserving all concurrent delivery-address work and local artifacts. Next action: owner reviews the
+real Admin location pin and operating hours with actual location values; earlier provider/deployment
+obligations remain open.
+
 ## Owner request — ADDR-0 delivery address plan (2026-09-14)
 
 Plan: `docs/product/DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md`, ADDR-0 — Planning.

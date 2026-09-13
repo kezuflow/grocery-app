@@ -12,6 +12,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { PageHeader } from "./admin-shell";
+import { TimeOfDayInput } from "./time-of-day-input";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { useSetupNavigationLock } from "./location-setup-state";
 
@@ -114,6 +115,12 @@ export function LocationScheduleWorkspace({
       setNotice("Response not confirmed. Retry the same schedule request.");
     }
   }
+  function updateClosure(index: number, field: "startsAt" | "endsAt" | "reason", value: string) {
+    setSchedule({
+      ...schedule,
+      closures: schedule.closures.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+    });
+  }
   const updateWeekly = (
     index: number,
     patch: Partial<LocationOperatingSchedule["weekly"][number]>,
@@ -178,24 +185,21 @@ export function LocationScheduleWorkspace({
                 </label>
                 <label>
                   Opens
-                  <Input
-                    aria-label={`Interval ${index + 1} opens`}
-                    type="time"
-                    value={time(row.opensMinute)}
-                    onChange={(event) =>
-                      updateWeekly(index, { opensMinute: minutes(event.target.value) })
-                    }
+                  <TimeOfDayInput
+                    label={`Interval ${index + 1} opens`}
+                    value={row.opensMinute}
+                    disabled={locked || !result.value.canManage}
+                    onChange={(value) => updateWeekly(index, { opensMinute: value })}
                   />
                 </label>
                 <label>
-                  Closes (24:00 for midnight)
-                  <Input
-                    aria-label={`Interval ${index + 1} closes`}
-                    pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00"
-                    value={time(row.closesMinute)}
-                    onChange={(event) =>
-                      updateWeekly(index, { closesMinute: minutes(event.target.value) })
-                    }
+                  Closes (12:00 AM ends this day)
+                  <TimeOfDayInput
+                    label={`Interval ${index + 1} closes`}
+                    value={row.closesMinute}
+                    endOfDay
+                    disabled={locked || !result.value.canManage}
+                    onChange={(value) => updateWeekly(index, { closesMinute: value })}
                   />
                 </label>
                 <Button
@@ -242,29 +246,47 @@ export function LocationScheduleWorkspace({
                       : field === "endsAt"
                         ? "Closure ends"
                         : "Closure reason"}
-                    <Input
-                      aria-label={`Closure ${index + 1} ${field}`}
-                      type={field === "reason" ? "text" : "datetime-local"}
-                      value={field === "reason" ? row[field] : localDateTime(row[field])}
-                      onChange={(event) =>
-                        setSchedule({
-                          ...schedule,
-                          closures: schedule.closures.map((item, i) =>
-                            i === index
-                              ? {
-                                  ...item,
-                                  [field]:
-                                    field === "reason"
-                                      ? event.target.value
-                                      : event.target.value
-                                        ? new Date(event.target.value).toISOString()
-                                        : "",
-                                }
-                              : item,
-                          ),
-                        })
-                      }
-                    />
+                    {field === "reason" ? (
+                      <Input
+                        aria-label={`Closure ${index + 1} reason`}
+                        value={row.reason}
+                        onChange={(event) => updateClosure(index, "reason", event.target.value)}
+                      />
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          type="date"
+                          className="w-auto"
+                          aria-label={`Closure ${index + 1} ${field} date`}
+                          value={localDateTime(row[field]).slice(0, 10)}
+                          onChange={(event) =>
+                            updateClosure(
+                              index,
+                              field,
+                              event.target.value
+                                ? new Date(
+                                    `${event.target.value}T${localDateTime(row[field]).slice(11) || "00:00"}`,
+                                  ).toISOString()
+                                : "",
+                            )
+                          }
+                        />
+                        <TimeOfDayInput
+                          label={`Closure ${index + 1} ${field}`}
+                          disabled={locked || !result.value.canManage || !row[field]}
+                          value={minutes(localDateTime(row[field]).slice(11) || "00:00")}
+                          onChange={(value) =>
+                            updateClosure(
+                              index,
+                              field,
+                              new Date(
+                                `${localDateTime(row[field]).slice(0, 10)}T${time(value)}`,
+                              ).toISOString(),
+                            )
+                          }
+                        />
+                      </div>
+                    )}
                   </label>
                 ))}
                 <p>
@@ -274,6 +296,7 @@ export function LocationScheduleWorkspace({
                       new Intl.DateTimeFormat("en-PH", {
                         dateStyle: "medium",
                         timeStyle: "short",
+                        hour12: true,
                         timeZone: result.value.timezone,
                       }).format(new Date(value)),
                     )
