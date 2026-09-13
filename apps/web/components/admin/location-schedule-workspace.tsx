@@ -128,8 +128,12 @@ export function LocationScheduleWorkspace({
         Locations
       </Link>
       <PageHeader
-        title={result.ok ? `${result.value.locationName} operating hours` : "Operating hours"}
-        description="Weekly hours and dated closures for new fulfillment. Existing work requires operational review."
+        title={
+          result.ok
+            ? `${result.value.locationName} Instant operating hours`
+            : "Instant operating hours"
+        }
+        description="Weekly hours and dated closures for new Instant checkout. Scheduled ordering follows its cycle opening and cutoff."
       />
       <p role="status">{notice || (!result.ok ? result.error.message : "")}</p>
       <Button variant="outline" disabled={locked} onClick={() => void refresh()}>
@@ -147,10 +151,10 @@ export function LocationScheduleWorkspace({
             hours across two days.
           </p>
           {!result.value.schedule && (
-            <p>Hours are not configured; new fulfillment remains unavailable.</p>
+            <p>Hours are not configured; new Instant checkout remains unavailable.</p>
           )}
           <fieldset disabled={locked || !result.value.canManage} className="space-y-4">
-            <legend className="font-semibold">Weekly operating hours</legend>
+            <legend className="font-semibold">Weekly Instant operating hours</legend>
             {schedule.weekly.map((row, index) => (
               <div key={index} className="flex flex-wrap items-end gap-3 rounded border p-3">
                 <label>

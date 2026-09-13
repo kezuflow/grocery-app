@@ -106,7 +106,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
           </dd>
         </div>
         <div>
-          <dt className="font-medium">Operating hours</dt>
+          <dt className="font-medium">Instant operating hours</dt>
           <dd>
             {data.hours
               ? data.hours.schedule?.weekly.length
@@ -130,8 +130,8 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
           }}
         >
           <p>
-            Activate this location before enabling dispatch. Dispatch also requires the saved
-            readiness and operating configuration.
+            Activate this location before enabling dispatch. Instant selling also requires saved
+            operating hours and a delivery promise; Scheduled uses its cycle timing.
           </p>
           <label className="block">
             Reason for activation

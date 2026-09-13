@@ -119,7 +119,7 @@ it("shows saved versus incomplete steps and blocks step navigation during an unc
     "Pickup contactIncomplete",
   );
   expect(host.textContent).toContain("LocationSaved");
-  expect(host.textContent).toContain("Operating hoursIncomplete");
+  expect(host.textContent).toContain("Instant operating hoursIncomplete");
   await render(true);
   const links = [...host.querySelectorAll("a")];
   expect(links.every((link) => link.getAttribute("aria-disabled") === "true")).toBe(true);

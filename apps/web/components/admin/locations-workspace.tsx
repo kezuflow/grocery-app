@@ -248,7 +248,7 @@ export function LocationsWorkspace({
                         href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
                         className="text-sm underline"
                       >
-                        Operating hours for {location.name}
+                        Instant operating hours for {location.name}
                       </Link>
                       {location.purpose === "CUSTOMER_FULFILLMENT" && (
                         <Link

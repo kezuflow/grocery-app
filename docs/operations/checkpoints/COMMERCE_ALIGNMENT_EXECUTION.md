@@ -1,6 +1,50 @@
 # Commerce alignment — active checkpoint
 
-## Current owner investigation — CHECKOUT-SCHEDULED-BLOCKER-1 (2026-09-13)
+## Current owner request — SCHEDULED-HOURS-QUOTE-1 (2026-09-13)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
+evidence. Owner confirms location operating hours apply only to Instant; Scheduled ordering runs from
+the cycle opening through cutoff and must still obtain the courier quotation used in the payable total.
+Owner also requests a Scheduled-cycle Admin URL instead of `/admin/settings/delivery-cycles`.
+Acceptance: Scheduled option, quote, revalidation and payment admission ignore location hours while
+retaining cycle/window, dispatch, service-area, catalog and courier-quotation authority; Instant still
+requires hours; canonical Admin route is `/admin/settings/scheduled-cycles`. Start: main at `7134718`
+with unrelated address-map/autofill and time-input/schedule work preserved; no subagents.
+
+Implemented: Scheduled routing no longer filters cycle pickup through the Instant schedule and no
+longer snapshots or transactionally guards an operating interval. Payment admission now branches the
+hours/current-interval guard inside Instant only; Scheduled retains its guarded open cycle, cutoff,
+exact window, participation, readiness and location checks. Scheduled candidates can exist without an
+hours row. Dispatch readiness itself is mode-neutral; opening Instant still requires configured hours
+and its minutes promise in both read blockers and the guarded write, while opening Scheduled does not.
+The authoritative future provider quotation remains required during Scheduled total creation and is
+revalidated before payment when necessary; unsupported/out-of-horizon future pickup remains unavailable.
+
+Admin labels now say Instant operating hours and explain that Scheduled uses cycle timing. Core
+navigation and Procurement link use `/admin/settings/scheduled-cycles`; the prior page URL redirects to
+the canonical route. Internal delivery-cycle contracts/API identities remain stable. PRODUCT,
+API_CONTRACTS and DESIGN record the owner correction.
+
+Verification on the final application scope: `pnpm.cmd check` passed, including 1,664 Core tests,
+538 Web tests, contracts/shared suites, formatting, naming/terminology, harness, migrations,
+architecture/readiness, lint/types and both builds. A first aggregate run was stopped after exposing
+the retained common payment-hours guard; the corrected affected commitment/quote/payment rerun passed
+63 tests before the successful aggregate. After strengthening the no-hours regression through actual
+payment creation, the final focused checkout/commitment run passed 58 tests and Core typecheck.
+Earlier focused policy/UI runs passed 62 Core tests, 24 Web tests and Core/Web typechecks.
+`pnpm.cmd --filter @freshmarkets/web check:vinext` reports 100% compatibility.
+Managed Playwright with disposable `e2e-scheduled-hours-20260913` passed the canonical 1440px cycle
+create/schedule/recovery/cancel journey 1/1; screenshot inspected. These prove local Worker/D1/browser
+behavior with the mock delivery provider, not actual Lalamove scheduling, payment or deployment.
+
+Completed ID: SCHEDULED-HOURS-QUOTE-1. Counting level: zero remaining implementation slices for this
+correction. The previously observed OPEN cycle still lacks real pickup/customer windows and therefore
+remains ineligible until configured through an authorized workflow; no shared configuration was
+changed. Integration target: commit and push intended files on main while preserving unrelated work.
+Next action: configure the owner's real Scheduled pickup/window values, then perform actual Lalamove
+future-quotation acceptance separately.
+
+## Prior owner investigation — CHECKOUT-SCHEDULED-BLOCKER-1 (2026-09-13)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, Phase 7 — Complete journeys and activation
 evidence. Owner asks why Scheduled checkout remains unavailable after completing location setup.

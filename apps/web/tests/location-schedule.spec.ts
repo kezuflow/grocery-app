@@ -5,8 +5,12 @@ for (const width of [1440, 390]) {
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
     await page.goto("/admin/locations");
-    await page.getByRole("link", { name: "Operating hours for Central Cebu", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Central Cebu operating hours" })).toBeVisible();
+    await page
+      .getByRole("link", { name: "Instant operating hours for Central Cebu", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Central Cebu Instant operating hours" }),
+    ).toBeVisible();
     while (await page.getByRole("button", { name: /Remove interval/ }).count())
       await page
         .getByRole("button", { name: /Remove interval/ })

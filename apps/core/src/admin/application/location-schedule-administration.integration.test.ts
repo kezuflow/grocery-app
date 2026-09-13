@@ -221,7 +221,7 @@ describe("Global location operating schedules", () => {
         .first(),
     ).toEqual({ count: 0 });
   });
-  it("Scheduled eligibility evaluates future pickup, not current opening hours", async () => {
+  it("does not apply Instant operating closures to Scheduled eligibility", async () => {
     const { request } = await command();
     const pickup = await env.DB.prepare(
       "SELECT pickup_at pickup FROM delivery_cycle_schedule WHERE cycle_id='cycle-next-cebu'",
@@ -244,6 +244,6 @@ describe("Global location operating schedules", () => {
         { latitude: 10.32, longitude: 123.9 },
         { mode: "SCHEDULED", cycleId: "cycle-next-cebu" },
       ),
-    ).toHaveLength(0);
+    ).not.toHaveLength(0);
   });
 });

@@ -20,8 +20,8 @@ export type OperationalCandidate = {
   locationVersion: number;
   readinessVersion: number | null;
   promiseMinutes: number | null;
-  scheduleJson: string;
-  scheduleTimezone: string;
+  scheduleJson: string | null;
+  scheduleTimezone: string | null;
   eligibleCycleIds: string[];
   openInterval: { startsAt: number; endsAt: number } | null;
 };
@@ -74,7 +74,7 @@ export async function operationalCandidates(
       ORDER BY candidate_area.polygon_version DESC,candidate_zone.id LIMIT 1)
     JOIN global_commerce_configuration g ON g.id='global'
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
-    JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
+    LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
     WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
       AND m.id IN (SELECT value FROM json_each(?))
       AND r.dispatch_ready=1
@@ -107,22 +107,23 @@ export async function operationalCandidates(
       Omit<OperationalCandidate, "eligibleCycleIds" | "openInterval"> & { cyclesJson: string }
     >();
   const evaluated = rows.results.map(({ cyclesJson, ...candidate }) => {
-    const schedule = locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson));
+    const schedule =
+      candidate.scheduleJson && candidate.scheduleTimezone
+        ? locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson))
+        : null;
     const cycles = z
       .array(z.object({ id: z.string(), pickupAt: z.number() }))
       .parse(JSON.parse(cyclesJson));
     const eligibleCycleIds = cycles
-      .filter(
-        (cycle) =>
-          (!input.cycleId || cycle.id === input.cycleId) &&
-          operatingInterval(schedule, candidate.scheduleTimezone, cycle.pickupAt) !== null,
-      )
+      .filter((cycle) => !input.cycleId || cycle.id === input.cycleId)
       .map((cycle) => cycle.id);
     return {
       ...candidate,
       eligibleCycleIds,
-      openInterval: operatingInterval(schedule, candidate.scheduleTimezone, now),
-      nextBoundary: nextOperatingBoundary(schedule, candidate.scheduleTimezone, now),
+      openInterval: schedule ? operatingInterval(schedule, candidate.scheduleTimezone!, now) : null,
+      nextBoundary: schedule
+        ? nextOperatingBoundary(schedule, candidate.scheduleTimezone!, now)
+        : Number.POSITIVE_INFINITY,
     };
   });
   // A nearer closed site may open without a configuration write. Fence that clock transition too.

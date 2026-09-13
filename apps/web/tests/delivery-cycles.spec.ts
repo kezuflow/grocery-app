@@ -5,7 +5,7 @@ for (const width of [1440, 390]) {
     adminPage: page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
-    await page.goto("/admin/settings/delivery-cycles");
+    await page.goto("/admin/settings/scheduled-cycles");
     const scope = page.getByRole("combobox", { name: "Active admin scope" });
     if (await scope.evaluate((element) => element.tagName === "SELECT"))
       await scope.selectOption({ label: "Global" });

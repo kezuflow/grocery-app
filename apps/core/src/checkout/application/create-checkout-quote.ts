@@ -3,10 +3,6 @@ import {
   MAX_ORDER_WEIGHT_GRAMS,
 } from "../../fulfillment/domain/delivery-package";
 import {
-  operatingScheduleGuard,
-  scheduledOperatingInterval,
-} from "../../geography/application/operating-schedule-guard";
-import {
   createCheckoutRepository,
   type CheckoutQuoteRow,
 } from "../infrastructure/d1-checkout-repository";
@@ -295,9 +291,6 @@ async function createScheduledQuote(
     );
 
   // Exact-location pricing. Missing price fails; no Market fallback exists.
-  const openInterval = scheduledOperatingInterval(routing, Date.parse(window.pickupAt));
-  if (!openInterval)
-    return failure("CYCLE_CLOSED", "The location is closed at planned pickup", command.requestId);
   const now2 = Date.now();
   const lines: QuoteLine[] = [];
   let subtotalMinor = 0;
@@ -457,7 +450,6 @@ async function createScheduledQuote(
         cycleVersion: cycle.version,
         geographyVersion: routing.geographyVersion,
         locationVersion: routing.locationVersion,
-        operatingInterval: openInterval,
         readinessVersion: routing.readinessVersion,
         modeVersion: routing.modeVersion,
         cycleId: cycle.id,
@@ -492,7 +484,6 @@ async function createScheduledQuote(
       repository.guardCartVersion(command.cartId, command.customerId, command.cartVersion),
       quoteRefreshPaymentGuard(database, command.cartId),
       geographyQuoteGuard(database, routing, cycle),
-      operatingScheduleGuard(database, routing, openInterval, Date.parse(window.pickupAt)),
       scheduledWindowGuard(database, cycle.id, window),
       repository.insertQuote(
         {

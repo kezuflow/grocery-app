@@ -27,7 +27,7 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
     ],
     [
       "/schedule",
-      "Operating hours",
+      "Instant operating hours",
       data?.hours ? (data.hours.schedule?.weekly.length ? "Saved" : "Incomplete") : "Unavailable",
     ],
     [
@@ -49,7 +49,8 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
         {data?.location?.name ?? "Location setup"} · Step {current + 1} of 4
       </p>
       <p className="text-sm text-muted-foreground">
-        Save each step to continue. You can return to any step to review its saved settings.
+        Save the location and pickup contact. Instant also requires operating hours; Scheduled uses
+        its cycle timing. You can return to any step to review saved settings.
       </p>
       <nav aria-label="Location setup steps" className="grid gap-2 border-b pb-3 sm:grid-cols-4">
         {steps.map(([path, label, status], index) => (

@@ -1,14 +1,5 @@
-import { locationOperatingScheduleSchema } from "@freshmarkets/validation";
-import { operatingInterval } from "../operating-schedule";
 import type { OperationalCandidate } from "./operational-candidates";
 
-export function scheduledOperatingInterval(candidate: OperationalCandidate, pickupAt: number) {
-  return operatingInterval(
-    locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson)),
-    candidate.scheduleTimezone,
-    pickupAt,
-  );
-}
 export function operatingScheduleGuard(
   database: D1Database,
   candidate: OperationalCandidate,

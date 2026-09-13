@@ -83,16 +83,6 @@ async function readinessBlockers(
       message: `${missingCapabilities.name} requires picking, packing, and dispatch capabilities`,
     });
 
-  const missingHours = await database
-    .prepare(`SELECT l.name FROM fulfillment_location l JOIN market m ON m.id=l.market_id
-    LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
-    WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0) ORDER BY l.id LIMIT 1`)
-    .first<{ name: string }>();
-  if (missingHours)
-    blockers.push({
-      code: "LOCATION_HOURS_NOT_CONFIGURED",
-      message: `${missingHours.name} requires configured operating hours`,
-    });
   const dispatchNotReady = await database
     .prepare(`SELECT l.name FROM fulfillment_location l
     LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
@@ -104,6 +94,16 @@ async function readinessBlockers(
       message: `${dispatchNotReady.name} is not ready to dispatch customer orders`,
     });
   if (mode === "INSTANT") {
+    const missingHours = await database
+      .prepare(`SELECT l.name FROM fulfillment_location l JOIN market m ON m.id=l.market_id
+      LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
+      WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0) ORDER BY l.id LIMIT 1`)
+      .first<{ name: string }>();
+    if (missingHours)
+      blockers.push({
+        code: "LOCATION_HOURS_NOT_CONFIGURED",
+        message: `${missingHours.name} requires configured Instant operating hours`,
+      });
     const unready = await database
       .prepare(
         `SELECT location.name
@@ -363,9 +363,6 @@ async function execute(
       database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE EXISTS (
         SELECT 1 FROM fulfillment_location l LEFT JOIN fulfillment_location_readiness r ON r.location_id=l.id
         WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND COALESCE(r.dispatch_ready,0)!=1)`),
-      database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE EXISTS (
-        SELECT 1 FROM fulfillment_location l JOIN market m ON m.id=l.market_id LEFT JOIN location_operating_schedule hours ON hours.location_id=l.id AND hours.timezone=m.timezone
-        WHERE l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT' AND (hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0))`),
       database.prepare(`INSERT INTO commitment_abort(id) SELECT -23 WHERE
         NOT EXISTS (SELECT 1 FROM fulfillment_location WHERE status='active' AND purpose='CUSTOMER_FULFILLMENT')
         OR EXISTS (SELECT 1 FROM fulfillment_location location WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT'
@@ -375,9 +372,12 @@ async function execute(
       nextMode === "INSTANT"
         ? database.prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE EXISTS (
             SELECT 1 FROM fulfillment_location location
+            JOIN market ON market.id=location.market_id
             LEFT JOIN fulfillment_location_readiness readiness ON readiness.location_id=location.id
+            LEFT JOIN location_operating_schedule hours ON hours.location_id=location.id AND hours.timezone=market.timezone
             WHERE location.status='active' AND location.purpose='CUSTOMER_FULFILLMENT' AND (readiness.location_id IS NULL
-              OR readiness.dispatch_ready!=1 OR readiness.instant_promise_minutes IS NULL))`)
+              OR readiness.dispatch_ready!=1 OR readiness.instant_promise_minutes IS NULL
+              OR hours.location_id IS NULL OR json_array_length(hours.definition_json,'$.weekly')=0))`)
         : database
             .prepare(`INSERT INTO commitment_abort(id) SELECT -24 WHERE NOT EXISTS (
             SELECT 1 FROM delivery_cycle cycle

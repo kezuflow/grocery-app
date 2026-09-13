@@ -178,18 +178,14 @@ export async function createPayment(
         AND geography.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.geographyVersion'),1)
         AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
         AND l.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.locationVersion'),l.version)
-        AND EXISTS (SELECT 1 FROM location_operating_schedule hours WHERE hours.location_id=l.id AND hours.timezone=market.timezone)
-        AND (CASE WHEN q.delivery_cycle_id IS NULL THEN CAST(unixepoch('subsec')*1000 AS INTEGER)
-          ELSE CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER) END)
-          >=json_extract(q.cycle_snapshot_json,'$.operatingInterval.startsAt')
-        AND (CASE WHEN q.delivery_cycle_id IS NULL THEN CAST(unixepoch('subsec')*1000 AS INTEGER)
-          ELSE CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER) END)
-          <json_extract(q.cycle_snapshot_json,'$.operatingInterval.endsAt')
         AND (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))=3
         AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
           AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version))
         AND ((q.fulfillment_mode='INSTANT' AND EXISTS (SELECT 1 FROM fulfillment_location_readiness readiness WHERE readiness.location_id=l.id AND readiness.dispatch_ready=1
-          AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version)))
+          AND readiness.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.readinessVersion'),readiness.version))
+          AND EXISTS (SELECT 1 FROM location_operating_schedule hours WHERE hours.location_id=l.id AND hours.timezone=market.timezone)
+          AND CAST(unixepoch('subsec')*1000 AS INTEGER)>=json_extract(q.cycle_snapshot_json,'$.operatingInterval.startsAt')
+          AND CAST(unixepoch('subsec')*1000 AS INTEGER)<json_extract(q.cycle_snapshot_json,'$.operatingInterval.endsAt'))
           OR (q.fulfillment_mode='SCHEDULED' AND EXISTS (SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
             WHERE cycle.id=q.delivery_cycle_id AND cycle.status='OPEN' AND cycle.cutoff_at>CAST(unixepoch('subsec')*1000 AS INTEGER)
               AND cycle.order_opens_at<=CAST(unixepoch('subsec')*1000 AS INTEGER)

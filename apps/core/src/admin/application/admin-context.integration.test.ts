@@ -221,6 +221,28 @@ describe("scoped admin context", () => {
     );
   });
 
+  it("publishes the canonical Scheduled cycles settings URL", async () => {
+    const staff = await staffCookie({
+      permissionCodes: ["fulfillment.read"],
+      scope: { kind: "global" },
+    });
+    const context = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: staff.cookie },
+    });
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+    expect(context.value.navigation).toContainEqual({
+      code: "settings-delivery-cycles",
+      label: "Scheduled cycles",
+      href: "/admin/settings/scheduled-cycles",
+      section: "administration",
+      scopeKinds: ["GLOBAL"],
+      parentCode: "settings",
+      kind: "destination",
+    });
+  });
+
   it("marks Inventory and Delivery as location-only even for globally scoped Staff", async () => {
     const staff = await staffCookie({
       permissionCodes: ["inventory.read", "delivery.read"],

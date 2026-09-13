@@ -38,7 +38,9 @@ test("Global creates a ready site and a customer confirms delivery there", async
     .fill("Address and operational capabilities checked");
   await page.getByRole("button", { name: "Activate location", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Location saved.");
-  await page.getByRole("link", { name: `Operating hours for ${name}`, exact: true }).click();
+  await page
+    .getByRole("link", { name: `Instant operating hours for ${name}`, exact: true })
+    .click();
   for (const [index, day] of [
     "Monday",
     "Tuesday",

@@ -339,7 +339,7 @@ const WORKSPACES: ReadonlyArray<{
   {
     code: "settings-delivery-cycles",
     label: "Scheduled cycles",
-    href: "/admin/settings/delivery-cycles",
+    href: "/admin/settings/scheduled-cycles",
     section: "administration",
     parentCode: "settings",
     kind: "destination",

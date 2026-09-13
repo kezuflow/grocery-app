@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import {
   activateGlobalFulfillmentMode,
   getGlobalCommerceConfiguration,
@@ -161,6 +161,61 @@ describe("global commerce configuration", () => {
     expect(await openSelling(env.DB, command(3))).toMatchObject({
       ok: true,
       value: { sellingState: "OPEN", fulfillmentMode: "INSTANT", version: 4 },
+    });
+  });
+
+  it("requires operating hours only when opening Instant commerce", async () => {
+    const hours = await env.DB.prepare(
+      "SELECT timezone,definition_json,updated_at FROM location_operating_schedule WHERE location_id='location-cebu-central'",
+    ).first<{ timezone: string; definition_json: string; updated_at: number }>();
+    if (!hours) throw new Error("Missing Instant hours fixture");
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "INSERT INTO location_operating_schedule(location_id,timezone,definition_json,updated_at) VALUES ('location-cebu-central',?,?,?) ON CONFLICT(location_id) DO UPDATE SET timezone=excluded.timezone,definition_json=excluded.definition_json,updated_at=excluded.updated_at",
+      )
+        .bind(hours.timezone, hours.definition_json, hours.updated_at)
+        .run();
+    });
+    await env.DB.prepare(
+      "DELETE FROM location_operating_schedule WHERE location_id='location-cebu-central'",
+    ).run();
+
+    const scheduled = await getGlobalCommerceConfiguration(env.DB, { requestId: "scheduled" });
+    expect(scheduled).toMatchObject({ ok: true });
+    if (!scheduled.ok) throw new Error(scheduled.error.message);
+    expect(scheduled.value.readinessBlockers).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "LOCATION_HOURS_NOT_CONFIGURED" })]),
+    );
+    expect(await pauseSelling(env.DB, command(1, "scheduled-no-hours-pause"))).toMatchObject({
+      ok: true,
+    });
+    expect(await openSelling(env.DB, command(2, "scheduled-no-hours-open"))).toMatchObject({
+      ok: true,
+      value: { fulfillmentMode: "SCHEDULED", sellingState: "OPEN", version: 3 },
+    });
+
+    expect(await pauseSelling(env.DB, command(3, "instant-no-hours-pause"))).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await activateGlobalFulfillmentMode(env.DB, {
+        ...command(4, "instant-no-hours-switch"),
+        fulfillmentMode: "INSTANT",
+        cadence: null,
+      }),
+    ).toMatchObject({ ok: true, value: { version: 5 } });
+    await makeInstantReady();
+    expect(await openSelling(env.DB, command(5, "instant-no-hours-open"))).toMatchObject({
+      ok: false,
+      error: { code: "CONFIGURATION_ERROR" },
+    });
+    expect(await getGlobalCommerceConfiguration(env.DB, { requestId: "instant" })).toMatchObject({
+      ok: true,
+      value: {
+        readinessBlockers: expect.arrayContaining([
+          expect.objectContaining({ code: "LOCATION_HOURS_NOT_CONFIGURED" }),
+        ]),
+      },
     });
   });
 

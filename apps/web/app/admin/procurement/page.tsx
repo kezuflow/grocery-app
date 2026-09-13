@@ -133,7 +133,7 @@ export default function ProcurementPage() {
       />
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline">
-          <Link href="/admin/settings/delivery-cycles">Manage delivery dates</Link>
+          <Link href="/admin/settings/scheduled-cycles">Manage Scheduled cycles</Link>
         </Button>
         <Button asChild variant="outline">
           <Link

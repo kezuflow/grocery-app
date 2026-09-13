@@ -36,7 +36,6 @@ const blocker = `CASE
   WHEN l.purpose<>'CUSTOMER_FULFILLMENT' THEN 'Warehouses do not dispatch customer orders'
   WHEN l.status<>'active' THEN 'Activate this fulfillment location'
   WHEN (SELECT COUNT(DISTINCT capability) FROM location_capability WHERE location_id=l.id AND enabled=1 AND capability IN ('PICKING','PACKING','DISPATCH'))<>3 THEN 'Configure picking, packing and dispatch capabilities'
-  WHEN NOT EXISTS (SELECT 1 FROM location_operating_schedule hours WHERE hours.location_id=l.id AND hours.timezone=m.timezone AND json_array_length(hours.definition_json,'$.weekly')>0) THEN 'Configure operating hours'
   WHEN NOT EXISTS (SELECT 1 FROM fulfillment_location_delivery_profile profile WHERE profile.location_id=l.id AND length(trim(profile.sender_name))>0 AND length(trim(profile.phone_e164))>0 AND length(trim(profile.formatted_address))>0) THEN 'Configure the courier pickup profile'
   WHEN m.status<>'active' THEN 'The market is inactive'
   ELSE NULL END`;

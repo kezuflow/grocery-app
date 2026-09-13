@@ -28,7 +28,23 @@ async function command() {
   };
 }
 describe("Global location fulfillment readiness", () => {
-  it("controls Scheduled routing without requiring an Instant promise or capacity", async () => {
+  it("controls Scheduled routing without requiring Instant hours, promise, or capacity", async () => {
+    const hours = await env.DB.prepare(
+      "SELECT timezone,definition_json,updated_at FROM location_operating_schedule WHERE location_id=?",
+    )
+      .bind(locationId)
+      .first<{ timezone: string; definition_json: string; updated_at: number }>();
+    if (!hours) throw new Error("Missing Instant hours fixture");
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "INSERT INTO location_operating_schedule(location_id,timezone,definition_json,updated_at) VALUES (?,?,?,?) ON CONFLICT(location_id) DO UPDATE SET timezone=excluded.timezone,definition_json=excluded.definition_json,updated_at=excluded.updated_at",
+      )
+        .bind(locationId, hours.timezone, hours.definition_json, hours.updated_at)
+        .run();
+    });
+    await env.DB.prepare("DELETE FROM location_operating_schedule WHERE location_id=?")
+      .bind(locationId)
+      .run();
     const { request } = await command();
     const enabled = await exports.default.configureAdminLocationFulfillment({
       ...request,

@@ -514,11 +514,27 @@ describe("instant checkout quotes", () => {
     });
   });
 
-  it("quotes and revalidates Scheduled checkout without membership or physical stock", async () => {
+  it("quotes and revalidates Scheduled checkout without Instant hours, membership, or physical stock", async () => {
     await env.DB.prepare(
       "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
     )
       .bind(Date.now())
+      .run();
+    const hours = await env.DB.prepare(
+      "SELECT timezone,definition_json FROM location_operating_schedule WHERE location_id=?",
+    )
+      .bind(LOCATION)
+      .first<{ timezone: string; definition_json: string }>();
+    if (!hours) throw new Error("Missing Instant hours fixture");
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "INSERT INTO location_operating_schedule(location_id,timezone,definition_json,updated_at) VALUES (?,?,?,?) ON CONFLICT(location_id) DO UPDATE SET timezone=excluded.timezone,definition_json=excluded.definition_json,updated_at=excluded.updated_at",
+      )
+        .bind(LOCATION, hours.timezone, hours.definition_json, Date.now())
+        .run();
+    });
+    await env.DB.prepare("DELETE FROM location_operating_schedule WHERE location_id=?")
+      .bind(LOCATION)
       .run();
     const basket = await seedBasket({ onHand: 0, member: false });
     const result = await createCheckoutQuote(
@@ -533,6 +549,11 @@ describe("instant checkout quotes", () => {
     if (!result.ok) throw new Error(result.error.message);
     const quote = await createCheckoutRepository(env.DB).findQuoteById(result.value.quoteId);
     if (!quote) throw new Error("Missing persisted quote");
+    expect(quote.deliveryFeeSnapshot).toMatchObject({
+      source: "EXTERNAL_PROVIDER",
+      providerCode: "lalamove",
+      scheduleAt: expect.any(String),
+    });
     expect(quote.financial.serviceFeeMinor).toBe(0);
     expect(quote.totalMinor).toBe(
       quote.financial.merchandiseSubtotalMinor -
@@ -551,6 +572,21 @@ describe("instant checkout quotes", () => {
         quoteDependencies.deliveryProviders,
       ),
     ).toEqual({ ok: true });
+    expect(
+      await createPayment(env.DB, new ProviderRegistry("test", [createMockPaymentProvider()]), {
+        purpose: "GROCERY_CHECKOUT",
+        subjectType: "checkout_quote",
+        subjectId: quote.id,
+        customerId: basket.customerId,
+        checkoutVersion: quote.version,
+        amountMinor: quote.totalMinor,
+        currency: quote.currency,
+        providerCode: "mock",
+        returnUrl: "https://example.com/return",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
     expect(
       await env.DB.prepare(
         "SELECT on_hand,reserved FROM inventory_balance WHERE location_id=? AND inventory_pool_id='pool-red-onion'",
