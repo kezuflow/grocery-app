@@ -88,9 +88,19 @@ contracts typechecks, contracts 20 / 69, focused checkout 2 / 15, both productio
 architecture, readiness and naming checks. The migrated QueryClient test fixture was corrected after
 its initial failure; the focused checkout suite then passed, and the current shared main working tree's
 complete Web suite passed 138 files / 568 tests while preserving unrelated location-workspace changes.
-No payment, courier request, database migration or deployment was performed. Next action: deploy the
-Core and Web staging revisions and verify an authenticated started-payment redirect only if the owner
-explicitly authorizes this new deployment.
+The owner then explicitly authorized commit, push and staging deployment. Commits `5e6923b2` and
+checkpoint `6922ebe2` were pushed to `origin/main`; an isolated clean worktree pinned to `6922ebe2`
+installed the frozen lockfile and passed Core staging and generated Web staging Wrangler dry runs.
+Core staging version `2a641d0a-0372-4112-b38a-922f6dd681ad` and Web staging version
+`91a09b7b-5d7d-436c-a0ff-78dbbe2e78e5` were deployed. The generated Web artifact confirms
+`freshmarkets-web-staging`, the `freshmarkets.ph` custom domain, staging origin and
+`freshmarkets-core-staging#CoreEntrypoint` binding. One initial Web wrapper attempt rebuilt without
+the `CLOUDFLARE_ENV=staging` selector and failed before creating a Worker version; the corrected
+staging-scoped wrapper succeeded. Public homepage, `/health`, `/api/core-health` and direct Core
+`/ready` all returned HTTP 200, with Core reporting staging and ready. No payment, courier request or
+database migration was performed. Next action: verify an authenticated started-payment redirect in
+staging when a safe existing settling-payment case is available; do not initiate a payment solely for
+this check.
 
 ## Concurrent owner request — CHECKOUT-SCHEDULED-FEE-REFRESH-1 (2026-09-14)
 
