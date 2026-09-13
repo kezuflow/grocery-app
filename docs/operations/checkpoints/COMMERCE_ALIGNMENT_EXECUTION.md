@@ -36,10 +36,16 @@ response, Review navigation and persisted closure/hour values. Both full-page sc
 inspected; controls remain legible and wrap without horizontal overflow. This proves local
 Worker/D1/browser behavior with test configuration, not actual Google Maps/provider or deployed
 acceptance. Completed ID: LOCATION-UX-FINISH-1. Counting level: zero remaining implementation slices
-for this request. Commit `32ee796c` is pushed to `origin/main`; all concurrent delivery-address work
-and local artifacts remain outside that commit. Next action: owner reviews the real Admin location
-pin and operating hours with actual location values; earlier provider/deployment obligations remain
-open.
+for this request. Commits `32ee796c` and `f6cb30f4` are pushed to `origin/main`; all concurrent work and
+local artifacts remain outside those commits. The owner then authorized deployment. A clean worktree
+pinned to `f6cb30f4` installed the frozen lockfile, built with `CLOUDFLARE_ENV=staging`, and confirmed
+the generated `freshmarkets-web-staging` worker, `https://freshmarkets.ph` origin and
+`freshmarkets-core-staging#CoreEntrypoint` binding; generated-config Wrangler dry run passed. Web
+version `22e1f1cb-70be-4d7f-bf83-f1a8872223cd` is active at 100%. Public homepage, Web liveness,
+Web-to-Core health, direct Core health and Core readiness returned HTTP 200/ready. The public hashed
+Admin asset contains both reverse-address and 12-hour-control markers. Core/D1 were unchanged; no
+provider transaction was performed. Next action: owner reviews the real Admin location pin and
+operating hours with actual location values; earlier actual-provider obligations remain open.
 
 ## Owner request — ADDR-0 delivery address plan (2026-09-14)
 
