@@ -26,8 +26,14 @@ corrected delivery-binding harness passes 2/2. Core and Web Wrangler type declar
 vinext check reports 16 supported and zero issues. The staging Web build, readiness verification and
 generated-config Wrangler dry run pass and identify `freshmarkets-web-staging`, `freshmarkets.ph`,
 staging environment values and `freshmarkets-core-staging#CoreEntrypoint`. Local browser inspection
-confirms the requested pending fee and black labels. Commit, push, deployment version and public health
-evidence remain to be recorded below after execution.
+confirms the requested pending fee and black labels. Commit `d64ba5cd` contains the complete eleven-file
+slice and is pushed to `origin/main`. Web version `41284167-ec47-4849-8e92-9fa359326e71` is deployed to
+`freshmarkets-web-staging` and the `freshmarkets.ph` custom domain. Public homepage, checkout,
+Web-to-Core health, direct Core health and Core readiness return HTTP 200/ready. Deployed checkout
+inspection confirms the black Items subtotal label, black-to-gray Delivery fee shine, blurred amount,
+pending accessible text and absence of “Calculated at checkout.” Core runtime and D1 were unchanged;
+no provider transaction occurred. Completed ID: STOREFRONT-CHECKOUT-POLISH-1. Remaining at this
+request level: zero implementation or deployment actions.
 
 ## Latest owner request — DELIVERY-FEE-PENDING-MOTION-1 (2026-09-14)
 
