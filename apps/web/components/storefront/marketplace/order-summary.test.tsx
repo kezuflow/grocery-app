@@ -36,6 +36,10 @@ describe("OrderSummary", () => {
     expect(html).toContain('aria-label="Increase Banana · 1 kg"');
     expect(html).toContain("text-right");
     expect(html).toContain("Items subtotal");
+    expect(html).toContain('class="fm-shine-text text-[var(--fm-text)]"');
+    expect(html).toContain("Delivery fee pending");
+    expect(html).toContain("blur-[4px]");
+    expect(html).not.toContain("Calculated at checkout");
   });
 
   it("supports a flat checkout presentation without a summary card", () => {

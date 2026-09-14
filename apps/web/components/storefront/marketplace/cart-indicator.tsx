@@ -22,15 +22,16 @@ export function CartIndicator() {
         event.preventDefault();
         window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
       }}
-      className="relative inline-flex h-10 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-3 text-sm font-semibold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#a9e83f]"
+      className="relative inline-flex h-11 items-center rounded-full p-2.5 text-sm font-semibold text-[var(--fm-text)] transition-colors hover:text-[var(--fm-primary-dark)]"
     >
-      <ShoppingCart className="size-4" aria-hidden="true" />
-      <span className="hidden sm:inline">Cart</span>
-      {count ? (
-        <span className="rounded-full bg-[var(--fm-primary-dark)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-          {count}
-        </span>
-      ) : null}
+      <span className="relative inline-flex">
+        <ShoppingCart className="size-6" aria-hidden="true" />
+        {count ? (
+          <span className="absolute -top-2.5 -right-2.5 flex min-w-4 items-center justify-center rounded-full bg-[var(--fm-primary-dark)] px-1 py-0.5 text-[10px] font-semibold leading-none text-white">
+            {count}
+          </span>
+        ) : null}
+      </span>
     </Link>
   );
 }

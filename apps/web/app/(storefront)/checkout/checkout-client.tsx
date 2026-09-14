@@ -1,13 +1,5 @@
 "use client";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  LockKeyhole,
-  MapPin,
-  Plus,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, MapPin, Plus, ShieldCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -664,9 +656,6 @@ export function CheckoutClient({
           </Link>
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-primary-dark)]">
-                Secure checkout
-              </p>
               <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
                 Review your order
               </h1>
@@ -674,10 +663,6 @@ export function CheckoutClient({
                 Confirm where and when we should deliver. Your current total stays visible while you
                 complete the details.
               </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-[var(--fm-text-muted)]">
-              <LockKeyhole className="size-4 text-[var(--fm-primary-dark)]" aria-hidden="true" />
-              Secure payment after review
             </div>
           </div>
         </header>
@@ -765,9 +750,6 @@ export function CheckoutClient({
                         )}
                       </span>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                          Delivery details
-                        </p>
                         <h2 className="mt-1 text-xl font-bold">Where should we deliver?</h2>
                         <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
                           Choose a saved destination or confirm the details for Deliver to.
@@ -1072,21 +1054,10 @@ export function CheckoutClient({
                     Boolean(cart?.checkoutBlocked) ||
                     (!pendingQuote && !selectedFulfillmentOption)
               }
-              note="The closest fulfillment location and Lalamove route fee are confirmed at checkout."
               showItems
               onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}
               updatingSkuId={updatingSkuId}
             />
-            <div className="mt-4 flex items-start gap-3 px-1 text-xs leading-5 text-[var(--fm-text-muted)]">
-              <ShieldCheck
-                className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]"
-                aria-hidden="true"
-              />
-              <p>
-                Location readiness, inventory, courier fees and promotions are rechecked immediately
-                before payment.
-              </p>
-            </div>
           </div>
         </div>
       </div>

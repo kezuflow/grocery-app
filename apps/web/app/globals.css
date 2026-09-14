@@ -378,6 +378,33 @@ textarea {
   color: var(--fm-primary-dark);
 }
 
+.fm-shine-text {
+  background-image: linear-gradient(
+    105deg,
+    var(--fm-text) 0%,
+    var(--fm-text) 38%,
+    color-mix(in srgb, var(--fm-text) 35%, white) 50%,
+    var(--fm-text) 62%,
+    var(--fm-text) 100%
+  );
+  background-position: 130% 0;
+  background-size: 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: fm-shine-text 2400ms linear infinite;
+}
+
+@keyframes fm-shine-text {
+  0%,
+  25% {
+    background-position: 130% 0;
+  }
+  75%,
+  100% {
+    background-position: -130% 0;
+  }
+}
+
 .fm-cart-drawer {
   transform: translateX(100%);
   transition: transform 240ms ease-out;

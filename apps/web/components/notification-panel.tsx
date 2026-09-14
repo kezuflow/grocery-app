@@ -33,9 +33,9 @@ export function NotificationPanel({
       <PopoverTrigger
         ref={triggerRef}
         aria-label="Open notifications"
-        className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--fm-radius-control)] text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        <Bell className="size-5" aria-hidden="true" />
+        <Bell className="size-6" aria-hidden="true" />
       </PopoverTrigger>
       <PopoverContent
         align="end"

@@ -9,10 +9,10 @@ const require = createRequire(new URL("../apps/web/package.json", import.meta.ur
 const { unstable_readConfig, unstable_getVarsForDev } = require("wrangler");
 
 for (const env of [undefined, "staging"]) {
-  test(`Core ${env ?? "local"} admits configured delivery bindings without enabling defaults`, () => {
+  test(`Core ${env ?? "local"} uses the approved delivery defaults and admits secret overrides`, () => {
     const config = unstable_readConfig({ config: resolve("apps/core/wrangler.jsonc"), env });
-    assert.equal(config.vars.DELIVERY_PROVIDERS, "disabled");
-    assert.equal(config.vars.LALAMOVE_SERVICE_TYPE, "");
+    assert.equal(config.vars.DELIVERY_PROVIDERS, env === "staging" ? "lalamove" : "disabled");
+    assert.equal(config.vars.LALAMOVE_SERVICE_TYPE, env === "staging" ? "MOTORCYCLE" : "");
     const directory = mkdtempSync(join(tmpdir(), "freshmarkets-delivery-bindings-"));
     const file = join(directory, ".dev.vars");
     const values = {

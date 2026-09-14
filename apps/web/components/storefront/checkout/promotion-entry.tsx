@@ -78,9 +78,6 @@ export function PromotionEntry({
           <TicketPercent className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-            Optional
-          </p>
           <h2 id="promotion-heading" className="mt-1 text-xl font-bold">
             Add a promotion code
           </h2>

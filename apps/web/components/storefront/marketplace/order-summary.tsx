@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Info, Minus, Plus, ShoppingBasket } from "lucide-react";
 import type { CartView, CheckoutQuoteView } from "@freshmarkets/contracts";
+import type { CSSProperties } from "react";
 import { cn } from "../../../lib/utils";
 import { ProductMedia } from "../product-media";
 
@@ -25,6 +26,8 @@ export function OrderSummary({
   onQuantityChange,
   updatingSkuId,
   surface = "card",
+  actionTextClassName,
+  actionTextStyle,
 }: {
   cart: CartView | null;
   actionLabel: string;
@@ -38,6 +41,8 @@ export function OrderSummary({
   onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
   updatingSkuId?: string | null;
   surface?: "card" | "flat";
+  actionTextClassName?: string;
+  actionTextStyle?: CSSProperties;
 }) {
   const currency = cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
@@ -57,11 +62,6 @@ export function OrderSummary({
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          {showItems ? null : (
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-              Your order
-            </p>
-          )}
           <h2 className={cn("text-lg font-bold", !showItems && "mt-1")}>
             {showItems ? "Order summary" : "Summary"}
           </h2>
@@ -166,7 +166,9 @@ export function OrderSummary({
         )}
       >
         <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
-          <span>{showItems ? "Items subtotal" : `Items (${itemCount})`}</span>
+          <span className="text-[var(--fm-text)]">
+            {showItems ? "Items subtotal" : `Items (${itemCount})`}
+          </span>
           <span className="font-medium tabular-nums text-[var(--fm-text)]">
             {pricesAvailable ? money(subtotal, currency) : "Price unavailable"}
           </span>
@@ -194,8 +196,16 @@ export function OrderSummary({
           </>
         ) : (
           <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
-            <span>Delivery fee</span>
-            <span className="font-medium text-[var(--fm-text)]">Calculated at checkout</span>
+            <span className="fm-shine-text text-[var(--fm-text)]" data-text="Delivery fee">
+              Delivery fee
+            </span>
+            <span className="sr-only">Delivery fee pending</span>
+            <span
+              aria-hidden="true"
+              className="min-w-[4.5rem] select-none text-right font-medium tabular-nums text-[var(--fm-text)] blur-[4px]"
+            >
+              {money(0, currency)}
+            </span>
           </div>
         )}
         <div className="flex items-center justify-between gap-4 border-t border-[var(--fm-border)] pt-3 text-base font-bold">
@@ -222,9 +232,11 @@ export function OrderSummary({
         <Link
           href={actionHref}
           aria-disabled={disabled}
+          style={actionTextStyle}
           className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] active:scale-[0.985]",
+            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] hover:text-white active:scale-[0.985]",
             disabled && "pointer-events-none opacity-50",
+            actionTextClassName,
           )}
         >
           {actionLabel}
@@ -235,7 +247,11 @@ export function OrderSummary({
           type="button"
           onClick={onAction}
           disabled={disabled}
-          className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+          style={actionTextStyle}
+          className={cn(
+            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] hover:text-white active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-white disabled:active:scale-100",
+            actionTextClassName,
+          )}
         >
           {actionLabel}
           <ArrowRight className="size-4" aria-hidden="true" />

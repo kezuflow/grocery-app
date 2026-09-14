@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Minus, Plus, ShoppingBasket, X } from "lucide-react";
+import { Minus, Plus, ShoppingBasket } from "lucide-react";
 import type { CartView } from "@freshmarkets/contracts";
 import { ProductMedia } from "../product-media";
 import { CART_DRAWER_REQUEST_EVENT, addToCart } from "../../../lib/storefront/cart-client";
@@ -181,34 +181,19 @@ export function CartDrawer() {
       >
         <div className="flex h-full flex-col bg-white shadow-[var(--fm-shadow-overlay)]">
           <div className="flex shrink-0 items-center justify-between border-b border-[var(--fm-border)] px-5 py-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                FreshMarkets
-              </p>
-              <h2 className="mt-1 text-xl font-bold">Your cart</h2>
-            </div>
-            <div className="flex items-center gap-1">
-              {canClear ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setClearError("");
-                    setConfirmingClear(true);
-                  }}
-                  className="min-h-11 px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
-                >
-                  Clear cart
-                </button>
-              ) : null}
+            <h2 className="mt-1 text-xl font-bold">Your cart</h2>
+            {canClear ? (
               <button
                 type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close cart"
-                className="inline-flex size-11 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
+                onClick={() => {
+                  setClearError("");
+                  setConfirmingClear(true);
+                }}
+                className="min-h-11 px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
               >
-                <X className="size-5" aria-hidden="true" />
+                Clear cart
               </button>
-            </div>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
@@ -332,6 +317,8 @@ export function CartDrawer() {
                 cart={cart}
                 actionLabel={guest ? "Sign in to checkout" : "Continue to checkout"}
                 actionHref={guest ? undefined : "/checkout"}
+                actionTextClassName="text-white hover:text-white"
+                actionTextStyle={{ color: "#ffffff" }}
                 onAction={
                   guest
                     ? () => {

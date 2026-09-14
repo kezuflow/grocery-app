@@ -1,5 +1,56 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-CHECKOUT-POLISH-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner authorized committing and pushing the complete current working tree, including the
+text/UI changes made immediately before the request, then deploying the Web Worker to staging. Owner
+clarified that Lalamove is the intentional staging delivery default, not `disabled`. Acceptance: ship
+the complete checkout/cart/header presentation polish together; retain accessible pending-fee
+semantics and authoritative quoted values; make the delivery-binding harness assert local disabled
+and staging Lalamove/MOTORCYCLE; deploy only the changed Web runtime. No Core runtime, D1 migration,
+provider transaction or data reset.
+
+Pre-commit implementation: checkout removes redundant Secure checkout, Delivery details, courier
+recheck and promotion Optional copy; the cart header and trigger are simplified, notification/cart
+icons enlarged, checkout action text is held white, and Order summary removes redundant eyebrow copy.
+The unresolved Delivery fee has a black-label shine and blurred peso placeholder announced as pending;
+Items subtotal is black. The missing `ShieldCheck` import was restored. The stale delivery-binding
+harness now asserts the approved per-environment defaults, and regenerated Core Worker declarations
+match the already-configured staging Lalamove values.
+
+Verification on the complete working tree: formatting, naming, terminology, migrations, commit
+convention, architecture, readiness and lint pass (two pre-existing unused-variable warnings); package
+typechecks pass; Contracts 20/69, Web 138/570 and Core 206/1,671 pass; both Worker builds pass. The
+corrected delivery-binding harness passes 2/2. Core and Web Wrangler type declarations are current;
+vinext check reports 16 supported and zero issues. The staging Web build, readiness verification and
+generated-config Wrangler dry run pass and identify `freshmarkets-web-staging`, `freshmarkets.ph`,
+staging environment values and `freshmarkets-core-staging#CoreEntrypoint`. Local browser inspection
+confirms the requested pending fee and black labels. Commit, push, deployment version and public health
+evidence remain to be recorded below after execution.
+
+## Latest owner request — DELIVERY-FEE-PENDING-MOTION-1 (2026-09-14)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner requested that the unresolved checkout Order summary replace “Calculated at
+checkout” with a blurred numeric fee treatment and give the Delivery fee label a shine animation.
+Acceptance: the label remains readable, the placeholder does not represent a real fee to assistive
+technology, reduced-motion behavior remains available, and resolved quotes continue to show the
+authoritative delivery amount unchanged. No Core, contract, storage, provider or deployment change.
+
+Implemented in the preserved working tree: the no-quote row now renders a currency-shaped blurred
+zero placeholder as visual loading evidence, hides that placeholder from assistive technology and
+announces “Delivery fee pending”; the label uses a restrained CSS-only shine while the quote is
+unresolved. Owner follow-up: Items subtotal and the pending Delivery fee label now use the storefront
+black text token; the shine sweeps to a lighter gray. Existing quote rendering is unchanged. Focused OrderSummary tests pass 2/2; intended-file
+format, lint and diff checks pass. Local browser inspection at `/checkout` confirms the readable label,
+active shine and blurred right-aligned peso placeholder. Web typecheck remains blocked by the separate
+pre-existing checkout-client edit that removes the `ShieldCheck` import while still rendering it at
+line 1017. Current overlapping OrderSummary edits and other owner work remain uncommitted and were
+preserved, so this slice is not committed or pushed. Completed ID: DELIVERY-FEE-PENDING-MOTION-1 at
+working-tree/local-browser level. Next action: resolve or finish the overlapping checkout edits, then
+run the complete Web gate and commit the intended combined slice.
+
 ## Latest owner request — ADDR-1 through ADDR-4 (2026-09-14)
 
 Plan: `docs/product/DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md`, **ADDR-1 — Simplify delivery
