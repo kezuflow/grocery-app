@@ -30,12 +30,17 @@ returns through the callback. A bounded Core trace of the reproduced callback id
 exchange response as HTTP 401 `invalid_client`: the provided client secret is invalid. Therefore the
 staging `GOOGLE_CLIENT_SECRET` does not match the OAuth client selected by `GOOGLE_CLIENT_ID`, or that
 secret was rotated/deleted; no application/proxy/callback code defect was observed before that
-provider rejection. No credential was printed, copied or changed. Completed ID:
-STAGING-DEPLOY-OAUTH-DIAG-1 at staging-deployment/diagnostic level. Remaining at this request level:
-one external configuration correction and retest. Next action: the owner retrieves or creates the
-current secret for the same Google Web OAuth client, updates the staging `GOOGLE_CLIENT_SECRET`, then
-reruns the browser sign-in callback; changing the client ID additionally requires keeping the exact
-authorized redirect URI above.
+provider rejection. No credential was printed or copied during diagnosis.
+
+Owner follow-up replaced the staging secret through the deployed Worker secret boundary, producing
+Core secret-change version `f982cda6-3cb8-4246-a683-370ace292380`. Direct Core readiness remained HTTP
+200. The real browser flow then completed Google authorization, returned through the configured
+callback, established the FreshMarkets session and navigated to the authenticated storefront home.
+The bounded Core trace showed successful auth RPC outcomes and no provider or application exception.
+No secret value, OAuth code, state or raw provider payload was recorded. Completed ID:
+STAGING-DEPLOY-OAUTH-DIAG-1 at staging-deployment and actual Google OAuth acceptance level. Remaining
+at this request level: zero. Production uses separately provisioned instances and credentials as
+previously directed by the owner.
 
 ## Latest owner request — STOREFRONT-POLISH-COMMIT-1 (2026-09-19)
 
@@ -2466,6 +2471,6 @@ Older implementation anchors `b8e32b2`, `f7f17dc`, `d14de2c`, `762a18e`, `f6f8c8
 
 Clean FreshMarkets deployment/reset is explicitly authorized; no additional approval is needed for its named resources. Payment/courier sandbox transactions, real pickup/service/hour/promise/catalog/accounting values and owner OAuth/setup observations remain separate release inputs. Customer self-service closure remains deferred. The old pre-launch data is explicitly disposable for this reset; normal future commerce records retain the approved retention policy.
 
-**One next action:** replace the invalid staging `GOOGLE_CLIENT_SECRET` with the current secret for the
-same Google Web OAuth client, then repeat the deployed Google sign-in callback. Preserve
-`https://freshmarkets.ph/api/auth/callback/google` as the authorized redirect URI.
+**One next action:** continue the next separately authorized Phase 7 acceptance obligation; staging
+Google OAuth has no remaining action. Production instance and credential provisioning remains a
+separate future release task.
