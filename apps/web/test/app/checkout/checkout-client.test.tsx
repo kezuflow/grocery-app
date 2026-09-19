@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
 import { JSDOM } from "jsdom";
-import type { CustomerAddressView } from "@freshmarkets/contracts";
+import type { CustomerAddressView, FulfillmentOptionView } from "@freshmarkets/contracts";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createQueryClient, queryKeys } from "@/lib/query/query-client";
 
@@ -31,14 +31,16 @@ vi.mock("@/components/storefront/marketplace/order-summary", () => ({
 vi.mock("@/components/storefront/address/address-editor", () => ({
   AddressEditor: ({
     initialAddress,
+    initialDestination,
     multiStep,
     onConfirmed,
   }: {
     initialAddress?: CustomerAddressView;
+    initialDestination?: { displayAddress: string };
     multiStep?: boolean;
     onConfirmed?: (addressId: string) => void;
   }) => {
-    addressEditorPropsMock({ initialAddress, multiStep });
+    addressEditorPropsMock({ initialAddress, initialDestination, multiStep });
     return (
       <button type="button" onClick={() => onConfirmed?.(initialAddress?.id ?? "address-new")}>
         Complete checkout address save
@@ -71,9 +73,35 @@ for (const name of [
     configurable: true,
     value: dom.window[name],
   });
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: dom.window.localStorage,
+});
 
 const home = address("address-home", "Home", true);
 const office = address("address-office", "Office", true);
+
+function instantOption(
+  optionId: string,
+  code: "lalamove" | "grab-express",
+  displayName: string,
+  serviceType: string,
+  eligible = true,
+): FulfillmentOptionView {
+  return {
+    optionId,
+    mode: "INSTANT",
+    eligible,
+    unavailableReason: eligible ? null : "DELIVERY_PARTNER_UNAVAILABLE",
+    deliveryPartner: { code, displayName, serviceType, serviceLabel: "Motorcycle" },
+    promisedAt: "2026-09-01T01:00:00Z",
+    deliveryWindow: null,
+    feePreview: null,
+    cycleId: null,
+    cutoffAt: null,
+    provisional: true,
+  };
+}
 
 function address(id: string, label: string, serviceable: boolean): CustomerAddressView {
   return {
@@ -186,6 +214,12 @@ function successfulFetch(options?: {
               mode: "INSTANT",
               eligible: true,
               unavailableReason: null,
+              deliveryPartner: {
+                code: "lalamove",
+                displayName: "Lalamove",
+                serviceType: "MOTORCYCLE",
+                serviceLabel: "Motorcycle",
+              },
               promisedAt: "2026-09-01T01:00:00Z",
               deliveryWindow: null,
               feePreview: {
@@ -294,6 +328,7 @@ describe("CheckoutClient delivery inputs", () => {
       currency: "PHP",
     });
     refreshCartForLocationMock.mockImplementation(() => fetchCartMock());
+    window.localStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -308,6 +343,7 @@ describe("CheckoutClient delivery inputs", () => {
     fetchCartMock.mockReset();
     refreshCartForLocationMock.mockReset();
     window.sessionStorage.clear();
+    window.localStorage.clear();
     vi.useRealTimers();
   });
 
@@ -338,11 +374,68 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.textContent).not.toContain("Try quotation again");
   });
 
-  it("automatically quotes the sole Scheduled option and refreshes it after four and a half minutes", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-14T00:00:00.000Z"));
+  it("keeps an unsaved Deliver to destination visible beside saved alternatives", async () => {
+    window.localStorage.setItem(
+      "freshmarkets.delivery-location.v3",
+      JSON.stringify({
+        displayAddress: "IT Park entrance, Cebu City",
+        coordinate: { latitude: 10.329, longitude: 123.906 },
+        savedAddressId: null,
+      }),
+    );
+    vi.stubGlobal("fetch", successfulFetch());
+
+    act(() => root.render(checkout()));
+    await flush();
+
+    expect(container.textContent).toContain("IT Park entrance, Cebu City");
+    expect(container.textContent).toContain("Complete delivery details");
+    expect(container.textContent).toContain("Home");
+    expect(container.textContent).toContain("Office");
+    expect(container.textContent).not.toContain("Complete checkout address save");
+
+    click(container, "Complete delivery details");
+    expect(addressEditorPropsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialAddress: undefined,
+        initialDestination: expect.objectContaining({
+          displayAddress: "IT Park entrance, Cebu City",
+        }),
+        multiStep: true,
+      }),
+    );
+  });
+
+  it("prefers a current explicit Deliver to identity over an older checkout draft", async () => {
+    window.localStorage.setItem(
+      "freshmarkets.delivery-location.v3",
+      JSON.stringify({
+        displayAddress: "Home destination",
+        coordinate: { latitude: home.latitude, longitude: home.longitude },
+        savedAddressId: home.id,
+      }),
+    );
+    const client = createQueryClient();
+    client.setQueryData(queryKeys.private(0, "checkout-draft"), {
+      cartId: "cart-1",
+      addressId: office.id,
+      promotionCodes: [],
+    });
+    vi.stubGlobal("fetch", successfulFetch());
+
+    act(() => root.render(checkout(client)));
+    await flush();
+
+    expect(container.textContent).toContain("HomeConfirmed");
+    const savedChoices = Array.from(container.querySelectorAll('input[type="radio"]')).map(
+      (radio) => radio.parentElement?.textContent ?? "",
+    );
+    expect(savedChoices.some((label) => label.includes("Office"))).toBe(true);
+    expect(savedChoices.some((label) => label.includes("Home"))).toBe(false);
+  });
+
+  it("does not expose or quote a Scheduled-only Core configuration", async () => {
     let quoteCalls = 0;
-    let abandonCalls = 0;
     const base = successfulFetch({ onQuote: () => (quoteCalls += 1) });
     vi.stubGlobal(
       "fetch",
@@ -373,7 +466,6 @@ describe("CheckoutClient delivery inputs", () => {
               ],
             }),
           );
-        if (path.endsWith("/abandon")) abandonCalls += 1;
         return base(url, init);
       }),
     );
@@ -383,16 +475,11 @@ describe("CheckoutClient delivery inputs", () => {
     choose(container, "Home");
     await flush();
 
-    expect(quoteCalls).toBe(1);
-    expect(container.textContent).toContain("₱30.00");
-    expect(container.textContent).not.toContain("Calculated on review");
-
-    await act(async () => vi.advanceTimersByTimeAsync(4.5 * 60_000));
-    await flush();
-
-    expect(abandonCalls).toBe(1);
-    expect(quoteCalls).toBe(2);
-    expect(container.textContent).toContain("₱30.00");
+    expect(quoteCalls).toBe(0);
+    expect(container.textContent).not.toContain("Scheduled delivery");
+    expect(container.textContent).toContain(
+      "Instant checkout is unavailable while this store is operating in Scheduled mode",
+    );
   });
 
   it("invalidates the quote and rotates idempotency when a different address is selected", async () => {
@@ -409,14 +496,14 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("PHP 320.00");
 
     choose(container, "Office");
     await flush();
     expect(container.textContent).not.toContain("PHP 320.00");
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
 
     expect(quoteKeys).toHaveLength(2);
@@ -437,7 +524,7 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     click(container, "Edit Home address");
     click(container, "Complete checkout address save");
@@ -445,12 +532,12 @@ describe("CheckoutClient delivery inputs", () => {
 
     expect(container.textContent).not.toContain("PHP 320.00");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
   });
 
-  it("invalidates the old quote immediately and rotates idempotency for a different cycle", async () => {
+  it("changes couriers immediately and rotates quote identity", async () => {
     const quoteKeys: string[] = [];
     const base = successfulFetch({
       onQuote: (init) => quoteKeys.push(String(new Headers(init?.headers).get("idempotency-key"))),
@@ -458,6 +545,50 @@ describe("CheckoutClient delivery inputs", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/fulfillment-options")
+          return Promise.resolve(
+            json({
+              ok: true,
+              value: [
+                {
+                  optionId: "option-instant",
+                  mode: "INSTANT",
+                  eligible: true,
+                  unavailableReason: null,
+                  deliveryPartner: {
+                    code: "lalamove",
+                    displayName: "Lalamove",
+                    serviceType: "MOTORCYCLE",
+                    serviceLabel: "Motorcycle",
+                  },
+                  promisedAt: "2026-09-01T01:00:00Z",
+                  deliveryWindow: null,
+                  feePreview: null,
+                  cycleId: null,
+                  cutoffAt: null,
+                  provisional: true,
+                },
+                {
+                  optionId: "option-grab",
+                  mode: "INSTANT",
+                  eligible: true,
+                  unavailableReason: null,
+                  deliveryPartner: {
+                    code: "grab-express",
+                    displayName: "GrabExpress",
+                    serviceType: "INSTANT",
+                    serviceLabel: "Bike",
+                  },
+                  promisedAt: "2026-09-01T01:10:00Z",
+                  deliveryWindow: null,
+                  feePreview: null,
+                  cycleId: null,
+                  cutoffAt: null,
+                  provisional: true,
+                },
+              ],
+            }),
+          );
         return base(url, init);
       }),
     );
@@ -466,15 +597,59 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("PHP 320.00");
 
-    click(container, "Scheduled delivery");
+    click(container, "GrabExpress");
     await flush();
     expect(container.textContent).not.toContain("PHP 320.00");
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
     expect(container.textContent).toContain("PHP 330.00");
+  });
+
+  it("preserves explicit provider and service intent across refreshed opaque option IDs", async () => {
+    const base = successfulFetch();
+    let optionReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/fulfillment-options") {
+          optionReads += 1;
+          const suffix = optionReads === 1 ? "old" : "new";
+          return Promise.resolve(
+            json({
+              ok: true,
+              value: [
+                instantOption(`lalamove-${suffix}`, "lalamove", "Lalamove", "MOTORCYCLE"),
+                instantOption(`grab-${suffix}`, "grab-express", "GrabExpress", "INSTANT"),
+              ],
+            }),
+          );
+        }
+        return base(url, init);
+      }),
+    );
+
+    act(() => root.render(checkout()));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    const initialChoice = Array.from(container.querySelectorAll('[role="radio"]')).find((choice) =>
+      choice.textContent?.includes("Lalamove"),
+    );
+    expect(initialChoice?.getAttribute("aria-checked")).toBe("true");
+    click(container, "GrabExpress");
+    await flush();
+
+    choose(container, "Office");
+    await flush();
+
+    const grabChoice = Array.from(container.querySelectorAll('[role="radio"]')).find((choice) =>
+      choice.textContent?.includes("GrabExpress"),
+    );
+    expect(grabChoice?.getAttribute("aria-checked")).toBe("true");
+    expect(grabChoice?.getAttribute("disabled")).toBeNull();
   });
 
   it("loads delivery options when the cart arrives after address selection", async () => {
@@ -497,7 +672,7 @@ describe("CheckoutClient delivery inputs", () => {
         base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
       ).toHaveLength(1),
     );
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("Payment review");
   });
@@ -538,7 +713,7 @@ describe("CheckoutClient delivery inputs", () => {
     click(container, "Retry delivery options");
     await flush();
     expect(requests.at(-1)?.cartVersion).toBe(5);
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("Payment review");
   });
@@ -562,12 +737,12 @@ describe("CheckoutClient delivery inputs", () => {
     choose(container, "Office");
     await flush();
     expect(container.textContent).toContain("Loading delivery options");
-    expect(container.textContent).not.toContain("Instant delivery");
+    expect(container.textContent).not.toContain("Lalamove");
     choose(container, "Home");
     await flush();
     pending.resolve(json({ ok: true, value: [] }));
     await flush();
-    expect(container.textContent).toContain("Instant delivery");
+    expect(container.textContent).toContain("Lalamove");
   });
 
   it("offers recovery for network failure and distinguishes a successful empty result", async () => {
@@ -590,7 +765,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
     click(container, "Retry delivery options");
     await flush();
-    expect(container.textContent).toContain("No delivery options are available");
+    expect(container.textContent).toContain("No Instant couriers are available");
     expect(container.textContent).not.toContain("Select a confirmed address to load");
   });
   it("retains a quote after an unknown release response and retries the identical request before replacement", async () => {
@@ -615,7 +790,7 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     choose(container, "Home");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     choose(container, "Office");
     await flush();
@@ -629,7 +804,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.textContent).not.toContain("Payment review");
     choose(container, "Office");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(quotes).toHaveLength(2);
   });
@@ -647,7 +822,7 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("Payment review");
 
@@ -664,7 +839,7 @@ describe("CheckoutClient delivery inputs", () => {
       expect(container.textContent).toContain("Promo codes changed in your cart"),
     );
     expect(container.textContent).not.toContain("Payment review");
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
 
@@ -711,7 +886,7 @@ describe("CheckoutClient delivery inputs", () => {
 
     expect(container.textContent).toContain("Current");
     expect(container.textContent).not.toContain("Stale");
-    click(container, "Instant delivery");
+    click(container, "Lalamove");
     await flush();
     expect(container.textContent).toContain("Payment review");
   });

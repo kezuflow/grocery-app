@@ -72,6 +72,29 @@ function displayAddress(address: CustomerAddressView): string {
     .join(", ");
 }
 
+type DeliveryPartnerIntent = Readonly<{ code: string; serviceType: string }>;
+
+function deliveryPartnerIntent(option: FulfillmentOptionView): DeliveryPartnerIntent | null {
+  return option.deliveryPartner
+    ? { code: option.deliveryPartner.code, serviceType: option.deliveryPartner.serviceType }
+    : null;
+}
+
+function matchesDeliveryPartnerIntent(
+  option: FulfillmentOptionView,
+  intent: DeliveryPartnerIntent | null,
+) {
+  return Boolean(
+    intent &&
+    option.deliveryPartner?.code === intent.code &&
+    option.deliveryPartner.serviceType === intent.serviceType,
+  );
+}
+
+function deliveryPartnerName(option?: FulfillmentOptionView | null) {
+  return option?.deliveryPartner?.displayName ?? "the selected courier";
+}
+
 export function CheckoutClient({
   browserApiKey,
   mapId,
@@ -101,14 +124,17 @@ export function CheckoutClient({
   );
   const [editingAddress, setEditingAddress] = useState<CustomerAddressView>();
   const [showAddressEditor, setShowAddressEditor] = useState(false);
-  const [showSavedAddresses, setShowSavedAddresses] = useState(true);
   const initialAddressId =
-    checkoutDraft.draft.addressId || carriedDestination.current?.savedAddressId || "";
+    carriedDestination.current?.savedAddressId ||
+    (carriedDestination.current ? "" : checkoutDraft.draft.addressId);
   const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
   const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
   const selectedAddressId = useRef(initialAddressId);
   const selectedFulfillmentOptionId = useRef("");
+  const selectedDeliveryPartnerIntent = useRef<DeliveryPartnerIntent | null>(null);
+  const deliveryPartnerWasExplicitlySelected = useRef(false);
+  const [instantModeMismatch, setInstantModeMismatch] = useState(false);
   const [status, setStatus] = useState("");
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
@@ -225,11 +251,11 @@ export function CheckoutClient({
       const browsingDestination = carriedDestination.current;
       const requestedAddressId =
         preferredAddressId ??
-        (selectedAddressId.current ||
+        (browsingDestination?.savedAddressId ||
+          selectedAddressId.current ||
           (browsingDestination ? null : bootstrap.profile.defaultAddressId));
       const confirmed = bootstrap.addresses.find((address) => address.id === requestedAddressId);
       setCurrentAddress(confirmed?.confirmedAt ? confirmed.id : "");
-      setShowSavedAddresses(!confirmed?.confirmedAt);
       if (!(await invalidatePendingQuote())) return;
       if (preferredAddressId) {
         if (confirmed?.confirmedAt) {
@@ -242,11 +268,14 @@ export function CheckoutClient({
         setShowAddressEditor(false);
       } else if (requestedAddressId && !confirmed) {
         setStatus(
-          "The Deliver to address is no longer available to this account. Choose or add an address to continue.",
+          browsingDestination
+            ? "Your Deliver to destination needs current delivery details before checkout."
+            : "The previous checkout address is no longer available to this account. Choose or add an address to continue.",
         );
       } else if (!requestedAddressId && browsingDestination) {
-        setShowAddressEditor(true);
-        setStatus("Your Deliver to destination is ready. Add the missing delivery details.");
+        setStatus(
+          "Your Deliver to destination is saved. Complete its delivery details to continue.",
+        );
       }
     } catch {
       if (generation !== addressLoadGeneration.current) return;
@@ -318,7 +347,11 @@ export function CheckoutClient({
   async function loadFulfillmentOptions(address: CustomerAddressView) {
     const generation = ++fulfillmentLoadGeneration.current;
     setFulfillmentOptions([]);
+    fulfillmentOptionsRef.current = [];
+    selectedFulfillmentOptionId.current = "";
+    setFulfillmentOptionId("");
     setFulfillmentError("");
+    setInstantModeMismatch(false);
     if (!cart || cart.id === "guest-cart" || !cart.items.length) {
       setFulfillmentLoadState("idle");
       return;
@@ -340,16 +373,35 @@ export function CheckoutClient({
       );
       if (generation !== fulfillmentLoadGeneration.current) return;
       if (result.ok) {
-        setFulfillmentOptions(result.value);
-        fulfillmentOptionsRef.current = result.value;
+        const instantOptions = result.value.filter((option) => option.mode === "INSTANT");
+        setInstantModeMismatch(!instantOptions.length && result.value.length > 0);
+        setFulfillmentOptions(instantOptions);
+        fulfillmentOptionsRef.current = instantOptions;
         setFulfillmentLoadState("ready");
-        const eligible = result.value.filter((option) => option.eligible);
+        const intent = selectedDeliveryPartnerIntent.current;
+        const matchingOption = instantOptions.find((option) =>
+          matchesDeliveryPartnerIntent(option, intent),
+        );
+        const eligibleMatch = matchingOption?.eligible ? matchingOption : undefined;
+        const eligible = instantOptions.filter((option) => option.eligible);
+        const fallback = deliveryPartnerWasExplicitlySelected.current ? undefined : eligible[0];
+        const selected =
+          eligibleMatch ??
+          (deliveryPartnerWasExplicitlySelected.current ? matchingOption : fallback);
+        selectedFulfillmentOptionId.current = selected?.optionId ?? "";
+        setFulfillmentOptionId(selected?.optionId ?? "");
         if (
-          !paymentInProgressRef.current &&
-          eligible.length === 1 &&
-          eligible[0]?.mode === "SCHEDULED"
+          selected &&
+          (!selectedDeliveryPartnerIntent.current || !deliveryPartnerWasExplicitlySelected.current)
         )
-          void reviewTotal(eligible[0]);
+          selectedDeliveryPartnerIntent.current = deliveryPartnerIntent(selected);
+        if (intent && !eligibleMatch && deliveryPartnerWasExplicitlySelected.current) {
+          setStatus(
+            matchingOption
+              ? `${deliveryPartnerName(matchingOption)} is unavailable for this cart or destination. Choose another courier.`
+              : "Your previously selected courier is no longer configured. Choose another available courier.",
+          );
+        }
         return;
       }
       setFulfillmentLoadState("error");
@@ -357,6 +409,7 @@ export function CheckoutClient({
     } catch {
       if (generation !== fulfillmentLoadGeneration.current) return;
       setFulfillmentLoadState("error");
+      setInstantModeMismatch(false);
       setFulfillmentError("Delivery options could not be loaded. Please try again.");
     }
   }
@@ -408,7 +461,6 @@ export function CheckoutClient({
       return;
     }
     await applySelectedAddress(selected);
-    setShowSavedAddresses(false);
     setStatus("Delivery address selected. Your cart was rechecked for this destination.");
   }
 
@@ -449,11 +501,15 @@ export function CheckoutClient({
       setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       return;
     }
+    if (option.mode !== "INSTANT" || !option.eligible) {
+      setStatus("Choose an available Instant courier before continuing.");
+      return;
+    }
     if (pendingQuoteRef.current || option.optionId !== selectedFulfillmentOptionId.current) {
       if (!(await invalidatePendingQuote())) return;
       selectedFulfillmentOptionId.current = option.optionId;
       setFulfillmentOptionId(option.optionId);
-      setStatus("Checking the selected delivery range and current total.");
+      setStatus(`Checking ${deliveryPartnerName(option)} and the current total.`);
     }
     const quoteInput = {
       addressId: selectedAddressId.current,
@@ -465,7 +521,7 @@ export function CheckoutClient({
     if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
     setQuoteLoadState("loading");
     setQuoteError("");
-    setStatus("Checking the Lalamove route and delivery fee…");
+    setStatus(`Checking ${deliveryPartnerName(option)} route availability and delivery fee…`);
     // 1) Core-authoritative quote. Core recalculates before payment and any
     // changed total must be accepted through a new attempt.
     try {
@@ -527,10 +583,16 @@ export function CheckoutClient({
       setPendingQuote(null);
       setQuoteLoadState("error");
       setQuoteError(
-        "The delivery fee could not be confirmed because Lalamove could not be reached. Retry the delivery quotation.",
+        `${deliveryPartnerName(option)} could not be reached to confirm the delivery fee. Retry the delivery quotation.`,
       );
       setStatus("");
     }
+  }
+
+  function selectDeliveryOption(option: FulfillmentOptionView) {
+    selectedDeliveryPartnerIntent.current = deliveryPartnerIntent(option);
+    deliveryPartnerWasExplicitlySelected.current = true;
+    void reviewTotal(option);
   }
 
   async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
@@ -649,6 +711,13 @@ export function CheckoutClient({
   const selectedFulfillmentOption = fulfillmentOptions.find(
     (option) => option.optionId === fulfillmentOptionId,
   );
+  const selectedEligibleFulfillmentOption = selectedFulfillmentOption?.eligible
+    ? selectedFulfillmentOption
+    : undefined;
+  const alternativeAddresses = selectedAddress
+    ? addresses.filter((address) => address.id !== selectedAddress.id)
+    : addresses;
+  const browsingDestination = selectedAddress ? null : carriedDestination.current;
   return (
     <>
       <div className="min-h-[100dvh] w-full bg-[var(--fm-background)]">
@@ -666,7 +735,7 @@ export function CheckoutClient({
                 Review your order
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--fm-text-muted)]">
-                Confirm where and when we should deliver. Your current total stays visible while you
+                Confirm your destination and courier. Your current total stays visible while you
                 complete the details.
               </p>
             </div>
@@ -749,16 +818,16 @@ export function CheckoutClient({
                   <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-5">
                     <div className="flex items-start gap-3">
                       <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
-                        {selectedAddress ? (
+                        {selectedAddress?.confirmedAt ? (
                           <CheckCircle2 className="size-5" aria-hidden="true" />
                         ) : (
                           <MapPin className="size-5" aria-hidden="true" />
                         )}
                       </span>
                       <div>
-                        <h2 className="mt-1 text-xl font-bold">Where should we deliver?</h2>
+                        <h2 className="mt-1 text-xl font-bold">Deliver to</h2>
                         <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                          Choose a saved destination or confirm the details for Deliver to.
+                          Review your current destination or choose another saved address.
                         </p>
                       </div>
                     </div>
@@ -777,62 +846,74 @@ export function CheckoutClient({
                     </button>
                   </div>
 
-                  {selectedAddress ? (
+                  {selectedAddress || browsingDestination ? (
                     <div className="mt-5 flex items-start gap-3 border-y border-[var(--fm-border)] py-4">
                       <span className="grid size-9 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         <MapPin className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold">{selectedAddress.label}</p>
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--fm-success)]">
-                            <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-                            Confirmed
-                          </span>
+                          <p className="font-bold">
+                            {selectedAddress?.label ?? "Current destination"}
+                          </p>
+                          {selectedAddress ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--fm-success)]">
+                              <span
+                                className="size-1.5 rounded-full bg-current"
+                                aria-hidden="true"
+                              />
+                              Confirmed
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-[var(--fm-warning-text)]">
+                              Details needed
+                            </span>
+                          )}
                         </div>
                         <p className="mt-1 text-sm leading-5 text-[var(--fm-text-muted)]">
-                          {displayAddress(selectedAddress)}
+                          {selectedAddress
+                            ? displayAddress(selectedAddress)
+                            : browsingDestination?.displayAddress}
                         </p>
-                        <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
-                          {selectedAddress.recipient} · {selectedAddress.phone}
-                        </p>
+                        {selectedAddress ? (
+                          <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
+                            {selectedAddress.recipient} · {selectedAddress.phone}
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-xs leading-5 text-[var(--fm-text-muted)]">
+                            Add the recipient and phone, then confirm this entrance pin before
+                            delivery can be quoted.
+                          </p>
+                        )}
                         <div className="mt-3 flex flex-wrap gap-3">
                           <button
                             type="button"
-                            aria-label={`Edit ${selectedAddress.label} address`}
+                            aria-label={
+                              selectedAddress
+                                ? `Edit ${selectedAddress.label} address`
+                                : "Complete delivery details"
+                            }
                             onClick={() => {
                               setEditingAddress(selectedAddress);
                               setShowAddressEditor(true);
                             }}
                             className="text-xs font-bold text-[var(--fm-primary-dark)] underline underline-offset-4"
                           >
-                            Edit details
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Change saved address"
-                            onClick={() => setShowSavedAddresses((current) => !current)}
-                            className="text-xs font-bold text-[var(--fm-primary-dark)] underline underline-offset-4"
-                          >
-                            {showSavedAddresses ? "Hide saved addresses" : "Choose another"}
+                            {selectedAddress ? "Edit details" : "Complete delivery details"}
                           </button>
                         </div>
                       </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="mt-5 border-y border-[var(--fm-border)] py-4 text-sm text-[var(--fm-text-muted)]">
+                      Choose a saved address or add a destination to continue.
+                    </p>
+                  )}
 
-                  <div
-                    className={
-                      selectedAddress && !showSavedAddresses && addressLoadState === "ready"
-                        ? "pt-5"
-                        : "pt-5 sm:pt-6"
-                    }
-                  >
-                    {!selectedAddress || showSavedAddresses ? (
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                        Saved addresses
-                      </p>
-                    ) : null}
+                  <div className="pt-5 sm:pt-6">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                      {selectedAddress ? "Other saved addresses" : "Saved addresses"}
+                    </p>
                     {addressLoadState === "loading" ? (
                       <p role="status" className="text-sm text-[var(--fm-text-muted)]">
                         Loading saved delivery addresses…
@@ -848,9 +929,9 @@ export function CheckoutClient({
                           Retry address load
                         </button>
                       </div>
-                    ) : !selectedAddress || showSavedAddresses ? (
+                    ) : alternativeAddresses.length ? (
                       <AddressList
-                        addresses={addresses}
+                        addresses={alternativeAddresses}
                         defaultAddressId={profile?.defaultAddressId}
                         selectedAddressId={addressId}
                         onSelect={selectAddress}
@@ -860,7 +941,13 @@ export function CheckoutClient({
                         }}
                         variant="flat"
                       />
-                    ) : null}
+                    ) : (
+                      <p className="text-sm text-[var(--fm-text-muted)]">
+                        {selectedAddress
+                          ? "No other saved addresses."
+                          : "No saved addresses yet. Complete the current destination or add one."}
+                      </p>
+                    )}
                   </div>
                 </section>
 
@@ -871,11 +958,12 @@ export function CheckoutClient({
                     </span>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                        Delivery option
+                        Delivery
                       </p>
-                      <h2 className="mt-1 text-xl font-bold">Choose when it arrives</h2>
+                      <h2 className="mt-1 text-xl font-bold">Choose a courier</h2>
                       <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                        Lalamove confirms route availability and the current fee for this address.
+                        Available Instant couriers confirm the route and current fee for this
+                        address.
                       </p>
                     </div>
                   </div>
@@ -896,7 +984,7 @@ export function CheckoutClient({
                             }
                           : undefined
                       }
-                      onSelect={(option) => void reviewTotal(option)}
+                      onSelect={selectDeliveryOption}
                     />
                   ) : (
                     <div className="mt-4 flex items-start gap-3 border-t border-[var(--fm-border)] pt-4 text-sm text-[var(--fm-text-muted)]">
@@ -909,11 +997,13 @@ export function CheckoutClient({
                               ? "Loading delivery options…"
                               : fulfillmentLoadState === "error"
                                 ? fulfillmentError
-                                : guest
-                                  ? "Sign in to load delivery options."
-                                  : !cart?.items.length
-                                    ? "Your cart must be loaded and contain items to check delivery."
-                                    : "No delivery options are available for this address right now."}
+                                : instantModeMismatch
+                                  ? "Instant checkout is unavailable while this store is operating in Scheduled mode. Try again after the store switches and reopens Instant ordering."
+                                  : guest
+                                    ? "Sign in to load delivery options."
+                                    : !cart?.items.length
+                                      ? "Your cart must be loaded and contain items to check delivery."
+                                      : "No Instant couriers are available for this address right now."}
                         </p>
                         {selectedAddress?.confirmedAt &&
                           !guest &&
@@ -934,7 +1024,8 @@ export function CheckoutClient({
                       role="status"
                       className="mt-4 border-t border-[var(--fm-border)] pt-3 text-sm text-[var(--fm-text-muted)]"
                     >
-                      Checking the Lalamove route and delivery fee…
+                      Checking {deliveryPartnerName(selectedFulfillmentOption)} route and delivery
+                      fee…
                     </p>
                   ) : quoteError ? (
                     <div
@@ -942,11 +1033,11 @@ export function CheckoutClient({
                       className="mt-4 border-t border-red-200 pt-3 text-sm text-red-800"
                     >
                       <p>{quoteError}</p>
-                      {selectedFulfillmentOption ? (
+                      {selectedEligibleFulfillmentOption ? (
                         <button
                           type="button"
                           className="mt-2 min-h-11 font-semibold underline underline-offset-4"
-                          onClick={() => void reviewTotal(selectedFulfillmentOption)}
+                          onClick={() => void reviewTotal(selectedEligibleFulfillmentOption)}
                         >
                           Try quotation again
                         </button>
@@ -1005,18 +1096,20 @@ export function CheckoutClient({
                       ? "Accept total and continue to payment"
                       : quoteLoadState === "loading"
                         ? "Checking delivery fee…"
-                        : quoteError && selectedFulfillmentOption
+                        : quoteError && selectedEligibleFulfillmentOption
                           ? "Retry delivery quotation"
-                          : addressId
-                            ? "Choose a delivery option"
-                            : "Select a delivery address"
+                          : selectedFulfillmentOption && !selectedFulfillmentOption.eligible
+                            ? "Selected courier unavailable"
+                            : addressId
+                              ? "Review delivery fee"
+                              : "Select a delivery address"
               }
               actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
               onAction={
                 pendingQuote
                   ? confirmPayment
-                  : selectedFulfillmentOption
-                    ? () => void reviewTotal(selectedFulfillmentOption)
+                  : selectedEligibleFulfillmentOption
+                    ? () => void reviewTotal(selectedEligibleFulfillmentOption)
                     : undefined
               }
               disabled={
@@ -1025,7 +1118,7 @@ export function CheckoutClient({
                   : acceptingPayment ||
                     quoteLoadState === "loading" ||
                     Boolean(cart?.checkoutBlocked) ||
-                    (!pendingQuote && !selectedFulfillmentOption)
+                    (!pendingQuote && !selectedEligibleFulfillmentOption)
               }
               showItems
               onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}

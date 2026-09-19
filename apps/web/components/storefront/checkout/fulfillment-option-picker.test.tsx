@@ -2,12 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FulfillmentOptionPicker } from "./fulfillment-option-picker";
 describe("FulfillmentOptionPicker", () => {
-  it("presents delivery promises without internal location or window labels", () => {
+  it("presents compact branded Instant courier choices", () => {
     const html = renderToStaticMarkup(
       <FulfillmentOptionPicker
         disabled={false}
         selectedOptionId="opaque"
-        loadingOptionId="opaque-2"
         quotedFee={{ optionId: "opaque", amountMinor: 5000, currency: "PHP" }}
         onSelect={() => undefined}
         options={[
@@ -36,24 +35,20 @@ describe("FulfillmentOptionPicker", () => {
           },
           {
             optionId: "opaque-2",
-            mode: "SCHEDULED",
-            eligible: true,
-            unavailableReason: null,
+            mode: "INSTANT",
+            eligible: false,
+            unavailableReason: "DELIVERY_PARTNER_UNAVAILABLE",
+            deliveryPartner: {
+              code: "grab-express",
+              displayName: "GrabExpress",
+              serviceType: "INSTANT",
+              serviceLabel: "Bike",
+            },
             promisedAt: null,
-            deliveryWindow: {
-              windowId: "internal-window",
-              name: "Internal window name",
-              startsAt: "2026-09-08T02:00:00Z",
-              endsAt: "2026-09-08T04:00:00Z",
-            },
-            feePreview: {
-              subtotalMinor: 5000,
-              discountMinor: 0,
-              totalMinor: 5000,
-              currency: "PHP",
-            },
-            cycleId: "scheduled-cycle",
-            cutoffAt: "2026-09-07T00:00:00Z",
+            deliveryWindow: null,
+            feePreview: null,
+            cycleId: null,
+            cutoffAt: null,
             provisional: true,
           },
         ]}
@@ -61,13 +56,16 @@ describe("FulfillmentOptionPicker", () => {
     );
     expect(html).toContain("Lalamove");
     expect(html).toContain("Motorcycle");
-    expect(html).toContain("Scheduled delivery");
+    expect(html).toContain("GrabExpress");
+    expect(html).toContain('data-provider-icon="lalamove"');
+    expect(html).toContain('data-provider-icon="grab-express"');
     expect(html).toContain("₱50.00");
-    expect(html).toContain("Checking fee…");
+    expect(html).toContain("delivery partner unavailable");
     expect(html).not.toContain("Calculated on review");
-    expect(html).toContain("9/8/2026");
     expect(html).not.toContain("Internal window name");
-    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("disabled");
     expect(html).not.toMatch(/hub|location-cebu/i);
     expect(html).toContain("divide-y");
     expect(html).not.toContain("fm-shadow-card");

@@ -2,14 +2,13 @@
 
 ## Latest owner request — CHECKOUT-CART-SIMPLIFICATION-1 (2026-09-19)
 
-Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence B — CK-07 shared promotion draft**,
+Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence C — CK-01, CK-03 and CK-02 authoritative delivery inputs**,
 continuing `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
 evidence**. The owner supplied and authorized the seven-slice checkout/cart plan. Overall acceptance
 is CK-01 through CK-07 at application, Worker/D1 and relevant browser level; deployment, a live mode
-switch and actual courier/payment transactions remain separate. The active dependency slice is CK-07:
-one normalized promotion-intent draft shared reactively by the Cart drawer, `/cart` and checkout,
-distinct entered versus Core-applied status, Cart/account scoping, successor-Cart reset, one bounded
-guest-to-account handoff and no address/contact persistence.
+switch and actual courier/payment transactions remain separate. The active dependency slice combines
+the current browsing destination and saved alternatives, an Instant-only new customer checkout, and
+compact provider-aware selection while retaining Core mode/provider/opaque-option authority.
 
 Sequence A started from clean `main` and `origin/main` at
 `264cf5cf4035cdbe6ac0989635e58168525fe0ec`. The delivered implementation replaces the former
@@ -43,15 +42,39 @@ eligibility-pending state from quote-backed applied/rejected feedback; quote res
 cart path. Instance-safe labels, pending interaction guards and the compact drawer presentation are
 covered by component tests.
 
-Verification on the complete CK-07 working tree: formatting, naming, terminology, architecture,
+Verification on the complete CK-07 implementation: formatting, naming, terminology, architecture,
 readiness and diff-whitespace checks pass; lint passes with the same two pre-existing address-book
 unused-variable warnings; all package typechecks pass. Focused draft/promotion/drawer/summary/checkout
 coverage passes 6 files / 33 tests. The complete Web suite passes 139 files / 580 tests, and the
 production Web build passes. This is source and local build acceptance; no browser journey,
 deployment, provider transaction or environment switch is claimed. CK-07 is complete at this slice's
-application/local-acceptance level; commit and push are pending. Remaining at the seven-ID plan
-level: CK-01, CK-02, CK-03, CK-04 and CK-05. Next action: commit and push CK-07, then start Sequence C
-/ CK-01, CK-03 and CK-02 authoritative delivery inputs.
+application/local-acceptance level. Implementation commit `fcb1a290` is pushed to `origin/main`.
+
+Sequence C started from clean `main` and `origin/main` at `fcb1a290`. The working tree keeps an
+unsaved browsing destination visible as Deliver to with a prefilled Complete delivery details path,
+renders saved alternatives concurrently, removes the current saved identity from that alternative
+list, reauthorizes saved identities against bootstrap and gives a current explicit browsing choice
+precedence over an older checkout draft. Fulfillment discovery remains Core-owned and provider-free;
+Web presents only returned Instant options, reports a Scheduled-only Core result as an unavailable
+mode mismatch and never falls back. Compact single-selection courier rows map the controlled
+provider code to local Lalamove/Grab-aware marks with visible names/services, stable price space,
+disabled returned reasons and keyboard focus. The first eligible Core-ordered option is a visible
+editable default, while an explicit provider/service preference survives refreshed opaque IDs and is
+not silently replaced when unavailable. Quotation and failure copy names the selected provider rather
+than hard-coding Lalamove. No Core mode, provider configuration or historical Scheduled behavior was
+changed.
+
+Verification on the complete Sequence C working tree: formatting, naming, terminology, architecture,
+readiness and diff-whitespace checks pass; lint passes with the same two pre-existing address-book
+warnings; all package typechecks pass. Focused checkout/picker coverage passes 3 files / 19 tests,
+including unsaved destination visibility, explicit-over-stale-draft precedence, no duplicate current
+saved identity, Scheduled-mode fail-closed behavior, provider switching and provider/service intent
+across new opaque IDs. The complete Web suite passes 139 files / 583 tests and the production Web build
+passes. This is source and local build acceptance; no real browser journey, deployment, live mode
+switch, provider quotation or courier transaction is claimed. CK-01, CK-02 and CK-03 are complete at
+this slice's application/local-acceptance level; commit and push are pending. Remaining at the
+seven-ID plan level: CK-04 and CK-05. Next action: commit and push Sequence C, then start Sequence D /
+CK-04 and CK-05 single summary and automatic quotation lifecycle.
 
 ## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
 
