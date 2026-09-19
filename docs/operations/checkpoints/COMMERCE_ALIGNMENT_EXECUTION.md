@@ -39,6 +39,9 @@ a test summary; the non-overlapping constrained rerun (`--maxWorkers=1 --no-file
 provider acceptance. F01, F02 and F07 are complete at application-source/local-acceptance level.
 F03 and F04 are closed by owner decision. F05 and the narrowed F08 abuse-control verification remain
 launch acceptance; F06 remains measurement-gated; broad F09 refactoring remains rejected.
+Implementation commit `ab8d3cbc` is pushed to `origin/main`. Remaining at this request level: zero
+implementation, deployment or provider actions; production-instance creation and the retained launch
+acceptance obligations remain separately authorized future work.
 
 ## Latest owner request — STOREFRONT-CHECKOUT-POLISH-1 (2026-09-14)
 
