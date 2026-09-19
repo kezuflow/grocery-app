@@ -11,6 +11,7 @@ import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-r
 import { createCheckoutRepository } from "../infrastructure/d1-checkout-repository";
 import { revalidateCheckoutQuote } from "./revalidate-checkout-quote";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
+import { listFulfillmentOptions } from "./list-fulfillment-options";
 
 const LOCATION = "location-cebu-central";
 const deliveryProvider = createMockDeliveryProvider();
@@ -67,9 +68,9 @@ async function seedBasket(options: {
   }
   const addressId = `addr-${customerId}`;
   await env.DB.prepare(
-    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, created_at, updated_at) VALUES (?, ?, 'Home', 'Inst Test', '+639171234567', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?)",
+    "INSERT INTO customer_address (id, customer_id, label, recipient, phone, address_json, latitude, longitude, service_area_code, delivery_zone_code, status, version, user_confirmed_at, created_at, updated_at) VALUES (?, ?, 'Home', 'Inst Test', '+639171234567', '{}', 10.32, 123.9, 'CEBU_CITY', ?, 'active', 1, ?, ?, ?)",
   )
-    .bind(addressId, customerId, ZONE_CODE, now, now)
+    .bind(addressId, customerId, ZONE_CODE, now, now, now)
     .run();
   const cartId = `cart-${customerId}`;
   await env.DB.prepare(
@@ -126,6 +127,32 @@ function command(customerId: string, cartId: string, addressId: string) {
     idempotencyKey: `quote-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
   };
+}
+
+async function instantOptions(basket: { customerId: string; cartId: string; addressId: string }) {
+  return listFulfillmentOptions(
+    env.DB,
+    quoteDependencies.routeDistance,
+    {
+      customerId: basket.customerId,
+      addressId: basket.addressId,
+      addressVersion: 1,
+      cartId: basket.cartId,
+      cartVersion: 1,
+      requestId: crypto.randomUUID(),
+    },
+    {
+      instantDeliveryPartners: [
+        {
+          providerCode: "lalamove",
+          displayName: "Lalamove",
+          serviceType: "MOTORCYCLE",
+          serviceLabel: "Motorcycle",
+          provider: deliveryProvider,
+        },
+      ],
+    },
+  );
 }
 
 describe("instant checkout quotes", () => {
@@ -465,7 +492,93 @@ describe("instant checkout quotes", () => {
 
     // Idempotent replay returns the same immutable quote.
     const replay = await createCheckoutQuote(env.DB, quoteCommand, quoteDependencies);
-    void replay;
+    expect(replay).toMatchObject({ ok: true, value: { quoteId: result.value.quoteId } });
+  });
+
+  it("returns one immutable receipt for concurrent identical idempotent commands", async () => {
+    await configureInstant();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const request = command(basket.customerId, basket.cartId, basket.addressId);
+
+    const results = await Promise.all([
+      createCheckoutQuote(env.DB, request, quoteDependencies),
+      createCheckoutQuote(
+        env.DB,
+        { ...request, requestId: crypto.randomUUID() },
+        quoteDependencies,
+      ),
+    ]);
+
+    expect(results.every((result) => result.ok)).toBe(true);
+    if (!results[0]?.ok || !results[1]?.ok) return;
+    expect(results[1].value.quoteId).toBe(results[0].value.quoteId);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM checkout_quote WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it("rejects concurrent payload reuse of one idempotency key", async () => {
+    await configureInstant();
+    const basket = await seedBasket({ onHand: 100_000, member: false });
+    const request = command(basket.customerId, basket.cartId, basket.addressId);
+
+    const results = await Promise.all([
+      createCheckoutQuote(env.DB, request, quoteDependencies),
+      createCheckoutQuote(
+        env.DB,
+        {
+          ...request,
+          promotionCodes: [`UNKNOWN_${crypto.randomUUID()}`],
+          requestId: crypto.randomUUID(),
+        },
+        quoteDependencies,
+      ),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+  });
+
+  it("rejects concurrent cross-customer reuse without returning the winning quote", async () => {
+    await configureInstant();
+    const firstBasket = await seedBasket({ onHand: 100_000, member: false });
+    const secondBasket = await seedBasket({ onHand: 100_000, member: false });
+    const idempotencyKey = `shared-${crypto.randomUUID()}`;
+
+    const results = await Promise.all([
+      createCheckoutQuote(
+        env.DB,
+        {
+          ...command(firstBasket.customerId, firstBasket.cartId, firstBasket.addressId),
+          idempotencyKey,
+        },
+        quoteDependencies,
+      ),
+      createCheckoutQuote(
+        env.DB,
+        {
+          ...command(secondBasket.customerId, secondBasket.cartId, secondBasket.addressId),
+          idempotencyKey,
+        },
+        quoteDependencies,
+      ),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM checkout_quote WHERE idempotency_key=?")
+        .bind(idempotencyKey)
+        .first(),
+    ).toEqual({ count: 1 });
   });
 
   it("quotes the fixed courier parcel when a non-gram line has no shipping estimate", async () => {
@@ -623,6 +736,50 @@ describe("instant checkout quotes", () => {
         .bind(quote.id)
         .first(),
     ).toEqual({ count: 0 });
+  });
+
+  it("applies the same concurrent replay rules to Scheduled quotes", async () => {
+    await env.DB.prepare(
+      "UPDATE global_commerce_configuration SET selling_state='OPEN',fulfillment_mode='SCHEDULED',cadence='WEEKLY',version=version+1,updated_at=? WHERE id='global'",
+    )
+      .bind(Date.now())
+      .run();
+    const basket = await seedBasket({ onHand: 0, member: false });
+    const identical = {
+      ...command(basket.customerId, basket.cartId, basket.addressId),
+      deliveryCycleId: "cycle-next-cebu",
+    };
+
+    const identicalResults = await Promise.all([
+      createCheckoutQuote(env.DB, identical, quoteDependencies),
+      createCheckoutQuote(
+        env.DB,
+        { ...identical, requestId: crypto.randomUUID() },
+        quoteDependencies,
+      ),
+    ]);
+    expect(identicalResults.every((result) => result.ok)).toBe(true);
+    if (!identicalResults[0]?.ok || !identicalResults[1]?.ok) return;
+    expect(identicalResults[1].value.quoteId).toBe(identicalResults[0].value.quoteId);
+
+    const conflicting = { ...identical, idempotencyKey: crypto.randomUUID() };
+    const conflictingResults = await Promise.all([
+      createCheckoutQuote(env.DB, conflicting, quoteDependencies),
+      createCheckoutQuote(
+        env.DB,
+        {
+          ...conflicting,
+          promotionCodes: [`UNKNOWN_${crypto.randomUUID()}`],
+          requestId: crypto.randomUUID(),
+        },
+        quoteDependencies,
+      ),
+    ]);
+    expect(conflictingResults.filter((result) => result.ok)).toHaveLength(1);
+    expect(conflictingResults.find((result) => !result.ok)).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
   });
 
   it("uses one fixed 20 kg parcel without deriving an order limit from line metadata", async () => {
@@ -922,6 +1079,11 @@ describe("instant checkout quotes", () => {
       quoteDependencies,
     );
     expect(first.ok).toBe(true);
+    const options = await instantOptions(basket);
+    expect(options).toMatchObject({
+      ok: true,
+      value: [{ eligible: true, unavailableReason: null }],
+    });
     const second = await createCheckoutQuote(
       env.DB,
       command(basket.customerId, basket.cartId, basket.addressId),
@@ -939,6 +1101,64 @@ describe("instant checkout quotes", () => {
         { status: "HELD", count: 1 },
       ]),
     );
+  });
+
+  it("keeps a payment-locked own hold unavailable for replacement", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE checkout_inventory_holds SET status='EXPIRED' WHERE status='HELD'",
+    ).run();
+    const basket = await seedBasket({ onHand: 2_500, member: false });
+    const quote = await createCheckoutQuote(
+      env.DB,
+      command(basket.customerId, basket.cartId, basket.addressId),
+      quoteDependencies,
+    );
+    if (!quote.ok) throw new Error(quote.error.message);
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,?,'PHP','INITIATED',?,1,?,?)",
+    )
+      .bind(
+        crypto.randomUUID(),
+        quote.value.quoteId,
+        basket.customerId,
+        quote.value.totalMinor,
+        crypto.randomUUID(),
+        now,
+        now,
+      )
+      .run();
+
+    expect(await instantOptions(basket)).toMatchObject({
+      ok: true,
+      value: [{ eligible: false, unavailableReason: "INVENTORY_UNAVAILABLE" }],
+    });
+  });
+
+  it("aggregates multiple variants that consume the same physical pool", async () => {
+    await configureInstant();
+    await env.DB.prepare(
+      "UPDATE checkout_inventory_holds SET status='EXPIRED' WHERE status='HELD'",
+    ).run();
+    const basket = await seedBasket({ onHand: 1_000, quantity: 1, member: false });
+    await env.DB.prepare(
+      "INSERT INTO cart_item(cart_id,sku_id,quantity) VALUES (?,'sku-red-onion-1kg',1)",
+    )
+      .bind(basket.cartId)
+      .run();
+
+    expect(await instantOptions(basket)).toMatchObject({
+      ok: true,
+      value: [{ eligible: false, unavailableReason: "INVENTORY_UNAVAILABLE" }],
+    });
+    expect(
+      await createCheckoutQuote(
+        env.DB,
+        command(basket.customerId, basket.cartId, basket.addressId),
+        quoteDependencies,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "INSUFFICIENT_STOCK" } });
   });
 
   it("reuses an unexpired courier quote after cart changes but re-quotes for an address change", async () => {

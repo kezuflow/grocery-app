@@ -1,5 +1,45 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PRODUCTION-REVIEW-FIXES-1 (2026-09-19)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner reviewed external production-readiness findings F01-F09, explicitly declined F04's
+checked-in CI/release-gate proposal, and clarified that F03 is an intentional local-to-staging
+workflow: `pnpm dev` may use staging resources, while future production will use newly provisioned
+isolated instances. Owner then authorized the agreed immediate implementation scope: F01 safe quote
+idempotency replay, F02 consistent Instant shared-pool/own-hold availability, and F07 scheduler timing
+and failure-detail hardening. Acceptance: identical concurrent quote commands replay one immutable
+receipt in both modes; incompatible payloads or owners receive `IDEMPOTENCY_CONFLICT`; option
+discovery and quote creation aggregate whole-cart demand by physical pool, ignore only replaceable
+own holds and preserve payment-locked holds; scheduler records actual per-job start/finish time while
+retaining logical tick time for business rules and never persists raw exception text. No schema,
+public contract, deployment, provider transaction, outbound message or remote-data change.
+
+Start: `main` at `21680c384273209c783b114dddf1e59ed50f689c`; preserved the owner's unrelated modified
+storefront files and untracked Meat/Seafood routes. Implementation uses one replay matcher for the
+ordinary and uniqueness-race paths, includes customer/cart/cart-version/address/cycle/window/option
+and normalized promotion evidence, and recognizes only the quote idempotency constraint as a replay
+race. One shared Instant inventory query now aggregates cart demand by stock pool for discovery and
+quote creation. It excludes an own hold only when no started/successful/unknown-outcome payment
+protects that quote; the existing transaction-local stock guard remains authoritative. Scheduler job
+records use an injectable wall clock around each job, retain the supplied logical `now` in job
+context, omit failed-job detail, and no longer log the database exception message if observation
+recording itself fails.
+
+Verification on the intended working-tree slice: Core typecheck passes; focused Worker/D1 suites
+pass 3 files / 41 tests, covering Instant and Scheduled identical/incompatible concurrency,
+cross-customer key reuse, own-hold replacement, payment-locked holds, combined variants, last-stock
+competition, timestamps and secret-bearing exception text. The initial focused run exposed an older
+fixture without the confirmation timestamp required by fulfillment-option discovery; the fixture was
+corrected to model a confirmed address and the final run passes. Intended-file format/lint and diff
+checks, architecture/readiness guards, migration verification and the Core Wrangler dry-run pass.
+The normal two-worker complete Core invocation exited natively with Windows code `3221226505` before
+a test summary; the non-overlapping constrained rerun (`--maxWorkers=1 --no-file-parallelism`) passes
+206 files / 1,677 tests in 800.80 seconds. This is local Worker/D1 evidence, not deployed or actual
+provider acceptance. F01, F02 and F07 are complete at application-source/local-acceptance level.
+F03 and F04 are closed by owner decision. F05 and the narrowed F08 abuse-control verification remain
+launch acceptance; F06 remains measurement-gated; broad F09 refactoring remains rejected.
+
 ## Latest owner request — STOREFRONT-CHECKOUT-POLISH-1 (2026-09-14)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

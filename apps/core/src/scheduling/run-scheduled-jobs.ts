@@ -19,18 +19,12 @@ import {
 } from "../notifications/infrastructure/email-delivery-port";
 import type { NotificationQueueProducer } from "../notifications/application/notification-queue";
 
-const MAX_DETAIL_LENGTH = 200;
-
-function errorDetail(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.slice(0, MAX_DETAIL_LENGTH);
-}
-
 async function recordJobRun(
   database: D1Database,
   jobName: string,
   cronExpression: string,
   startedAt: number,
+  finishedAt: number,
   outcome: ScheduledJobOutcome,
 ): Promise<void> {
   try {
@@ -45,16 +39,15 @@ async function recordJobRun(
         outcome.status,
         outcome.affected ?? null,
         outcome.errorCode ?? null,
-        outcome.detail ?? null,
+        outcome.status === "FAILED" ? null : (outcome.detail ?? null),
         startedAt,
-        startedAt,
+        finishedAt,
       )
       .run();
-  } catch (error) {
+  } catch {
     // Observability must never mask the job's own outcome.
     log("error", "scheduling.job_run.record_failed", {
       job: jobName,
-      reason: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -78,9 +71,11 @@ export async function runRegisteredJobs(
   applicationOrigin?: string,
   productMedia?: R2Bucket,
   deliveryProviders?: import("./types").ScheduledJobContext["deliveryProviders"],
+  clock: () => number = Date.now,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
   for (const job of jobs) {
+    const startedAt = clock();
     let outcome: ScheduledJobOutcome;
     try {
       outcome = await job.run({
@@ -93,10 +88,11 @@ export async function runRegisteredJobs(
         productMedia,
         deliveryProviders,
       });
-    } catch (error) {
-      outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR", detail: errorDetail(error) };
+    } catch {
+      outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR" };
     }
-    await recordJobRun(database, job.name, cronExpression, now, outcome);
+    const finishedAt = Math.max(startedAt, clock());
+    await recordJobRun(database, job.name, cronExpression, startedAt, finishedAt, outcome);
     outcomes.push(outcome);
   }
   return outcomes;

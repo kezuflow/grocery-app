@@ -139,6 +139,57 @@ describe("runRegisteredJobs", () => {
     expect(rows[1]).toMatchObject({ job_name: "iso.after", status: "SUCCEEDED" });
   });
 
+  it("records per-job wall-clock duration and never persists raw failure text", async () => {
+    const readings = [1_000, 1_125, 2_000, 2_090];
+    const clock = () => readings.shift() ?? 2_090;
+    const secretBearingMessage = "token=provider-secret customer@example.com 123 Customer Street";
+
+    const outcomes = await runRegisteredJobs(
+      env.DB,
+      "* * * * *",
+      NOW,
+      [
+        stubJob("timing.ok", { status: "SUCCEEDED", affected: 1, detail: "one effect" }),
+        stubJob("timing.failed", new Error(secretBearingMessage)),
+      ],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      clock,
+    );
+
+    expect(outcomes).toEqual([
+      { status: "SUCCEEDED", affected: 1, detail: "one effect" },
+      { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR" },
+    ]);
+    const rows = await env.DB.prepare(
+      "SELECT job_name,detail,started_at,finished_at FROM scheduled_job_run WHERE job_name LIKE 'timing.%' ORDER BY rowid",
+    ).all<{
+      job_name: string;
+      detail: string | null;
+      started_at: number;
+      finished_at: number;
+    }>();
+    expect(rows.results).toEqual([
+      {
+        job_name: "timing.ok",
+        detail: "one effect",
+        started_at: 1_000,
+        finished_at: 1_125,
+      },
+      {
+        job_name: "timing.failed",
+        detail: null,
+        started_at: 2_000,
+        finished_at: 2_090,
+      },
+    ]);
+    expect(JSON.stringify(rows.results)).not.toContain(secretBearingMessage);
+  });
+
   it("applies due scheduled cancellations exactly once across repeated fires", async () => {
     const subscriptionId = await seedDueScheduledCancellation(NOW);
     const first = await runScheduledJobs(env, "* * * * *", NOW);

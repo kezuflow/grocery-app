@@ -1,6 +1,10 @@
 import type { FulfillmentOptionView, RpcResult } from "@freshmarkets/contracts";
 import { requestHash } from "../../idempotency";
 import type { RouteDistancePort } from "../../geography/ports/route-distance";
+import {
+  hasSufficientInstantInventory,
+  loadInstantInventoryAvailability,
+} from "./instant-inventory-availability";
 import { operationalCandidates } from "../../geography/application/operational-candidates";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
@@ -122,15 +126,11 @@ export async function listFulfillmentOptions(
     };
     let cycles: CycleWindow[] = [];
     if (candidate && mode === "INSTANT") {
-      const unavailable = await database
-        .prepare(
-          `SELECT 1 found FROM cart_item ci JOIN sku s ON s.id=ci.sku_id JOIN product p ON p.id=s.product_id
-         LEFT JOIN inventory_balance b ON b.location_id=? AND b.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id)
-         WHERE ci.cart_id=? AND (COALESCE(b.on_hand-b.reserved,0)-COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.location_id=? AND h.inventory_pool_id=COALESCE(s.stock_pool_id,p.inventory_pool_id) AND h.status='HELD'),0) < ci.quantity*s.consumption_base_quantity) LIMIT 1`,
-        )
-        .bind(candidate.locationId, query.cartId, candidate.locationId)
-        .first();
-      if (unavailable) reason = "INVENTORY_UNAVAILABLE";
+      const inventoryDemands = await loadInstantInventoryAvailability(database, {
+        cartId: query.cartId,
+        locationId: candidate.locationId,
+      });
+      if (!hasSufficientInstantInventory(inventoryDemands)) reason = "INVENTORY_UNAVAILABLE";
     }
     if (candidate && mode === "SCHEDULED") {
       for (const operationalCandidate of orderedCandidates) {

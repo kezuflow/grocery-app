@@ -26,6 +26,14 @@ import {
   type CanonicalBaseUnitCode,
 } from "../../fulfillment/domain/delivery-package";
 import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-provider-delivery";
+import {
+  hasSufficientInstantInventory,
+  loadInstantInventoryAvailability,
+} from "./instant-inventory-availability";
+import {
+  checkoutQuoteMatchesCommand,
+  isCheckoutQuoteIdempotencyViolation,
+} from "./checkout-quote-replay";
 
 export type QuoteItem = {
   sku_id: string;
@@ -78,30 +86,16 @@ export async function createInstantQuote(
 
   const now = Date.now();
 
-  // Usable stocked availability per pool: on_hand minus reserved and held.
-  const demandByPool = new Map<string, number>();
-  for (const item of items) {
-    const baseQuantity = item.quantity * item.consumption_base_quantity;
-    demandByPool.set(
-      item.inventory_pool_id,
-      (demandByPool.get(item.inventory_pool_id) ?? 0) + baseQuantity,
+  const inventoryDemands = await loadInstantInventoryAvailability(database, {
+    cartId: command.cartId,
+    locationId: routing.location_id,
+  });
+  if (!hasSufficientInstantInventory(inventoryDemands))
+    return failure(
+      "INSUFFICIENT_STOCK",
+      "Not enough stock for instant delivery",
+      command.requestId,
     );
-  }
-  for (const [poolId, baseQuantity] of demandByPool) {
-    const balance = await database
-      .prepare(
-        `SELECT (b.on_hand - b.reserved - COALESCE((SELECT SUM(h.quantity) FROM checkout_inventory_holds h WHERE h.inventory_pool_id=b.inventory_pool_id AND h.location_id=b.location_id AND h.status='HELD' AND h.checkout_attempt_id NOT IN (SELECT id FROM checkout_quote WHERE cart_id=?)),0)) AS usable
-         FROM inventory_balance b WHERE b.location_id=? AND b.inventory_pool_id=?`,
-      )
-      .bind(command.cartId, routing.location_id, poolId)
-      .first<{ usable: number | null }>();
-    if (!balance || balance.usable === null || balance.usable < baseQuantity)
-      return failure(
-        "INSUFFICIENT_STOCK",
-        "Not enough stock for instant delivery",
-        command.requestId,
-      );
-  }
 
   // Exact-location pricing. Missing price fails; no Market fallback exists.
   const lines: QuoteLine[] = [];
@@ -291,7 +285,7 @@ export async function createInstantQuote(
       // this transaction-local guard is authoritative. D1 serializes the
       // batch, so two carts cannot both insert holds against the same final
       // usable units after observing availability concurrently.
-      ...[...demandByPool.entries()].map(([poolId, baseQuantity]) =>
+      ...inventoryDemands.map((demand) =>
         database
           .prepare(
             `INSERT INTO commitment_abort (id)
@@ -305,7 +299,7 @@ export async function createInstantQuote(
                  ), 0) >= ?
              )`,
           )
-          .bind(routing.location_id, poolId, baseQuantity),
+          .bind(routing.location_id, demand.inventoryPoolId, demand.requiredQuantity),
       ),
       repository.insertQuote(
         {
@@ -365,20 +359,36 @@ export async function createInstantQuote(
           now,
           now,
         ),
-      ...[...demandByPool.entries()].map(([poolId, baseQuantity]) =>
+      ...inventoryDemands.map((demand) =>
         database
           .prepare(
             "INSERT INTO checkout_inventory_holds (id, checkout_attempt_id, inventory_pool_id, location_id, quantity, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'HELD', ?, ?)",
           )
-          .bind(crypto.randomUUID(), quoteId, poolId, routing.location_id, baseQuantity, now, now),
+          .bind(
+            crypto.randomUUID(),
+            quoteId,
+            demand.inventoryPoolId,
+            routing.location_id,
+            demand.requiredQuantity,
+            now,
+            now,
+          ),
       ),
       repository.supersedeQuotesForCart(command.cartId, quoteId, Date.now()),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("UNIQUE constraint failed")) {
+    if (isCheckoutQuoteIdempotencyViolation(error)) {
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
-      if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
+      if (replayed) {
+        if (!checkoutQuoteMatchesCommand(replayed, command))
+          return failure(
+            "IDEMPOTENCY_CONFLICT",
+            "Idempotency key was used with a different request",
+            command.requestId,
+          );
+        return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
+      }
     }
     const currentCart = await database
       .prepare("SELECT version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'")

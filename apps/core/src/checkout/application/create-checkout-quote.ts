@@ -32,8 +32,11 @@ import { quoteProviderDelivery, type ProviderCheckoutAddress } from "./quote-pro
 import {
   selectScheduledWindow,
   scheduledWindowGuard,
-  scheduledWindowSnapshotSchema,
 } from "../../commerce/application/scheduled-window";
+import {
+  checkoutQuoteMatchesCommand,
+  isCheckoutQuoteIdempotencyViolation,
+} from "./checkout-quote-replay";
 
 export type CreateCheckoutQuoteCommand = {
   customerId: string;
@@ -108,29 +111,7 @@ export async function createCheckoutQuote(
   // Idempotent replay first: same key returns the same immutable quote.
   const existing = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
   if (existing) {
-    const savedWindow = scheduledWindowSnapshotSchema.safeParse(
-      existing.cycleSnapshot &&
-        typeof existing.cycleSnapshot === "object" &&
-        "deliveryWindow" in existing.cycleSnapshot
-        ? existing.cycleSnapshot.deliveryWindow
-        : null,
-    );
-    const existingOptionId =
-      existing.fulfillmentSnapshot && typeof existing.fulfillmentSnapshot === "object"
-        ? (existing.fulfillmentSnapshot as { fulfillmentOptionId?: unknown }).fulfillmentOptionId
-        : undefined;
-    if (
-      existing.customerId !== command.customerId ||
-      existing.cartId !== command.cartId ||
-      existing.addressId !== command.addressId ||
-      (existing.deliveryCycleId ?? null) !== (command.deliveryCycleId ?? null) ||
-      (command.deliveryWindowId !== undefined &&
-        (!savedWindow.success || savedWindow.data.windowId !== command.deliveryWindowId)) ||
-      (command.fulfillmentOptionId !== undefined &&
-        existingOptionId !== command.fulfillmentOptionId) ||
-      JSON.stringify(existing.requestedPromotionCodes) !==
-        JSON.stringify((command.promotionCodes ?? []).map((code) => code.trim().toUpperCase()))
-    )
+    if (!checkoutQuoteMatchesCommand(existing, command))
       return failure(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency key was used with a different request",
@@ -533,10 +514,17 @@ async function createScheduledQuote(
       repository.supersedeQuotesForCart(command.cartId, quoteId, Date.now()),
     ]);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("UNIQUE constraint failed")) {
+    if (isCheckoutQuoteIdempotencyViolation(error)) {
       const replayed = await repository.findQuoteByIdempotencyKey(command.idempotencyKey);
-      if (replayed) return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
+      if (replayed) {
+        if (!checkoutQuoteMatchesCommand(replayed, command))
+          return failure(
+            "IDEMPOTENCY_CONFLICT",
+            "Idempotency key was used with a different request",
+            command.requestId,
+          );
+        return { ok: true, value: viewFrom(replayed), requestId: command.requestId };
+      }
     }
     const currentCart = await database
       .prepare("SELECT version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'")
