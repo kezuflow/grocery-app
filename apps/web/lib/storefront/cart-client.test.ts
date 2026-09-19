@@ -5,6 +5,7 @@ import {
   CART_CHANGED_EVENT,
   CART_DRAWER_REQUEST_EVENT,
   addToCart,
+  clearCart,
   cartCountFromView,
   fetchCart,
   quantityForSku,
@@ -166,6 +167,79 @@ describe("addToCart", () => {
       }),
     );
     expect(await addToCart("sku-a", 1)).toMatchObject({ ok: false, reason: "error" });
+  });
+});
+describe("clearCart", () => {
+  it("clears a guest Cart locally with one shared projection", async () => {
+    saveGuest();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const guest = view({ id: "guest-cart", version: 1 });
+    expect(await clearCart(guest)).toMatchObject({
+      ok: true,
+      view: { id: "guest-cart", items: [], totalMinor: 0 },
+      count: 0,
+    });
+    expect(saved.has(guestKey)).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dispatch.mock.calls.at(-1)?.[0].detail).toMatchObject({
+      count: 0,
+      view: { items: [] },
+    });
+  });
+
+  it("retries an unknown authenticated outcome with the same identity and accepts a fresh read", async () => {
+    const cleared = view({ version: 3, items: [], totalMinor: 0 });
+    const bodies: string[] = [];
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/clear")) {
+          bodies.push(String(init?.body));
+          attempts++;
+          if (attempts === 1) throw new Error("response lost");
+          return response({
+            ok: true,
+            value: {
+              cartId: "cart-1",
+              outcome: "CLEARED",
+              clearedLineCount: 2,
+              releasedCheckoutAttempts: 0,
+              newCartVersion: 3,
+            },
+          });
+        }
+        return response({ ok: true, value: cleared });
+      }),
+    );
+    expect(await clearCart(view())).toMatchObject({ ok: false });
+    expect(await clearCart(view())).toEqual({ ok: true, view: cleared, count: 0 });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+  });
+
+  it("uses the current read after replay so later additions are not overwritten", async () => {
+    const later = view({ version: 4, items: [view().items[0]!], totalMinor: 18900 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL) =>
+        String(url).endsWith("/clear")
+          ? response({
+              ok: true,
+              value: {
+                cartId: "cart-1",
+                outcome: "CLEARED",
+                clearedLineCount: 2,
+                releasedCheckoutAttempts: 0,
+                newCartVersion: 3,
+              },
+            })
+          : response({ ok: true, value: later }),
+      ),
+    );
+    expect(await clearCart(view())).toEqual({ ok: true, view: later, count: 2 });
+    expect(cachedCart()).toEqual(later);
   });
 });
 describe("fetchCart", () => {

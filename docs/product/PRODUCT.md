@@ -1,5 +1,19 @@
 # FreshMarkets Product Rules
 
+Owner supplement, 2026-09-19: the new customer checkout is Instant-only and keeps the browsing
+destination visible beside saved-address alternatives. It presents only Core-returned configured
+couriers with provider-appropriate identity, automatically obtains the authoritative delivery quote
+once the Cart, confirmed address and selected eligible option are ready, and uses one quote-backed
+Order summary and one payment action. Scheduled history and operations remain supported; activating
+Instant in an environment still requires its existing readiness and mode-change authority. Promotion
+intent is edited in the Cart drawer and direct Cart page through one account/Cart-scoped reactive
+draft and is never treated as an applied discount until Core validates it. Clear All is one
+authenticated, version-guarded Cart command (or one local guest mutation), atomically releases only
+eligible unpaid checkout state, never changes paid/committed evidence, and replays an immutable
+receipt without deleting later additions. Implementation is tracked by
+[CHECKOUT_CART_SIMPLIFICATION_PLAN.md](CHECKOUT_CART_SIMPLIFICATION_PLAN.md); deployment, operational
+mode activation and actual courier/payment acceptance remain separate.
+
 Owner supplement, 2026-09-14: customer delivery details retain the address label (Home/Work shortcuts or an existing custom label), one optional Delivery instructions field, the confirmed destination, recipient name and phone. Separate building/unit, landmark, gate/guard, recipient-guidance and private-note inputs are removed. Useful entrance/unit details belong in Delivery instructions; no separate unit field is required. Core combines retained courier-facing legacy fields without duplication when an address is read or edited, never exposes private notes as courier instructions, and never rewrites immutable paid snapshots. Deliver to persists through browsing and sign-in, takes precedence over a different account default at checkout, and remains browser evidence until Core reauthorizes a saved-address identity or creates a saved address from the confirmed pin. An Instant destination change keeps every Cart row, reassigns only by the existing geographic policy, returns current local price/stock reasons, blocks payment until unavailable quantities/items are explicitly resolved, and neither reroutes by stock nor splits an Order. Started Payments retain their destination lock. Implementation is tracked by [DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md](DELIVERY_ADDRESS_SIMPLIFICATION_PLAN.md); deployment and actual-provider acceptance remain separate.
 
 ## Owner-approved notification surfaces — 2026-09-13

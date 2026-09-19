@@ -3192,6 +3192,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async setCartItem(input: import("@freshmarkets/contracts").SetCartItemRequest) {
     return this.checkoutRpc.setCartItem(input);
   }
+  async clearCart(input: import("@freshmarkets/contracts").ClearCartRequest) {
+    return this.checkoutRpc.clearCart(input);
+  }
 
   async evaluateCheckout(input: import("@freshmarkets/contracts").CheckoutEligibilityRequest) {
     return this.checkoutRpc.evaluateCheckout(input);

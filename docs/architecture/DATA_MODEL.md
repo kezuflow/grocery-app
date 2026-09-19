@@ -177,6 +177,15 @@ Cart rows create no authoritative hold, reservation, or demand. `INSTANT` checko
 
 Core creates an active Cart only after an explicit coordinate selection resolves to an eligible location; reads do not assign a default location. The partial unique active-cart index preserves one active identity per customer. `cart.selectLocation` atomically guards current geography/customer/Cart versions, creates or changes the location while preserving lines, and stores an immutable command receipt. `cart.mergeGuest` atomically adds guest quantities to existing lines with a Cart-version guard and immutable receipt; it stores no client prices or names. Known unavailable options remain removable. Neither command changes paid Orders or grants checkout eligibility. `cart.setItem` claims a stable idempotency key and applies the line mutation plus cart-version compare-and-swap in one transactional batch. Current price is resolved only from the exact assigned location/SKU row; missing/expired price remains nullable and blocks checkout rather than becoming a zero-valued line. Quantity reduction/removal remains available for a line that later becomes unavailable.
 
+`cart.clear` uses the existing Cart, checkout-attempt/hold, Audit and idempotency tables; no new
+schema is required. One guarded batch claims the Customer-qualified request, verifies the exact line
+and releasable-attempt set, rejects any started checkout Payment, releases unpaid entitlements,
+deletes all lines and advances the Cart version once only when it was nonempty. The frozen receipt
+records the cleared version and line/attempt counts, so replay is independent of later Cart contents.
+Per-Quote release audits use identities derived from the clear command while the Cart audit retains
+the original command identity. A rejected or suppressed effect leaves lines, holds, versions, audits
+and receipt unchanged.
+
 ## Orders and Amendments
 
 - `orders(id PK, order_number UNIQUE, customer_id FK, market_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, tax_minor, final_total_minor, currency, address_snapshot_json, fulfillment_promise_snapshot_json, provider_quotation_snapshot_json, delivery_execution_snapshot_json NULL, cycle_snapshot_json NULL, fulfillment_context_snapshot_json, committed_at, version, created_at, updated_at)`; legacy Service Fee/pre-fee fields remain readable only for historical committed Orders.

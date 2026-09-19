@@ -340,6 +340,7 @@ export const coreServiceMethodNames = [
   "selectCartLocation",
   "mergeGuestCart",
   "setCartItem",
+  "clearCart",
   "evaluateCheckout",
   "createCheckoutQuote",
   "listFulfillmentOptions",

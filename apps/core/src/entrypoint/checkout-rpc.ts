@@ -6,6 +6,7 @@ import type {
   CheckoutQuoteRefreshRequest,
   DeliveryCycleRequest,
   FulfillmentOptionsRequest,
+  ClearCartRequest,
   SetCartItemRequest,
   SelectCartLocationRequest,
   MergeGuestCartRequest,
@@ -16,6 +17,7 @@ import { listFulfillmentOptions } from "../checkout/application/list-fulfillment
 import { listDeliveryCycles } from "../commerce/cycle-queries";
 import { activeMarketCode } from "../geography/market-defaults";
 import { getCart, setCartItem } from "../checkout/application/cart";
+import { clearCart } from "../checkout/application/clear-cart";
 import { selectCartLocation } from "../checkout/application/select-cart-location";
 import { mergeGuestCart } from "../checkout/application/merge-guest-cart";
 import {
@@ -30,6 +32,7 @@ import {
   checkoutRequestSchema,
   createCheckoutQuoteSchema,
   refreshCheckoutQuoteSchema,
+  clearCartRequestSchema,
   setCartItemRequestSchema,
   selectCartLocationRequestSchema,
   mergeGuestCartRequestSchema,
@@ -87,6 +90,14 @@ export function createCheckoutRpc(context: CoreRpcContext) {
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
       return setCartItem(context.env.DB, { ...input, customerId: customer.value.customerId });
+    },
+
+    async clearCart(input: ClearCartRequest) {
+      const validation = clearCartRequestSchema.safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return clearCart(context.env.DB, { ...input, customerId: customer.value.customerId });
     },
 
     async selectCartLocation(input: SelectCartLocationRequest) {

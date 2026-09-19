@@ -162,7 +162,7 @@ it("does not offer cart mutations while a retained checkout payment is pending",
   ).toBe(true);
 });
 
-it("confirms before clearing every cart line through authoritative mutations", async () => {
+it("confirms before clearing every cart line through one authoritative mutation", async () => {
   let authoritative: CartView = {
     id: "cart-1",
     locationId: "location-1",
@@ -190,23 +190,32 @@ it("confirms before clearing every cart line through authoritative mutations", a
     checkoutBlocked: false,
     blockingReasons: [],
   };
-  const commands: Array<{ skuId: string; quantity: number; expectedVersion: number }> = [];
+  const commands: Array<{ cartId: string; expectedVersion: number; idempotencyKey: string }> = [];
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/serviceability")
       return Response.json({
         ok: true,
         value: { serviceable: true, fulfillmentLocation: { id: "location-1" } },
       });
-    if (init?.method === "POST") {
+    if (url === "/api/commerce/cart/clear" && init?.method === "POST") {
       const body = JSON.parse(String(init.body)) as (typeof commands)[number];
       commands.push(body);
-      const items = authoritative.items.filter((item) => item.skuId !== body.skuId);
       authoritative = {
         ...authoritative,
         version: authoritative.version + 1,
-        items,
-        totalMinor: items.reduce((total, item) => total + (item.lineTotalMinor ?? 0), 0),
+        items: [],
+        totalMinor: 0,
       };
+      return Response.json({
+        ok: true,
+        value: {
+          cartId: authoritative.id,
+          outcome: "CLEARED",
+          clearedLineCount: 2,
+          releasedCheckoutAttempts: 0,
+          newCartVersion: authoritative.version,
+        },
+      });
     }
     return Response.json({ ok: true, value: authoritative });
   });
@@ -240,12 +249,10 @@ it("confirms before clearing every cart line through authoritative mutations", a
     [...(confirmation?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
       .find((button) => button.textContent === "Clear All")
       ?.click();
-    await vi.waitFor(() => expect(commands).toHaveLength(2));
+    await vi.waitFor(() => expect(commands).toHaveLength(1));
   });
-  expect(commands).toMatchObject([
-    { skuId: "sku-1", quantity: 0, expectedVersion: 1 },
-    { skuId: "sku-2", quantity: 0, expectedVersion: 2 },
-  ]);
+  expect(commands).toMatchObject([{ cartId: "cart-1", expectedVersion: 1 }]);
+  expect(commands[0]?.idempotencyKey).toBeTruthy();
   expect(document.body.textContent).toContain("Your cart is empty");
   expect(confirmation?.open).toBe(false);
 });

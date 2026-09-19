@@ -1,4 +1,10 @@
-import type { CartView, CatalogMedia, RpcResult, GuestCartMerge } from "@freshmarkets/contracts";
+import type {
+  CartView,
+  CatalogMedia,
+  ClearCartResult,
+  RpcResult,
+  GuestCartMerge,
+} from "@freshmarkets/contracts";
 import { readJson } from "../http/read-deadline";
 import { z } from "@freshmarkets/validation";
 import { loadCartForLocation, requestDeliveryLocation } from "./load-cart-for-location";
@@ -31,6 +37,8 @@ export type StorefrontToast = {
 export type AddToCartResult =
   | { ok: true; view: CartView; count: number; requiresSignIn?: boolean }
   | { ok: false; reason: "unauthenticated" | "error"; message: string };
+
+export type ClearCartClientResult = AddToCartResult;
 
 export type GuestCartItem = {
   skuId: string;
@@ -380,6 +388,131 @@ export function addToCart(
   });
 }
 
+type PendingClearCommand = {
+  cartId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+let pendingClearCommand: PendingClearCommand | null = null;
+
+/** Clear the complete current Cart through one serialized business command. */
+export function clearCart(view: CartView): Promise<ClearCartClientResult> {
+  const requestedGeneration = locationGeneration;
+  return runCartOperation<ClearCartClientResult>(async () => {
+    if (requestedGeneration !== locationGeneration)
+      return {
+        ok: false as const,
+        reason: "error" as const,
+        message: "Your session or delivery location changed. Review your cart before clearing.",
+      };
+    if (view.id === "guest-cart") {
+      if (window.localStorage.getItem(GUEST_MERGE_KEY))
+        return {
+          ok: false as const,
+          reason: "error" as const,
+          message: "Your saved cart is still being transferred. Retry after it finishes.",
+        };
+      window.localStorage.removeItem(GUEST_CART_KEY);
+      const empty: CartView = {
+        ...view,
+        items: [],
+        totalMinor: 0,
+        checkoutBlocked: false,
+        blockingReasons: [],
+      };
+      rememberCart(empty);
+      return { ok: true as const, view: empty, count: 0 };
+    }
+    if (
+      pendingClearCommand &&
+      (pendingClearCommand.cartId !== view.id ||
+        pendingClearCommand.expectedVersion !== view.version)
+    )
+      return {
+        ok: false as const,
+        reason: "error" as const,
+        message: "A previous clear is still being reconciled. Refresh the cart before retrying.",
+      };
+    const command =
+      pendingClearCommand ??
+      ({
+        cartId: view.id,
+        expectedVersion: view.version,
+        idempotencyKey: crypto.randomUUID(),
+      } satisfies PendingClearCommand);
+    pendingClearCommand = command;
+    let result: RpcResult<ClearCartResult>;
+    try {
+      const response = await fetch("/api/commerce/cart/clear", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      result = (await response.json()) as RpcResult<ClearCartResult>;
+    } catch {
+      return {
+        ok: false as const,
+        reason: "error" as const,
+        message: "The clear result is not confirmed yet. Retry to reconcile the same request.",
+      };
+    }
+    if (!result.ok) {
+      if (result.error.code !== "CONFLICT") pendingClearCommand = null;
+      if (result.error.code === "CART_VERSION_CONFLICT" || result.error.code === "NOT_FOUND") {
+        try {
+          const current = await loadCartForLocation();
+          if (current.ok) rememberCart(current.value);
+        } catch {
+          // The command was definitively rejected; the ordinary Cart read remains retryable.
+        }
+      }
+      return {
+        ok: false as const,
+        reason: result.error.code === "UNAUTHENTICATED" ? "unauthenticated" : "error",
+        message: result.error.message,
+      };
+    }
+    try {
+      const current = await readJson<RpcResult<CartView>>("/api/commerce/cart");
+      if (!current.ok)
+        return {
+          ok: false as const,
+          reason: "error" as const,
+          message:
+            "The cart was cleared, but its current view could not be loaded. Retry to refresh.",
+        };
+      if (activeOperationGeneration !== locationGeneration)
+        return {
+          ok: false as const,
+          reason: "error" as const,
+          message: "The cart was cleared. Refresh to load the current session.",
+        };
+      pendingClearCommand = null;
+      rememberCart(current.value);
+      return {
+        ok: true as const,
+        view: current.value,
+        count: cartCountFromView(current.value),
+      };
+    } catch {
+      return {
+        ok: false as const,
+        reason: "error" as const,
+        message:
+          "The cart was cleared, but its current view could not be loaded. Retry to refresh.",
+      };
+    }
+  }).catch((error: unknown): ClearCartClientResult => {
+    if (error instanceof StaleCartOperationError)
+      return {
+        ok: false,
+        reason: "error",
+        message: "Your session or delivery location changed. Review your cart before clearing.",
+      };
+    throw error;
+  });
+}
+
 /**
  * Load the current cart. Anonymous visitors resolve to null rather than an
  * error so surfaces can render signed-out states without console noise.
@@ -398,6 +531,7 @@ export function resetCartSession(): void {
   loadError = "";
   loadingCart = null;
   refreshingCart = null;
+  pendingClearCommand = null;
   if (typeof window !== "undefined")
     window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
 }

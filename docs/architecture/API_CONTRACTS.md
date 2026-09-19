@@ -225,8 +225,20 @@ Cart creation now follows an explicit coordinate selection. `cart.get()` returns
 
 `cart.mergeGuestCart({ cartId, expectedVersion, idempotencyKey, items: [{ skuId, quantity }] })` atomically adds guest quantities to existing quantities and returns an immutable `{ cartId, version }` receipt. Payloads are bounded to 100 distinct selling options within the Web byte bound. Names/prices/availability come from the following Core Cart read. Known inactive options remain removable unavailable lines; unknown options or invalid/overflow quantities reject without partial lines or success. The browser retains the exact pending command through a lost response, clears guest data only after confirmed merge/current read, and blocks checkout while carryover needs retry.
 
+`cart.clearCart({ cartId, expectedVersion, idempotencyKey })` is the sole authenticated bulk-clear
+command. Core derives the Customer from the session, guards the owned active Cart/version and any
+started Payment, releases every eligible unpaid checkout attempt/hold, deletes all current lines
+set-wise, advances a nonempty Cart exactly once, and stores audit evidence plus an immutable
+`{ cartId, outcome, clearedLineCount, releasedCheckoutAttempts, newCartVersion }` receipt in one D1
+transaction. An empty Cart returns `ALREADY_EMPTY` without a version advance. Exact replay returns
+the original receipt; changed key reuse conflicts. Replay never deletes later additions. Web retains
+the same command after an unknown transport outcome and accepts only a following current Cart read
+into shared cache; a genuine stale-version rejection refreshes instead of clearing newer state. The
+guest path performs one local clear and refuses to erase an unresolved sign-in transfer.
+
 - `cart.get() -> CartView`
 - `cart.setItem({ cartId, skuId, quantity, expectedVersion, idempotencyKey }) -> CartView`
+- `cart.clearCart({ cartId, expectedVersion, idempotencyKey }) -> ClearCartResult`
 
 Cart `quantity` is an integer count of the configured SKU, never kilograms/liters or a floating requested weight; zero removes the line. Every mutation is idempotent and compare-and-swaps the customer-owned active cart version. Identical replay returns the already-applied cart, key reuse with another payload returns `IDEMPOTENCY_CONFLICT`, and stale aggregate state returns `CART_VERSION_CONFLICT`. `CartView` reports each line as `AVAILABLE`, `UNAVAILABLE`, or `PRICE_UNAVAILABLE`, with Core-authored `NOT_SOLD_AT_LOCATION`, `INSUFFICIENT_QUANTITY`, or `PRICE_UNAVAILABLE` detail and the current available quantity when relevant; unavailable prices are nullable and are never projected as zero. `checkoutBlocked` plus stable blocking reasons prevents checkout while retaining removable stale lines. Cart activity alone promises no inventory hold/reservation or provider quotation.
 

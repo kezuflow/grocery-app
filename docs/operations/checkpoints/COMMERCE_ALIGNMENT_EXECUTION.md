@@ -1,5 +1,39 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-CART-SIMPLIFICATION-1 (2026-09-19)
+
+Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence A — CK-06 atomic Clear All**,
+continuing `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner supplied and authorized the seven-slice checkout/cart plan. Overall acceptance
+is CK-01 through CK-07 at application, Worker/D1 and relevant browser level; deployment, a live mode
+switch and actual courier/payment transactions remain separate. The active dependency slice is
+CK-06: one authenticated/versioned Cart clear command (or one guest-local mutation), atomic unpaid
+checkout release plus set-wise line deletion, payment lock, immutable replay that cannot delete later
+additions, and one accepted shared Cart projection.
+
+Start: clean `main` and `origin/main` at `264cf5cf4035cdbe6ac0989635e58168525fe0ec`.
+The reviewed current caller still looped through Cart rows and issued `setCartItem(..., 0)` once per
+SKU. Working-tree implementation adds the typed `clearCart` binding and bounded Web route, a Core
+transaction with Customer ownership, Cart version/payment/current-line/releasable-attempt guards,
+unpaid hold release, set-wise deletion, single nonempty version advance, per-effect Audit evidence
+and frozen result, plus serialized browser/guest behavior. Transport-unknown retries retain the exact
+command identity; success replay is followed by a fresh current Cart read so later additions cannot
+be overwritten.
+
+Verification on the complete CK-06 working tree: formatting, naming, terminology, architecture,
+readiness, harness, migration and commit-message checks pass; lint passes with the two pre-existing
+address-book unused-variable warnings; all package typechecks pass. Contracts pass 20 files / 69
+tests. Focused Core cart/release/RPC/conformance coverage passes 6 files / 37 tests, including the new
+clear-cart Worker/D1 suite at 6/6 for concurrent replay, ownership/version/key rejection, empty Cart,
+payment lock, hold release, rollback and replay after a later addition. Focused Web route/client/drawer
+coverage passes 3 files / 25 tests, and the complete Web suite passes 139 files / 575 tests. Core
+Wrangler dry-run, vinext compatibility (16 supported, zero issues) and the production Web build pass,
+including `/api/commerce/cart/clear`. Diff whitespace review passes. This is source, local Worker/D1
+and build acceptance; no browser journey, deployment, provider transaction or complete Core aggregate
+suite is claimed. CK-06 is complete at this slice's application/local-acceptance level. Commit and
+push are pending. Remaining at the seven-ID plan level: CK-01, CK-02, CK-03, CK-04, CK-05 and CK-07.
+Next action: commit and push CK-06, then start Sequence B / CK-07 shared promotion draft.
+
 ## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

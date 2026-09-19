@@ -245,6 +245,20 @@ export type SetCartItemRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type ClearCartRequest = AuthenticatedRequest & {
+  cartId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type ClearCartResult = {
+  cartId: string;
+  outcome: "CLEARED" | "ALREADY_EMPTY";
+  clearedLineCount: number;
+  releasedCheckoutAttempts: number;
+  newCartVersion: number;
+};
+
 export type SelectCartLocationRequest = AuthenticatedRequest & {
   latitude: number;
   longitude: number;
@@ -281,6 +295,7 @@ export type CheckoutService = {
   selectCartLocation(request: SelectCartLocationRequest): Promise<RpcResult<CartLocationSelection>>;
   mergeGuestCart(request: MergeGuestCartRequest): Promise<RpcResult<GuestCartMerge>>;
   setCartItem(request: SetCartItemRequest): Promise<RpcResult<CartView>>;
+  clearCart(request: ClearCartRequest): Promise<RpcResult<ClearCartResult>>;
   createCustomerAddress(
     request: CreateCustomerAddressRequest,
   ): Promise<RpcResult<CustomerAddressView>>;

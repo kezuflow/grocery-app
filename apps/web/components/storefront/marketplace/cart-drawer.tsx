@@ -5,7 +5,11 @@ import { usePathname } from "next/navigation";
 import { Minus, Plus, ShoppingBasket } from "lucide-react";
 import type { CartView } from "@freshmarkets/contracts";
 import { ProductMedia } from "../product-media";
-import { CART_DRAWER_REQUEST_EVENT, addToCart } from "../../../lib/storefront/cart-client";
+import {
+  CART_DRAWER_REQUEST_EVENT,
+  addToCart,
+  clearCart as clearCartCommand,
+} from "../../../lib/storefront/cart-client";
 import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
 import { OrderSummary } from "./order-summary";
 import { CheckoutAuthDialog } from "./checkout-auth-dialog";
@@ -109,45 +113,19 @@ export function CartDrawer() {
 
   async function clearCart() {
     if (!cart?.items.length || clearing) return;
-    const items = [...cart.items];
     setClearing(true);
     setClearError("");
-    let removed = 0;
-    let latest = cart;
     try {
-      for (const item of items) {
-        const result = await addToCart(item.skuId, 0, {
-          name: item.name,
-          media: item.media,
-          unitPriceMinor: item.unitPriceMinor,
-          currency: cart.currency,
-        });
-        if (!result.ok) {
-          setClearError(
-            removed > 0
-              ? `Some items were removed, but the cart could not be fully cleared. ${result.message}`
-              : result.message,
-          );
-          return;
-        }
-        removed++;
-        latest = result.view;
-        acceptCart(result.view);
-      }
-      if (latest.items.length > 0) {
-        setClearError(
-          "Your cart changed while it was being cleared. Review the remaining items and try again.",
-        );
+      const result = await clearCartCommand(cart);
+      if (!result.ok) {
+        setClearError(result.message);
         return;
       }
+      acceptCart(result.view);
       setConfirmingClear(false);
       await invalidateCheckout();
     } catch {
-      setClearError(
-        removed > 0
-          ? "Some items were removed, but the cart could not be fully cleared. Try again."
-          : "Your cart could not be cleared right now. Try again.",
-      );
+      setClearError("Your cart could not be cleared right now. Try again.");
     } finally {
       setClearing(false);
     }
