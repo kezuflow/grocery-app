@@ -1,5 +1,42 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner authorized deploying the already-committed `main` revision to the existing staging
+Core/Web pair, then diagnosing why Google OAuth does not work. Acceptance: build and dry-run the exact
+staging targets; deploy Core before Web without a schema change; verify direct Core health/readiness,
+the public site and Web-to-Core health; reproduce Google sign-in without changing credentials or
+performing unrelated provider transactions; identify the failing boundary without recording OAuth
+codes, state, credentials or raw provider payloads.
+
+Start: `main` and `origin/main` at `b47a736a02ada71ff7a48594e3cc49ec627d52fe`, with a clean
+working tree. Generated Core/Web binding declarations were current; vinext reported 16 supported
+features and zero issues; Worker readiness passed; the staging Web build and both Wrangler dry runs
+passed. The generated Web configuration targeted `freshmarkets-web-staging`, the `freshmarkets.ph`
+custom domain and `freshmarkets-core-staging#CoreEntrypoint`. No migration was required or applied.
+
+Deployment completed in order. Core version `b4ba2b18-5eca-4bee-bc41-b4ee0f3fc49f` and Web version
+`6a81d6e9-4ee5-4aac-bc5b-f1be4c31d7f2` are live on the existing staging resources. Direct Core
+`/health` and `/ready`, `https://freshmarkets.ph/`, and public `/api/core-health` returned HTTP 200;
+Core readiness reported runtime configuration, database and PayMongo ready. This is staging runtime
+acceptance for the deployed revision, not production-instance or actual payment/courier acceptance.
+
+Google OAuth diagnosis reproduced the deployed browser failure as `/api/auth/error?error=invalid_code`.
+Both Google credential secret names are present. FreshMarkets successfully initiates Google OAuth,
+sets the state cookie, and supplies the exact callback
+`https://freshmarkets.ph/api/auth/callback/google`; Google accepts that authorization request and
+returns through the callback. A bounded Core trace of the reproduced callback identifies the token
+exchange response as HTTP 401 `invalid_client`: the provided client secret is invalid. Therefore the
+staging `GOOGLE_CLIENT_SECRET` does not match the OAuth client selected by `GOOGLE_CLIENT_ID`, or that
+secret was rotated/deleted; no application/proxy/callback code defect was observed before that
+provider rejection. No credential was printed, copied or changed. Completed ID:
+STAGING-DEPLOY-OAUTH-DIAG-1 at staging-deployment/diagnostic level. Remaining at this request level:
+one external configuration correction and retest. Next action: the owner retrieves or creates the
+current secret for the same Google Web OAuth client, updates the staging `GOOGLE_CLIENT_SECRET`, then
+reruns the browser sign-in callback; changing the client ID additionally requires keeping the exact
+authorized redirect URI above.
+
 ## Latest owner request — STOREFRONT-POLISH-COMMIT-1 (2026-09-19)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
@@ -2429,4 +2466,6 @@ Older implementation anchors `b8e32b2`, `f7f17dc`, `d14de2c`, `762a18e`, `f6f8c8
 
 Clean FreshMarkets deployment/reset is explicitly authorized; no additional approval is needed for its named resources. Payment/courier sandbox transactions, real pickup/service/hour/promise/catalog/accounting values and owner OAuth/setup observations remain separate release inputs. Customer self-service closure remains deferred. The old pre-launch data is explicitly disposable for this reset; normal future commerce records retain the approved retention policy.
 
-**One next action:** finish staging configuration/build verification, reset the exact named D1/media resources, deploy Core/Web and verify `freshmarkets.ph`. Record the new D1 and Worker versions and actual public checks. Do not apply the obsolete retained-copy migration/cutover plan.
+**One next action:** replace the invalid staging `GOOGLE_CLIENT_SECRET` with the current secret for the
+same Google Web OAuth client, then repeat the deployed Google sign-in callback. Preserve
+`https://freshmarkets.ph/api/auth/callback/google` as the authorized redirect URI.
