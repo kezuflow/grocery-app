@@ -23,7 +23,9 @@ terminology, architecture and readiness checks pass; focused storefront tests pa
 tests; Web typecheck passes; the complete Web suite passes 138 files / 570 tests; the production
 vinext build passes and includes `/meat` and `/seafood`. This is local source/build acceptance, not a
 deployment or browser/provider journey. Completed ID: STOREFRONT-POLISH-COMMIT-1 at
-application-source/local-verification level. Remaining at this request level: commit and push only.
+application-source/local-verification level. Implementation commit `4d9b436a` is pushed to
+`origin/main`. Remaining at this request level: zero implementation, commit, push or deployment
+actions.
 
 ## Latest owner request — PRODUCTION-REVIEW-FIXES-1 (2026-09-19)
 
