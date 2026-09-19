@@ -110,8 +110,9 @@ desktop and mobile 2/2. The provider-gated retained Scheduled operational journe
 not executed because no managed provider gateway was authorized for this run. No deployment, live
 mode switch, actual courier quotation, payment transaction or remote-data change was performed.
 CK-01 through CK-07 are complete at the seven-ID application/local-acceptance counting level; zero
-implementation IDs remain. Next action requires separate owner authorization: activate only after
-the target environment is verified Instant-ready, then record actual provider/deployed acceptance.
+implementation IDs remain. Sequence D/E implementation commit `a4669ba7` is pushed to `origin/main`.
+Next action requires separate owner authorization: activate only after the target environment is
+verified Instant-ready, then record actual provider/deployed acceptance.
 
 ## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
 
