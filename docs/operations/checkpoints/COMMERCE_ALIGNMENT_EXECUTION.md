@@ -2,25 +2,25 @@
 
 ## Latest owner request — CHECKOUT-CART-SIMPLIFICATION-1 (2026-09-19)
 
-Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence A — CK-06 atomic Clear All**,
+Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence B — CK-07 shared promotion draft**,
 continuing `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
 evidence**. The owner supplied and authorized the seven-slice checkout/cart plan. Overall acceptance
 is CK-01 through CK-07 at application, Worker/D1 and relevant browser level; deployment, a live mode
-switch and actual courier/payment transactions remain separate. The active dependency slice is
-CK-06: one authenticated/versioned Cart clear command (or one guest-local mutation), atomic unpaid
-checkout release plus set-wise line deletion, payment lock, immutable replay that cannot delete later
-additions, and one accepted shared Cart projection.
+switch and actual courier/payment transactions remain separate. The active dependency slice is CK-07:
+one normalized promotion-intent draft shared reactively by the Cart drawer, `/cart` and checkout,
+distinct entered versus Core-applied status, Cart/account scoping, successor-Cart reset, one bounded
+guest-to-account handoff and no address/contact persistence.
 
-Start: clean `main` and `origin/main` at `264cf5cf4035cdbe6ac0989635e58168525fe0ec`.
-The reviewed current caller still looped through Cart rows and issued `setCartItem(..., 0)` once per
-SKU. Working-tree implementation adds the typed `clearCart` binding and bounded Web route, a Core
-transaction with Customer ownership, Cart version/payment/current-line/releasable-attempt guards,
-unpaid hold release, set-wise deletion, single nonempty version advance, per-effect Audit evidence
-and frozen result, plus serialized browser/guest behavior. Transport-unknown retries retain the exact
-command identity; success replay is followed by a fresh current Cart read so later additions cannot
-be overwritten.
+Sequence A started from clean `main` and `origin/main` at
+`264cf5cf4035cdbe6ac0989635e58168525fe0ec`. The delivered implementation replaces the former
+per-line Clear All loop with the typed `clearCart` binding and bounded Web route, a Core transaction
+with Customer ownership, Cart version/payment/current-line/releasable-attempt guards, unpaid hold
+release, set-wise deletion, single nonempty version advance, per-effect Audit evidence and frozen
+result, plus serialized browser/guest behavior. Transport-unknown retries retain the exact command
+identity; success replay is followed by a fresh current Cart read so later additions cannot be
+overwritten. CK-06 implementation commit `21cfee86` is pushed to `origin/main`.
 
-Verification on the complete CK-06 working tree: formatting, naming, terminology, architecture,
+Verification on the complete CK-06 implementation: formatting, naming, terminology, architecture,
 readiness, harness, migration and commit-message checks pass; lint passes with the two pre-existing
 address-book unused-variable warnings; all package typechecks pass. Contracts pass 20 files / 69
 tests. Focused Core cart/release/RPC/conformance coverage passes 6 files / 37 tests, including the new
@@ -30,9 +30,28 @@ coverage passes 3 files / 25 tests, and the complete Web suite passes 139 files 
 Wrangler dry-run, vinext compatibility (16 supported, zero issues) and the production Web build pass,
 including `/api/commerce/cart/clear`. Diff whitespace review passes. This is source, local Worker/D1
 and build acceptance; no browser journey, deployment, provider transaction or complete Core aggregate
-suite is claimed. CK-06 is complete at this slice's application/local-acceptance level. Commit and
-push are pending. Remaining at the seven-ID plan level: CK-01, CK-02, CK-03, CK-04, CK-05 and CK-07.
-Next action: commit and push CK-06, then start Sequence B / CK-07 shared promotion draft.
+suite is claimed. CK-06 is complete at this slice's application/local-acceptance level.
+
+Sequence B started from clean `main` and `origin/main` at `21cfee86`. The working tree moves promotion
+entry into both Cart surfaces, backed by one disabled-query private draft owner whose functional cache
+patches keep independently mounted views reactive without network traffic. Promotion codes are
+normalized, bounded and Cart-scoped; a changed server Cart clears them while retaining the selected
+address, and a guest Cart may transfer codes once through promotion-only session storage. Successful
+Clear All resets the codes. Checkout consumes the same draft, invalidates a pending quote when codes
+change and includes the latest codes in the next quote request. The input distinguishes entered and
+eligibility-pending state from quote-backed applied/rejected feedback; quote results expose an Edit in
+cart path. Instance-safe labels, pending interaction guards and the compact drawer presentation are
+covered by component tests.
+
+Verification on the complete CK-07 working tree: formatting, naming, terminology, architecture,
+readiness and diff-whitespace checks pass; lint passes with the same two pre-existing address-book
+unused-variable warnings; all package typechecks pass. Focused draft/promotion/drawer/summary/checkout
+coverage passes 6 files / 33 tests. The complete Web suite passes 139 files / 580 tests, and the
+production Web build passes. This is source and local build acceptance; no browser journey,
+deployment, provider transaction or environment switch is claimed. CK-07 is complete at this slice's
+application/local-acceptance level; commit and push are pending. Remaining at the seven-ID plan
+level: CK-01, CK-02, CK-03, CK-04 and CK-05. Next action: commit and push CK-07, then start Sequence C
+/ CK-01, CK-03 and CK-02 authoritative delivery inputs.
 
 ## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
 

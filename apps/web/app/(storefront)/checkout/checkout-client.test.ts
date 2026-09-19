@@ -14,7 +14,8 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("Choose when it arrives");
     expect(checkout).not.toContain("type CheckoutStep");
     expect(checkout).not.toContain('aria-label="Checkout progress"');
-    expect(checkout).toContain("<PromotionEntry");
+    expect(checkout).not.toContain("<PromotionEntry");
+    expect(checkout).toContain("checkoutDraft.draft.promotionCodes");
     expect(checkout).toContain("<FulfillmentOptionPicker");
   });
 

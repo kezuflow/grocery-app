@@ -230,6 +230,19 @@ it("confirms before clearing every cart line through one authoritative mutation"
       ),
     ).toBe(true),
   );
+  expect(cartDialog?.textContent).toContain("Promo code");
+  const promotionInput = cartDialog?.querySelector<HTMLInputElement>(
+    'input[aria-label="Promotion code"]',
+  );
+  if (!promotionInput) throw new Error("Missing compact promotion input");
+  await act(async () => {
+    promotionInput.value = " save10 ";
+    promotionInput.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await vi.waitFor(() =>
+    expect(cartDialog?.querySelector('[aria-label="Remove SAVE10 promotion code"]')).not.toBeNull(),
+  );
+  expect(cartDialog?.textContent).toContain("eligibility pending checkout");
 
   await act(async () => {
     [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])]

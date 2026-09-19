@@ -159,6 +159,31 @@ export function OrderSummary({
         </div>
       ) : null}
 
+      {quote?.promotionFeedback.length ? (
+        <div className="mt-4 border-t border-[var(--fm-border)] pt-3 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Promo codes</span>
+            <Link href="/cart" className="font-semibold underline underline-offset-4">
+              Edit in cart
+            </Link>
+          </div>
+          <ul className="mt-2 space-y-1" aria-label="Promotion code results">
+            {quote.promotionFeedback.map((entry) => (
+              <li
+                key={`${entry.code}-${entry.status}`}
+                className={
+                  entry.status === "APPLIED"
+                    ? "text-[var(--fm-success)]"
+                    : "text-[var(--fm-text-muted)]"
+                }
+              >
+                <strong>{entry.code}:</strong> {entry.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div
         className={cn(
           "space-y-3 text-sm",

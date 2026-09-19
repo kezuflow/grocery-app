@@ -51,4 +51,32 @@ describe("PromotionEntry", () => {
     expect(html).not.toContain("fm-shadow-card");
     expect(html).not.toContain("bg-[var(--fm-surface-soft)]");
   });
+
+  it("supports compact Cart placement with instance-safe labels and pending eligibility copy", () => {
+    const html = renderToStaticMarkup(
+      <>
+        <PromotionEntry
+          codes={["SAVE10"]}
+          feedback={[]}
+          disabled={false}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          surface="compact"
+        />
+        <PromotionEntry
+          codes={[]}
+          feedback={[]}
+          disabled={false}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          surface="compact"
+        />
+      </>,
+    );
+    const inputIds = [...html.matchAll(/id="([^"]+-promotion-code)"/g)].map((match) => match[1]);
+    expect(inputIds).toHaveLength(2);
+    expect(new Set(inputIds).size).toBe(2);
+    expect(html).toContain("Eligibility is checked with your delivery total at checkout.");
+    expect(html).toContain("Added; eligibility pending checkout.");
+  });
 });

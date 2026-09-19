@@ -633,7 +633,7 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     expect(quotes).toHaveLength(2);
   });
-  it("normalizes promotion input and invalidates an accepted quote when codes change", async () => {
+  it("reacts to shared Cart promotion intent and invalidates an accepted quote", async () => {
     const quoteBodies: Array<{ promotionCodes?: string[] }> = [];
     vi.stubGlobal(
       "fetch",
@@ -641,7 +641,8 @@ describe("CheckoutClient delivery inputs", () => {
         onQuote: (init) => quoteBodies.push(JSON.parse(String(init?.body))),
       }),
     );
-    act(() => root.render(checkout()));
+    const client = createQueryClient();
+    act(() => root.render(checkout(client)));
     await flush();
 
     choose(container, "Home");
@@ -650,28 +651,32 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     expect(container.textContent).toContain("Payment review");
 
-    const input = container.querySelector<HTMLInputElement>("#promotion-code");
-    if (!input) throw new Error("Missing promotion input");
     act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        input,
-        " save10 ",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      client.setQueryData(queryKeys.private(0, "checkout-draft"), {
+        cartId: "cart-1",
+        addressId: "address-home",
+        promotionCodes: ["SAVE10"],
+      });
     });
-    click(container, "Add code");
     await flush();
 
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Promo codes changed in your cart"),
+    );
     expect(container.textContent).not.toContain("Payment review");
-    expect(container.textContent).toContain("SAVE10 added");
     click(container, "Instant delivery");
     await flush();
     expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
 
-    click(container, "Remove SAVE10 promotion code");
+    act(() => {
+      client.setQueryData(queryKeys.private(0, "checkout-draft"), {
+        cartId: "cart-1",
+        addressId: "address-home",
+        promotionCodes: [],
+      });
+    });
     await flush();
-    expect(container.textContent).not.toContain("Payment review");
+    await vi.waitFor(() => expect(container.textContent).not.toContain("Payment review"));
   });
 
   it("ignores an older initial address response after a current post-save refresh", async () => {

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { CartView } from "@freshmarkets/contracts";
+import type { CartView, CheckoutQuoteView } from "@freshmarkets/contracts";
 import { OrderSummary } from "./order-summary";
 
 const cart: CartView = {
@@ -21,6 +21,30 @@ const cart: CartView = {
       media: { src: "/media/products/banana/1", alt: "Fresh bananas" },
     },
   ],
+};
+const quote: CheckoutQuoteView = {
+  quoteId: "quote-1",
+  attemptVersion: 1,
+  priceAcceptanceVersion: 1,
+  expiresAt: "2026-09-19T12:00:00.000Z",
+  currency: "PHP",
+  merchandiseSubtotalMinor: 17_000,
+  itemDiscountMinor: 1_000,
+  orderDiscountMinor: 0,
+  deliverySubtotalMinor: 2_000,
+  deliveryDiscountMinor: 0,
+  taxMinor: 0,
+  subtotalMinor: 19_000,
+  discountMinor: 1_000,
+  deliveryFeeMinor: 2_000,
+  totalMinor: 18_000,
+  lines: [],
+  requestedPromotionCodes: ["SAVE10", "OLD"],
+  promotionFeedback: [
+    { code: "SAVE10", status: "APPLIED", message: "Promotion applied" },
+    { code: "OLD", status: "EXPIRED", message: "Promotion expired" },
+  ],
+  promotionApplications: [],
 };
 
 describe("OrderSummary", () => {
@@ -55,5 +79,22 @@ describe("OrderSummary", () => {
 
     expect(html).not.toContain("fm-shadow-card");
     expect(html).not.toContain("bg-[var(--fm-surface-soft)]");
+  });
+
+  it("keeps applied and rejected promotion feedback in the quote-backed summary", () => {
+    const html = renderToStaticMarkup(
+      <OrderSummary
+        cart={cart}
+        quote={quote}
+        actionLabel="Continue"
+        totalMinor={quote.totalMinor}
+      />,
+    );
+    expect(html).toContain("Promo codes");
+    expect(html).toContain("SAVE10:");
+    expect(html).toContain("Promotion applied");
+    expect(html).toContain("OLD:");
+    expect(html).toContain("Promotion expired");
+    expect(html).toContain('href="/cart"');
   });
 });

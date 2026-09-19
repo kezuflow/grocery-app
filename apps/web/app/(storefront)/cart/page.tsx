@@ -4,10 +4,16 @@ import { ShoppingBasket } from "lucide-react";
 import { useState } from "react";
 import type { CartView } from "@freshmarkets/contracts";
 import { addToCart, cartCountFromView } from "../../../lib/storefront/cart-client";
-import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
+import {
+  useAcceptCart,
+  useCartQuery,
+  useCheckoutDraft,
+  useInvalidateCheckoutReads,
+} from "../../../lib/query/cart";
 import { OrderSummary } from "../../../components/storefront/marketplace/order-summary";
 import { CheckoutAuthDialog } from "../../../components/storefront/marketplace/checkout-auth-dialog";
 import { ProductMedia } from "../../../components/storefront/product-media";
+import { PromotionEntry } from "../../../components/storefront/checkout/promotion-entry";
 
 const money = (value: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
@@ -15,6 +21,7 @@ const money = (value: number) =>
 export default function CartPage() {
   const query = useCartQuery({ fresh: true });
   const cart = query.cart;
+  const checkoutDraft = useCheckoutDraft(cart?.id);
   const loading = query.isPending;
   const [commandError, setCommandError] = useState("");
   const error =
@@ -169,6 +176,24 @@ export default function CartPage() {
                 ))}
               </div>
             )}
+            {cart?.items.length ? (
+              <div className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 sm:p-5">
+                <PromotionEntry
+                  surface="compact"
+                  codes={checkoutDraft.draft.promotionCodes}
+                  feedback={[]}
+                  disabled={Boolean(cart.paymentInProgress)}
+                  onAdd={(code) =>
+                    checkoutDraft.setPromotionCodes([...checkoutDraft.draft.promotionCodes, code])
+                  }
+                  onRemove={(code) =>
+                    checkoutDraft.setPromotionCodes(
+                      checkoutDraft.draft.promotionCodes.filter((current) => current !== code),
+                    )
+                  }
+                />
+              </div>
+            ) : null}
           </section>
           <div className="lg:sticky lg:top-24">
             <OrderSummary

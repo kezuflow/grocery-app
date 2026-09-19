@@ -10,7 +10,13 @@ import {
   addToCart,
   clearCart as clearCartCommand,
 } from "../../../lib/storefront/cart-client";
-import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
+import {
+  useAcceptCart,
+  useCartQuery,
+  useCheckoutDraft,
+  useInvalidateCheckoutReads,
+} from "../../../lib/query/cart";
+import { PromotionEntry } from "../checkout/promotion-entry";
 import { OrderSummary } from "./order-summary";
 import { CheckoutAuthDialog } from "./checkout-auth-dialog";
 
@@ -24,6 +30,7 @@ export function CartDrawer() {
   const [open, setOpen] = useState(false);
   const cartQuery = useCartQuery({ enabled: open });
   const cart = cartQuery.cart;
+  const checkoutDraft = useCheckoutDraft(cart?.id);
   const loading = open && cartQuery.isPending;
   const [commandError, setCommandError] = useState("");
   const error =
@@ -122,6 +129,7 @@ export function CartDrawer() {
         return;
       }
       acceptCart(result.view);
+      checkoutDraft.clearPromotions();
       setConfirmingClear(false);
       await invalidateCheckout();
     } catch {
@@ -279,6 +287,20 @@ export function CartDrawer() {
                     </div>
                   </div>
                 ))}
+                <PromotionEntry
+                  surface="compact"
+                  codes={checkoutDraft.draft.promotionCodes}
+                  feedback={[]}
+                  disabled={clearing || Boolean(cart?.paymentInProgress)}
+                  onAdd={(code) =>
+                    checkoutDraft.setPromotionCodes([...checkoutDraft.draft.promotionCodes, code])
+                  }
+                  onRemove={(code) =>
+                    checkoutDraft.setPromotionCodes(
+                      checkoutDraft.draft.promotionCodes.filter((current) => current !== code),
+                    )
+                  }
+                />
                 {guest ? (
                   <p className="rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
                     Your cart is saved on this browser. Sign in only when you are ready to check

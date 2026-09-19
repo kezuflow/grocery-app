@@ -14,7 +14,6 @@ import type {
 import { OrderSummary } from "../../../components/storefront/marketplace/order-summary";
 import { AddressEditor } from "../../../components/storefront/address/address-editor";
 import { AddressList } from "../../../components/storefront/address/address-list";
-import { PromotionEntry } from "../../../components/storefront/checkout/promotion-entry";
 import { CheckoutTotalReview } from "../../../components/storefront/checkout/checkout-total-review";
 import { FulfillmentOptionPicker } from "../../../components/storefront/checkout/fulfillment-option-picker";
 import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
@@ -87,7 +86,7 @@ export function CheckoutClient({
   const invalidateCheckoutReads = useInvalidateCheckoutReads();
   const checkoutBootstrap = useCheckoutBootstrapOwner();
   const accountAddresses = useAccountAddressOwner();
-  const checkoutDraft = useCheckoutDraft();
+  const checkoutDraft = useCheckoutDraft(cart?.id);
   const [fulfillmentOptions, setFulfillmentOptions] = useState<readonly FulfillmentOptionView[]>(
     [],
   );
@@ -104,17 +103,14 @@ export function CheckoutClient({
   const [showAddressEditor, setShowAddressEditor] = useState(false);
   const [showSavedAddresses, setShowSavedAddresses] = useState(true);
   const initialAddressId =
-    checkoutDraft.initial.addressId || carriedDestination.current?.savedAddressId || "";
+    checkoutDraft.draft.addressId || carriedDestination.current?.savedAddressId || "";
   const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
   const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
   const selectedAddressId = useRef(initialAddressId);
   const selectedFulfillmentOptionId = useRef("");
   const [status, setStatus] = useState("");
-  const [promotionCodes, setPromotionCodes] = useState<readonly string[]>(
-    checkoutDraft.initial.promotionCodes,
-  );
-  const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.initial.promotionCodes);
+  const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
   const paymentInProgressRef = useRef(false);
   const paymentContinuationRef = useRef<PaymentActionView | null>(null);
@@ -152,6 +148,16 @@ export function CheckoutClient({
     paymentInProgressRef.current = true;
     window.location.replace(paymentContinuationHref(paymentContinuationRef.current));
   }, [cart?.paymentInProgress]);
+  useEffect(() => {
+    const next = checkoutDraft.draft.promotionCodes;
+    if (next.join("\u0000") === promotionCodesRef.current.join("\u0000")) return;
+    promotionCodesRef.current = next;
+    if (pendingQuoteRef.current) {
+      void invalidatePendingQuote().then((released) => {
+        if (released) setStatus("Promo codes changed in your cart. Review the updated total.");
+      });
+    }
+  }, [checkoutDraft.draft.promotionCodes]);
   useEffect(() => {
     const address = addresses.find((entry) => entry.id === addressId && entry.confirmedAt);
     if (address && cart) void loadFulfillmentOptions(address);
@@ -253,7 +259,7 @@ export function CheckoutClient({
   function setCurrentAddress(nextAddressId: string) {
     selectedAddressId.current = nextAddressId;
     setAddressId(nextAddressId);
-    checkoutDraft.save({ addressId: nextAddressId, promotionCodes: promotionCodesRef.current });
+    checkoutDraft.patchAddress(nextAddressId);
   }
 
   async function abandonQuote(quote: CheckoutQuoteView): Promise<boolean> {
@@ -948,39 +954,6 @@ export function CheckoutClient({
                     </div>
                   ) : null}
                 </section>
-
-                <div>
-                  <PromotionEntry
-                    surface="flat"
-                    codes={promotionCodes}
-                    feedback={pendingQuote?.promotionFeedback ?? []}
-                    disabled={guest || acceptingPayment}
-                    onAdd={async (code) => {
-                      if (!(await invalidatePendingQuote())) return false;
-                      const next = [...promotionCodesRef.current, code];
-                      promotionCodesRef.current = next;
-                      setPromotionCodes(next);
-                      checkoutDraft.save({
-                        addressId: selectedAddressId.current,
-                        promotionCodes: next,
-                      });
-                      setStatus(`${code} added. Review the total again to check the promotion.`);
-                    }}
-                    onRemove={async (code) => {
-                      if (!(await invalidatePendingQuote())) return;
-                      const next = promotionCodesRef.current.filter(
-                        (currentCode) => currentCode !== code,
-                      );
-                      promotionCodesRef.current = next;
-                      setPromotionCodes(next);
-                      checkoutDraft.save({
-                        addressId: selectedAddressId.current,
-                        promotionCodes: next,
-                      });
-                      setStatus(`${code} removed. Review the total again.`);
-                    }}
-                  />
-                </div>
 
                 {pendingQuote ? (
                   <div>

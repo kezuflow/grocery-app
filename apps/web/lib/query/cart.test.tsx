@@ -33,12 +33,23 @@ function Consumer({ label }: { label: string }) {
   );
 }
 
-function DraftProbe() {
-  const draft = useCheckoutDraft();
+function DraftProbe({ cartId = "cart-1", label = "draft" }: { cartId?: string; label?: string }) {
+  const draft = useCheckoutDraft(cartId);
   return (
-    <button onClick={() => draft.save({ addressId: "address-1", promotionCodes: ["SAVE10"] })}>
-      {draft.initial.addressId || "empty"}:{draft.initial.promotionCodes.join(",")}
-    </button>
+    <div data-label={label}>
+      <span>
+        {label}:{draft.draft.addressId || "empty"}:{draft.draft.promotionCodes.join(",")}
+      </span>
+      <button
+        onClick={() => {
+          draft.patchAddress("address-1");
+          draft.setPromotionCodes(["save10"]);
+        }}
+      >
+        Set {label}
+      </button>
+      <button onClick={draft.clearPromotions}>Clear {label}</button>
+    </div>
   );
 }
 
@@ -47,6 +58,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.replaceChildren();
+  window.sessionStorage.clear();
   load.mockReset();
 });
 
@@ -107,8 +119,93 @@ it("keeps safe checkout inputs across an ordinary remount in the private epoch c
       </QueryClientProvider>,
     ),
   );
-  expect(host.textContent).toBe("address-1:SAVE10");
+  expect(host.textContent).toContain("draft:address-1:SAVE10");
   expect(
     client.getQueryCache().findAll({ queryKey: ["private", 0, "checkout-draft"] }),
   ).toHaveLength(1);
+});
+
+it("reactively shares promotion and address patches across mounted Cart surfaces", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const client = createQueryClient();
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <QueryClientProvider client={client}>
+        <DraftProbe label="drawer" />
+        <DraftProbe label="page" />
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((button) => button.textContent === "Set drawer")
+      ?.click(),
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(host.textContent).toContain("drawer:address-1:SAVE10");
+  expect(host.textContent).toContain("page:address-1:SAVE10");
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((button) => button.textContent === "Clear page")
+      ?.click(),
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(host.textContent).toContain("drawer:address-1:");
+  expect(host.textContent).toContain("page:address-1:");
+});
+
+it("clears promotion intent for a successor Cart while preserving the selected address", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const client = createQueryClient();
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <QueryClientProvider client={client}>
+        <DraftProbe cartId="cart-1" />
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () => host.querySelector("button")?.click());
+  await act(async () =>
+    root!.render(
+      <QueryClientProvider client={client}>
+        <DraftProbe cartId="cart-2" />
+      </QueryClientProvider>,
+    ),
+  );
+  expect(host.textContent).toContain("draft:address-1:");
+  expect(host.textContent).not.toContain("SAVE10");
+});
+
+it("carries non-sensitive guest promotion intent through the sign-in Cart handoff once", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const guestClient = createQueryClient();
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <QueryClientProvider client={guestClient}>
+        <DraftProbe cartId="guest-cart" />
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () => host.querySelector("button")?.click());
+  act(() => root!.unmount());
+  root = createRoot(host);
+  const signedInClient = createQueryClient();
+  await act(async () =>
+    root!.render(
+      <QueryClientProvider client={signedInClient}>
+        <DraftProbe cartId="server-cart" />
+      </QueryClientProvider>,
+    ),
+  );
+  expect(host.textContent).toContain("draft:empty:SAVE10");
+  expect(window.sessionStorage.length).toBe(0);
 });
