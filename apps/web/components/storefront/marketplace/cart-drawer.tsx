@@ -189,9 +189,9 @@ export function CartDrawer() {
                   setClearError("");
                   setConfirmingClear(true);
                 }}
-                className="min-h-11 px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
+                className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
               >
-                Clear cart
+                Clear All
               </button>
             ) : null}
           </div>
@@ -214,7 +214,7 @@ export function CartDrawer() {
                 {error}
                 <button
                   type="button"
-                  className="ml-3 min-h-11 underline"
+                  className="ml-3 inline-flex min-h-11 items-center justify-center underline"
                   onClick={() => void cartQuery.refetch()}
                 >
                   Retry loading cart
@@ -319,6 +319,7 @@ export function CartDrawer() {
                 actionHref={guest ? undefined : "/checkout"}
                 actionTextClassName="text-white hover:text-white"
                 actionTextStyle={{ color: "#ffffff" }}
+                surface="flat"
                 onAction={
                   guest
                     ? () => {
@@ -367,7 +368,7 @@ export function CartDrawer() {
             type="button"
             disabled={clearing}
             onClick={() => setConfirmingClear(false)}
-            className="min-h-11 rounded-[var(--fm-radius-control)] px-4 text-sm font-semibold hover:bg-[var(--fm-hover)] disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-[var(--fm-radius-control)] px-4 text-sm font-semibold hover:bg-[var(--fm-hover)] disabled:opacity-50"
           >
             {clearError ? "Close" : "Keep items"}
           </button>
@@ -375,9 +376,9 @@ export function CartDrawer() {
             type="button"
             onClick={() => void clearCart()}
             disabled={clearing || !hasItems}
-            className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-destructive)] px-4 text-sm font-bold text-white disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-destructive)] px-4 text-sm font-bold text-white disabled:opacity-50"
           >
-            {clearing ? "Clearing…" : clearError ? "Try clearing again" : "Clear cart"}
+            {clearing ? "Clearing…" : clearError ? "Try clearing again" : "Clear All"}
           </button>
         </div>
       </dialog>

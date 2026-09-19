@@ -90,7 +90,7 @@ export function PromoBanners({ campaigns }: { campaigns: PublishedBanner[] }) {
       className="space-y-3"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="daily-deals-title" className="text-[32px] leading-[42px] font-semibold">
+        <h2 id="daily-deals-title" className="text-[2.25rem] leading-[2.625rem] font-semibold">
           Featured
         </h2>
         <div className="flex items-center gap-2">

@@ -1,5 +1,30 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-POLISH-COMMIT-1 (2026-09-19)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. Owner authorized committing and pushing all remaining uncommitted storefront work after
+the production-review fixes. Acceptance: preserve the existing presentation intent; ship the
+typography, cart-action, flat-summary and brand-wordmark polish; replace the combined navigation item
+with separate Meat and Seafood destinations backed by honest unavailable-yet pages; verify the Web
+package; commit directly to `main` and push. No Core, contract, schema, deployment, provider
+transaction or outbound-message change.
+
+Start: `main` and `origin/main` at `d834b8a2`; eight modified storefront source/test files and the
+untracked Meat/Seafood routes were the complete remaining working tree. Implementation retains the
+legacy `/meat-seafood` page for direct-link compatibility while primary navigation now exposes
+`/meat` and `/seafood`. Cart controls use centered minimum-height hit targets and consistent “Clear
+All” copy; the drawer summary uses its existing flat presentation. Section headings, category labels
+and the wordmark receive the saved typography adjustments. Formatting normalized two pre-existing
+JSX indentation drifts, and the cart test now asserts the new visible action text.
+
+Verification on the complete storefront slice: changed-file formatting and lint pass; naming,
+terminology, architecture and readiness checks pass; focused storefront tests pass 5 files / 15
+tests; Web typecheck passes; the complete Web suite passes 138 files / 570 tests; the production
+vinext build passes and includes `/meat` and `/seafood`. This is local source/build acceptance, not a
+deployment or browser/provider journey. Completed ID: STOREFRONT-POLISH-COMMIT-1 at
+application-source/local-verification level. Remaining at this request level: commit and push only.
+
 ## Latest owner request — PRODUCTION-REVIEW-FIXES-1 (2026-09-19)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

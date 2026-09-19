@@ -36,12 +36,11 @@ export function StorefrontHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-white/95 shadow-[var(--fm-shadow-header)] backdrop-blur">
       <div className="flex h-16 w-full items-center gap-1 px-3 sm:gap-3 sm:px-6 lg:gap-5 lg:px-8">
-        <Link
-          href="/"
-          className="fm-font-display flex shrink-0 items-center gap-2 text-lg font-bold text-[var(--fm-primary-dark)] lg:text-xl"
-        >
+        <Link href="/" className="flex shrink-0 items-center gap-2">
           <FreshMarketsMark className="size-7" />
-          freshmarkets
+          <span className="text-lg font-semibold leading-none tracking-[-0.02em] lowercase">
+            freshmarkets
+          </span>
         </Link>
         <CatalogSearchForm
           id="storefront-search"

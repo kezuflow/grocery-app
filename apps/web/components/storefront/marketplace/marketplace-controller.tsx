@@ -161,7 +161,7 @@ export function MarketplaceController({
                   <h2
                     ref={headingRef}
                     tabIndex={-1}
-                    className="mt-1 text-[32px] leading-[42px] font-semibold outline-none"
+                    className="mt-1 text-[2.25rem] leading-[2.625rem] font-semibold outline-none"
                   >
                     {selection.query
                       ? `Results for “${selection.query}”`

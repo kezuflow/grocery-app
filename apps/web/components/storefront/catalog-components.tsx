@@ -158,7 +158,7 @@ export function ProductRail({
     <section aria-labelledby={`rail-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}>
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-[32px] leading-[42px] font-semibold">{title}</h2>
+          <h2 className="text-[2.25rem] leading-[2.625rem] font-semibold">{title}</h2>
           {subtitle ? (
             <p className="mt-0.5 text-sm text-[var(--fm-text-muted)]">{subtitle}</p>
           ) : null}

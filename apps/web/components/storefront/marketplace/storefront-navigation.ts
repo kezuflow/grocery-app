@@ -1,6 +1,7 @@
 import {
   CookingPot,
   Fish,
+  Beef,
   ClipboardList,
   HeartPulse,
   Home,
@@ -30,7 +31,8 @@ export const storefrontNavigation: ReadonlyArray<StorefrontNavigationItem> = [
   },
   { label: "Retail", href: "/retail", icon: ShoppingBag, tone: "retail" },
   { label: "Pantry", href: "/pantry", icon: CookingPot, tone: "pantry" },
-  { label: "Meat & Seafood", href: "/meat-seafood", icon: Fish, tone: "meat-seafood" },
+  { label: "Meat", href: "/meat", icon: Beef, tone: "meat" },
+  { label: "Seafood", href: "/seafood", icon: Fish, tone: "seafood" },
   { label: "Health", href: "/health", icon: HeartPulse, tone: "health" },
   { label: "Alcohol", href: "/alcohol", icon: Wine, tone: "alcohol" },
   { label: "Deals", href: "/#daily-deals", icon: Tag, tone: "deals" },

@@ -151,7 +151,7 @@ it("does not offer cart mutations while a retained checkout payment is pending",
   const cartDialog = document.querySelector<HTMLDialogElement>('[aria-label="Shopping cart"]');
   expect(
     [...(cartDialog?.querySelectorAll("button") ?? [])].some(
-      (button) => button.textContent === "Clear cart",
+      (button) => button.textContent === "Clear All",
     ),
   ).toBe(false);
   expect(
@@ -217,14 +217,14 @@ it("confirms before clearing every cart line through authoritative mutations", a
   await vi.waitFor(() =>
     expect(
       [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].some(
-        (button) => button.textContent === "Clear cart",
+        (button) => button.textContent === "Clear All",
       ),
     ).toBe(true),
   );
 
   await act(async () => {
     [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
-      .find((button) => button.textContent === "Clear cart")
+      .find((button) => button.textContent === "Clear All")
       ?.click();
   });
   expect(commands).toHaveLength(0);
@@ -238,7 +238,7 @@ it("confirms before clearing every cart line through authoritative mutations", a
 
   await act(async () => {
     [...(confirmation?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
-      .find((button) => button.textContent === "Clear cart")
+      .find((button) => button.textContent === "Clear All")
       ?.click();
     await vi.waitFor(() => expect(commands).toHaveLength(2));
   });

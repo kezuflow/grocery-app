@@ -87,7 +87,7 @@ export function CategoryStrip({
   };
 
   const itemClassName =
-    "group flex h-[132px] w-[116px] shrink-0 snap-start flex-col items-center gap-2 py-1 text-center text-[15px] leading-5 font-semibold text-[var(--fm-text)] transition-transform hover:-translate-y-0.5";
+    "group flex h-[132px] w-[116px] shrink-0 snap-start flex-col items-center gap-2 py-1 text-center text-base leading-5 font-medium text-[var(--fm-text)] transition-transform hover:-translate-y-0.5";
   const selectCategory = (category: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (
       !onCategorySelect ||
