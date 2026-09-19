@@ -22,7 +22,7 @@ const reason = "Synthetic Scheduled customer journey";
 test.describe.configure({ timeout: 300000 });
 
 for (const width of [1440, 390]) {
-  test(`Scheduled checkout, paid addition, packing and manual delivery at ${width}px`, async ({
+  test(`retained Scheduled order, paid addition, packing and manual delivery at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }, testInfo) => {
@@ -191,27 +191,29 @@ for (const width of [1440, 390]) {
       expectedVersion: config.version,
       reason,
     });
-    await post(page, "/api/commerce/address", {
-      label: "Journey address",
-      recipient: "Synthetic customer",
-      phone: "+639171110001",
-      components: {
-        addressLine1: "Test customer road",
-        addressLine2: null,
-        barangay: null,
-        city: "Cebu",
-        region: "Cebu",
-        postalCode: null,
-        countryCode: "PH",
-      },
-      componentsSource: "FIRST_PARTY",
-      latitude: 10.32,
-      longitude: 123.9,
-      confirmationSource: "USER_PIN",
-      instructions: {
-        deliveryInstructions: null,
-      },
-    });
+    const journeyAddress = z.object({ id: z.string(), version: z.number() }).parse(
+      await post(page, "/api/commerce/address", {
+        label: "Journey address",
+        recipient: "Synthetic customer",
+        phone: "+639171110001",
+        components: {
+          addressLine1: "Test customer road",
+          addressLine2: null,
+          barangay: null,
+          city: "Cebu",
+          region: "Cebu",
+          postalCode: null,
+          countryCode: "PH",
+        },
+        componentsSource: "FIRST_PARTY",
+        latitude: 10.32,
+        longitude: 123.9,
+        confirmationSource: "USER_PIN",
+        instructions: {
+          deliveryInstructions: null,
+        },
+      }),
+    );
     // The provider-hosted page is the sole browser response fake. It has no
     // financial-success authority; signed events go to the actual Core webhook.
     await page.route("**/development/mock-payments/**", (route) =>
@@ -247,40 +249,86 @@ for (const width of [1440, 390]) {
     }
     async function checkout(quantity: number) {
       const before = orders.parse(await read(page, "/api/commerce/orders"));
-      const loadedCart = page.waitForResponse(
-        async (response) =>
-          response.url().endsWith("/api/commerce/cart") &&
-          response.request().method() === "GET" &&
-          (await response.json()).ok === true,
-      );
-      await page.goto("/cart");
       const cart = z
         .object({ id: z.string(), version: z.number() })
-        .parse(await value(await loadedCart));
-      await post(page, "/api/commerce/cart", {
-        cartId: cart.id,
-        expectedVersion: cart.version,
-        skuId,
-        quantity,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      await page.goto("/checkout");
-      await page.getByRole("radio").first().check();
-      const quoteResponse = page.waitForResponse(
-        (r) => r.url().endsWith("/api/checkout/quote") && r.request().method() === "POST",
+        .parse(await read(page, "/api/commerce/cart"));
+      const currentCart = z.object({ id: z.string(), version: z.number() }).parse(
+        await post(page, "/api/commerce/cart", {
+          cartId: cart.id,
+          expectedVersion: cart.version,
+          skuId,
+          quantity,
+          idempotencyKey: crypto.randomUUID(),
+        }),
       );
-      await page
-        .getByRole("group", { name: "Fulfillment option", exact: true })
-        .getByRole("button")
-        .first()
-        .click();
+      const options = z
+        .array(
+          z.object({
+            optionId: z.string(),
+            mode: z.string(),
+            eligible: z.boolean(),
+          }),
+        )
+        .parse(
+          await post(page, "/api/checkout/fulfillment-options", {
+            addressId: journeyAddress.id,
+            addressVersion: journeyAddress.version,
+            cartId: currentCart.id,
+            cartVersion: currentCart.version,
+          }),
+        );
+      const scheduledOption = options.find(
+        (option) => option.mode === "SCHEDULED" && option.eligible,
+      );
+      if (!scheduledOption) throw new Error("Missing retained Scheduled fulfillment option");
       const quote = z
-        .object({ totalMinor: z.number(), merchandiseSubtotalMinor: z.number() })
-        .parse(await value(await quoteResponse));
+        .object({
+          quoteId: z.string(),
+          attemptVersion: z.number(),
+          priceAcceptanceVersion: z.number(),
+          currency: z.string(),
+          merchandiseSubtotalMinor: z.number(),
+          itemDiscountMinor: z.number(),
+          orderDiscountMinor: z.number(),
+          deliverySubtotalMinor: z.number(),
+          deliveryFeeMinor: z.number(),
+          deliveryDiscountMinor: z.number(),
+          taxMinor: z.number(),
+          totalMinor: z.number(),
+        })
+        .parse(
+          await post(page, "/api/checkout/quote", {
+            cartId: currentCart.id,
+            cartVersion: currentCart.version,
+            addressId: journeyAddress.id,
+            fulfillmentOptionId: scheduledOption.optionId,
+            promotionCodes: [],
+          }),
+        );
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100000);
-      await page
-        .getByRole("button", { name: "Accept total and continue to payment", exact: true })
-        .click();
+      const payment = z
+        .object({ actionType: z.literal("REDIRECT"), redirectUrl: z.string().url() })
+        .parse(
+          await post(page, "/api/checkout/payment", {
+            checkoutAttemptId: quote.quoteId,
+            expectedQuoteVersion: quote.attemptVersion,
+            expectedPriceAcceptanceVersion: quote.priceAcceptanceVersion,
+            expectedCurrency: quote.currency,
+            expectedMerchandiseSubtotalMinor: quote.merchandiseSubtotalMinor,
+            expectedItemDiscountMinor: quote.itemDiscountMinor,
+            expectedOrderDiscountMinor: quote.orderDiscountMinor,
+            expectedDeliverySubtotalMinor: quote.deliverySubtotalMinor,
+            expectedDeliveryFeeMinor: quote.deliveryFeeMinor,
+            expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
+            expectedTaxMinor: quote.taxMinor,
+            expectedTotalMinor: quote.totalMinor,
+            returnUrl: new URL(
+              "/orders",
+              testInfo.project.use.baseURL ?? "http://localhost:3100",
+            ).toString(),
+          }),
+        );
+      await page.goto(payment.redirectUrl);
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
       await confirmTestPayment(quote.totalMinor);

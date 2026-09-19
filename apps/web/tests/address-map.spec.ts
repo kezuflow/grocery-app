@@ -222,23 +222,26 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
       ok: true,
       value: [
         {
-          optionId: "fulfillment-scheduled-1",
-          mode: "SCHEDULED",
+          optionId: "fulfillment-instant-1",
+          mode: "INSTANT",
           eligible: true,
           unavailableReason: null,
-          promisedAt: null,
-          deliveryWindow: {
-            startsAt: "2026-09-05T00:00:00.000Z",
-            endsAt: "2026-09-06T00:00:00.000Z",
+          deliveryPartner: {
+            code: "lalamove",
+            displayName: "Lalamove",
+            serviceType: "MOTORCYCLE",
+            serviceLabel: "Motorcycle",
           },
+          promisedAt: "2099-09-05T00:30:00.000Z",
+          deliveryWindow: null,
           feePreview: {
             subtotalMinor: 2_000,
             discountMinor: 0,
             totalMinor: 2_000,
             currency: "PHP",
           },
-          cycleId: "cycle-1",
-          cutoffAt: "2026-09-04T00:00:00.000Z",
+          cycleId: null,
+          cutoffAt: null,
           provisional: true,
         },
       ],
@@ -295,8 +298,8 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   await expect(page.getByRole("radio", { name: /Outside Cebu/ })).toBeDisabled();
   await assertNoCoordinateInputs(page);
   await page.getByRole("radio", { name: /Home/ }).check();
-  await page.getByRole("button", { name: /Scheduled delivery/ }).click();
-  await expect(page.getByText("Review your current total: PHP 320.00.")).toBeVisible();
+  await expect(page.getByText("Delivery fee confirmed with Lalamove.")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText("₱320.00");
   expect(optionAddressId).toBe("address-home");
 });
 

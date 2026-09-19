@@ -482,6 +482,34 @@ describe("CheckoutClient delivery inputs", () => {
     );
   });
 
+  it("refreshes the accepted Instant quote at the provider-expiry safety boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-19T00:00:00.000Z"));
+    let quoteCalls = 0;
+    let abandonCalls = 0;
+    const base = successfulFetch({ onQuote: () => (quoteCalls += 1) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith("/abandon")) abandonCalls += 1;
+        return base(url, init);
+      }),
+    );
+
+    act(() => root.render(checkout()));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    await flush();
+    expect(quoteCalls).toBe(1);
+
+    await act(async () => vi.advanceTimersByTimeAsync(4.5 * 60_000));
+    await flush();
+
+    expect(abandonCalls).toBe(1);
+    expect(quoteCalls).toBe(2);
+  });
+
   it("invalidates the quote and rotates idempotency when a different address is selected", async () => {
     const quoteKeys: string[] = [];
     vi.stubGlobal(
@@ -496,15 +524,12 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("PHP 320.00");
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(1));
+    expect(container.textContent).toContain("Delivery fee confirmed with Lalamove");
 
     choose(container, "Office");
     await flush();
-    expect(container.textContent).not.toContain("PHP 320.00");
-    click(container, "Lalamove");
-    await flush();
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(2));
 
     expect(quoteKeys).toHaveLength(2);
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
@@ -524,16 +549,12 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Lalamove");
-    await flush();
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(1));
     click(container, "Edit Home address");
     click(container, "Complete checkout address save");
     await flush();
 
-    expect(container.textContent).not.toContain("PHP 320.00");
-    await flush();
-    click(container, "Lalamove");
-    await flush();
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(2));
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
   });
 
@@ -597,15 +618,12 @@ describe("CheckoutClient delivery inputs", () => {
 
     choose(container, "Home");
     await flush();
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("PHP 320.00");
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(1));
 
     click(container, "GrabExpress");
-    await flush();
-    expect(container.textContent).not.toContain("PHP 320.00");
+    await vi.waitFor(() => expect(quoteKeys).toHaveLength(2));
     expect(quoteKeys[1]).not.toBe(quoteKeys[0]);
-    expect(container.textContent).toContain("PHP 330.00");
+    expect(container.textContent).toContain("Delivery fee confirmed with GrabExpress");
   });
 
   it("preserves explicit provider and service intent across refreshed opaque option IDs", async () => {
@@ -672,9 +690,12 @@ describe("CheckoutClient delivery inputs", () => {
         base.mock.calls.filter(([url]) => String(url).includes("fulfillment-options")),
       ).toHaveLength(1),
     );
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("Payment review");
+    await vi.waitFor(() =>
+      expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+        1,
+      ),
+    );
+    expect(container.textContent).toContain("Delivery fee confirmed with Lalamove");
   });
   it("shows the delivery error beside a confirmed address and retries with fresh input versions", async () => {
     const base = successfulFetch();
@@ -713,9 +734,12 @@ describe("CheckoutClient delivery inputs", () => {
     click(container, "Retry delivery options");
     await flush();
     expect(requests.at(-1)?.cartVersion).toBe(5);
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("Payment review");
+    await vi.waitFor(() =>
+      expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+        1,
+      ),
+    );
+    expect(container.textContent).toContain("Delivery fee confirmed with Lalamove");
   });
 
   it("clears old options while a new address loads and discards the older response", async () => {
@@ -789,24 +813,16 @@ describe("CheckoutClient delivery inputs", () => {
     act(() => root.render(checkout()));
     await flush();
     choose(container, "Home");
-    await flush();
-    click(container, "Lalamove");
-    await flush();
+    await vi.waitFor(() => expect(quotes).toHaveLength(1));
     choose(container, "Office");
     await flush();
     expect(container.textContent).toContain("could not be released safely");
-    expect(container.textContent).toContain("Payment review");
     expect(quotes).toHaveLength(1);
-    click(container, "Discard current total and start again");
-    await flush();
+    choose(container, "Office");
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
     expect(releases).toHaveLength(2);
     expect(releases[1]).toEqual(releases[0]);
-    expect(container.textContent).not.toContain("Payment review");
-    choose(container, "Office");
-    await flush();
-    click(container, "Lalamove");
-    await flush();
-    expect(quotes).toHaveLength(2);
+    await vi.waitFor(() => expect(quotes).toHaveLength(2));
   });
   it("reacts to shared Cart promotion intent and invalidates an accepted quote", async () => {
     const quoteBodies: Array<{ promotionCodes?: string[] }> = [];
@@ -821,10 +837,7 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     choose(container, "Home");
-    await flush();
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("Payment review");
+    await vi.waitFor(() => expect(quoteBodies).toHaveLength(1));
 
     act(() => {
       client.setQueryData(queryKeys.private(0, "checkout-draft"), {
@@ -835,12 +848,7 @@ describe("CheckoutClient delivery inputs", () => {
     });
     await flush();
 
-    await vi.waitFor(() =>
-      expect(container.textContent).toContain("Promo codes changed in your cart"),
-    );
-    expect(container.textContent).not.toContain("Payment review");
-    click(container, "Lalamove");
-    await flush();
+    await vi.waitFor(() => expect(quoteBodies).toHaveLength(2));
     expect(quoteBodies.at(-1)?.promotionCodes).toEqual(["SAVE10"]);
 
     act(() => {
@@ -850,8 +858,83 @@ describe("CheckoutClient delivery inputs", () => {
         promotionCodes: [],
       });
     });
+    await vi.waitFor(() => expect(quoteBodies).toHaveLength(3));
+    expect(quoteBodies.at(-1)?.promotionCodes).toEqual([]);
+  });
+
+  it("retries an unknown quote with the identical request identity", async () => {
+    const requests: Array<{ key: string; body: string }> = [];
+    const base = successfulFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/quote") {
+          requests.push({
+            key: new Headers(init?.headers).get("idempotency-key") ?? "",
+            body: String(init?.body),
+          });
+          if (requests.length === 1)
+            return Promise.reject(new Error("Response lost after submission"));
+        }
+        return base(url, init);
+      }),
+    );
+
+    act(() => root.render(checkout()));
     await flush();
-    await vi.waitFor(() => expect(container.textContent).not.toContain("Payment review"));
+    choose(container, "Home");
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await vi.waitFor(() => expect(container.textContent).toContain("identical delivery quotation"));
+
+    click(container, "Try quotation again");
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1]).toEqual(requests[0]);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Delivery fee confirmed with Lalamove"),
+    );
+  });
+
+  it("releases a successful obsolete quote before automatically quoting newer promo intent", async () => {
+    const firstQuote = deferred<Response>();
+    const quoteRequests: Array<{ key: string; body: string; init?: RequestInit }> = [];
+    let releases = 0;
+    const base = successfulFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        const path = String(url);
+        if (path === "/api/checkout/quote") {
+          quoteRequests.push({
+            key: new Headers(init?.headers).get("idempotency-key") ?? "",
+            body: String(init?.body),
+            init,
+          });
+          if (quoteRequests.length === 1) return firstQuote.promise;
+        }
+        if (path.endsWith("/abandon")) releases += 1;
+        return base(url, init);
+      }),
+    );
+    const client = createQueryClient();
+    act(() => root.render(checkout(client)));
+    await flush();
+    choose(container, "Home");
+    await vi.waitFor(() => expect(quoteRequests).toHaveLength(1));
+
+    act(() => {
+      client.setQueryData(queryKeys.private(0, "checkout-draft"), {
+        cartId: "cart-1",
+        addressId: "address-home",
+        promotionCodes: ["SAVE10"],
+      });
+    });
+    const firstResponse = await base("/api/checkout/quote", quoteRequests[0]?.init);
+    firstQuote.resolve(firstResponse);
+
+    await vi.waitFor(() => expect(releases).toBe(1));
+    await vi.waitFor(() => expect(quoteRequests).toHaveLength(2));
+    expect(JSON.parse(quoteRequests[1]?.body ?? "{}").promotionCodes).toEqual(["SAVE10"]);
+    expect(quoteRequests[1]?.key).not.toBe(quoteRequests[0]?.key);
   });
 
   it("ignores an older initial address response after a current post-save refresh", async () => {
@@ -886,8 +969,11 @@ describe("CheckoutClient delivery inputs", () => {
 
     expect(container.textContent).toContain("Current");
     expect(container.textContent).not.toContain("Stale");
-    click(container, "Lalamove");
-    await flush();
-    expect(container.textContent).toContain("Payment review");
+    await vi.waitFor(() =>
+      expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+        1,
+      ),
+    );
+    expect(container.textContent).toContain("Delivery fee confirmed with Lalamove");
   });
 });

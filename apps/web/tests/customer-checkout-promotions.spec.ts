@@ -17,7 +17,7 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
     quoteId: "quote-promotion-1",
     attemptVersion: 4,
     priceAcceptanceVersion: 2,
-    expiresAt: "2026-09-01T00:00:00.000Z",
+    expiresAt: "2099-09-01T00:00:00.000Z",
     currency: "PHP",
     merchandiseSubtotalMinor: 30_000,
     itemDiscountMinor: 0,
@@ -54,11 +54,36 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
     ],
   };
 
+  await page.context().addCookies([
+    {
+      name: "freshmarkets_browse_point_v2",
+      value: encodeURIComponent(JSON.stringify({ latitude: 10.3173, longitude: 123.9058 })),
+      url: test.info().project.use.baseURL ?? "http://localhost:3100",
+      sameSite: "Lax",
+    },
+  ]);
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "freshmarkets.delivery-location.v3",
+      JSON.stringify({
+        displayAddress: "Ayala Center Cebu",
+        coordinate: { latitude: 10.3173, longitude: 123.9058 },
+        savedAddressId: null,
+      }),
+    ),
+  );
+  await page.route("**/api/serviceability", (route) =>
+    json(route, {
+      ok: true,
+      value: { serviceable: true, fulfillmentLocation: { id: "test-location" } },
+    }),
+  );
   await page.route("**/api/commerce/cart", (route) =>
     json(route, {
       ok: true,
       value: {
         id: "cart-1",
+        locationId: "test-location",
         version: 3,
         currency: "PHP",
         totalMinor: 30_000,
@@ -82,62 +107,68 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
       ok: true,
       value: [
         {
-          optionId: "fulfillment-scheduled-1",
-          mode: "SCHEDULED",
+          optionId: "fulfillment-instant-1",
+          mode: "INSTANT",
           eligible: true,
           unavailableReason: null,
-          promisedAt: null,
-          deliveryWindow: {
-            startsAt: "2026-09-05T08:00:00.000Z",
-            endsAt: "2026-09-06T08:00:00.000Z",
+          deliveryPartner: {
+            code: "lalamove",
+            displayName: "Lalamove",
+            serviceType: "MOTORCYCLE",
+            serviceLabel: "Motorcycle",
           },
+          promisedAt: "2099-09-01T00:30:00.000Z",
+          deliveryWindow: null,
           feePreview: {
             subtotalMinor: 2_000,
             discountMinor: 0,
             totalMinor: 2_000,
             currency: "PHP",
           },
-          cycleId: "cycle-1",
-          cutoffAt: "2026-09-04T00:00:00.000Z",
+          cycleId: null,
+          cutoffAt: null,
           provisional: true,
         },
       ],
     }),
   );
-  await page.route("**/api/commerce/address", (route) =>
+  await page.route("**/api/checkout/bootstrap", (route) =>
     json(route, {
       ok: true,
-      value: [
-        {
-          id: "address-1",
-          label: "Home",
-          recipient: "Ana",
-          phone: "+639171234567",
-          components: {
-            addressLine1: "Ayala Center Cebu",
-            addressLine2: null,
-            barangay: "Luz",
-            city: "Cebu City",
-            region: "Central Visayas",
-            postalCode: "6000",
-            countryCode: "PH",
+      value: {
+        addresses: [
+          {
+            id: "address-1",
+            label: "Home",
+            recipient: "Ana",
+            phone: "+639171234567",
+            components: {
+              addressLine1: "Ayala Center Cebu",
+              addressLine2: null,
+              barangay: "Luz",
+              city: "Cebu City",
+              region: "Central Visayas",
+              postalCode: "6000",
+              countryCode: "PH",
+            },
+            confirmationSource: "USER_PIN",
+            confirmedAt: "2026-08-30T00:00:00.000Z",
+            instructions: {
+              deliveryInstructions: null,
+            },
+            latitude: 10.3173,
+            longitude: 123.9058,
+            serviceable: true,
+            serviceabilityReason: null,
+            serviceAreaCode: "CEBU_CITY",
+            deliveryZoneCode: "CEBU_CITY_CORE",
+            resolutionVersion: 1,
+            status: "active",
+            version: 2,
           },
-          confirmationSource: "USER_PIN",
-          confirmedAt: "2026-08-30T00:00:00.000Z",
-          instructions: {
-            deliveryInstructions: null,
-          },
-          latitude: 10.3173,
-          longitude: 123.9058,
-          serviceable: true,
-          serviceabilityReason: null,
-          serviceAreaCode: "CEBU_CITY",
-          deliveryZoneCode: "CEBU_CITY_CORE",
-          resolutionVersion: 1,
-          status: "active",
-          version: 2,
-        },
-      ],
+        ],
+        profile: { accountPhone: null, defaultAddressId: null },
+      },
     }),
   );
   await page.route("**/api/checkout/quote", async (route) => {
@@ -159,24 +190,22 @@ test("applies a promotion, presents Core totals, and accepts the exact quote ver
     });
   });
 
-  await page.goto("/checkout");
-  await page.getByRole("radio", { name: /^Home/ }).check();
+  await page.goto("/cart");
   await page.getByRole("textbox", { name: "Promotion code" }).fill(" save10 ");
-  await page.getByRole("button", { name: "Add code" }).click();
-  await page.getByRole("button", { name: /Scheduled delivery/ }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("link", { name: "Checkout", exact: true }).click();
+  await page.getByRole("radio", { name: /^Home/ }).focus();
+  await page.keyboard.press("Space");
 
   await expect.poll(() => quoteRequest?.promotionCodes).toEqual(["SAVE10"]);
-  expect(quoteRequest).toMatchObject({ fulfillmentOptionId: "fulfillment-scheduled-1" });
+  expect(quoteRequest).toMatchObject({ fulfillmentOptionId: "fulfillment-instant-1" });
   await expect(page.getByText("Promotion applied")).toBeVisible();
-  await expect(page.getByText("Free delivery (automatically applied)")).toBeVisible();
-  await expect(page.getByText("Merchandise promotion")).toBeVisible();
-  await expect(page.getByText("Delivery promotion")).toBeVisible();
+  await expect(page.getByText(/Free delivery.*Automatic/)).toBeVisible();
+  await expect(page.getByText("Order discount")).toBeVisible();
+  await expect(page.getByText("Delivery discount")).toBeVisible();
   await expect(page.getByText("₱270.00").first()).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Accept total and continue to payment", exact: true })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Continue to payment", exact: true }).first().click();
   await expect
     .poll(() => paymentRequest)
     .toMatchObject({

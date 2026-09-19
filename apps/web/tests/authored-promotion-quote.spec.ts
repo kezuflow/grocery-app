@@ -154,20 +154,16 @@ test("Admin campaign reaches a real customer Quote at the authored code length b
     .fill("Verify real customer promotion application");
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
-  await page.goto("/checkout");
+  await page.goto("/cart");
   await page.getByLabel("Promotion code", { exact: true }).fill(code);
   await expect(page.getByLabel("Promotion code", { exact: true })).toHaveValue(code);
-  await page.getByRole("button", { name: "Add code", exact: true }).click();
-  await page.getByRole("radio").first().check();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("link", { name: "Checkout", exact: true }).click();
   const quoteResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/checkout/quote") && response.request().method() === "POST",
   );
-  await page
-    .getByRole("group", { name: "Fulfillment option", exact: true })
-    .getByRole("button")
-    .first()
-    .click();
+  await page.getByRole("radio").first().check();
   const quote = z
     .object({
       orderDiscountMinor: z.number(),
@@ -178,7 +174,7 @@ test("Admin campaign reaches a real customer Quote at the authored code length b
     .parse(await value(await quoteResponse));
   expect(quote.orderDiscountMinor).toBe(500);
   expect(quote.promotionFeedback).toContainEqual({ code, status: "APPLIED" });
-  const review = page.getByRole("region", { name: "Order total review" });
+  const review = page.getByRole("complementary", { name: "Order summary" });
   await expect(review).toContainText("Authored customer quote campaign");
   await expect(review).toContainText(
     new Intl.NumberFormat("en-PH", { style: "currency", currency: quote.currency }).format(
@@ -195,8 +191,4 @@ test("Admin campaign reaches a real customer Quote at the authored code length b
       fullPage: true,
     });
   }
-  await page
-    .getByRole("button", { name: "Discard current total and start again", exact: true })
-    .click();
-  await expect(review).toHaveCount(0);
 });

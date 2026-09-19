@@ -2,13 +2,13 @@
 
 ## Latest owner request — CHECKOUT-CART-SIMPLIFICATION-1 (2026-09-19)
 
-Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence C — CK-01, CK-03 and CK-02 authoritative delivery inputs**,
+Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence E — integrated browser, Worker/D1 and regression verification**,
 continuing `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
 evidence**. The owner supplied and authorized the seven-slice checkout/cart plan. Overall acceptance
 is CK-01 through CK-07 at application, Worker/D1 and relevant browser level; deployment, a live mode
-switch and actual courier/payment transactions remain separate. The active dependency slice combines
-the current browsing destination and saved alternatives, an Instant-only new customer checkout, and
-compact provider-aware selection while retaining Core mode/provider/opaque-option authority.
+switch and actual courier/payment transactions remain separate. All seven implementation IDs are now
+complete at source/local-application acceptance level; activation and actual-provider evidence remain
+separate authorized work.
 
 Sequence A started from clean `main` and `origin/main` at
 `264cf5cf4035cdbe6ac0989635e58168525fe0ec`. The delivered implementation replaces the former
@@ -72,9 +72,46 @@ saved identity, Scheduled-mode fail-closed behavior, provider switching and prov
 across new opaque IDs. The complete Web suite passes 139 files / 583 tests and the production Web build
 passes. This is source and local build acceptance; no real browser journey, deployment, live mode
 switch, provider quotation or courier transaction is claimed. CK-01, CK-02 and CK-03 are complete at
-this slice's application/local-acceptance level; commit and push are pending. Remaining at the
-seven-ID plan level: CK-04 and CK-05. Next action: commit and push Sequence C, then start Sequence D /
-CK-04 and CK-05 single summary and automatic quotation lifecycle.
+this slice's application/local-acceptance level. Implementation commit `96bf0ee6` is pushed to
+`origin/main`.
+
+Sequence D started from clean `main` and `origin/main` at `96bf0ee6`. Checkout now has one automatic
+quote lifecycle and one Order summary/payment action. A fingerprint of query epoch, Cart/version,
+confirmed address/version, opaque fulfillment option and normalized promotion intent governs quote
+ownership. Valid inputs quote automatically; Cart, destination, provider and promo changes release
+the old attempt before requoting. Transport-unknown requests retain their exact body and idempotency
+key for replay, successful obsolete responses are released before newer work proceeds, and failed
+release or replacement keeps payment blocked. Provider expiry uses the same lifecycle, and
+`PRICE_CHANGED` cannot leave stale money actionable.
+
+The summary is the sole financial presentation: before a quote it labels the amount honestly as
+before delivery; afterward it renders quote-backed merchandise, item/order/delivery discounts,
+delivery, applicable tax, total, promotion feedback/applications, provider terms and expiry. Its
+small opacity/position update is disabled by reduced-motion preference and announced politely without
+layout movement. The separate total-review component and its discard/review action were removed;
+`Continue to payment` remains guarded by the exact quote, price-acceptance and monetary component
+versions. CK-04 and CK-05 source, component and lifecycle coverage passes 3 focused files / 24 tests.
+
+Sequence E reconciles the browser suite with the authorized flow. Mocked desktop/mobile journeys
+cover Instant option recovery, automatic quote failure/retry, address invalidation, promotion intent
+carried from Cart through client navigation, quote-backed discounts and exact payment guards. The
+local Worker/D1 journey covers an unknown release response and exact command replay at both viewport
+sizes. Older checkout journeys now wait for automatic quotation and use the sole summary/action; the
+retained Scheduled-operations journey creates its Scheduled order through the real API boundary
+rather than the removed new-customer control, preserving its downstream amendment, packing and
+delivery assertions.
+
+Verification on the complete Sequence D/E working tree: formatting, naming, terminology,
+architecture, readiness and diff-whitespace checks pass; lint passes with the same two pre-existing
+address-book warnings; all workspace typechecks pass. The complete Web suite passes 138 files / 583
+tests and repeated production vinext builds pass. Focused Playwright acceptance passes 5 scenarios:
+promotion/quote/payment 1/1, fulfillment/address desktop and mobile 2/2, and unknown release replay
+desktop and mobile 2/2. The provider-gated retained Scheduled operational journey was typechecked but
+not executed because no managed provider gateway was authorized for this run. No deployment, live
+mode switch, actual courier quotation, payment transaction or remote-data change was performed.
+CK-01 through CK-07 are complete at the seven-ID application/local-acceptance counting level; zero
+implementation IDs remain. Next action requires separate owner authorization: activate only after
+the target environment is verified Instant-ready, then record actual provider/deployed acceptance.
 
 ## Latest owner request — STAGING-DEPLOY-OAUTH-DIAG-1 (2026-09-19)
 

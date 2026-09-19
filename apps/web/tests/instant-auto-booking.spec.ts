@@ -246,15 +246,10 @@ for (const width of [1440, 390]) {
         });
       }
       await page.goto("/checkout");
-      await page.getByRole("radio").first().check();
       const quoteResponse = page.waitForResponse(
         (r) => r.url().endsWith("/api/checkout/quote") && r.request().method() === "POST",
       );
-      await page
-        .getByRole("group", { name: "Fulfillment option", exact: true })
-        .getByRole("button")
-        .first()
-        .click();
+      await page.getByRole("radio").first().check();
       const quote = z
         .object({
           totalMinor: z.number(),
@@ -264,12 +259,10 @@ for (const width of [1440, 390]) {
         .parse(await value(await quoteResponse));
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
       expect(quote.itemDiscountMinor).toBe(itemDiscountMinor);
-      await page.getByRole("region", { name: "Order total review" }).screenshot({
+      await page.getByRole("complementary", { name: "Order summary" }).screenshot({
         path: testInfo.outputPath(`checkout-delivery-policy-${width}.png`),
       });
-      await page
-        .getByRole("button", { name: "Accept total and continue to payment", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Continue to payment", exact: true }).click();
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
       await confirmTestPayment(quote.totalMinor);

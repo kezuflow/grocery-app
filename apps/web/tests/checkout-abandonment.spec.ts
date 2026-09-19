@@ -62,12 +62,9 @@ for (const width of [1440, 390])
     expect(await address.json()).toMatchObject({ ok: true });
     await page.goto("/checkout");
     await page.locator("label").filter({ hasText: "Checkout home" }).click();
-    await page
-      .getByRole("group", { name: "Fulfillment option", exact: true })
-      .getByRole("button")
-      .click();
-    await expect(page.getByRole("heading", { name: "Payment review" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
     const requests: Array<{ body: string | null; key: string | undefined }> = [];
+    let settledRequestCount = 0;
     await page.route("**/api/checkout/quote/*/abandon", async (route) => {
       requests.push({
         body: route.request().postData(),
@@ -80,17 +77,17 @@ for (const width of [1440, 390])
       });
       if (requests.length === 1) await route.abort("failed");
       else await route.fulfill({ response });
+      settledRequestCount += 1;
     });
-    await page.getByRole("button", { name: "Discard current total and start again" }).click();
+    const increase = page.getByRole("button", { name: /^Increase / }).first();
+    await increase.click();
     await expect(page.getByText(/could not be released safely/)).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Payment review" })).toBeVisible();
-    await page.getByRole("button", { name: "Discard current total and start again" }).click();
-    await expect(
-      page.getByText("Current checkout released. You can choose new delivery details."),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
+    await increase.click();
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
-    await expect(page.getByRole("heading", { name: "Payment review" })).toHaveCount(0);
+    await expect.poll(() => settledRequestCount).toBe(2);
+    await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
@@ -98,4 +95,5 @@ for (const width of [1440, 390])
       path: testInfo.outputPath("checkout-abandonment.png"),
       fullPage: true,
     });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
   });

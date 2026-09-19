@@ -362,21 +362,16 @@ for (const width of [1280, 390]) {
     });
 
     await page.goto("/checkout");
-    await page.getByRole("radio").first().check();
     const quoteResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/checkout/quote") && response.request().method() === "POST",
     );
-    await page
-      .getByRole("group", { name: "Fulfillment option", exact: true })
-      .getByRole("button")
-      .first()
-      .click();
+    await page.getByRole("radio").first().check();
     const quote = z
       .object({ quoteId: z.string(), merchandiseSubtotalMinor: z.number() })
       .parse(await value(await quoteResponse));
     expect(quote.merchandiseSubtotalMinor).toBe(200000);
-    await expect(page.getByRole("region", { name: "Order total review" })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Order summary" })).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`counted-checkout-${width}.png`),
       fullPage: true,

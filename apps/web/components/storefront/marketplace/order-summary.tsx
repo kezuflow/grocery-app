@@ -1,7 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Info, Minus, Plus, ShoppingBasket } from "lucide-react";
 import type { CartView, CheckoutQuoteView } from "@freshmarkets/contracts";
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { cn } from "../../../lib/utils";
 import { ProductMedia } from "../product-media";
 
@@ -22,6 +24,7 @@ export function OrderSummary({
   note,
   totalMinor,
   quote,
+  quoteState = "needs-input",
   showItems = false,
   onQuantityChange,
   updatingSkuId,
@@ -37,6 +40,7 @@ export function OrderSummary({
   note?: string;
   totalMinor?: number;
   quote?: CheckoutQuoteView;
+  quoteState?: "needs-input" | "quoting" | "ready" | "refreshing" | "error";
   showItems?: boolean;
   onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
   updatingSkuId?: string | null;
@@ -44,12 +48,26 @@ export function OrderSummary({
   actionTextClassName?: string;
   actionTextStyle?: CSSProperties;
 }) {
-  const currency = cart?.currency ?? "PHP";
+  const currency = quote?.currency ?? cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
-  const total = totalMinor ?? subtotal;
+  const total = totalMinor ?? quote?.totalMinor ?? subtotal;
   const pricesAvailable = !cart?.items.some((item) => item.lineTotalMinor === null);
   const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const flat = surface === "flat";
+  const [resolvedValuesVisible, setResolvedValuesVisible] = useState(Boolean(quote));
+  useEffect(() => {
+    if (!quote) {
+      setResolvedValuesVisible(false);
+      return;
+    }
+    setResolvedValuesVisible(false);
+    const timer = window.setTimeout(() => setResolvedValuesVisible(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [quote?.quoteId, quote?.attemptVersion]);
+  const resolvedValueClass = cn(
+    "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+    quote && resolvedValuesVisible ? "translate-y-0 opacity-100" : "translate-y-0.5 opacity-80",
+  );
 
   return (
     <aside
@@ -184,6 +202,20 @@ export function OrderSummary({
         </div>
       ) : null}
 
+      {quote?.promotionApplications.length ? (
+        <div className="mt-3 text-xs text-[var(--fm-text-muted)]">
+          <p className="font-semibold text-[var(--fm-text)]">Applied savings</p>
+          <ul className="mt-1 space-y-1" aria-label="Applied promotions">
+            {quote.promotionApplications.map((application) => (
+              <li key={application.promotionId}>
+                {application.name}
+                {application.automatic ? " · Automatic" : ` · ${application.code}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div
         className={cn(
           "space-y-3 text-sm",
@@ -195,29 +227,76 @@ export function OrderSummary({
             {showItems ? "Items subtotal" : `Items (${itemCount})`}
           </span>
           <span className="font-medium tabular-nums text-[var(--fm-text)]">
-            {pricesAvailable ? money(subtotal, currency) : "Price unavailable"}
+            {pricesAvailable
+              ? money(quote?.merchandiseSubtotalMinor ?? subtotal, currency)
+              : "Price unavailable"}
           </span>
         </div>
         {quote ? (
           <>
-            <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
-              <span>Merchandise discount</span>
-              <span className="font-medium tabular-nums text-[var(--fm-success)]">
-                −{money(quote.itemDiscountMinor + quote.orderDiscountMinor, currency)}
-              </span>
-            </div>
+            {quote.itemDiscountMinor > 0 ? (
+              <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+                <span>Item discounts</span>
+                <span
+                  className={cn(
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    resolvedValueClass,
+                  )}
+                >
+                  −{money(quote.itemDiscountMinor, currency)}
+                </span>
+              </div>
+            ) : null}
+            {quote.orderDiscountMinor > 0 ? (
+              <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+                <span>Order discount</span>
+                <span
+                  className={cn(
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    resolvedValueClass,
+                  )}
+                >
+                  −{money(quote.orderDiscountMinor, currency)}
+                </span>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
               <span>Delivery</span>
-              <span className="font-medium tabular-nums text-[var(--fm-text)]">
+              <span
+                className={cn(
+                  "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-text)]",
+                  resolvedValueClass,
+                )}
+              >
                 {money(quote.deliverySubtotalMinor, currency)}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
-              <span>Delivery discount</span>
-              <span className="font-medium tabular-nums text-[var(--fm-success)]">
-                −{money(quote.deliveryDiscountMinor, currency)}
-              </span>
-            </div>
+            {quote.deliveryDiscountMinor > 0 ? (
+              <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+                <span>Delivery discount</span>
+                <span
+                  className={cn(
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    resolvedValueClass,
+                  )}
+                >
+                  −{money(quote.deliveryDiscountMinor, currency)}
+                </span>
+              </div>
+            ) : null}
+            {quote.taxMinor > 0 ? (
+              <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
+                <span>Tax</span>
+                <span
+                  className={cn(
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-text)]",
+                    resolvedValueClass,
+                  )}
+                >
+                  {money(quote.taxMinor, currency)}
+                </span>
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="flex items-center justify-between gap-4 text-[var(--fm-text-muted)]">
@@ -234,12 +313,20 @@ export function OrderSummary({
           </div>
         )}
         <div className="flex items-center justify-between gap-4 border-t border-[var(--fm-border)] pt-3 text-base font-bold">
-          <span>Total</span>
-          <span className="tabular-nums">
+          <span>{quote ? "Total" : "Amount before delivery"}</span>
+          <span className={cn("min-w-[6rem] text-right tabular-nums", resolvedValueClass)}>
             {pricesAvailable ? money(total, currency) : "Price unavailable"}
           </span>
         </div>
       </div>
+
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {quote
+          ? `Delivery fee ${money(quote.deliveryFeeMinor, currency)}. Total ${money(quote.totalMinor, currency)}.`
+          : quoteState === "quoting" || quoteState === "refreshing"
+            ? "Checking delivery fee and total."
+            : ""}
+      </p>
 
       <div
         className={cn(
@@ -250,8 +337,24 @@ export function OrderSummary({
         )}
       >
         <Info className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]" aria-hidden="true" />
-        <span>{note ?? "Availability and delivery are confirmed at checkout."}</span>
+        <span>
+          {note ??
+            (quote
+              ? quoteState === "error"
+                ? "This total is not ready for payment. Retry the delivery quotation."
+                : `Current total valid until ${new Date(quote.expiresAt).toLocaleString()}.`
+              : "Availability and delivery are confirmed at checkout.")}
+        </span>
       </div>
+
+      {quote ? (
+        <p className="mt-3 text-xs leading-5 text-[var(--fm-text-muted)]">
+          Please be available to receive your delivery. A missed delivery does not create an
+          automatic refund; FreshMarkets reviews responsibility and any courier cost. Any extra
+          redelivery charge requires your agreement. Your rights for faulty goods or delivery remain
+          unchanged.
+        </p>
+      ) : null}
 
       {actionHref ? (
         <Link

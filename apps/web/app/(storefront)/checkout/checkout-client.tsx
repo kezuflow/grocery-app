@@ -11,10 +11,10 @@ import type {
   PaymentActionView,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { useQueryEpoch } from "../../../components/query-provider";
 import { OrderSummary } from "../../../components/storefront/marketplace/order-summary";
 import { AddressEditor } from "../../../components/storefront/address/address-editor";
 import { AddressList } from "../../../components/storefront/address/address-list";
-import { CheckoutTotalReview } from "../../../components/storefront/checkout/checkout-total-review";
 import { FulfillmentOptionPicker } from "../../../components/storefront/checkout/fulfillment-option-picker";
 import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
 import {
@@ -73,6 +73,33 @@ function displayAddress(address: CustomerAddressView): string {
 }
 
 type DeliveryPartnerIntent = Readonly<{ code: string; serviceType: string }>;
+type QuoteInputSnapshot = Readonly<{
+  queryEpoch: number;
+  cartId: string;
+  cartVersion: number;
+  addressId: string;
+  addressVersion: number;
+  fulfillmentOptionId: string;
+  promotionCodes: readonly string[];
+}>;
+type QuoteRequestSnapshot = Readonly<{
+  input: QuoteInputSnapshot;
+  fingerprint: string;
+  attemptKey: string;
+  providerName: string;
+}>;
+
+function quoteInputFingerprint(input: QuoteInputSnapshot) {
+  return JSON.stringify([
+    input.queryEpoch,
+    input.cartId,
+    input.cartVersion,
+    input.addressId,
+    input.addressVersion,
+    input.fulfillmentOptionId,
+    ...input.promotionCodes,
+  ]);
+}
 
 function deliveryPartnerIntent(option: FulfillmentOptionView): DeliveryPartnerIntent | null {
   return option.deliveryPartner
@@ -103,6 +130,7 @@ export function CheckoutClient({
   mapId?: string;
 }) {
   const carriedDestination = useRef(readDeliveryLocationSelection());
+  const queryEpoch = useQueryEpoch();
   const cartQuery = useCartQuery({ fresh: true });
   const cart = cartQuery.cart;
   const acceptCart = useAcceptCart();
@@ -138,18 +166,14 @@ export function CheckoutClient({
   const [status, setStatus] = useState("");
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
+  const [quoteNeedsReplacement, setQuoteNeedsReplacement] = useState(false);
   const paymentInProgressRef = useRef(false);
   const paymentContinuationRef = useRef<PaymentActionView | null>(null);
   const [quoteLoadState, setQuoteLoadState] = useState<"idle" | "loading" | "error">("idle");
   const [quoteError, setQuoteError] = useState("");
   const [pendingQuote, setPendingQuote] = useState<
     | (CheckoutQuoteView & {
-        input: {
-          addressId: string;
-          fulfillmentOptionId: string;
-          cartVersion: number;
-          promotionCodes: readonly string[];
-        };
+        input: QuoteInputSnapshot;
         attemptKey: string;
       })
     | null
@@ -159,8 +183,12 @@ export function CheckoutClient({
   const fulfillmentOptionsRef = useRef(fulfillmentOptions);
   fulfillmentOptionsRef.current = fulfillmentOptions;
   const releaseInFlight = useRef<Promise<boolean> | null>(null);
+  const quoteRequestInFlight = useRef(false);
+  const unresolvedQuoteRequest = useRef<QuoteRequestSnapshot | null>(null);
+  const staleQuoteToRelease = useRef<CheckoutQuoteView | null>(null);
   const quoteRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
+  const [quoteLifecycleRevision, setQuoteLifecycleRevision] = useState(0);
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
   const addressSelectionGeneration = useRef(0);
@@ -232,7 +260,7 @@ export function CheckoutClient({
       const option = fulfillmentOptionsRef.current.find(
         (candidate) => candidate.optionId === quote.input.fulfillmentOptionId,
       );
-      if (option) void reviewTotal(option);
+      if (option) void reviewTotal(option, { replaceCurrent: true });
     }, delay);
   }
 
@@ -313,16 +341,21 @@ export function CheckoutClient({
 
   async function invalidatePendingQuote(): Promise<boolean> {
     if (releaseInFlight.current) return releaseInFlight.current;
-    const quote = pendingQuoteRef.current;
-    clearQuoteRefreshTimer();
-    if (!quote) {
-      attemptKey.current = `checkout-${crypto.randomUUID()}`;
-      setQuoteLoadState("idle");
-      setQuoteError("");
-      return true;
+    if (quoteRequestInFlight.current) {
+      setStatus("Wait for the current delivery quotation to finish before changing checkout.");
+      return false;
     }
+    clearQuoteRefreshTimer();
     setStatus("Releasing the current checkout reservation…");
     const operation = (async () => {
+      if (!(await settlePreviousQuoteWork())) return false;
+      const quote = pendingQuoteRef.current;
+      if (!quote) {
+        attemptKey.current = `checkout-${crypto.randomUUID()}`;
+        setQuoteLoadState("idle");
+        setQuoteError("");
+        return true;
+      }
       if (!(await abandonQuote(quote))) {
         setStatus(
           "The current checkout could not be released safely. Try again before restarting.",
@@ -428,20 +461,15 @@ export function CheckoutClient({
     }
   }
 
-  async function discardPendingQuote() {
-    if (await invalidatePendingQuote()) {
-      setStatus("Current checkout released. You can choose new delivery details.");
-    }
-  }
-
-  function quoteInputIsCurrent(input: {
-    addressId: string;
-    fulfillmentOptionId: string;
-    cartVersion: number;
-    promotionCodes: readonly string[];
-  }) {
+  function quoteInputIsCurrent(input: QuoteInputSnapshot) {
+    const currentAddress = addresses.find(
+      (address) => address.id === selectedAddressId.current && address.confirmedAt,
+    );
     return (
+      input.queryEpoch === queryEpoch &&
+      input.cartId === cart?.id &&
       input.addressId === selectedAddressId.current &&
+      input.addressVersion === currentAddress?.version &&
       input.fulfillmentOptionId === selectedFulfillmentOptionId.current &&
       input.cartVersion === cart?.version &&
       input.promotionCodes.join("\u0000") === promotionCodesRef.current.join("\u0000")
@@ -488,12 +516,149 @@ export function CheckoutClient({
     selectedFulfillmentOptionId.current = "";
     setFulfillmentOptionId("");
   }
-  async function reviewTotal(option: FulfillmentOptionView) {
+  function quoteRequestIsCurrent(request: QuoteRequestSnapshot) {
+    return (
+      request.fingerprint === quoteInputFingerprint(request.input) &&
+      quoteInputIsCurrent(request.input) &&
+      request.attemptKey === attemptKey.current
+    );
+  }
+
+  function acceptQuoteResult(request: QuoteRequestSnapshot, quote: CheckoutQuoteView) {
+    const acceptedQuote = { ...quote, input: request.input, attemptKey: request.attemptKey };
+    pendingQuoteRef.current = acceptedQuote;
+    setPendingQuote(acceptedQuote);
+    scheduleQuoteRefresh(acceptedQuote);
+    setQuoteLoadState("idle");
+    setQuoteError("");
+    setQuoteNeedsReplacement(false);
+    setStatus(`Delivery fee confirmed with ${request.providerName}.`);
+  }
+
+  async function applyQuoteResult(
+    request: QuoteRequestSnapshot,
+    quoteResult: RpcResult<CheckoutQuoteView>,
+  ): Promise<boolean> {
+    const current = quoteRequestIsCurrent(request);
+    if (!quoteResult.ok) {
+      if (!current) {
+        if (request.attemptKey === attemptKey.current)
+          attemptKey.current = `checkout-${crypto.randomUUID()}`;
+        setQuoteLifecycleRevision((revision) => revision + 1);
+        return true;
+      }
+      const message = quoteResult.error?.message ?? "The delivery fee could not be confirmed.";
+      setPendingQuote(null);
+      if (quoteResult.error?.details?.reason === CHECKOUT_PAYMENT_IN_PROGRESS_REASON) {
+        clearQuoteRefreshTimer();
+        paymentInProgressRef.current = true;
+        const continuation = readPaymentContinuation();
+        paymentContinuationRef.current = continuation;
+        setQuoteLoadState("idle");
+        setQuoteError("");
+        setStatus("Payment has already started. Your cart is locked until it is confirmed.");
+        window.location.replace(paymentContinuationHref(continuation));
+        return true;
+      }
+      setQuoteLoadState("error");
+      setQuoteError(`${message} Retry the delivery quotation.`);
+      setStatus("");
+      return true;
+    }
+    if (!quoteResult.value) {
+      if (current) {
+        setQuoteLoadState("error");
+        setQuoteError("The delivery fee could not be confirmed. Retry the delivery quotation.");
+        setStatus("");
+      }
+      return true;
+    }
+    if (current) {
+      acceptQuoteResult(request, quoteResult.value);
+      return true;
+    }
+    if (!(await abandonQuote(quoteResult.value))) {
+      staleQuoteToRelease.current = quoteResult.value;
+      setQuoteLoadState("error");
+      setQuoteError(
+        "The previous delivery quotation must be released before the updated total can be checked. Retry the delivery quotation.",
+      );
+      return false;
+    }
+    if (request.attemptKey === attemptKey.current)
+      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+    setQuoteLoadState("idle");
+    setQuoteLifecycleRevision((revision) => revision + 1);
+    return true;
+  }
+
+  async function performQuoteRequest(request: QuoteRequestSnapshot): Promise<boolean> {
+    if (quoteRequestInFlight.current) return false;
+    quoteRequestInFlight.current = true;
+    unresolvedQuoteRequest.current = request;
+    setQuoteLoadState("loading");
+    setQuoteError("");
+    setStatus(`Checking ${request.providerName} route availability and delivery fee…`);
+    try {
+      const quoteResponse = await fetch("/api/checkout/quote", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": request.attemptKey,
+        },
+        body: JSON.stringify({
+          cartId: request.input.cartId,
+          cartVersion: request.input.cartVersion,
+          addressId: request.input.addressId,
+          fulfillmentOptionId: request.input.fulfillmentOptionId,
+          promotionCodes: request.input.promotionCodes,
+        }),
+      });
+      const result = (await quoteResponse.json()) as RpcResult<CheckoutQuoteView>;
+      unresolvedQuoteRequest.current = null;
+      return await applyQuoteResult(request, result);
+    } catch {
+      setQuoteLoadState("error");
+      setQuoteError(
+        quoteRequestIsCurrent(request)
+          ? `${request.providerName} could not be reached to confirm the delivery fee. Retry the identical delivery quotation.`
+          : "The previous delivery quotation has an unknown outcome. Retry it before checking the updated total.",
+      );
+      setStatus("");
+      return false;
+    } finally {
+      quoteRequestInFlight.current = false;
+    }
+  }
+
+  async function settlePreviousQuoteWork(): Promise<boolean> {
+    if (quoteRequestInFlight.current) return false;
+    const staleQuote = staleQuoteToRelease.current;
+    if (staleQuote) {
+      if (!(await abandonQuote(staleQuote))) {
+        setStatus("The previous checkout reservation could not be released safely. Try again.");
+        return false;
+      }
+      staleQuoteToRelease.current = null;
+      attemptKey.current = `checkout-${crypto.randomUUID()}`;
+    }
+    const unresolved = unresolvedQuoteRequest.current;
+    if (unresolved && !(await performQuoteRequest(unresolved))) return false;
+    return !unresolvedQuoteRequest.current && !staleQuoteToRelease.current;
+  }
+
+  async function reviewTotal(
+    option: FulfillmentOptionView,
+    { replaceCurrent = false }: { replaceCurrent?: boolean } = {},
+  ) {
     if (paymentInProgressRef.current) {
       setStatus("Payment has already started. Continue it or check its status instead.");
       return;
     }
-    if (!cart || !addressId) {
+    const address = addresses.find(
+      (candidate) => candidate.id === selectedAddressId.current && candidate.confirmedAt,
+    );
+    if (!cart || !address) {
       setStatus("Confirm a delivery address first.");
       return;
     }
@@ -505,94 +670,52 @@ export function CheckoutClient({
       setStatus("Choose an available Instant courier before continuing.");
       return;
     }
-    if (pendingQuoteRef.current || option.optionId !== selectedFulfillmentOptionId.current) {
-      if (!(await invalidatePendingQuote())) return;
-      selectedFulfillmentOptionId.current = option.optionId;
-      setFulfillmentOptionId(option.optionId);
-      setStatus(`Checking ${deliveryPartnerName(option)} and the current total.`);
-    }
-    const quoteInput = {
-      addressId: selectedAddressId.current,
-      fulfillmentOptionId: option.optionId,
+    const quoteInput: QuoteInputSnapshot = {
+      queryEpoch,
+      cartId: cart.id,
       cartVersion: cart.version,
+      addressId: address.id,
+      addressVersion: address.version,
+      fulfillmentOptionId: option.optionId,
       promotionCodes: promotionCodesRef.current,
     };
+    const fingerprint = quoteInputFingerprint(quoteInput);
+    const existing = pendingQuoteRef.current;
+    if (
+      existing &&
+      quoteInputFingerprint(existing.input) === fingerprint &&
+      !quoteNeedsReplacement &&
+      !replaceCurrent
+    )
+      return;
+    if (!(await settlePreviousQuoteWork())) return;
+    const settledPending = pendingQuoteRef.current;
+    if (
+      settledPending &&
+      quoteInputFingerprint(settledPending.input) === fingerprint &&
+      !quoteNeedsReplacement &&
+      !replaceCurrent
+    )
+      return;
+    if (settledPending) {
+      if (!(await invalidatePendingQuote())) return;
+    }
     const quoteAttemptKey = attemptKey.current;
     if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
-    setQuoteLoadState("loading");
-    setQuoteError("");
-    setStatus(`Checking ${deliveryPartnerName(option)} route availability and delivery fee…`);
-    // 1) Core-authoritative quote. Core recalculates before payment and any
-    // changed total must be accepted through a new attempt.
-    try {
-      const quoteResponse = await fetch("/api/checkout/quote", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": quoteAttemptKey,
-        },
-        body: JSON.stringify({
-          cartId: cart.id,
-          cartVersion: cart.version,
-          addressId,
-          fulfillmentOptionId: option.optionId,
-          promotionCodes: promotionCodesRef.current,
-        }),
-      });
-      const quoteResult = (await quoteResponse.json()) as RpcResult<CheckoutQuoteView>;
-      if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
-      if (!quoteResult.ok) {
-        const message = quoteResult.error?.message ?? "The delivery fee could not be confirmed.";
-        setPendingQuote(null);
-        if (quoteResult.error?.details?.reason === CHECKOUT_PAYMENT_IN_PROGRESS_REASON) {
-          clearQuoteRefreshTimer();
-          paymentInProgressRef.current = true;
-          const continuation = readPaymentContinuation();
-          paymentContinuationRef.current = continuation;
-          setQuoteLoadState("idle");
-          setQuoteError("");
-          setStatus("Payment has already started. Your cart is locked until it is confirmed.");
-          window.location.replace(paymentContinuationHref(readPaymentContinuation()));
-          return;
-        }
-        setQuoteLoadState("error");
-        setQuoteError(`${message} Retry the delivery quotation.`);
-        setStatus("");
-        return;
-      }
-      if (!quoteResult.value) {
-        setQuoteLoadState("error");
-        setQuoteError("The delivery fee could not be confirmed. Retry the delivery quotation.");
-        setStatus("");
-        return;
-      }
-      const acceptedQuote = {
-        ...quoteResult.value,
-        input: quoteInput,
-        attemptKey: quoteAttemptKey,
-      };
-      pendingQuoteRef.current = acceptedQuote;
-      setPendingQuote(acceptedQuote);
-      scheduleQuoteRefresh(acceptedQuote);
-      setQuoteLoadState("idle");
-      setStatus(
-        `Review your current total: ${quoteResult.value.currency} ${(quoteResult.value.totalMinor / 100).toFixed(2)}.`,
-      );
-    } catch {
-      if (!quoteInputIsCurrent(quoteInput) || quoteAttemptKey !== attemptKey.current) return;
-      setPendingQuote(null);
-      setQuoteLoadState("error");
-      setQuoteError(
-        `${deliveryPartnerName(option)} could not be reached to confirm the delivery fee. Retry the delivery quotation.`,
-      );
-      setStatus("");
-    }
+    await performQuoteRequest({
+      input: quoteInput,
+      fingerprint,
+      attemptKey: quoteAttemptKey,
+      providerName: deliveryPartnerName(option),
+    });
   }
 
   function selectDeliveryOption(option: FulfillmentOptionView) {
     selectedDeliveryPartnerIntent.current = deliveryPartnerIntent(option);
     deliveryPartnerWasExplicitlySelected.current = true;
-    void reviewTotal(option);
+    selectedFulfillmentOptionId.current = option.optionId;
+    setFulfillmentOptionId(option.optionId);
+    setStatus(`${deliveryPartnerName(option)} selected. Checking the current fee and total.`);
   }
 
   async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
@@ -633,7 +756,7 @@ export function CheckoutClient({
       setStatus("Wait for the current checkout reservation to be released.");
       return;
     }
-    if (!pendingQuote) return;
+    if (!pendingQuote || quoteNeedsReplacement) return;
     if (
       !quoteInputIsCurrent(pendingQuote.input) ||
       pendingQuote.attemptKey !== attemptKey.current
@@ -697,11 +820,19 @@ export function CheckoutClient({
       window.location.replace(paymentContinuationHref(continuation));
     } else {
       if (paymentResult.error?.code === "PRICE_CHANGED") {
-        setPendingQuote(null);
-        attemptKey.current = `checkout-${crypto.randomUUID()}`;
+        setQuoteNeedsReplacement(true);
+        setStatus("The total changed. Releasing the previous quote before checking it again.");
+        if (await invalidatePendingQuote()) {
+          setQuoteLifecycleRevision((revision) => revision + 1);
+        } else {
+          setQuoteLoadState("error");
+          setQuoteError(
+            "The changed total must be released before it can be checked again. Retry the delivery quotation.",
+          );
+        }
+        return;
       }
-      if (paymentResult.error?.code !== "PRICE_CHANGED" && pendingQuoteRef.current)
-        scheduleQuoteRefresh(pendingQuoteRef.current);
+      if (pendingQuoteRef.current) scheduleQuoteRefresh(pendingQuoteRef.current);
       setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
@@ -718,6 +849,30 @@ export function CheckoutClient({
     ? addresses.filter((address) => address.id !== selectedAddress.id)
     : addresses;
   const browsingDestination = selectedAddress ? null : carriedDestination.current;
+  const automaticQuoteFingerprint =
+    selectedAddress?.confirmedAt && selectedEligibleFulfillmentOption && cart?.items.length
+      ? quoteInputFingerprint({
+          queryEpoch,
+          cartId: cart.id,
+          cartVersion: cart.version,
+          addressId: selectedAddress.id,
+          addressVersion: selectedAddress.version,
+          fulfillmentOptionId: selectedEligibleFulfillmentOption.optionId,
+          promotionCodes: checkoutDraft.draft.promotionCodes,
+        })
+      : "";
+  useEffect(() => {
+    if (
+      !automaticQuoteFingerprint ||
+      !selectedEligibleFulfillmentOption ||
+      guest ||
+      cart?.checkoutBlocked ||
+      paymentInProgressRef.current ||
+      acceptingPayment
+    )
+      return;
+    void reviewTotal(selectedEligibleFulfillmentOption);
+  }, [automaticQuoteFingerprint, quoteLifecycleRevision]);
   return (
     <>
       <div className="min-h-[100dvh] w-full bg-[var(--fm-background)]">
@@ -1045,26 +1200,6 @@ export function CheckoutClient({
                     </div>
                   ) : null}
                 </section>
-
-                {pendingQuote ? (
-                  <div>
-                    <CheckoutTotalReview
-                      quote={pendingQuote}
-                      onAccept={confirmPayment}
-                      accepting={acceptingPayment}
-                      showAction={false}
-                      surface="flat"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void discardPendingQuote()}
-                      disabled={acceptingPayment}
-                      className="mt-3 text-sm font-semibold underline underline-offset-4 disabled:opacity-50"
-                    >
-                      Discard current total and start again
-                    </button>
-                  </div>
-                ) : null}
               </div>
             )}
             {status ? (
@@ -1086,39 +1221,49 @@ export function CheckoutClient({
               cart={cart}
               totalMinor={pendingQuote?.totalMinor}
               quote={pendingQuote ?? undefined}
+              quoteState={
+                quoteError
+                  ? "error"
+                  : quoteLoadState === "loading"
+                    ? pendingQuote
+                      ? "refreshing"
+                      : "quoting"
+                    : pendingQuote
+                      ? "ready"
+                      : quoteError
+                        ? "error"
+                        : "needs-input"
+              }
               surface="flat"
               actionLabel={
                 guest
                   ? "Sign in to continue"
                   : cart?.checkoutBlocked
                     ? "Resolve unavailable items to continue"
-                    : pendingQuote
-                      ? "Accept total and continue to payment"
-                      : quoteLoadState === "loading"
-                        ? "Checking delivery fee…"
-                        : quoteError && selectedEligibleFulfillmentOption
-                          ? "Retry delivery quotation"
+                    : quoteError
+                      ? "Delivery quote needs retry"
+                      : pendingQuote
+                        ? acceptingPayment
+                          ? "Starting payment…"
+                          : "Continue to payment"
+                        : quoteLoadState === "loading"
+                          ? "Checking delivery fee…"
                           : selectedFulfillmentOption && !selectedFulfillmentOption.eligible
                             ? "Selected courier unavailable"
                             : addressId
-                              ? "Review delivery fee"
+                              ? "Waiting for delivery quote"
                               : "Select a delivery address"
               }
               actionHref={guest ? "/auth/login?returnTo=/checkout" : undefined}
-              onAction={
-                pendingQuote
-                  ? confirmPayment
-                  : selectedEligibleFulfillmentOption
-                    ? () => void reviewTotal(selectedEligibleFulfillmentOption)
-                    : undefined
-              }
+              onAction={pendingQuote ? confirmPayment : undefined}
               disabled={
                 guest
                   ? false
                   : acceptingPayment ||
                     quoteLoadState === "loading" ||
+                    quoteNeedsReplacement ||
                     Boolean(cart?.checkoutBlocked) ||
-                    (!pendingQuote && !selectedEligibleFulfillmentOption)
+                    !pendingQuote
               }
               showItems
               onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}

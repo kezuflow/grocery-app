@@ -33,7 +33,12 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("showItems");
     expect(checkout).toContain("onQuantityChange={");
     expect(checkout).toContain("updatingSkuId={updatingSkuId}");
-    expect(checkout).toContain("showAction={false}");
+    expect(checkout).not.toContain("<CheckoutTotalReview");
+    expect(checkout).not.toContain("Discard current total and start again");
+    expect(checkout).toContain('"Continue to payment"');
+    expect(checkout).toContain("automaticQuoteFingerprint");
+    expect(checkout).toContain("quoteInputFingerprint");
+    expect(checkout).toContain("settlePreviousQuoteWork");
     expect(checkout).toContain("cart?.paymentInProgress");
     expect(checkout).toContain("window.location.replace(paymentContinuationHref");
     expect(checkout).toContain("CHECKOUT_PAYMENT_IN_PROGRESS_REASON");

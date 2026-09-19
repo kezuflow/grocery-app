@@ -112,6 +112,12 @@ for (const width of [1440, 390]) {
             mode: "INSTANT",
             eligible: true,
             unavailableReason: null,
+            deliveryPartner: {
+              code: "lalamove",
+              displayName: "Lalamove",
+              serviceType: "MOTORCYCLE",
+              serviceLabel: "Motorcycle",
+            },
             promisedAt: "2026-08-30T17:00:00.000Z",
             deliveryWindow: null,
             feePreview: {
@@ -124,26 +130,6 @@ for (const width of [1440, 390]) {
             cutoffAt: null,
             provisional: true,
           },
-          {
-            optionId: "fulfillment-scheduled-opaque",
-            mode: "SCHEDULED",
-            eligible: true,
-            unavailableReason: null,
-            promisedAt: null,
-            deliveryWindow: {
-              startsAt: "2026-09-05T00:00:00.000Z",
-              endsAt: "2026-09-06T00:00:00.000Z",
-            },
-            feePreview: {
-              subtotalMinor: 2_000,
-              discountMinor: 0,
-              totalMinor: 2_000,
-              currency: "PHP",
-            },
-            cycleId: "internal-cycle",
-            cutoffAt: "2026-09-04T00:00:00.000Z",
-            provisional: true,
-          },
         ],
       });
     });
@@ -154,7 +140,7 @@ for (const width of [1440, 390]) {
           ok: false,
           error: {
             code: "CONFIGURATION_ERROR",
-            message: "Scheduled delivery quotation is unavailable.",
+            message: "Lalamove quotation is temporarily unavailable.",
           },
         });
         return;
@@ -203,20 +189,21 @@ for (const width of [1440, 390]) {
       page.getByText("Select a confirmed address to load delivery options."),
     ).toHaveCount(0);
     await page.getByRole("button", { name: "Retry delivery options" }).click();
-    await expect(page.getByRole("button", { name: /Instant delivery/ })).toBeEnabled();
-    await expect(page.getByRole("button", { name: /Scheduled delivery/ })).toBeEnabled();
-    await expect(page.getByText(/hub|location-cebu/i)).toHaveCount(0);
-    await page.getByRole("button", { name: /Scheduled delivery/ }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      "Scheduled delivery quotation is unavailable. Retry the delivery quotation.",
-    );
-    await expect(page.getByRole("button", { name: /Scheduled delivery/ })).toHaveAttribute(
-      "aria-pressed",
+    await expect(page.getByRole("radio", { name: /Lalamove/ })).toBeEnabled();
+    await expect(page.getByRole("radio", { name: /Lalamove/ })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
-    await expect(page.getByRole("button", { name: "Retry delivery quotation" })).toBeEnabled();
+    await expect(page.getByText(/Scheduled delivery/)).toHaveCount(0);
+    await expect(page.getByText(/hub|location-cebu/i)).toHaveCount(0);
+    await expect(page.getByRole("alert")).toContainText(
+      "Lalamove quotation is temporarily unavailable. Retry the delivery quotation.",
+    );
     await page.getByRole("button", { name: "Try quotation again" }).click();
-    await expect(page.getByRole("region", { name: "Order total review" })).toContainText("₱330.00");
+    await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText(
+      "₱330.00",
+    );
+    await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
 
     await page.screenshot({ path: `test-results/checkout-delivery-${width}.png` });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -230,15 +217,14 @@ for (const width of [1440, 390]) {
     });
     expect(quoteRequests[1]).toMatchObject({
       addressId: "home",
-      fulfillmentOptionId: "fulfillment-scheduled-opaque",
+      fulfillmentOptionId: "fulfillment-instant-opaque",
     });
     expect(quoteRequests[1]).not.toHaveProperty("cycleId");
 
-    await page.getByRole("button", { name: "Change saved address" }).click();
     await page.getByRole("radio", { name: /^Work/ }).focus();
     await page.keyboard.press("Space");
     await expect.poll(() => abandoned.length).toBe(1);
     await expect.poll(() => optionRequests.at(-1)?.addressId).toBe("work");
-    await expect(page.getByText(/Review your current total/)).toHaveCount(0);
+    await expect(page.getByText(/Payment review/)).toHaveCount(0);
   });
 }

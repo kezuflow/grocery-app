@@ -33,18 +33,28 @@ const quote: CheckoutQuoteView = {
   orderDiscountMinor: 0,
   deliverySubtotalMinor: 2_000,
   deliveryDiscountMinor: 0,
-  taxMinor: 0,
+  taxMinor: 500,
   subtotalMinor: 19_000,
   discountMinor: 1_000,
   deliveryFeeMinor: 2_000,
-  totalMinor: 18_000,
+  totalMinor: 18_500,
   lines: [],
   requestedPromotionCodes: ["SAVE10", "OLD"],
   promotionFeedback: [
     { code: "SAVE10", status: "APPLIED", message: "Promotion applied" },
     { code: "OLD", status: "EXPIRED", message: "Promotion expired" },
   ],
-  promotionApplications: [],
+  promotionApplications: [
+    {
+      promotionId: "promotion-save10",
+      code: "SAVE10",
+      name: "Fresh basket savings",
+      component: "MERCHANDISE",
+      benefitType: "ORDER_FIXED_DISCOUNT",
+      amountMinor: 1_000,
+      automatic: false,
+    },
+  ],
 };
 
 describe("OrderSummary", () => {
@@ -83,18 +93,25 @@ describe("OrderSummary", () => {
 
   it("keeps applied and rejected promotion feedback in the quote-backed summary", () => {
     const html = renderToStaticMarkup(
-      <OrderSummary
-        cart={cart}
-        quote={quote}
-        actionLabel="Continue"
-        totalMinor={quote.totalMinor}
-      />,
+      <OrderSummary cart={cart} quote={quote} actionLabel="Continue" />,
     );
     expect(html).toContain("Promo codes");
+    expect(html).toContain("Applied savings");
+    expect(html).toContain("Fresh basket savings");
     expect(html).toContain("SAVE10:");
     expect(html).toContain("Promotion applied");
     expect(html).toContain("OLD:");
     expect(html).toContain("Promotion expired");
     expect(html).toContain('href="/cart"');
+    expect(html).toContain("Item discounts");
+    expect(html).toContain("Delivery");
+    expect(html).toContain("Tax");
+    expect(html).toContain("₱185.00");
+    expect(html).not.toContain("Order discount");
+    expect(html).not.toContain("Delivery discount");
+    expect(html).toContain("Current total valid until");
+    expect(html).toContain("A missed delivery does not create an");
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("duration-200");
   });
 });
