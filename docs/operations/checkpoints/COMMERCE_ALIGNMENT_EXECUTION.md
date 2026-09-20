@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-ADDRESS-CARD-ROW-DEPLOY-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner authorized deployment of the committed checkout address-card row on `main`.
+Acceptance: the pushed application revision is released to the existing staging Workers in Core-then-Web
+order, the staging migration ledger is current, and the documented liveness/readiness surfaces and
+public checkout route pass.
+
+Deployment started from clean, synchronized `main` and `origin/main` at application revision
+`4eed1134c442be472165832ba2c79d9c059c6716`. The complete `pnpm check` release gate passed, including
+Core 207 files / 1,686 tests, Web 139 files / 590 tests, all workspace typechecks and both builds.
+Deployment-specific binding type checks, vinext compatibility (16 supported, zero issues), readiness
+verification, staging Web build and both Wrangler dry runs passed. Staging D1 reported no pending
+migrations. Read-only secret-name checks confirmed the required Core and Web staging secret names
+without reading their values. Lint retained the two previously recorded address-book unused-variable
+warnings. Wrangler retained the known warning that top-level `INITIAL_GLOBAL_ADMIN_EMAIL` is not
+inherited by the staging environment; the staging Core Worker has that secret configured.
+
+Core was deployed first as `freshmarkets-core-staging`, version
+`0942f524-9668-4d4d-be6e-0cf3d57fd020`, followed by `freshmarkets-web-staging`, version
+`efd1c4ff-09d3-43eb-8d07-ec7945dfa67c`, including the `freshmarkets.ph` custom domain. Post-deploy
+checks returned HTTP 200 from direct Core `/health` and `/ready`, Web `/health`, Web
+`/api/core-health`, and the public `/checkout` route. Core readiness reported staging runtime
+configuration, D1 and the PayMongo adapter ready. No schema migration, payment, courier request,
+outbound message or destructive remote-data operation was performed.
+CHECKOUT-ADDRESS-CARD-ROW-DEPLOY-1 is complete at the one-ID staging deployment/readiness counting
+level; zero deployment actions remain. The next action is owner review of the authenticated checkout
+address row in the target browser when convenient.
+
 ## Latest owner request — CHECKOUT-ADDRESS-CARD-ROW-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
