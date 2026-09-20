@@ -9,8 +9,11 @@ Customer rows show only a short wrapping status title linked to the existing saf
 Order context remains in the accessible link name. The customer panel has no subtitle or X button,
 and its empty state is one short line (owner simplification 2026-09-13). Admin rows retain context,
 explicit date/time and action details. Admin panel and Overview share
-the same scoped data/list representation and reporting timezone. No read counts, dots or dismiss-row
-semantics are implied. Loading, empty, signed-out/denied, unavailable and retry states remain distinct.
+the same scoped data/list representation and reporting timezone. The storefront bell uses the same
+compact numeric badge as Cart for currently returned updates not yet opened by that account in this
+browser; opening the panel clears the badge for those rows. It does not add row controls, dots, motion
+or cross-device read receipts. The Admin bell remains unchanged. Loading, empty, signed-out/denied,
+unavailable and retry states remain distinct.
 Customer opening focuses the panel heading; Admin opening focuses Close. Tab reaches links;
 Escape, the bell and outside click dismiss with focus returned to the bell. Admin also retains Close. Navigation closes the panel. No entry/exit motion or decorative notification animation
 is added, including for keyboard and reduced-motion users.

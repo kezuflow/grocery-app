@@ -1,8 +1,12 @@
 import { expect, test, executeAdminE2eSql } from "./admin-authenticated-fixture";
 import type { Page } from "@playwright/test";
 
+function notificationBell(page: Page) {
+  return page.getByRole("button", { name: /^Open notifications(?:, \d+ unread)?$/ });
+}
+
 async function checkPanel(page: Page, customer = false) {
-  const bell = page.getByRole("button", { name: "Open notifications", exact: true });
+  const bell = notificationBell(page);
   await bell.focus();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("dialog", { name: "Notifications", exact: true });
@@ -47,7 +51,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/orders");
-    await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+    await notificationBell(page).click();
     await expect(
       page.getByRole("dialog", { name: "Notifications" }).getByText("No updates yet"),
     ).toBeVisible();
@@ -60,7 +64,14 @@ for (const width of [1440, 390]) {
     const now = Date.now();
     executeAdminE2eSql(`INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at) SELECT 'payment-${order}',id,100,'PHP','SUCCEEDED','mock','${order}',${now},${now} FROM customer WHERE auth_user_id='${authId}';
       INSERT INTO grocery_order(id,customer_id,payment_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,created_at,committed_at,order_number) SELECT '${order}',id,'payment-${order}','INSTANT','{}','COMMITTED',100,'PHP',${now},${now},'FM-${order}' FROM customer WHERE auth_user_id='${authId}';`);
-    await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: /Open notifications, \d+ unread/ }),
+    ).toBeVisible();
+    await notificationBell(page).click();
+    await expect(
+      page.getByRole("button", { name: "Open notifications", exact: true }),
+    ).toBeVisible();
     const panel = page.getByRole("dialog", { name: "Notifications" });
     await expect(panel.getByText("Order confirmed", { exact: true })).toBeVisible();
     await expect(panel.locator(`a[href="/orders/${order}"]`)).toBeVisible();
@@ -70,7 +81,7 @@ for (const width of [1440, 390]) {
     });
     await page.keyboard.press("Escape");
     await checkPanel(page, true);
-    await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+    await notificationBell(page).click();
     await panel.locator(`a[href="/orders/${order}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/orders/${order}$`));
     await expect(panel).toBeHidden();
@@ -84,7 +95,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
     await expect(page.getByText("Open orders", { exact: true })).toBeVisible();
     await checkPanel(page);
-    await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+    await notificationBell(page).click();
     await page.screenshot({
       path: `test-results/admin-notifications-${width}.png`,
       fullPage: false,
@@ -102,7 +113,7 @@ test("anonymous customer sees sign-in and cannot read private notifications", as
   expect(result.status()).toBe(401);
   expect(result.headers()["cache-control"]).toContain("no-store");
   await page.goto("/orders");
-  await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+  await notificationBell(page).click();
   const panel = page.getByRole("dialog", { name: "Notifications" });
   await expect(panel.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(panel.getByText("Order confirmed", { exact: true })).toHaveCount(0);
@@ -138,7 +149,7 @@ test("mobile customer handles failed reads and a long bounded list", async ({
     }),
   );
   await page.goto("/orders");
-  await page.getByRole("button", { name: "Open notifications", exact: true }).click();
+  await notificationBell(page).click();
   const panel = page.getByRole("dialog", { name: "Notifications" });
   await expect(panel.getByRole("alert")).toBeVisible();
   fail = false;
@@ -150,5 +161,5 @@ test("mobile customer handles failed reads and a long bounded list", async ({
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/customer-notifications-320-long.png" });
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Open notifications", exact: true })).toBeFocused();
+  await expect(notificationBell(page)).toBeFocused();
 });

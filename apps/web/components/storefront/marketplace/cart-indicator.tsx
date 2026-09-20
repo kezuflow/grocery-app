@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { CART_DRAWER_REQUEST_EVENT, cartCountFromView } from "../../../lib/storefront/cart-client";
 import { useCartQuery } from "../../../lib/query/cart";
+import { IconCountBadge } from "../../icon-count-badge";
 
 /**
  * Header cart button with a live item-count badge. Resolves to the signed-out
@@ -26,11 +27,7 @@ export function CartIndicator() {
     >
       <span className="relative inline-flex">
         <ShoppingCart className="size-6" aria-hidden="true" />
-        {count ? (
-          <span className="absolute -top-2.5 -right-2.5 flex min-w-4 items-center justify-center rounded-full bg-[var(--fm-primary-dark)] px-1 py-0.5 text-[10px] font-semibold leading-none text-white">
-            {count}
-          </span>
-        ) : null}
+        <IconCountBadge count={count} />
       </span>
     </Link>
   );

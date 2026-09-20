@@ -25,8 +25,11 @@ processing/completed/support exception. They are bounded read projections of own
 facts and existing notification intent. Email delivery status, addresses, provider details and internal
 errors remain private. Payment action notices must still be current; successful refund completion
 requires successful refund facts. Destinations use existing Order, checkout and support surfaces.
-Signed-out customers get a sign-in entry. No promotional feed, SMS, push, read/unread persistence,
-counts, permanent dots or notification-management workflow is approved.
+Signed-out customers get a sign-in entry. The storefront bell may show a browser-local, per-account
+count of currently returned updates not yet opened in that browser; opening the panel clears the
+counter for those rows. This is presentation state only, not a Core read receipt or cross-device
+guarantee. No promotional feed, SMS, push, permanent dots or notification-management workflow is
+approved.
 
 Admin reuses `AdminOverviewView.notifications` for the same six approved material notices and
 selected-scope destinations. Notifications grant no access and cannot reopen an Order. This approval

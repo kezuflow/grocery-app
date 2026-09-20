@@ -1,35 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CustomerNotificationsView, RpcResult } from "@freshmarkets/contracts";
 import { authClient } from "../../../lib/auth/auth-client";
 import { NotificationPanel, notificationRowClassName } from "../../notification-panel";
 
-export function CustomerNotifications() {
-  return (
-    <NotificationPanel storefront>
-      {(close) => <CustomerNotificationContents close={close} />}
-    </NotificationPanel>
-  );
+const READ_STORAGE_PREFIX = "freshmarkets:notification-read:";
+
+function notificationIdentity(item: CustomerNotificationsView["items"][number]) {
+  return JSON.stringify([item.type, item.reference, item.occurredAt, item.href]);
 }
 
-function CustomerNotificationContents({ close }: { close: () => void }) {
+function readNotificationIdentities(userId: string) {
+  try {
+    const value = JSON.parse(localStorage.getItem(`${READ_STORAGE_PREFIX}${userId}`) ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter((item) => typeof item === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function markNotificationsRead(userId: string, items: CustomerNotificationsView["items"]) {
+  const identities = readNotificationIdentities(userId);
+  for (const item of items) identities.add(notificationIdentity(item));
+  try {
+    localStorage.setItem(
+      `${READ_STORAGE_PREFIX}${userId}`,
+      JSON.stringify(Array.from(identities).slice(-100)),
+    );
+  } catch {
+    // The current panel still clears for this visit when browser storage is unavailable.
+  }
+}
+
+export function CustomerNotifications() {
   const { data: session, isPending, error, refetch } = authClient.useSession();
   const userId = session?.user?.id;
   const [attempt, setAttempt] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const hasOpenedRef = useRef(false);
   const [result, setResult] = useState<{
     userId: string;
     value: RpcResult<CustomerNotificationsView>;
   } | null>(null);
+
   useEffect(() => {
+    hasOpenedRef.current = false;
+  }, [userId]);
+
+  useEffect(() => {
+    setUnreadCount(0);
+    setResult(null);
     if (!userId || isPending || error) return;
     const controller = new AbortController();
-    setResult(null);
     void fetch("/api/commerce/notifications", { signal: controller.signal, cache: "no-store" })
       .then((response) => response.json() as Promise<RpcResult<CustomerNotificationsView>>)
       .then((value) => {
-        if (!controller.signal.aborted) setResult({ userId, value });
+        if (controller.signal.aborted) return;
+        setResult({ userId, value });
+        if (value.ok) {
+          const seen = readNotificationIdentities(userId);
+          setUnreadCount(
+            value.value.items.filter((item) => !seen.has(notificationIdentity(item))).length,
+          );
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted)
@@ -47,7 +83,57 @@ function CustomerNotificationContents({ close }: { close: () => void }) {
       });
     return () => controller.abort();
   }, [userId, isPending, error, attempt]);
-  const current = result?.userId === userId ? result?.value : null;
+
+  const current = result && result.userId === userId ? result.value : null;
+  useEffect(() => {
+    if (!open || !userId || !current?.ok) return;
+    markNotificationsRead(userId, current.value.items);
+    setUnreadCount(0);
+  }, [current, open, userId]);
+
+  return (
+    <NotificationPanel
+      storefront
+      unreadCount={unreadCount}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) return;
+        if (hasOpenedRef.current && current) setAttempt((value) => value + 1);
+        hasOpenedRef.current = true;
+      }}
+    >
+      {(close) => (
+        <CustomerNotificationContents
+          close={close}
+          current={current}
+          error={error}
+          isPending={isPending}
+          refetch={refetch}
+          retry={() => setAttempt((value) => value + 1)}
+          userId={userId}
+        />
+      )}
+    </NotificationPanel>
+  );
+}
+
+function CustomerNotificationContents({
+  close,
+  current,
+  error,
+  isPending,
+  refetch,
+  retry,
+  userId,
+}: {
+  close: () => void;
+  current: RpcResult<CustomerNotificationsView> | null;
+  error: Error | null;
+  isPending: boolean;
+  refetch: () => unknown;
+  retry: () => void;
+  userId: string | undefined;
+}) {
   if (isPending)
     return (
       <p role="status" className="p-4 text-sm">
@@ -92,7 +178,7 @@ function CustomerNotificationContents({ close }: { close: () => void }) {
     return (
       <div role="alert" className="p-4 text-sm">
         <p>We couldn’t load your notifications.</p>
-        <button className="min-h-11 underline" onClick={() => setAttempt((value) => value + 1)}>
+        <button className="min-h-11 underline" onClick={retry}>
           Try again
         </button>
       </div>

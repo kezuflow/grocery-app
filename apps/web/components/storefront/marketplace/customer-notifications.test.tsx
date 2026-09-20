@@ -16,6 +16,7 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   Object.assign(session, { data: null, isPending: false, error: null });
+  localStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   const host = document.createElement("div");
@@ -69,7 +70,7 @@ it("keeps focus inside a rapidly reopened panel", async () => {
   );
   await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector("h2")));
 });
-it("announces loading and empty state without fake unread semantics", async () => {
+it("announces loading and the empty state without an unread badge", async () => {
   session.data = { user: { id: "shopper" } };
   let finish: ((value: ReturnType<typeof success>) => void) | undefined;
   fetchMock.mockImplementation(
@@ -82,7 +83,44 @@ it("announces loading and empty state without fake unread semantics", async () =
   expect(document.querySelector('[role="status"]')?.textContent).toContain("Loading notifications");
   await act(async () => finish?.(success()));
   expect(document.querySelector('[role="status"]')?.textContent).toContain("No updates yet");
-  expect(document.body.textContent).not.toMatch(/unread|mark.*read/i);
+  expect(document.querySelector('[aria-label*="unread"]')).toBeNull();
+});
+it("shows the unread count on the bell and clears it when the panel is opened", async () => {
+  session.data = { user: { id: "shopper" } };
+  fetchMock.mockResolvedValueOnce(
+    success([
+      {
+        type: "ORDER_CONFIRMED",
+        label: "Order confirmed",
+        reference: "FM-1",
+        occurredAt: "2026-09-13T00:00:00.000Z",
+        href: "/orders/one",
+        actionLabel: "View order",
+      },
+      {
+        type: "OUT_FOR_DELIVERY",
+        label: "Out for delivery",
+        reference: "FM-2",
+        occurredAt: "2026-09-13T01:00:00.000Z",
+        href: "/orders/two",
+        actionLabel: "View order",
+      },
+    ]),
+  );
+  await act(async () => root.render(<CustomerNotifications />));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Open notifications, 2 unread"]')).not.toBeNull(),
+  );
+  expect(document.querySelector('[aria-label="Open notifications, 2 unread"]')?.textContent).toBe(
+    "2",
+  );
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Open notifications, 2 unread"]')
+      ?.click(),
+  );
+  expect(document.querySelector('[aria-label="Open notifications"]')).not.toBeNull();
+  expect(localStorage.getItem("freshmarkets:notification-read:shopper")).not.toBeNull();
 });
 it("renders title-only safe destinations, retries failures, and closes after selection", async () => {
   session.data = { user: { id: "shopper" } };
@@ -118,7 +156,7 @@ it("renders title-only safe destinations, retries failures, and closes after sel
   await act(async () => document.querySelector<HTMLAnchorElement>('a[href="/orders"]')?.click());
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
-it("discards late results after dismissal and fetches again on reopening", async () => {
+it("retains a late initial read across dismissal and refreshes when reopened", async () => {
   session.data = { user: { id: "shopper" } };
   let finish: ((value: ReturnType<typeof success>) => void) | undefined;
   fetchMock.mockImplementationOnce(
@@ -140,6 +178,7 @@ it("discards late results after dismissal and fetches again on reopening", async
     document.querySelector<HTMLButtonElement>('[aria-label="Open notifications"]')?.click(),
   );
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('[role="status"]')?.textContent).toContain("No updates yet");
 });
 
 it("shows unavailable account access without exposing internal errors", async () => {

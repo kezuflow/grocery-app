@@ -1,5 +1,38 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CUSTOMER-NOTIFICATION-UNREAD-BADGE-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner requested a numeric unread counter on the storefront notification bell matching
+the Instant Cart counter. Acceptance: authenticated customers see the count of currently returned
+updates not yet opened for that account in the current browser, the count is announced in the bell's
+accessible name, opening the panel clears the displayed count for those rows, and existing panel,
+Cart, authentication and responsive behavior remain intact.
+
+Work started from clean `main` and `origin/main` at
+`4cb31a7f0054287a7639569560e6cf2ad738308a`. Web now loads the existing private notification read for
+the signed-in header, derives a browser-local per-account unread count from stable row identities and
+stores at most 100 read identities. Opening the panel marks the currently returned rows read in that
+browser; later openings retain the existing refresh behavior. Storage failure still clears the badge
+for the current visit. Signed-out customers make no private request, session changes discard the
+previous account's result, and unavailable/denied/retry states remain distinct. Bell and Cart share
+one `IconCountBadge` presentation, with no new animation. PRODUCT and DESIGN record that this is
+presentation state, not a Core read receipt or cross-device guarantee; Admin notification semantics
+are unchanged. No Core, contract, schema, authorization or notification-delivery behavior changed.
+
+Verification on the complete working tree: formatting, lint and Web typecheck pass; lint retains the
+two previously recorded address-book unused-variable warnings. Focused customer/Cart coverage passes
+2 files / 15 tests and customer/Admin notification coverage passes 2 files / 12 tests; the complete
+Web suite passes 139 files / 589 tests and the production vinext build passes. Managed Playwright
+acceptance passes 6/6 against fresh disposable
+`e2e-notification-badge-20260920` Worker/D1 state at 1440px, 390px and 320px, including a newly inserted
+owned notification producing the count-aware bell label and opening the panel clearing it, plus Admin,
+anonymous, failure/retry, bounded-list and focus/dismissal coverage. No deployment, provider
+transaction, outbound message or shared/remote-data change was performed.
+CUSTOMER-NOTIFICATION-UNREAD-BADGE-1 is complete at the one-ID application/local-browser counting
+level; zero implementation IDs remain. The next action, if separately authorized, is staging
+deployment and target-browser acceptance.
+
 ## Latest owner request — RELEASE-STAGING-DEPLOY-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

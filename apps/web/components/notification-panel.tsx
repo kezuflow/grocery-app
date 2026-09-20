@@ -3,13 +3,18 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Bell, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { IconCountBadge } from "./icon-count-badge";
 
 /** Shared overlay behavior only; each surface owns its data and design tokens. */
 export function NotificationPanel({
   storefront = false,
+  unreadCount = 0,
+  onOpenChange,
   children,
 }: {
   storefront?: boolean;
+  unreadCount?: number;
+  onOpenChange?: (open: boolean) => void;
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -17,6 +22,7 @@ export function NotificationPanel({
   function changeOpen(next: boolean) {
     openRef.current = next;
     setOpen(next);
+    onOpenChange?.(next);
   }
   const titleId = useId();
   const descriptionId = useId();
@@ -32,10 +38,15 @@ export function NotificationPanel({
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger
         ref={triggerRef}
-        aria-label="Open notifications"
+        aria-label={
+          unreadCount ? `Open notifications, ${unreadCount} unread` : "Open notifications"
+        }
         className="inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        <Bell className="size-6" aria-hidden="true" />
+        <span className="relative inline-flex">
+          <Bell className="size-6" aria-hidden="true" />
+          <IconCountBadge count={unreadCount} />
+        </span>
       </PopoverTrigger>
       <PopoverContent
         align="end"
