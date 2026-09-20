@@ -1,5 +1,32 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SCHEDULED-CYCLES-DEFAULT-TIMES-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner requested full-day draft suggestions: ordering opens at 12:00 AM on the first
+selected date, the cutoff covers the complete day before delivery, procurement begins one minute
+after cutoff, preparation begins two hours later and planned pickup another two hours later. Because
+12:00 PM is noon rather than the end of a day, the implemented cutoff suggestion is 11:59 PM.
+
+Work started from clean `main` and `origin/main` at
+`8f95cf2bffdf42f193d28191a55d595f8646b0cf`. Web now owns one shared editable suggestion builder:
+orders open at 12:00 AM on the first planning date, cutoff is 11:59 PM on the day before delivery,
+procurement is 12:00 AM on delivery day, preparation is 2:00 AM and pickup is 4:00 AM. Drag creation,
+one-day calendar creation and choosing a date in New cycle use the same suggestions. Existing edits,
+duplicate-relative shifting, validation, draft save and Core activation authority are unchanged. The
+approved presentation is recorded in `docs/design/DESIGN.md`; no Core, contract, storage or
+authorization behavior changed.
+
+Verification on the complete working tree: repository formatting and diff-whitespace pass; focused
+lint and Web typecheck pass; cycle-planning coverage passes 5/5 including exact business-time values;
+the complete Web suite passes 139 files / 588 tests. Managed Playwright acceptance passes 2/2 at
+1440px and 390px, including midnight opening assertion, complete save/retry recovery, activation and
+deactivation; that run also performs the production vinext build. No deployment, provider
+transaction, outbound message or remote-data change was performed. SCHEDULED-CYCLES-DEFAULT-TIMES-1
+is complete at the one-ID application/local-acceptance counting level; zero implementation IDs
+remain. Next action, if separately authorized, is deployment and target-environment browser
+acceptance.
+
 ## Latest owner request — SCHEDULED-CYCLES-DIRECT-RANGE-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

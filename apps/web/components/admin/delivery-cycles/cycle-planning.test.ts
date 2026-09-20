@@ -5,6 +5,7 @@ import {
   businessFieldsToInstant,
   instantToBusinessFields,
   shiftInstantToDeliveryDate,
+  suggestedCycleSchedule,
 } from "./cycle-time";
 import { validateCycleDraft } from "./cycle-validation";
 
@@ -72,6 +73,24 @@ describe("cycle planning presentation", () => {
     expect(
       shiftInstantToDeliveryDate(cycle.orderOpensAt, "2026-09-26", "2026-10-03", timezone),
     ).toBe("2026-09-28T00:00:00Z");
+  });
+
+  it("suggests a full ordering day followed by spaced fulfillment milestones", () => {
+    const schedule = suggestedCycleSchedule("2026-09-26", timezone, "2026-09-21");
+    expect(
+      Object.fromEntries(
+        Object.entries(schedule).map(([field, instant]) => [
+          field,
+          instantToBusinessFields(instant, timezone),
+        ]),
+      ),
+    ).toEqual({
+      orderOpensAt: { date: "2026-09-21", time: "00:00" },
+      cutoffAt: { date: "2026-09-25", time: "23:59" },
+      procurementAt: { date: "2026-09-26", time: "00:00" },
+      preparationAt: { date: "2026-09-26", time: "02:00" },
+      pickupAt: { date: "2026-09-26", time: "04:00" },
+    });
   });
 
   it("shows a compact connected cycle in month and exact markers in agenda", () => {

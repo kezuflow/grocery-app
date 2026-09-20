@@ -103,7 +103,7 @@ for (const width of [1440, 390]) {
       await expect(editor.getByRole("button", { name: "Orders open date" })).toContainText(
         displayDate(openingDate),
       );
-      await expect(editor.getByLabel("Orders open time", { exact: true })).toHaveValue("08:00");
+      await expect(editor.getByLabel("Orders open time", { exact: true })).toHaveValue("00:00");
     }
     await editor.getByRole("button", { name: "Continue", exact: true }).click();
     await editor.getByLabel("Planning note", { exact: true }).fill("Prepare weekly service");

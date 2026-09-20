@@ -29,7 +29,11 @@ import { Sheet, SheetContent } from "../ui/sheet";
 import { CycleCalendar } from "./delivery-cycles/cycle-calendar";
 import { CycleDetailsPanel } from "./delivery-cycles/cycle-details-panel";
 import { CycleEditor } from "./delivery-cycles/cycle-editor";
-import { addBusinessDays, businessFieldsToInstant } from "./delivery-cycles/cycle-time";
+import {
+  addBusinessDays,
+  businessFieldsToInstant,
+  suggestedCycleSchedule,
+} from "./delivery-cycles/cycle-time";
 
 const failure = z.object({
   ok: z.literal(false),
@@ -122,14 +126,7 @@ function blankForDeliveryDate(
   return {
     ...blank(marketId),
     name: `${new Intl.DateTimeFormat("en-PH", { weekday: "long" }).format(value)} delivery · ${new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short" }).format(value)}`,
-    orderOpensAt: businessFieldsToInstant(
-      { date: addBusinessDays(date, -5), time: "08:00" },
-      timezone,
-    ),
-    cutoffAt: businessFieldsToInstant({ date: addBusinessDays(date, -1), time: "17:00" }, timezone),
-    procurementAt: businessFieldsToInstant({ date, time: "05:00" }, timezone),
-    preparationAt: businessFieldsToInstant({ date, time: "06:00" }, timezone),
-    pickupAt: businessFieldsToInstant({ date, time: "08:30" }, timezone),
+    ...suggestedCycleSchedule(date, timezone),
     windows: [
       {
         name: "Scheduled delivery",
@@ -151,7 +148,7 @@ function blankForPlanningRange(
   const draft = blankForDeliveryDate(marketId, deliveryDateValue, timezone);
   return {
     ...draft,
-    orderOpensAt: businessFieldsToInstant({ date: startDate, time: "08:00" }, timezone),
+    ...suggestedCycleSchedule(deliveryDateValue, timezone, startDate),
   };
 }
 

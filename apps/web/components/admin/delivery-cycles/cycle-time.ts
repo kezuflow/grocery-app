@@ -27,6 +27,23 @@ export function addBusinessDays(date: string, days: number): string {
   return Temporal.PlainDate.from(date).add({ days }).toString();
 }
 
+export function suggestedCycleSchedule(
+  deliveryDate: string,
+  timezone: string,
+  orderOpeningDate = addBusinessDays(deliveryDate, -5),
+) {
+  return {
+    orderOpensAt: businessFieldsToInstant({ date: orderOpeningDate, time: "00:00" }, timezone),
+    cutoffAt: businessFieldsToInstant(
+      { date: addBusinessDays(deliveryDate, -1), time: "23:59" },
+      timezone,
+    ),
+    procurementAt: businessFieldsToInstant({ date: deliveryDate, time: "00:00" }, timezone),
+    preparationAt: businessFieldsToInstant({ date: deliveryDate, time: "02:00" }, timezone),
+    pickupAt: businessFieldsToInstant({ date: deliveryDate, time: "04:00" }, timezone),
+  };
+}
+
 export function shiftInstantToDeliveryDate(
   value: string,
   sourceDeliveryDate: string,

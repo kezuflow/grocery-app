@@ -94,6 +94,11 @@ activation. Activation explains that the schedule locks; deactivation uses the n
 dialog and Core-provided blocked reason. Unknown command recovery stays inside the open panel with the
 original request and idempotency identity. Historical multiple delivery ranges remain readable.
 
+Owner follow-up, 2026-09-20: a newly suggested schedule opens ordering at 12:00 AM on its first day
+and uses 11:59 PM on the day before delivery as the full-day cutoff. Procurement begins at 12:00 AM
+on delivery day, exactly one minute later, preparation at 2:00 AM and planned pickup at 4:00 AM. These
+are editable Web suggestions only; Core chronology and activation guards remain authoritative.
+
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.
 At least three points form the shaded draft; the last joins the first. Coordinates are a secondary

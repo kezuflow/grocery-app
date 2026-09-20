@@ -26,6 +26,7 @@ import {
   businessFieldsToInstant,
   instantToBusinessFields,
   shiftInstantToDeliveryDate,
+  suggestedCycleSchedule,
 } from "./cycle-time";
 import { validateCycleDraft, type CycleField } from "./cycle-validation";
 
@@ -174,19 +175,7 @@ function applyDeliveryDate(
       next[field] = shiftInstantToDeliveryDate(draft[field], sourceDate, nextDate, timezone);
     return next;
   }
-  if (!draft.orderOpensAt) {
-    next.orderOpensAt = businessFieldsToInstant(
-      { date: addBusinessDays(nextDate, -5), time: "08:00" },
-      timezone,
-    );
-    next.cutoffAt = businessFieldsToInstant(
-      { date: addBusinessDays(nextDate, -1), time: "17:00" },
-      timezone,
-    );
-    next.procurementAt = businessFieldsToInstant({ date: nextDate, time: "05:00" }, timezone);
-    next.preparationAt = businessFieldsToInstant({ date: nextDate, time: "06:00" }, timezone);
-    next.pickupAt = businessFieldsToInstant({ date: nextDate, time: "08:30" }, timezone);
-  }
+  if (!draft.orderOpensAt) Object.assign(next, suggestedCycleSchedule(nextDate, timezone));
   return next;
 }
 
