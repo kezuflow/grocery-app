@@ -1,5 +1,27 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-SCHEDULED-QUOTATION-DIAG-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner reported that checkout shows “Instant checkout is unavailable while this store
+is operating in Scheduled mode” with a Retry delivery options action while reviewing a delivery
+quotation. Acceptance for this diagnostic request: identify whether the message is caused by Web
+classification, Core policy or live configuration without changing operational state.
+
+Read-only source tracing and a direct read of the existing staging D1 configuration at committed
+`main` revision `7b1d5083` found the canonical `global_commerce_configuration` row is `OPEN`,
+`SCHEDULED`, `WEEKLY`, version 1; the retained legacy mode row agrees. Core fulfillment discovery
+therefore correctly returns only the current Scheduled option. The owner-approved 2026-09-19
+customer checkout is Instant-only, so Web filters the Scheduled result and intentionally displays the
+mode-mismatch copy. Retrying cannot alter the global mode and is therefore a misleading action for
+this particular state. Option discovery itself is provider-free, but the displayed checkout total is
+an authoritative mode-bound quote and is not merely decorative fee text. No code, configuration,
+database row, provider request, deployment or outbound message was changed. The material unresolved
+choice is whether the intended correction is (a) an operator-controlled switch to Instant using the
+existing pause/readiness flow, or (b) a new product-policy change allowing a different quotation or
+Scheduled customer checkout behavior. Do not infer either shared-state or policy change from this
+diagnosis.
+
 ## Latest owner request — CHECKOUT-ADDRESS-CARD-ROW-DEPLOY-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
