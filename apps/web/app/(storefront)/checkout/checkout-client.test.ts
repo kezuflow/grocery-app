@@ -51,6 +51,6 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain('surface="flat"');
     expect(checkout).toContain('className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0"');
     expect(checkout).not.toContain("Other saved addresses");
-    expect(checkout).toContain("Scheduled delivery cutoff: Friday, 12:00 PM.");
+    expect(checkout).toContain("Scheduled delivery cutoff: Friday, 11:59 PM.");
   });
 });

@@ -1251,7 +1251,7 @@ export function CheckoutClient({
               aria-hidden="true"
             />
             <p className="text-xs leading-5 sm:text-sm">
-              <strong>Scheduled delivery cutoff: Friday, 12:00 PM.</strong> Orders placed after the
+              <strong>Scheduled delivery cutoff: Friday, 11:59 PM.</strong> Orders placed after the
               cutoff will be scheduled for delivery the following Saturday or Sunday.
             </p>
           </div>

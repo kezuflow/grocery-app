@@ -202,7 +202,7 @@ separate full-width selected-address summary. Delivery choices and the surroundi
 remain flat.
 
 Owner correction, 2026-09-20: checkout keeps a persistent bottom notice with no decorative motion:
-“Scheduled delivery cutoff: Friday, 12:00 PM. Orders placed after the cutoff will be scheduled for
+“Scheduled delivery cutoff: Friday, 11:59 PM. Orders placed after the cutoff will be scheduled for
 delivery the following Saturday or Sunday.” It is a concise operating-policy reminder, not cycle or
 quotation authority, and must not obscure checkout content, actions or focus. The current Core option
 still supplies and enforces the exact eligible delivery range and cutoff shown in the delivery row.

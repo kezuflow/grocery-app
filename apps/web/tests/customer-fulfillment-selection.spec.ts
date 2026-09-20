@@ -306,7 +306,7 @@ test("quotes the current Scheduled delivery option and keeps the cutoff notice v
           },
           feePreview: null,
           cycleId: "cycle-weekend",
-          cutoffAt: "2099-09-25T04:00:00.000Z",
+          cutoffAt: "2099-09-25T15:59:00.000Z",
           provisional: true,
         },
       ],
@@ -321,7 +321,7 @@ test("quotes the current Scheduled delivery option and keeps the cutoff notice v
         quoteId: "quote-scheduled",
         attemptVersion: 1,
         priceAcceptanceVersion: 1,
-        expiresAt: "2099-09-25T05:00:00.000Z",
+        expiresAt: "2099-09-25T16:59:00.000Z",
         currency: "PHP",
         merchandiseSubtotalMinor: 30_000,
         itemDiscountMinor: 0,
@@ -350,7 +350,7 @@ test("quotes the current Scheduled delivery option and keeps the cutoff notice v
   await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText("₱325.00");
   await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
   const cutoffNotice = page.getByRole("complementary", { name: "Scheduled delivery cutoff" });
-  await expect(cutoffNotice).toContainText("Friday, 12:00 PM");
+  await expect(cutoffNotice).toContainText("Friday, 11:59 PM");
   await expect(cutoffNotice).toContainText("following Saturday or Sunday");
   expect(await cutoffNotice.evaluate((element) => getComputedStyle(element).position)).toBe(
     "fixed",

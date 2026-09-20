@@ -100,7 +100,7 @@ describe("FulfillmentOptionPicker", () => {
             },
             feePreview: null,
             cycleId: "cycle-1",
-            cutoffAt: "2026-09-25T04:00:00Z",
+            cutoffAt: "2026-09-25T15:59:00Z",
             provisional: true,
           },
         ]}
@@ -111,7 +111,7 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Sat, Sep 26");
     expect(html).toContain("Sun, Sep 27");
-    expect(html).toContain("Order cutoff Fri, Sep 25, 12:00 PM");
+    expect(html).toContain("Order cutoff Fri, Sep 25, 11:59 PM");
     expect(html).toContain('aria-label="Delivery option"');
     expect(html).toContain('data-provider-icon="lalamove"');
   });

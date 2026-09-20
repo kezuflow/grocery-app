@@ -4,7 +4,7 @@ Owner correction, 2026-09-20: customer checkout supports the one active global m
 Core. Instant obtains an immediate courier quotation; Scheduled presents the current eligible cycle,
 delivery range and cutoff and obtains its authoritative future courier quotation. Web must not discard
 a Scheduled option or imply that the operator must switch to Instant. Checkout carries a persistent
-customer notice that the ordinary Scheduled cutoff is Friday at 12:00 PM Philippine time and orders
+customer notice that the ordinary Scheduled cutoff is Friday at 11:59 PM Philippine time and orders
 after that cutoff move to the following Saturday/Sunday delivery schedule. Core's current cycle,
 window and cutoff remain command authority; the notice never admits an expired or absent cycle.
 This supersedes only the Instant-only checkout presentation in the 2026-09-19 supplement below.

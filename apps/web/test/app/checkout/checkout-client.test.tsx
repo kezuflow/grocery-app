@@ -486,7 +486,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.textContent).toContain("Order cutoff");
     expect(container.textContent).toContain("Delivery fee confirmed with Lalamove.");
     expect(container.textContent).toContain("₱30.00");
-    expect(container.textContent).toContain("Scheduled delivery cutoff: Friday, 12:00 PM.");
+    expect(container.textContent).toContain("Scheduled delivery cutoff: Friday, 11:59 PM.");
     expect(container.textContent).toContain("following Saturday or Sunday");
     expect(container.textContent).not.toContain("Instant checkout is unavailable");
   });

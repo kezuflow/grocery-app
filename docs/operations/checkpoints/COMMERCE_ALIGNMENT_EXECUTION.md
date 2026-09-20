@@ -40,8 +40,8 @@ optimization.
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
 evidence**. The owner corrected the preceding diagnosis by authorizing customer checkout quotations
-in both global modes and requested a persistent notice that the ordinary Scheduled cutoff is Friday
-at 12:00 PM, with later orders moving to the following Saturday/Sunday delivery schedule. Acceptance:
+in both global modes and requested a persistent notice, subsequently corrected to Friday at 11:59 PM,
+with later orders moving to the following Saturday/Sunday delivery schedule. Acceptance:
 Web presents and quotes the current Core-returned Instant or Scheduled option, Scheduled shows the
 configured courier, eligible delivery range and exact cycle cutoff, the notice remains visible
 without obscuring checkout, and opaque option/Core cycle authority remains unchanged.
@@ -52,8 +52,8 @@ eligible current-mode option, obtains the existing authoritative quote and displ
 and total. Core fulfillment discovery now exposes the configured courier identity for Scheduled as
 well as Instant; provider quotation still occurs only in the quote command, and Core re-resolves the
 opaque option, cycle, window and cutoff. Scheduled rows display courier/service, delivery range and
-the exact Core cutoff in Philippine time. Checkout adds a fixed, non-animated, accessible Friday-noon
-notice with sufficient page-bottom space. The checkout grid now constrains the saved-address
+the exact Core cutoff in Philippine time. Checkout adds a fixed, non-animated, accessible Friday
+11:59 PM notice with sufficient page-bottom space. The checkout grid now constrains the saved-address
 horizontal row to the viewport while preserving the row's own scrolling.
 
 Verification on the complete working tree: formatting, diff whitespace, naming, terminology,
@@ -68,9 +68,9 @@ regression; a later combined run encountered local Worker hydration instability 
 passing case, not an application assertion. The complete Core suite passes 207 files / 1,686 tests.
 
 Read-only staging evidence from the preceding diagnostic remains important: the currently published
-cycle uses a Saturday 11:59 PM cutoff, so it does not yet match the new Friday-noon notice. This task
+cycle uses a Saturday 11:59 PM cutoff, so it does not yet match the new Friday 11:59 PM notice. This task
 does not authorize changing shared staging data or deploying, and neither occurred. Before a future
-deployment, operations must create/publish a current Friday-noon weekend cycle so the exact
+deployment, operations must create/publish a current Friday 11:59 PM weekend cycle so the exact
 Core-returned cutoff and the policy notice agree. CHECKOUT-CURRENT-MODE-QUOTATION-1 is otherwise
 complete at the one-ID application/local-browser counting level; the next action is separately
 authorized cycle configuration and deployment after this verified change is committed and pushed.
