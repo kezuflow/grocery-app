@@ -1,5 +1,27 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — INVENTORY-SALES-LOCATION-COLUMN-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner requested that Inventory sales stop combining the fulfillment location with the
+product summary, exemplified by `Young Corn · 250 g · Central Cebu +1 more`. Acceptance: the table
+shows Products and Location as distinct columns, retains concise additional-product/location counts,
+and continues matching both values in search.
+
+Work started from clean `main` and `origin/main` at
+`8900bb26f3c225d40a4ffceec8b55c6130a51421`. Web now renders product/option summaries separately
+from deduplicated location summaries. For the observed row, Products is `Young Corn · 250 g +1 more`
+and Location is `Central Cebu`. No Core, contract, storage, authorization or sale-command behavior
+changed.
+
+Verification on the complete working tree: focused formatting, lint and Web typecheck pass. The
+localhost in-app browser at `/admin/sales` shows the new Location header and separate cells for both
+current rows; the observed values and horizontal overflow layout render correctly in dark mode. No
+sale status, record, provider transaction, deployment or remote data was changed.
+INVENTORY-SALES-LOCATION-COLUMN-1 is complete at the one-ID application/local-acceptance counting
+level; zero implementation IDs remain. Next action, if separately authorized, is deployment and
+target-environment browser acceptance.
+
 ## Latest owner request — SCHEDULED-CYCLES-DEFAULT-TIMES-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

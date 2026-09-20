@@ -69,12 +69,24 @@ function saleAllowance(promotion: AdminPromotionSummary): string {
   return `${limit - remaining}/${limit} pcs`;
 }
 
-function saleTargetsLabel(promotion: AdminPromotionSummary): string {
+function saleProductsLabel(promotion: AdminPromotionSummary): string {
   const targets = promotion.productTargets ?? [];
   if (!targets.length) return "—";
   const first = targets[0];
-  const head = [first.productName, first.skuName, first.locationName].filter(Boolean).join(" · ");
+  const head = [first.productName, first.skuName].filter(Boolean).join(" · ");
   return targets.length > 1 ? `${head} +${targets.length - 1} more` : head;
+}
+
+function saleLocationsLabel(promotion: AdminPromotionSummary): string {
+  const locations = [
+    ...new Map(
+      (promotion.productTargets ?? [])
+        .filter((target) => target.locationName)
+        .map((target) => [target.locationId, target.locationName]),
+    ).values(),
+  ];
+  if (!locations.length) return "—";
+  return locations.length > 1 ? `${locations[0]} +${locations.length - 1} more` : locations[0]!;
 }
 
 function saleDiscountLabel(promotion: AdminPromotionSummary): string {
@@ -198,7 +210,7 @@ export default function InventorySalesPage() {
         (tab === "draft" && sale.status === "DRAFT");
       if (!matchesTab) return false;
       if (!normalized) return true;
-      return [sale.name, saleTargetsLabel(sale), saleDiscountLabel(sale)]
+      return [sale.name, saleProductsLabel(sale), saleLocationsLabel(sale), saleDiscountLabel(sale)]
         .join(" ")
         .toLocaleLowerCase()
         .includes(normalized);
@@ -401,6 +413,7 @@ export default function InventorySalesPage() {
                     <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
                       <TableHead>Sale</TableHead>
                       <TableHead>Products</TableHead>
+                      <TableHead>Location</TableHead>
                       <TableHead>Discount</TableHead>
                       <TableHead>Allowance</TableHead>
                       <TableHead>Status</TableHead>
@@ -416,7 +429,10 @@ export default function InventorySalesPage() {
                           {promotion.name}
                         </TableCell>
                         <TableCell className="min-w-48 max-w-72 text-sm text-[var(--fm-text-muted)]">
-                          {saleTargetsLabel(promotion)}
+                          {saleProductsLabel(promotion)}
+                        </TableCell>
+                        <TableCell className="min-w-36 whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                          {saleLocationsLabel(promotion)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
                           {saleDiscountLabel(promotion)}
