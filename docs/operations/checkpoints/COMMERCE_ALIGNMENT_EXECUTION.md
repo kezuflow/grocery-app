@@ -1,5 +1,38 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-CURRENT-MODE-QUOTATION-DEPLOY-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner authorized deployment of the committed current-mode quotation checkout and
+corrected Friday 11:59 PM notice. Acceptance: deploy the verified application revision to the existing
+staging Workers in Core-then-Web order, leave the migration ledger current, and verify the documented
+liveness/readiness and public checkout surfaces.
+
+Deployment started from clean synchronized `main` and `origin/main` at application revision
+`f84c8d06336861f6e25adc654c76e0368d78c0fd`. The complete `pnpm check` release gate passed, including
+Core 207 files / 1,686 tests, Web 139 files / 595 tests, contracts 20 files / 69 tests, all workspace
+typechecks, migrations, architecture/readiness/security checks and both builds. Deployment-specific
+binding type checks, vinext compatibility (16 supported, zero issues), readiness verification, the
+`CLOUDFLARE_ENV=staging` Web build and explicit Core/Web Wrangler dry runs passed. Staging D1 reported
+no pending migrations. A read-only secret-name check confirmed the required staging Core secret names
+without reading their values. Lint retained the two previously recorded address-book unused-variable
+warnings. Wrangler retained the known warning that top-level `INITIAL_GLOBAL_ADMIN_EMAIL` is not
+inherited by the staging environment; the staging Core Worker has that secret configured.
+
+Core was deployed first as `freshmarkets-core-staging`, version
+`cbbafcc7-4739-4774-9480-79480d25f0f6`, followed by `freshmarkets-web-staging`, version
+`60a7a231-831d-48f6-b03c-1e81e7d05fac`, including the `freshmarkets.ph` custom domain. Post-deploy
+checks returned HTTP 200 from direct Core `/health` and `/ready`, Web `/health`, Web
+`/api/core-health`, and public `/checkout`. Core readiness reported staging runtime configuration,
+D1 and the PayMongo adapter ready. No schema migration, payment, courier request, outbound message or
+destructive remote-data operation was performed. The existing published cycle still has a Saturday
+11:59 PM exact cutoff and was not changed by this code deployment; checkout displays that exact Core
+value beside the separately requested Friday 11:59 PM policy notice.
+CHECKOUT-CURRENT-MODE-QUOTATION-DEPLOY-1 is complete at the one-ID staging
+deployment/readiness counting level; zero deployment actions remain. The next action is owner review
+of the authenticated Scheduled quotation journey and, if desired, separately authorized cycle
+configuration to align the current exact cutoff with the policy notice.
+
 ## Latest owner request — CART-MUTATION-LATENCY-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
