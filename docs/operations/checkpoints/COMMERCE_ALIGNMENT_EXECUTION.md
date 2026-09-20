@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — RELEASE-STAGING-DEPLOY-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner authorized committing and pushing the complete repository state and deploying
+it. Acceptance: `main` is synchronized with `origin/main`, the checked-in staging migration set is
+current, Core is deployed before Web, and the documented target health/readiness surfaces pass.
+
+Work started from clean `main`, `origin/main` and deployed application revision
+`e8d803adef9a6c612ebea3a4aa806e730f127b88`; there were no implementation changes to commit and the
+initial push reported `Everything up-to-date`. The complete `pnpm check` release gate passed,
+including Web 139 files / 588 tests and Core 207 files / 1,686 tests. Deployment-specific binding
+type checks, vinext compatibility (16 supported, zero issues), readiness verification and the
+`CLOUDFLARE_ENV=staging` Web build passed. Staging D1 reported no pending migrations. Lint retained
+the two previously recorded address-book unused-variable warnings. Wrangler also retained the known
+configuration warning that the top-level `INITIAL_GLOBAL_ADMIN_EMAIL` variable is not inherited by
+the staging environment; a read-only remote secret-name check confirmed the staging Core Worker has
+that secret configured, without reading or recording its value.
+
+Core was deployed first as `freshmarkets-core-staging`, version
+`fdfbd8bb-7343-42f2-a6c2-96c5479d3b75`, followed by `freshmarkets-web-staging`, version
+`0ea584e0-0be1-44bb-9a5e-d8449ef21a44`, including the `freshmarkets.ph` custom domain. Post-deploy
+checks returned HTTP 200 from Core `/health`, Core `/ready`, Web `/health` and Web
+`/api/core-health`; Core readiness reported runtime configuration, D1 and the PayMongo adapter ready.
+No schema change, provider transaction, outbound message or destructive remote-data operation was
+performed. RELEASE-STAGING-DEPLOY-1 is complete at the one-ID staging-deployment/readiness counting
+level; zero deployment IDs remain. The next action is owner-directed target browser journey or
+actual-provider acceptance when separately authorized.
+
 ## Latest owner request — INVENTORY-SALES-LOCATION-COLUMN-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
