@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CheckCircle2, MapPin, Plus, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, MapPin, Plus, ShieldCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -162,7 +162,6 @@ export function CheckoutClient({
   const selectedFulfillmentOptionId = useRef("");
   const selectedDeliveryPartnerIntent = useRef<DeliveryPartnerIntent | null>(null);
   const deliveryPartnerWasExplicitlySelected = useRef(false);
-  const [instantModeMismatch, setInstantModeMismatch] = useState(false);
   const [status, setStatus] = useState("");
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
@@ -384,7 +383,6 @@ export function CheckoutClient({
     selectedFulfillmentOptionId.current = "";
     setFulfillmentOptionId("");
     setFulfillmentError("");
-    setInstantModeMismatch(false);
     if (!cart || cart.id === "guest-cart" || !cart.items.length) {
       setFulfillmentLoadState("idle");
       return;
@@ -406,17 +404,21 @@ export function CheckoutClient({
       );
       if (generation !== fulfillmentLoadGeneration.current) return;
       if (result.ok) {
-        const instantOptions = result.value.filter((option) => option.mode === "INSTANT");
-        setInstantModeMismatch(!instantOptions.length && result.value.length > 0);
-        setFulfillmentOptions(instantOptions);
-        fulfillmentOptionsRef.current = instantOptions;
+        const currentOptions = result.value;
+        const instantConfiguration = currentOptions.some((option) => option.mode === "INSTANT");
+        if (!instantConfiguration) {
+          selectedDeliveryPartnerIntent.current = null;
+          deliveryPartnerWasExplicitlySelected.current = false;
+        }
+        setFulfillmentOptions(currentOptions);
+        fulfillmentOptionsRef.current = currentOptions;
         setFulfillmentLoadState("ready");
         const intent = selectedDeliveryPartnerIntent.current;
-        const matchingOption = instantOptions.find((option) =>
+        const matchingOption = currentOptions.find((option) =>
           matchesDeliveryPartnerIntent(option, intent),
         );
         const eligibleMatch = matchingOption?.eligible ? matchingOption : undefined;
-        const eligible = instantOptions.filter((option) => option.eligible);
+        const eligible = currentOptions.filter((option) => option.eligible);
         const fallback = deliveryPartnerWasExplicitlySelected.current ? undefined : eligible[0];
         const selected =
           eligibleMatch ??
@@ -442,7 +444,6 @@ export function CheckoutClient({
     } catch {
       if (generation !== fulfillmentLoadGeneration.current) return;
       setFulfillmentLoadState("error");
-      setInstantModeMismatch(false);
       setFulfillmentError("Delivery options could not be loaded. Please try again.");
     }
   }
@@ -666,8 +667,8 @@ export function CheckoutClient({
       setStatus("Your cart is saved. Sign in before checkout so we can confirm your delivery.");
       return;
     }
-    if (option.mode !== "INSTANT" || !option.eligible) {
-      setStatus("Choose an available Instant courier before continuing.");
+    if (!option.eligible) {
+      setStatus("Choose an available delivery option before continuing.");
       return;
     }
     const quoteInput: QuoteInputSnapshot = {
@@ -872,7 +873,7 @@ export function CheckoutClient({
   }, [automaticQuoteFingerprint, quoteLifecycleRevision]);
   return (
     <>
-      <div className="min-h-[100dvh] w-full bg-[var(--fm-background)]">
+      <div className="min-h-[100dvh] w-full bg-[var(--fm-background)] pb-28 sm:pb-24">
         <header className="border-b border-[var(--fm-border)] bg-white px-4 py-6 sm:px-6 lg:px-10">
           <Link
             href="/cart"
@@ -965,10 +966,10 @@ export function CheckoutClient({
                 </div>
               </section>
             ) : (
-              <div className="grid gap-0">
-                <section className="border-b border-[var(--fm-border)] pb-7">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0">
+                <section className="min-w-0 border-b border-[var(--fm-border)] pb-7">
                   <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-5">
-                    <div className="flex items-start gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
                       <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         {selectedAddress?.confirmedAt ? (
                           <CheckCircle2 className="size-5" aria-hidden="true" />
@@ -976,7 +977,7 @@ export function CheckoutClient({
                           <MapPin className="size-5" aria-hidden="true" />
                         )}
                       </span>
-                      <div>
+                      <div className="min-w-0">
                         <h2 className="mt-1 text-xl font-bold">Deliver to</h2>
                         <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
                           Review your current destination or choose another saved address.
@@ -1077,7 +1078,7 @@ export function CheckoutClient({
                   </div>
                 </section>
 
-                <section className="border-b border-[var(--fm-border)] py-7">
+                <section className="min-w-0 border-b border-[var(--fm-border)] py-7">
                   <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
                     <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                       <Truck className="size-5" aria-hidden="true" />
@@ -1086,10 +1087,10 @@ export function CheckoutClient({
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
                         Delivery
                       </p>
-                      <h2 className="mt-1 text-xl font-bold">Choose a courier</h2>
+                      <h2 className="mt-1 text-xl font-bold">Choose delivery</h2>
                       <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                        Available Instant couriers confirm the route and current fee for this
-                        address.
+                        Available Instant and Scheduled options confirm the route, delivery time,
+                        and current fee for this address.
                       </p>
                     </div>
                   </div>
@@ -1123,13 +1124,11 @@ export function CheckoutClient({
                               ? "Loading delivery options…"
                               : fulfillmentLoadState === "error"
                                 ? fulfillmentError
-                                : instantModeMismatch
-                                  ? "Instant checkout is unavailable while this store is operating in Scheduled mode. Try again after the store switches and reopens Instant ordering."
-                                  : guest
-                                    ? "Sign in to load delivery options."
-                                    : !cart?.items.length
-                                      ? "Your cart must be loaded and contain items to check delivery."
-                                      : "No Instant couriers are available for this address right now."}
+                                : guest
+                                  ? "Sign in to load delivery options."
+                                  : !cart?.items.length
+                                    ? "Your cart must be loaded and contain items to check delivery."
+                                    : "No delivery options are available for this address right now."}
                         </p>
                         {selectedAddress?.confirmedAt &&
                           !guest &&
@@ -1242,6 +1241,21 @@ export function CheckoutClient({
             />
           </div>
         </div>
+        <aside
+          aria-label="Scheduled delivery cutoff"
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--fm-border)] bg-[color:var(--fm-primary-dark)] px-4 py-3 text-white shadow-[0_-8px_24px_rgba(20,51,31,0.12)] sm:px-6 lg:px-10"
+        >
+          <div className="mx-auto flex max-w-[1440px] items-start gap-3 sm:items-center">
+            <Clock3
+              className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-lime)] sm:mt-0"
+              aria-hidden="true"
+            />
+            <p className="text-xs leading-5 sm:text-sm">
+              <strong>Scheduled delivery cutoff: Friday, 12:00 PM.</strong> Orders placed after the
+              cutoff will be scheduled for delivery the following Saturday or Sunday.
+            </p>
+          </div>
+        </aside>
       </div>
     </>
   );

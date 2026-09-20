@@ -231,15 +231,14 @@ export async function listFulfillmentOptions(
           mode,
           eligible: optionReason === null,
           unavailableReason: optionReason,
-          deliveryPartner:
-            mode === "INSTANT" && partner
-              ? {
-                  code: partner.providerCode,
-                  displayName: partner.displayName,
-                  serviceType: partner.serviceType,
-                  serviceLabel: partner.serviceLabel,
-                }
-              : null,
+          deliveryPartner: partner
+            ? {
+                code: partner.providerCode,
+                displayName: partner.displayName,
+                serviceType: partner.serviceType,
+                serviceLabel: partner.serviceLabel,
+              }
+            : null,
           promisedAt:
             mode === "INSTANT" && candidate?.promiseMinutes
               ? new Date(Date.now() + candidate.promiseMinutes * 60_000).toISOString()

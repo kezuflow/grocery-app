@@ -121,7 +121,7 @@ export type FulfillmentOptionView = {
     | "DELIVERY_PARTNER_UNAVAILABLE"
     | "DELIVERY_WEIGHT_UNAVAILABLE"
     | null;
-  /** Present only for Instant. The opaque optionId remains selection authority. */
+  /** Present when a configured courier owns either mode. The opaque optionId remains selection authority. */
   deliveryPartner?: {
     code: "lalamove" | "grab-express";
     displayName: string;

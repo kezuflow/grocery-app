@@ -194,7 +194,9 @@ for (const width of [1440, 390]) {
       "aria-checked",
       "true",
     );
-    await expect(page.getByText(/Scheduled delivery/)).toHaveCount(0);
+    await expect(
+      page.getByRole("radiogroup", { name: "Delivery option" }).getByText(/Scheduled delivery/),
+    ).toHaveCount(0);
     await expect(page.getByText(/hub|location-cebu/i)).toHaveCount(0);
     await expect(page.getByRole("alert")).toContainText(
       "Lalamove quotation is temporarily unavailable. Retry the delivery quotation.",
@@ -228,3 +230,130 @@ for (const width of [1440, 390]) {
     await expect(page.getByText(/Payment review/)).toHaveCount(0);
   });
 }
+
+test("quotes the current Scheduled delivery option and keeps the cutoff notice visible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let quotedOptionId: string | undefined;
+  await page.context().addCookies([
+    {
+      name: "freshmarkets_browse_point_v2",
+      value: encodeURIComponent(JSON.stringify({ latitude: 10.3173, longitude: 123.9058 })),
+      url: test.info().project.use.baseURL ?? "http://localhost:3100",
+    },
+  ]);
+  await page.route("**/api/serviceability", (route) =>
+    json(route, {
+      ok: true,
+      value: { serviceable: true, fulfillmentLocation: { id: "test-location" } },
+    }),
+  );
+  await page.route("**/api/commerce/cart", (route) =>
+    json(route, {
+      ok: true,
+      value: {
+        id: "cart-scheduled",
+        locationId: "test-location",
+        version: 8,
+        currency: "PHP",
+        totalMinor: 30_000,
+        checkoutBlocked: false,
+        blockingReasons: [],
+        items: [
+          {
+            skuId: "sku-1",
+            quantity: 1,
+            name: "Produce box",
+            availability: "AVAILABLE",
+            unitPriceMinor: 30_000,
+            lineTotalMinor: 30_000,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/checkout/bootstrap", (route) =>
+    json(route, {
+      ok: true,
+      value: {
+        addresses: [address("home", "Home")],
+        profile: { accountPhone: null, defaultAddressId: "home" },
+      },
+    }),
+  );
+  await page.route("**/api/checkout/fulfillment-options", (route) =>
+    json(route, {
+      ok: true,
+      value: [
+        {
+          optionId: "fulfillment-scheduled-opaque",
+          mode: "SCHEDULED",
+          eligible: true,
+          unavailableReason: null,
+          deliveryPartner: {
+            code: "lalamove",
+            displayName: "Lalamove",
+            serviceType: "MOTORCYCLE",
+            serviceLabel: "Motorcycle",
+          },
+          promisedAt: null,
+          deliveryWindow: {
+            windowId: "window-weekend",
+            name: "Weekend delivery",
+            startsAt: "2099-09-26T01:00:00.000Z",
+            endsAt: "2099-09-27T04:00:00.000Z",
+          },
+          feePreview: null,
+          cycleId: "cycle-weekend",
+          cutoffAt: "2099-09-25T04:00:00.000Z",
+          provisional: true,
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/checkout/quote", async (route) => {
+    quotedOptionId = (route.request().postDataJSON() as { fulfillmentOptionId?: string })
+      .fulfillmentOptionId;
+    await json(route, {
+      ok: true,
+      value: {
+        quoteId: "quote-scheduled",
+        attemptVersion: 1,
+        priceAcceptanceVersion: 1,
+        expiresAt: "2099-09-25T05:00:00.000Z",
+        currency: "PHP",
+        merchandiseSubtotalMinor: 30_000,
+        itemDiscountMinor: 0,
+        orderDiscountMinor: 0,
+        deliverySubtotalMinor: 2_500,
+        deliveryDiscountMinor: 0,
+        taxMinor: 0,
+        subtotalMinor: 30_000,
+        discountMinor: 0,
+        deliveryFeeMinor: 2_500,
+        totalMinor: 32_500,
+        lines: [],
+        requestedPromotionCodes: [],
+        promotionFeedback: [],
+        promotionApplications: [],
+      },
+    });
+  });
+
+  await page.goto("/checkout");
+  await expect(page.getByRole("radio", { name: /Lalamove/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page.getByText("Order cutoff", { exact: false })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText("₱325.00");
+  await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
+  const cutoffNotice = page.getByRole("complementary", { name: "Scheduled delivery cutoff" });
+  await expect(cutoffNotice).toContainText("Friday, 12:00 PM");
+  await expect(cutoffNotice).toContainText("following Saturday or Sunday");
+  expect(await cutoffNotice.evaluate((element) => getComputedStyle(element).position)).toBe(
+    "fixed",
+  );
+  expect(quotedOptionId).toBe("fulfillment-scheduled-opaque");
+});

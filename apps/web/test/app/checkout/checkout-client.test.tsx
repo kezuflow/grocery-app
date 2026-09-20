@@ -433,7 +433,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(savedChoices.find((choice) => choice.value === office.id)?.checked).toBe(false);
   });
 
-  it("does not expose or quote a Scheduled-only Core configuration", async () => {
+  it("quotes a Scheduled-only Core configuration and keeps its cutoff visible", async () => {
     let quoteCalls = 0;
     const base = successfulFetch({ onQuote: () => (quoteCalls += 1) });
     vi.stubGlobal(
@@ -450,6 +450,12 @@ describe("CheckoutClient delivery inputs", () => {
                   mode: "SCHEDULED",
                   eligible: true,
                   unavailableReason: null,
+                  deliveryPartner: {
+                    code: "lalamove",
+                    displayName: "Lalamove",
+                    serviceType: "MOTORCYCLE",
+                    serviceLabel: "Motorcycle",
+                  },
                   promisedAt: null,
                   deliveryWindow: {
                     windowId: "window-1",
@@ -473,12 +479,16 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     choose(container, "Home");
     await flush();
+    await flush();
 
-    expect(quoteCalls).toBe(0);
-    expect(container.textContent).not.toContain("Scheduled delivery");
-    expect(container.textContent).toContain(
-      "Instant checkout is unavailable while this store is operating in Scheduled mode",
-    );
+    expect(quoteCalls).toBe(1);
+    expect(container.textContent).toContain("Scheduled delivery");
+    expect(container.textContent).toContain("Order cutoff");
+    expect(container.textContent).toContain("Delivery fee confirmed with Lalamove.");
+    expect(container.textContent).toContain("₱30.00");
+    expect(container.textContent).toContain("Scheduled delivery cutoff: Friday, 12:00 PM.");
+    expect(container.textContent).toContain("following Saturday or Sunday");
+    expect(container.textContent).not.toContain("Instant checkout is unavailable");
   });
 
   it("refreshes the accepted Instant quote at the provider-expiry safety boundary", async () => {
@@ -788,7 +798,7 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
     click(container, "Retry delivery options");
     await flush();
-    expect(container.textContent).toContain("No Instant couriers are available");
+    expect(container.textContent).toContain("No delivery options are available");
     expect(container.textContent).not.toContain("Select a confirmed address to load");
   });
   it("retains a quote after an unknown release response and retries the identical request before replacement", async () => {

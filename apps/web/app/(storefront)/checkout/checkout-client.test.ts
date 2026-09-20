@@ -12,9 +12,9 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain('aria-label="Address setup workspace"');
     expect(checkout).toContain("Your cart and order total remain available beside this guide.");
     expect(checkout).toContain("Saved addresses");
-    expect(checkout).toContain("Choose a courier");
+    expect(checkout).toContain("Choose delivery");
     expect(checkout).not.toContain("Choose when it arrives");
-    expect(checkout).toContain('option.mode === "INSTANT"');
+    expect(checkout).toContain("Available Instant and Scheduled options");
     expect(checkout).not.toContain("type CheckoutStep");
     expect(checkout).not.toContain('aria-label="Checkout progress"');
     expect(checkout).not.toContain("<PromotionEntry");
@@ -49,7 +49,8 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("bg-[var(--fm-background)]");
     expect(checkout).toContain('variant="row"');
     expect(checkout).toContain('surface="flat"');
-    expect(checkout).toContain('className="grid gap-0"');
+    expect(checkout).toContain('className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0"');
     expect(checkout).not.toContain("Other saved addresses");
+    expect(checkout).toContain("Scheduled delivery cutoff: Friday, 12:00 PM.");
   });
 });

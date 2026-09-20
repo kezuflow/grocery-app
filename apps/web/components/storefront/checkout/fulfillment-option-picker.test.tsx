@@ -72,4 +72,47 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).not.toContain("fm-radius-surface");
     expect(html).not.toContain("fm-surface-soft");
   });
+
+  it("presents the configured Scheduled courier, delivery window, and cutoff", () => {
+    const html = renderToStaticMarkup(
+      <FulfillmentOptionPicker
+        disabled={false}
+        selectedOptionId="scheduled-opaque"
+        onSelect={() => undefined}
+        options={[
+          {
+            optionId: "scheduled-opaque",
+            mode: "SCHEDULED",
+            eligible: true,
+            unavailableReason: null,
+            deliveryPartner: {
+              code: "lalamove",
+              displayName: "Lalamove",
+              serviceType: "MOTORCYCLE",
+              serviceLabel: "Motorcycle",
+            },
+            promisedAt: null,
+            deliveryWindow: {
+              windowId: "window-1",
+              name: "Scheduled delivery",
+              startsAt: "2026-09-26T01:00:00Z",
+              endsAt: "2026-09-27T04:00:00Z",
+            },
+            feePreview: null,
+            cycleId: "cycle-1",
+            cutoffAt: "2026-09-25T04:00:00Z",
+            provisional: true,
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Lalamove");
+    expect(html).toContain("Motorcycle");
+    expect(html).toContain("Sat, Sep 26");
+    expect(html).toContain("Sun, Sep 27");
+    expect(html).toContain("Order cutoff Fri, Sep 25, 12:00 PM");
+    expect(html).toContain('aria-label="Delivery option"');
+    expect(html).toContain('data-provider-icon="lalamove"');
+  });
 });

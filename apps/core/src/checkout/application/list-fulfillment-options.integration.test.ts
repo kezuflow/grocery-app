@@ -61,6 +61,7 @@ describe("listFulfillmentOptions", () => {
     expect(result.value.map((option) => option.deliveryWindow?.name)).toEqual([
       "Test delivery window",
     ]);
+    expect(result.value.map((option) => option.deliveryPartner?.displayName)).toEqual(["Lalamove"]);
     expect(result.value.every((option) => option.eligible)).toBe(true);
     for (const option of result.value) {
       expect(option.deliveryWindow?.windowId).toBeTruthy();

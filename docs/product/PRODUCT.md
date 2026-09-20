@@ -1,5 +1,14 @@
 # FreshMarkets Product Rules
 
+Owner correction, 2026-09-20: customer checkout supports the one active global mode returned by
+Core. Instant obtains an immediate courier quotation; Scheduled presents the current eligible cycle,
+delivery range and cutoff and obtains its authoritative future courier quotation. Web must not discard
+a Scheduled option or imply that the operator must switch to Instant. Checkout carries a persistent
+customer notice that the ordinary Scheduled cutoff is Friday at 12:00 PM Philippine time and orders
+after that cutoff move to the following Saturday/Sunday delivery schedule. Core's current cycle,
+window and cutoff remain command authority; the notice never admits an expired or absent cycle.
+This supersedes only the Instant-only checkout presentation in the 2026-09-19 supplement below.
+
 Owner supplement, 2026-09-19: the new customer checkout is Instant-only and keeps the browsing
 destination visible beside saved-address alternatives. It presents only Core-returned configured
 couriers with provider-appropriate identity, automatically obtains the authoritative delivery quote
