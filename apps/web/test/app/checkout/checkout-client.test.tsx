@@ -426,12 +426,11 @@ describe("CheckoutClient delivery inputs", () => {
     act(() => root.render(checkout(client)));
     await flush();
 
-    expect(container.textContent).toContain("HomeConfirmed");
-    const savedChoices = Array.from(container.querySelectorAll('input[type="radio"]')).map(
-      (radio) => radio.parentElement?.textContent ?? "",
+    const savedChoices = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
     );
-    expect(savedChoices.some((label) => label.includes("Office"))).toBe(true);
-    expect(savedChoices.some((label) => label.includes("Home"))).toBe(false);
+    expect(savedChoices.find((choice) => choice.value === home.id)?.checked).toBe(true);
+    expect(savedChoices.find((choice) => choice.value === office.id)?.checked).toBe(false);
   });
 
   it("does not expose or quote a Scheduled-only Core configuration", async () => {

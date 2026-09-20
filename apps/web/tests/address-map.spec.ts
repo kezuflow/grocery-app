@@ -191,6 +191,14 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   const home = address("address-home", "Home", true);
   const unavailable = address("address-unavailable", "Outside Cebu", false);
   let optionAddressId: string | undefined;
+  await page.context().addCookies([
+    {
+      name: "freshmarkets_browse_point_v2",
+      value: encodeURIComponent(JSON.stringify(candidate.coordinate)),
+      url: test.info().project.use.baseURL ?? "http://localhost:3100",
+      sameSite: "Lax",
+    },
+  ]);
   await page.route("**/api/commerce/cart", (route) =>
     json(route, {
       ok: true,
@@ -294,6 +302,25 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   );
 
   await page.goto("/checkout");
+  const addressRow = page.getByRole("radiogroup", { name: "Saved delivery addresses" });
+  await expect(addressRow).toBeVisible();
+  const addressLayout = await addressRow.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const cards = Array.from(element.children).map((card) => {
+      const rect = card.getBoundingClientRect();
+      const cardStyle = getComputedStyle(card);
+      return {
+        top: Math.round(rect.top),
+        borderStyle: cardStyle.borderStyle,
+        borderRadius: cardStyle.borderRadius,
+      };
+    });
+    return { display: style.display, flexWrap: style.flexWrap, overflowX: style.overflowX, cards };
+  });
+  expect(addressLayout).toMatchObject({ display: "flex", flexWrap: "nowrap", overflowX: "auto" });
+  expect(new Set(addressLayout.cards.map((card) => card.top)).size).toBe(1);
+  expect(addressLayout.cards.every((card) => card.borderStyle === "solid")).toBe(true);
+  expect(addressLayout.cards.every((card) => card.borderRadius !== "0px")).toBe(true);
   await expect(page.getByRole("radio", { name: /Home/ })).toBeEnabled();
   await expect(page.getByRole("radio", { name: /Outside Cebu/ })).toBeDisabled();
   await assertNoCoordinateInputs(page);

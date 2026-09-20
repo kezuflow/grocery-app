@@ -1,5 +1,38 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-ADDRESS-CARD-ROW-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner requested that every saved checkout address appear as a boxed item in one
+horizontal line instead of the current full-width selected summary followed by vertically stacked
+alternatives. Acceptance: the selected and alternative saved addresses each appear once in a single
+non-wrapping row, every item has a visible bordered surface, smaller viewports can scroll the row
+horizontally, and selection, editing, serviceability, courier quoting and totals continue to work.
+
+Work started from clean `main` and `origin/main` at
+`c2635ede` (`feat(storefront): show unread notification count`). Checkout now renders all saved
+addresses through one boxed row variant of the shared address list. The current selection remains
+visible through its radio/check and selected border treatment instead of a duplicate full-width
+summary; unavailable addresses remain visible and disabled, and each card retains its edit or confirm
+action. An unsaved browsing destination remains a separate compact details-required surface because
+it is not yet a saved address. The account address book's existing grid and other checkout sections
+are unchanged. DESIGN records this owner-directed exception to the earlier flat checkout-address
+rule. No Core, contract, schema, authorization, quote or address-write behavior changed.
+
+Verification on the complete working tree: focused component/source-contract coverage passes 2 files
+/ 7 tests; formatting, diff-whitespace, naming, architecture, lint and Web typecheck pass, with lint
+retaining the two previously recorded address-book unused-variable warnings. The complete Web suite
+passes 139 files / 590 tests. Managed Playwright acceptance passes 6/6 against fresh disposable
+`e2e-checkout-address-row-20260920b` Worker/D1 state, including computed non-wrapping horizontal
+layout, visible card borders/radii, saved-address selection, Core fulfillment eligibility, Lalamove
+quote and the resulting order total; that run also performs the production vinext build. The first
+browser attempt proved the layout assertions but exposed a stale test fixture that lacked the
+browsing-location cookie required to load its mocked cart; the fixture was corrected and the fresh
+rerun passed. No deployment, provider transaction, outbound message or remote-data change was
+performed. CHECKOUT-ADDRESS-CARD-ROW-1 is complete at the one-ID application/local-browser counting
+level; zero implementation IDs remain. The next action, if separately authorized, is deployment and
+target-environment browser acceptance.
+
 ## Latest owner request — CUSTOMER-NOTIFICATION-UNREAD-BADGE-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

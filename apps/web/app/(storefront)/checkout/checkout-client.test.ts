@@ -11,7 +11,7 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("Complete delivery details");
     expect(checkout).toContain('aria-label="Address setup workspace"');
     expect(checkout).toContain("Your cart and order total remain available beside this guide.");
-    expect(checkout).toContain("Other saved addresses");
+    expect(checkout).toContain("Saved addresses");
     expect(checkout).toContain("Choose a courier");
     expect(checkout).not.toContain("Choose when it arrives");
     expect(checkout).toContain('option.mode === "INSTANT"');
@@ -45,10 +45,11 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("window.sessionStorage.setItem");
   });
 
-  it("uses flat surfaces across the checkout review workspace", () => {
+  it("keeps the checkout workspace flat while saved addresses use one boxed row", () => {
     expect(checkout).toContain("bg-[var(--fm-background)]");
-    expect(checkout).toContain('variant="flat"');
+    expect(checkout).toContain('variant="row"');
     expect(checkout).toContain('surface="flat"');
     expect(checkout).toContain('className="grid gap-0"');
+    expect(checkout).not.toContain("Other saved addresses");
   });
 });

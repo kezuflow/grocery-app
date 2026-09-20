@@ -11,7 +11,7 @@ export type AddressListProps = Readonly<{
   onCorrect: (address: CustomerAddressView) => void;
   defaultAddressId?: string | null;
   onManage?: (action: "SET_DEFAULT" | "REMOVE", address: CustomerAddressView) => void;
-  variant?: "cards" | "flat";
+  variant?: "cards" | "flat" | "row";
 }>;
 
 function displayAddress(address: CustomerAddressView): string {
@@ -36,6 +36,7 @@ export function AddressList({
   variant = "cards",
 }: AddressListProps) {
   const flat = variant === "flat";
+  const row = variant === "row";
 
   if (addresses.length === 0)
     return (
@@ -73,7 +74,9 @@ export function AddressList({
       className={cn(
         flat
           ? "grid gap-0 divide-y divide-[var(--fm-border)] border-y border-[var(--fm-border)]"
-          : "grid gap-3 sm:grid-cols-2",
+          : row
+            ? "flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]"
+            : "grid gap-3 sm:grid-cols-2",
       )}
     >
       {addresses.map((address) => {
@@ -88,6 +91,7 @@ export function AddressList({
               flat
                 ? "relative px-0 py-4 transition-[color,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--fm-primary-dark)]"
                 : "relative rounded-[var(--fm-radius-surface)] border bg-white p-4 transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+              row && "flex w-[min(20rem,calc(100vw-4rem))] shrink-0 snap-start flex-col",
               !flat &&
                 (selected
                   ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
@@ -99,6 +103,7 @@ export function AddressList({
               htmlFor={choiceId}
               className={cn(
                 "flex items-start gap-3",
+                row && "flex-1",
                 available ? "cursor-pointer" : "cursor-not-allowed",
               )}
             >

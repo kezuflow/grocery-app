@@ -89,4 +89,22 @@ describe("AddressList", () => {
     expect(markup).not.toContain("bg-[var(--fm-surface-soft)]");
     expect(markup).toContain("Edit address");
   });
+
+  it("keeps boxed checkout addresses in one horizontally scrollable row", () => {
+    const markup = renderToStaticMarkup(
+      <AddressList
+        addresses={[baseAddress, { ...baseAddress, id: "address-2", label: "Parents" }]}
+        selectedAddressId="address-1"
+        onSelect={vi.fn()}
+        onCorrect={vi.fn()}
+        variant="row"
+      />,
+    );
+
+    expect(markup).toContain("overflow-x-auto");
+    expect(markup).toContain("snap-x");
+    expect(markup).toContain("shrink-0");
+    expect(markup).toContain("rounded-[var(--fm-radius-surface)]");
+    expect(markup).not.toContain("divide-y");
+  });
 });

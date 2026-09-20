@@ -845,9 +845,6 @@ export function CheckoutClient({
   const selectedEligibleFulfillmentOption = selectedFulfillmentOption?.eligible
     ? selectedFulfillmentOption
     : undefined;
-  const alternativeAddresses = selectedAddress
-    ? addresses.filter((address) => address.id !== selectedAddress.id)
-    : addresses;
   const browsingDestination = selectedAddress ? null : carriedDestination.current;
   const automaticQuoteFingerprint =
     selectedAddress?.confirmedAt && selectedEligibleFulfillmentOption && cart?.items.length
@@ -1001,60 +998,36 @@ export function CheckoutClient({
                     </button>
                   </div>
 
-                  {selectedAddress || browsingDestination ? (
-                    <div className="mt-5 flex items-start gap-3 border-y border-[var(--fm-border)] py-4">
+                  {browsingDestination ? (
+                    <div className="mt-5 flex max-w-80 items-start gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-warning-border)] bg-white p-4">
                       <span className="grid size-9 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         <MapPin className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold">
-                            {selectedAddress?.label ?? "Current destination"}
-                          </p>
-                          {selectedAddress ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--fm-success)]">
-                              <span
-                                className="size-1.5 rounded-full bg-current"
-                                aria-hidden="true"
-                              />
-                              Confirmed
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold text-[var(--fm-warning-text)]">
-                              Details needed
-                            </span>
-                          )}
+                          <p className="font-bold">Current destination</p>
+                          <span className="text-xs font-semibold text-[var(--fm-warning-text)]">
+                            Details needed
+                          </span>
                         </div>
                         <p className="mt-1 text-sm leading-5 text-[var(--fm-text-muted)]">
-                          {selectedAddress
-                            ? displayAddress(selectedAddress)
-                            : browsingDestination?.displayAddress}
+                          {browsingDestination.displayAddress}
                         </p>
-                        {selectedAddress ? (
-                          <p className="mt-2 text-xs text-[var(--fm-text-muted)]">
-                            {selectedAddress.recipient} · {selectedAddress.phone}
-                          </p>
-                        ) : (
-                          <p className="mt-2 text-xs leading-5 text-[var(--fm-text-muted)]">
-                            Add the recipient and phone, then confirm this entrance pin before
-                            delivery can be quoted.
-                          </p>
-                        )}
+                        <p className="mt-2 text-xs leading-5 text-[var(--fm-text-muted)]">
+                          Add the recipient and phone, then confirm this entrance pin before
+                          delivery can be quoted.
+                        </p>
                         <div className="mt-3 flex flex-wrap gap-3">
                           <button
                             type="button"
-                            aria-label={
-                              selectedAddress
-                                ? `Edit ${selectedAddress.label} address`
-                                : "Complete delivery details"
-                            }
+                            aria-label="Complete delivery details"
                             onClick={() => {
-                              setEditingAddress(selectedAddress);
+                              setEditingAddress(undefined);
                               setShowAddressEditor(true);
                             }}
                             className="text-xs font-bold text-[var(--fm-primary-dark)] underline underline-offset-4"
                           >
-                            {selectedAddress ? "Edit details" : "Complete delivery details"}
+                            Complete delivery details
                           </button>
                         </div>
                       </div>
@@ -1067,7 +1040,7 @@ export function CheckoutClient({
 
                   <div className="pt-5 sm:pt-6">
                     <p className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                      {selectedAddress ? "Other saved addresses" : "Saved addresses"}
+                      Saved addresses
                     </p>
                     {addressLoadState === "loading" ? (
                       <p role="status" className="text-sm text-[var(--fm-text-muted)]">
@@ -1084,9 +1057,9 @@ export function CheckoutClient({
                           Retry address load
                         </button>
                       </div>
-                    ) : alternativeAddresses.length ? (
+                    ) : addresses.length ? (
                       <AddressList
-                        addresses={alternativeAddresses}
+                        addresses={addresses}
                         defaultAddressId={profile?.defaultAddressId}
                         selectedAddressId={addressId}
                         onSelect={selectAddress}
@@ -1094,13 +1067,11 @@ export function CheckoutClient({
                           setEditingAddress(address);
                           setShowAddressEditor(true);
                         }}
-                        variant="flat"
+                        variant="row"
                       />
                     ) : (
                       <p className="text-sm text-[var(--fm-text-muted)]">
-                        {selectedAddress
-                          ? "No other saved addresses."
-                          : "No saved addresses yet. Complete the current destination or add one."}
+                        No saved addresses yet. Complete the current destination or add one.
                       </p>
                     )}
                   </div>
