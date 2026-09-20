@@ -1,6 +1,6 @@
 @import "@fullcalendar/react/skeleton.css";
-@import "@fullcalendar/react/themes/pulse/theme.css";
-@import "@fullcalendar/react/themes/pulse/palettes/red.css";
+@import "@fullcalendar/react/themes/classic/theme.css";
+@import "@fullcalendar/react/themes/classic/palette.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -175,6 +175,11 @@ body {
   --fm-admin-chart-3: #fb923c;
   --fm-admin-chart-4: #ea580c;
   --fm-admin-chart-5: #9a3412;
+  --fm-cycle-ordering: #8b5cf6;
+  --fm-cycle-procurement: #3b82f6;
+  --fm-cycle-preparation: #d9a300;
+  --fm-cycle-pickup: #f97316;
+  --fm-cycle-delivery: #16a36a;
   --fm-admin-sidebar-expanded: 256px;
   --fm-admin-sidebar-collapsed: 64px;
   --fm-background: var(--fm-admin-surface);
@@ -210,6 +215,11 @@ html.fm-admin-dark .fm-admin {
   --fm-admin-accent: #f97316;
   --fm-admin-accent-strong: #fb923c;
   --fm-admin-accent-soft: #2b1b12;
+  --fm-cycle-ordering: #a78bfa;
+  --fm-cycle-procurement: #60a5fa;
+  --fm-cycle-preparation: #facc15;
+  --fm-cycle-pickup: #fb923c;
+  --fm-cycle-delivery: #34d399;
   --fm-background: var(--fm-admin-surface);
   --fm-surface-soft: var(--fm-admin-canvas);
   --fm-surface-muted: var(--fm-admin-surface-muted);
@@ -360,12 +370,18 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
 }
 
 .fm-cycle-calendar {
-  --fc-page-bg-color: var(--fm-admin-surface);
-  --fc-neutral-bg-color: var(--fm-surface-muted);
-  --fc-neutral-text-color: var(--fm-text-muted);
-  --fc-border-color: var(--fm-border);
-  --fc-today-bg-color: color-mix(in srgb, var(--fm-admin-accent) 7%, transparent);
-  --fc-now-indicator-color: var(--fm-admin-accent);
+  --fc-classic-background: var(--fm-admin-surface);
+  --fc-classic-faint: color-mix(in srgb, var(--fm-text) 3%, transparent);
+  --fc-classic-muted: color-mix(in srgb, var(--fm-text) 7%, transparent);
+  --fc-classic-strong: color-mix(in srgb, var(--fm-text) 12%, transparent);
+  --fc-classic-foreground: var(--fm-text);
+  --fc-classic-faint-foreground: var(--fm-text-muted);
+  --fc-classic-muted-foreground: var(--fm-text-muted);
+  --fc-classic-border: var(--fm-border);
+  --fc-classic-strong-border: color-mix(in srgb, var(--fm-text) 20%, var(--fm-border));
+  --fc-classic-highlight: color-mix(in srgb, var(--fm-admin-accent) 8%, transparent);
+  --fc-classic-today: color-mix(in srgb, var(--fm-admin-accent) 8%, transparent);
+  --fc-classic-now: var(--fm-admin-accent);
   color: var(--fm-text);
 }
 
@@ -381,9 +397,16 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
 }
 
 .fm-cycle-event {
+  --fm-cycle-event-color: var(--fm-cycle-ordering);
+  --fc-event-color: var(--fm-cycle-event-color) !important;
+  --fc-event-contrast-color: var(--fm-text) !important;
   cursor: pointer;
-  border-color: color-mix(in srgb, var(--fm-admin-accent) 55%, var(--fm-border)) !important;
-  background: color-mix(in srgb, var(--fm-admin-accent) 13%, var(--fm-admin-surface)) !important;
+  border-color: color-mix(in srgb, var(--fm-cycle-event-color) 72%, var(--fm-border)) !important;
+  background: color-mix(
+    in srgb,
+    var(--fm-cycle-event-color) 24%,
+    var(--fm-admin-surface)
+  ) !important;
   color: var(--fm-text) !important;
 }
 
@@ -391,9 +414,27 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
   color: var(--fm-text) !important;
 }
 
+.fm-cycle-event-ordering,
+.fm-cycle-event-orders-open,
+.fm-cycle-event-cutoff {
+  --fm-cycle-event-color: var(--fm-cycle-ordering);
+}
+
+.fm-cycle-event-procurement {
+  --fm-cycle-event-color: var(--fm-cycle-procurement);
+}
+
+.fm-cycle-event-preparation {
+  --fm-cycle-event-color: var(--fm-cycle-preparation);
+}
+
+.fm-cycle-event-pickup {
+  --fm-cycle-event-color: var(--fm-cycle-pickup);
+}
+
 .fm-cycle-event-delivery {
-  border-left: 3px solid var(--fm-admin-accent) !important;
-  background: var(--fm-admin-accent-soft) !important;
+  --fm-cycle-event-color: var(--fm-cycle-delivery);
+  border-left: 3px solid var(--fm-cycle-delivery) !important;
 }
 
 .fm-cycle-event-selected {
@@ -404,6 +445,27 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
 .fm-cycle-event-preview {
   border-style: dashed !important;
   opacity: 0.82;
+}
+
+.fm-cycle-timeline-dot-orders-open,
+.fm-cycle-timeline-dot-cutoff {
+  background: var(--fm-cycle-ordering);
+}
+
+.fm-cycle-timeline-dot-procurement {
+  background: var(--fm-cycle-procurement);
+}
+
+.fm-cycle-timeline-dot-preparation {
+  background: var(--fm-cycle-preparation);
+}
+
+.fm-cycle-timeline-dot-pickup {
+  background: var(--fm-cycle-pickup);
+}
+
+.fm-cycle-timeline-dot-delivery {
+  background: var(--fm-cycle-delivery);
 }
 
 @media (max-width: 767px) {

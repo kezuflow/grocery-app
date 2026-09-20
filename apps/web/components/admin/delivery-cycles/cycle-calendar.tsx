@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import FullCalendar, {
   useCalendarController,
   type DateClickInfo,
@@ -12,12 +12,12 @@ import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
 import listPlugin from "@fullcalendar/react/list";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
-import pulseThemePlugin from "@fullcalendar/react/themes/pulse";
+import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import type { AdminDeliveryCycleView, DeliveryCycleDraft } from "@freshmarkets/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { cyclesToCalendarEvents, type CycleCalendarElementKind } from "./cycle-calendar-adapter";
+import { cyclesToCalendarEvents } from "./cycle-calendar-adapter";
 
 export type CycleCalendarView = "month" | "week" | "agenda";
 
@@ -27,16 +27,6 @@ function viewName(type: string): CycleCalendarView {
   return "month";
 }
 
-const kindLabels: Record<CycleCalendarElementKind, string> = {
-  ordering: "Ordering window",
-  "orders-open": "Orders open",
-  cutoff: "Order cutoff",
-  procurement: "Procurement",
-  preparation: "Preparation",
-  pickup: "Planned pickup",
-  delivery: "Customer delivery",
-};
-
 export function CycleCalendar({
   cycles,
   timezone,
@@ -44,6 +34,7 @@ export function CycleCalendar({
   draft,
   loading,
   rangeIncomplete,
+  filters,
   onRangeChange,
   onSelectCycle,
   onEmptyDate,
@@ -55,6 +46,7 @@ export function CycleCalendar({
   draft: DeliveryCycleDraft | null;
   loading: boolean;
   rangeIncomplete: boolean;
+  filters?: ReactNode;
   onRangeChange(info: DatesSetInfo): void;
   onSelectCycle(cycleId: string): void;
   onEmptyDate(date: string): void;
@@ -68,7 +60,12 @@ export function CycleCalendar({
   );
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
-    if (query.matches) controller.changeView("listMonth");
+    const useMobileAgenda = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) controller.changeView("listMonth");
+    };
+    useMobileAgenda(query);
+    query.addEventListener("change", useMobileAgenda);
+    return () => query.removeEventListener("change", useMobileAgenda);
   }, [controller]);
   const changeView = (next: CycleCalendarView) => {
     controller.changeView(
@@ -80,14 +77,14 @@ export function CycleCalendar({
       "fm-cycle-event",
       info.event.groupId === selectedCycleId && "fm-cycle-event-selected",
       info.event.extendedProps.draft && "fm-cycle-event-preview",
-      info.event.extendedProps.kind === "delivery" && "fm-cycle-event-delivery",
+      `fm-cycle-event-${String(info.event.extendedProps.kind)}`,
     );
   return (
     <section
       aria-label="Scheduled cycle calendar"
       className="min-w-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
     >
-      <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] p-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-end gap-2 border-b border-[var(--fm-border)] p-3">
         <div className="flex items-center gap-1">
           <Button type="button" size="sm" variant="outline" onClick={() => controller.today()}>
             Today
@@ -101,7 +98,7 @@ export function CycleCalendar({
           >
             <ChevronLeft aria-hidden className="size-4" />
           </Button>
-          <h2 aria-live="polite" className="min-w-40 px-2 text-base font-semibold">
+          <h2 aria-live="polite" className="min-w-32 px-2 text-base font-semibold">
             {controller.view?.title ?? "Schedule"}
           </h2>
           <Button
@@ -114,7 +111,10 @@ export function CycleCalendar({
             <ChevronRight aria-hidden className="size-4" />
           </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-1">
+        {filters ? (
+          <div className="flex flex-1 flex-wrap items-end gap-2 lg:justify-end">{filters}</div>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-1 lg:ml-auto">
           <Button
             type="button"
             size="sm"
@@ -160,15 +160,21 @@ export function CycleCalendar({
           No cycles in this range. Select an empty date to start one.
         </p>
       ) : null}
-      <div className="fm-cycle-calendar min-h-[36rem] p-2 sm:p-3">
+      <div className="fm-cycle-calendar p-2 sm:p-3">
         <FullCalendar
           controller={controller}
-          plugins={[pulseThemePlugin, dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+          plugins={[
+            classicThemePlugin,
+            dayGridPlugin,
+            timeGridPlugin,
+            listPlugin,
+            interactionPlugin,
+          ]}
           initialView="dayGridMonth"
           headerToolbar={false}
           timeZone={timezone}
           firstDay={1}
-          height="auto"
+          height={view === "week" ? 620 : 500}
           fixedWeekCount={false}
           dayMaxEvents={3}
           nowIndicator
@@ -189,31 +195,24 @@ export function CycleCalendar({
               onSelectCycle(String(info.event.extendedProps.cycleId));
           }}
           eventClass={eventClass}
-          eventContent={(info) => (
-            <span className="flex min-w-0 items-center gap-1">
-              <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current opacity-70" />
-              <span className="truncate">
-                {info.event.extendedProps.draft ? "Unsaved preview · " : ""}
-                {view === "month" && info.event.extendedProps.kind === "ordering"
-                  ? info.event.title
-                  : kindLabels[info.event.extendedProps.kind as CycleCalendarElementKind]}
-              </span>
-            </span>
-          )}
           noEventsText="No cycles in this range"
         />
       </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--fm-border)] px-4 py-3 text-xs text-[var(--fm-text-muted)]">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[var(--fm-border)] px-4 py-3 text-xs text-[var(--fm-text-muted)]">
         <span className="flex items-center gap-2">
-          <span className="h-1.5 w-6 rounded-full bg-[var(--fm-admin-accent)]" /> Ordering window
+          <span className="size-2 rounded-full bg-[var(--fm-cycle-ordering)]" /> Ordering
         </span>
         <span className="flex items-center gap-2">
-          <span className="size-2 rounded-full border-2 border-[var(--fm-admin-accent)]" />
-          Fulfillment milestones
+          <span className="size-2 rounded-full bg-[var(--fm-cycle-procurement)]" /> Procurement
         </span>
         <span className="flex items-center gap-2">
-          <span className="size-2 rounded-sm bg-[var(--fm-admin-accent-soft)] ring-1 ring-[var(--fm-admin-accent)]" />
-          Customer delivery
+          <span className="size-2 rounded-full bg-[var(--fm-cycle-preparation)]" /> Preparation
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-[var(--fm-cycle-pickup)]" /> Pickup
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-[var(--fm-cycle-delivery)]" /> Delivery
         </span>
       </div>
     </section>

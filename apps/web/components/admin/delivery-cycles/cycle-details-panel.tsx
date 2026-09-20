@@ -60,7 +60,7 @@ export function CycleDetailsPanel({
     !cycle.cancellationUnavailableReason;
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] p-5">
+      <header className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] p-4">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="truncate text-xl font-semibold">{cycle.name}</h2>
@@ -91,7 +91,7 @@ export function CycleDetailsPanel({
           <X aria-hidden className="size-4" />
         </Button>
       </header>
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         <section aria-labelledby="cycle-delivery-heading">
           <h3
             id="cycle-delivery-heading"
@@ -131,13 +131,17 @@ export function CycleDetailsPanel({
           <CycleTimeline
             timezone={cycle.timezone}
             items={[
-              { label: "Orders open", value: cycle.orderOpensAt },
-              { label: "Order cutoff", value: cycle.cutoffAt },
-              { label: "Procurement starts", value: cycle.procurementAt },
-              { label: "Preparation starts", value: cycle.preparationAt },
-              { label: "Planned courier pickup", value: cycle.pickupAt },
-              { label: "Delivery window begins", value: primaryWindow?.startsAt ?? null },
-              { label: "Delivery window ends", value: primaryWindow?.endsAt ?? null },
+              { label: "Orders open", value: cycle.orderOpensAt, kind: "orders-open" },
+              { label: "Order cutoff", value: cycle.cutoffAt, kind: "cutoff" },
+              { label: "Procurement starts", value: cycle.procurementAt, kind: "procurement" },
+              { label: "Preparation starts", value: cycle.preparationAt, kind: "preparation" },
+              { label: "Planned courier pickup", value: cycle.pickupAt, kind: "pickup" },
+              {
+                label: "Customer delivery",
+                value: primaryWindow?.startsAt ?? null,
+                endValue: primaryWindow?.endsAt ?? null,
+                kind: "delivery",
+              },
             ]}
           />
         </section>
@@ -156,25 +160,31 @@ export function CycleDetailsPanel({
           </p>
         ) : null}
       </div>
-      <footer className="flex flex-wrap items-center gap-2 border-t border-[var(--fm-border)] p-4">
+      <footer className="grid grid-cols-2 gap-2 border-t border-[var(--fm-border)] p-4">
         {retryAvailable ? (
-          <Button type="button" disabled={submitting} onClick={onRetry}>
+          <Button type="button" className="col-span-2" disabled={submitting} onClick={onRetry}>
             {submitting ? "Retrying…" : "Retry unconfirmed request"}
           </Button>
         ) : editable ? (
-          <Button type="button" variant="outline" disabled={pending} onClick={onEdit}>
+          <Button type="button" className="col-span-2" disabled={pending} onClick={onEdit}>
             <Pencil aria-hidden className="size-3.5" /> Edit draft
           </Button>
         ) : null}
         {!retryAvailable ? (
-          <Button type="button" variant="outline" disabled={pending} onClick={onDuplicate}>
-            <Copy aria-hidden className="size-3.5" /> Duplicate to another date
+          <Button
+            type="button"
+            variant="outline"
+            className={!editable && !deactivatable ? "col-span-2" : undefined}
+            disabled={pending}
+            onClick={onDuplicate}
+          >
+            <Copy aria-hidden className="size-3.5" /> Duplicate
           </Button>
         ) : null}
         {!retryAvailable && editable ? (
           <Button
             type="button"
-            className="ml-auto"
+            className="w-full"
             disabled={pending || !cycle.pickupAt || cycle.windows.length !== 1}
             onClick={() => setConfirmation("activate")}
           >
@@ -184,7 +194,7 @@ export function CycleDetailsPanel({
           <Button
             type="button"
             variant="destructive"
-            className="ml-auto"
+            className="w-full"
             disabled={pending}
             onClick={() => setConfirmation("deactivate")}
           >

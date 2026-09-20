@@ -143,7 +143,7 @@ function ResponsivePanel({
 }) {
   const [docked, setDocked] = useState(false);
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 1536px)");
+    const media = window.matchMedia("(min-width: 1280px)");
     const update = () => setDocked(media.matches);
     update();
     media.addEventListener("change", update);
@@ -152,7 +152,10 @@ function ResponsivePanel({
   if (!open) return null;
   if (docked)
     return (
-      <aside className="min-h-[42rem] w-[26rem] shrink-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <aside
+        aria-label="Cycle workspace panel"
+        className="sticky top-4 h-[calc(100vh-10rem)] min-h-[34rem] max-h-[42rem] w-[20rem] shrink-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
+      >
         {children}
       </aside>
     );
@@ -393,66 +396,6 @@ export function DeliveryCyclesWorkspace({
           Retry unconfirmed request
         </Button>
       ) : null}
-      <div className="flex flex-wrap items-end gap-2 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3">
-        {page && page.markets.length > 1 ? (
-          <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
-            Market
-            <Select
-              value={marketFilter}
-              onValueChange={(value) => {
-                setMarketFilter(value);
-                setLocationFilter("all");
-              }}
-            >
-              <SelectTrigger className="min-w-40 bg-[var(--fm-admin-surface)]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {page.markets.map((market) => (
-                  <SelectItem key={market.marketId} value={market.marketId}>
-                    {market.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
-        ) : null}
-        <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
-          Location
-          <Select value={locationFilter} onValueChange={setLocationFilter}>
-            <SelectTrigger className="min-w-44 bg-[var(--fm-admin-surface)]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All locations</SelectItem>
-              {destinations.items.map((item) => (
-                <SelectItem key={item.locationId} value={item.locationId}>
-                  {item.locationName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
-          Status
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => setStatusFilter(value as DeliveryCycleState | "all")}
-          >
-            <SelectTrigger className="min-w-40 bg-[var(--fm-admin-surface)]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {statuses.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.toLowerCase().replaceAll("_", " ")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-      </div>
       <div className="flex min-w-0 items-stretch gap-4">
         <div className="min-w-0 flex-1">
           <CycleCalendar
@@ -462,6 +405,68 @@ export function DeliveryCyclesWorkspace({
             draft={draft}
             loading={loading}
             rangeIncomplete={rangeIncomplete}
+            filters={
+              <>
+                {page && page.markets.length > 1 ? (
+                  <label className="block">
+                    <span className="sr-only">Market</span>
+                    <Select
+                      value={marketFilter}
+                      onValueChange={(value) => {
+                        setMarketFilter(value);
+                        setLocationFilter("all");
+                      }}
+                    >
+                      <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {page.markets.map((market) => (
+                          <SelectItem key={market.marketId} value={market.marketId}>
+                            {market.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                ) : null}
+                <label className="block">
+                  <span className="sr-only">Location</span>
+                  <Select value={locationFilter} onValueChange={setLocationFilter}>
+                    <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All locations</SelectItem>
+                      {destinations.items.map((item) => (
+                        <SelectItem key={item.locationId} value={item.locationId}>
+                          {item.locationName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Status</span>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as DeliveryCycleState | "all")}
+                  >
+                    <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      {statuses.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status.toLowerCase().replaceAll("_", " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </>
+            }
             onRangeChange={onDatesSet}
             onSelectCycle={(cycleId) => {
               setDraft(null);

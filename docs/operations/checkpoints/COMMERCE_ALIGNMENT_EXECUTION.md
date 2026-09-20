@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SCHEDULED-CYCLES-LIVE-POLISH-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner asked for the live `/admin/settings/scheduled-cycles` route to be inspected and
+fixed using the supplied dense calendar/detail-panel reference as inspiration. Acceptance is a
+theme-correct calendar, usable common-desktop split view, compact calendar-owned controls, readable
+connected phase semantics, responsive mobile Agenda and a clean live development reload without the
+observed blocking overlay.
+
+Work started from clean `main` and `origin/main` at
+`f0a0c6fa33a515929e8230cd93949271c7bd4130`. Live inspection at the default 1280x720 viewport found
+that the Pulse calendar palette rendered a white grid inside the dark admin shell, the details panel
+became a modal sheet until 1536px, filters occupied a detached surface, schedule markers were
+monochrome and a clean reload could expose both a service-binding `Symbol.dispose` serialization
+warning and FullCalendar's `ResizeObserver` notification as a blocking vinext development overlay.
+
+The working tree now docks a labeled 20rem complementary panel from 1280px while retaining the
+full-width mobile sheet, integrates compact location/status controls into the calendar toolbar and
+uses ordering, procurement, preparation, pickup and delivery colors consistently across Month, Week,
+Agenda, legend and timeline. The detail timeline is delivery-first and compact, combines the delivery
+range into one row and uses a non-colliding action layout. The calendar maps both light and dark admin
+tokens into FullCalendar, uses its stable Classic renderer with bounded view heights and native event
+content, and responds to a live transition into the mobile breakpoint by selecting Agenda. The page
+also copies the initial Core result into a plain server-to-client value before rendering.
+
+Verification on the complete working tree: focused formatting, lint, diff-whitespace and Web
+typecheck pass; focused cycle-planning coverage passes 4/4; the complete Web suite passes 139 files /
+587 tests; and the production vinext build passes. Managed Playwright acceptance passes desktop and
+mobile (2/2), including the docked 1440px editor/details flow and the 390px full-screen/Agenda flow.
+Live browser inspection passes dark and light presentation, restored the original dark preference,
+passes settled mobile panel and Agenda rendering, and passes a clean desktop reload with no error
+overlay or new serialization warning. No deployment, provider transaction, outbound message or
+remote-data change was performed. SCHEDULED-CYCLES-LIVE-POLISH-1 is complete at the one-ID
+application/local-acceptance counting level; zero implementation IDs remain. Next action, if
+separately authorized, is deployment and target-environment browser acceptance.
+
 ## Latest owner request — SCHEDULED-CYCLES-CALENDAR-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

@@ -47,13 +47,14 @@ export function cycleToCalendarEvents(
   draft = false,
 ): CycleCalendarEvent[] {
   const className = draft ? "fm-cycle-event fm-cycle-event-preview" : "fm-cycle-event";
+  const title = (value: string) => (draft ? `Unsaved preview · ${value}` : value);
   const events: CycleCalendarEvent[] = [];
   if (detail !== "agenda") {
     const cutoffDate = instantToBusinessDate(cycle.cutoffAt, cycle.timezone);
     events.push({
       id: `${cycle.cycleId}:ordering`,
       groupId: cycle.cycleId,
-      title: `${cycle.name} · Ordering open`,
+      title: title(`${cycle.name} · Ordering open`),
       start: instantToBusinessDate(cycle.orderOpensAt, cycle.timezone),
       end: addBusinessDays(cutoffDate, 1),
       allDay: true,
@@ -71,7 +72,7 @@ export function cycleToCalendarEvents(
       events.push({
         id: `${cycle.cycleId}:${kind}`,
         groupId: cycle.cycleId,
-        title,
+        title: draft ? `Unsaved preview · ${title}` : title,
         start,
         interactive: true,
         className,
@@ -83,7 +84,7 @@ export function cycleToCalendarEvents(
     events.push({
       id: `${cycle.cycleId}:delivery:${index}`,
       groupId: cycle.cycleId,
-      title: `${cycle.name} · Customer delivery`,
+      title: title(`${cycle.name} · Customer delivery`),
       start: window.startsAt,
       end: window.endsAt,
       interactive: true,

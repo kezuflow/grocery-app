@@ -30,11 +30,11 @@ import {
 import { validateCycleDraft, type CycleField } from "./cycle-validation";
 
 const scheduleFields = [
-  ["orderOpensAt", "Orders open"],
-  ["cutoffAt", "Order cutoff"],
-  ["procurementAt", "Procurement starts"],
-  ["preparationAt", "Preparation starts"],
-  ["pickupAt", "Planned pickup"],
+  ["orderOpensAt", "Orders open", "orders-open"],
+  ["cutoffAt", "Order cutoff", "cutoff"],
+  ["procurementAt", "Procurement starts", "procurement"],
+  ["preparationAt", "Preparation starts", "preparation"],
+  ["pickupAt", "Planned pickup", "pickup"],
 ] as const;
 
 function displayDate(date: string) {
@@ -528,7 +528,11 @@ export function CycleEditor({
                 </h4>
                 <CycleTimeline
                   timezone={timezone}
-                  items={scheduleFields.map(([field, label]) => ({ label, value: draft[field] }))}
+                  items={scheduleFields.map(([field, label, kind]) => ({
+                    label,
+                    value: draft[field],
+                    kind,
+                  }))}
                 />
               </section>
               <section>

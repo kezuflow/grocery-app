@@ -21,7 +21,10 @@ for (const width of [1440, 390]) {
         "true",
       );
     await page.getByRole("button", { name: "New cycle", exact: true }).click();
-    const editor = page.getByRole("dialog");
+    const editor =
+      width >= 1280
+        ? page.getByRole("complementary", { name: "Cycle workspace panel" })
+        : page.getByRole("dialog");
     await expect(editor.getByRole("heading", { name: "New cycle" })).toBeVisible();
 
     const deliveryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -64,7 +67,10 @@ for (const width of [1440, 390]) {
     await editor.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(editor.getByLabel("Planning note", { exact: true })).toBeDisabled();
     await editor.getByRole("button", { name: "Retry unconfirmed request" }).click();
-    const details = page.getByRole("dialog");
+    const details =
+      width >= 1280
+        ? page.getByRole("complementary", { name: "Cycle workspace panel" })
+        : page.getByRole("dialog");
     await expect(details.getByRole("heading", { name, exact: true })).toBeVisible();
     await expect(details).toContainText("Draft");
     await expect(details).toContainText("Customer delivery");
