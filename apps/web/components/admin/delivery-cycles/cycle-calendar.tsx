@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import FullCalendar, {
   useCalendarController,
   type DateClickInfo,
+  type DateSelectInfo,
   type DatesSetInfo,
   type EventClickInfo,
   type EventDisplayInfo,
@@ -34,10 +35,12 @@ export function CycleCalendar({
   draft,
   loading,
   rangeIncomplete,
+  canCreate,
   filters,
   onRangeChange,
   onSelectCycle,
   onEmptyDate,
+  onDateRange,
   onRefresh,
 }: {
   cycles: readonly AdminDeliveryCycleView[];
@@ -46,10 +49,12 @@ export function CycleCalendar({
   draft: DeliveryCycleDraft | null;
   loading: boolean;
   rangeIncomplete: boolean;
+  canCreate: boolean;
   filters?: ReactNode;
   onRangeChange(info: DatesSetInfo): void;
   onSelectCycle(cycleId: string): void;
   onEmptyDate(date: string): void;
+  onDateRange(startDate: string, endDate: string): void;
   onRefresh(): void;
 }) {
   const controller = useCalendarController();
@@ -160,7 +165,17 @@ export function CycleCalendar({
           No cycles in this range. Select an empty date to start one.
         </p>
       ) : null}
-      <div className="fm-cycle-calendar p-2 sm:p-3">
+      <div
+        className={cn(
+          "fm-cycle-calendar p-2 sm:p-3",
+          canCreate && view === "month" && "fm-cycle-calendar-selectable",
+        )}
+      >
+        <p className="mb-2 px-1 text-xs text-[var(--fm-text-muted)]">
+          {view === "month" && canCreate
+            ? "Drag from the order-opening date to the customer-delivery date, or select one day."
+            : "Select a cycle to inspect its complete schedule."}
+        </p>
         <FullCalendar
           controller={controller}
           plugins={[
@@ -184,11 +199,19 @@ export function CycleCalendar({
           scrollTime="05:00:00"
           eventTimeFormat={{ hour: "numeric", minute: "2-digit" }}
           events={events}
+          selectable={canCreate && view === "month" && !loading}
+          selectMirror
+          selectMinDistance={8}
+          selectLongPressDelay={350}
           datesSet={(info) => {
             setView(viewName(info.view.type));
             onRangeChange(info);
           }}
           dateClick={(info: DateClickInfo) => onEmptyDate(info.dateStr.slice(0, 10))}
+          select={(info: DateSelectInfo) => {
+            if (!info.allDay) return;
+            onDateRange(info.startStr.slice(0, 10), info.endStr.slice(0, 10));
+          }}
           eventClick={(info: EventClickInfo) => {
             info.jsEvent.preventDefault();
             if (!info.event.extendedProps.draft)

@@ -396,6 +396,15 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
   transform: scale(0.97);
 }
 
+.fm-cycle-calendar-selectable .fc-daygrid-day-frame {
+  cursor: crosshair;
+}
+
+.fm-cycle-calendar .fc-highlight {
+  background: color-mix(in srgb, var(--fm-admin-accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fm-admin-accent) 42%, transparent);
+}
+
 .fm-cycle-event {
   --fm-cycle-event-color: var(--fm-cycle-ordering);
   --fc-event-color: var(--fm-cycle-event-color) !important;

@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SCHEDULED-CYCLES-DIRECT-RANGE-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. After reviewing the polished live calendar, the owner clarified that Month must be an
+interactive creation surface: an administrator drags from the intended ordering-open date through the
+customer-delivery date, then sets exact opening and fulfillment times in the cycle editor. Acceptance
+is continuous range feedback, an inclusive range end, a complete editable working schedule, a visible
+unsaved preview and retained click/New cycle fallbacks for keyboard and mobile use.
+
+Work started from clean `main` and `origin/main` at
+`dc965a2ffec1615d9583249be49c62fe564d2283`. Month now enables FullCalendar date selection for
+authorized, idle administrators with an 8px drag threshold, touch long-press support, direct range
+highlighting and an explicit interaction hint. A selected range treats its first day as the proposed
+ordering-open date and its inclusive last day as customer delivery; the existing delivery-relative
+cutoff, procurement, preparation and pickup values remain suggestions and all exact business-timezone
+fields stay editable before save. The range opens the existing validated three-step panel and renders
+the dashed ordering/delivery preview immediately. A one-day click still creates from that delivery
+date, and New cycle remains the mobile/keyboard fallback. The shared calendar-prefilled initializer
+now supplies the full working schedule instead of leaving milestones blank until the delivery picker
+was touched. `docs/design/DESIGN.md` records the corrected owner interaction without adding Core,
+contract, storage or authorization behavior.
+
+Verification on the complete working tree: repository formatting and diff-whitespace pass; focused
+lint and Web typecheck pass; focused cycle-planning coverage passes 4/4; the complete Web suite passes
+139 files / 587 tests. Managed Playwright acceptance passes 2/2: the 1440px journey creates the draft
+only by dragging a Month range and asserts its opening/delivery dates and opening time before save,
+retry recovery, activation and deactivation; the 390px full-screen/Agenda fallback remains intact.
+That run also performs the production vinext build. Direct localhost inspection in dark mode confirms
+continuous September 21–26 highlighting, a September 21–25 unsaved ordering preview, a September 26
+delivery marker and the docked editor. The first range test exposed the blank-milestone initializer and
+was corrected; one later managed-Web startup exited before tests, while the fresh isolated rerun and
+final aggregate passed. No deployment, provider transaction, outbound message or remote-data change
+was performed. SCHEDULED-CYCLES-DIRECT-RANGE-1 is complete at the one-ID application/local-acceptance
+counting level; zero implementation IDs remain. Next action, if separately authorized, is deployment
+and target-environment browser acceptance.
+
 ## Latest owner request — SCHEDULED-CYCLES-LIVE-POLISH-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

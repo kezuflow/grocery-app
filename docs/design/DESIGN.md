@@ -79,10 +79,14 @@ never invented durations or inferred completion. The selected cycle opens a cust
 timeline beside the calendar only when width permits; narrower screens use an overlay/full-screen panel
 without squeezing seven columns. Range, filters and calendar position remain mounted across panel work.
 
-Creation is delivery-first and uses business-timezone date/time controls. Clicking an empty calendar
-date prefills the customer delivery date explicitly; a new cycle may suggest an editable name and
-working schedule, while duplicate shifts proposed dates relative to the chosen delivery date without
-moving the original or overwriting edited business times. The three editor stages are Delivery and
+Creation is delivery-first and uses business-timezone date/time controls. On Month, dragging from an
+empty order-opening date through the intended customer-delivery date prefills that complete planning
+horizon; the range end is inclusive in the interaction, exact opening/cutoff/fulfillment times remain
+editable, and the cutoff is only a working suggestion before delivery. Clicking one empty date
+continues to prefill the customer delivery date explicitly, while New cycle remains the keyboard and
+mobile fallback. A new cycle may suggest an editable name and working schedule, while duplicate shifts
+proposed dates relative to the chosen delivery date without moving the original or overwriting edited
+business times. The three editor stages are Delivery and
 locations, Schedule, and Review and save. Inline chronology feedback preserves the existing weak
 ordering between cutoff/procurement/preparation/pickup, keeps the future-cutoff rule, and never silently
 repairs another field. An unsaved preview is visually distinct. Draft save remains separate from

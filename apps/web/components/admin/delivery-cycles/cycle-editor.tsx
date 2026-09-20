@@ -372,7 +372,9 @@ export function CycleEditor({
                   }
                 />
                 <p className="text-xs text-[var(--fm-text-muted)]">
-                  Clicking a calendar date prefills this date only.
+                  {mode === "duplicate"
+                    ? "Changing this date shifts the copied schedule by the same number of days."
+                    : "Changing this date keeps the exact schedule milestones you have already set."}
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

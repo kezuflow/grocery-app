@@ -29,7 +29,7 @@ import { Sheet, SheetContent } from "../ui/sheet";
 import { CycleCalendar } from "./delivery-cycles/cycle-calendar";
 import { CycleDetailsPanel } from "./delivery-cycles/cycle-details-panel";
 import { CycleEditor } from "./delivery-cycles/cycle-editor";
-import { businessFieldsToInstant } from "./delivery-cycles/cycle-time";
+import { addBusinessDays, businessFieldsToInstant } from "./delivery-cycles/cycle-time";
 
 const failure = z.object({
   ok: z.literal(false),
@@ -122,6 +122,14 @@ function blankForDeliveryDate(
   return {
     ...blank(marketId),
     name: `${new Intl.DateTimeFormat("en-PH", { weekday: "long" }).format(value)} delivery · ${new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short" }).format(value)}`,
+    orderOpensAt: businessFieldsToInstant(
+      { date: addBusinessDays(date, -5), time: "08:00" },
+      timezone,
+    ),
+    cutoffAt: businessFieldsToInstant({ date: addBusinessDays(date, -1), time: "17:00" }, timezone),
+    procurementAt: businessFieldsToInstant({ date, time: "05:00" }, timezone),
+    preparationAt: businessFieldsToInstant({ date, time: "06:00" }, timezone),
+    pickupAt: businessFieldsToInstant({ date, time: "08:30" }, timezone),
     windows: [
       {
         name: "Scheduled delivery",
@@ -129,6 +137,21 @@ function blankForDeliveryDate(
         endsAt: businessFieldsToInstant({ date, time: "12:00" }, timezone),
       },
     ],
+  };
+}
+
+function blankForPlanningRange(
+  marketId: string,
+  startDate: string,
+  endDateExclusive: string,
+  timezone: string,
+): DeliveryCycleDraft {
+  const deliveryDateValue = addBusinessDays(endDateExclusive, -1);
+  if (deliveryDateValue <= startDate) return blankForDeliveryDate(marketId, startDate, timezone);
+  const draft = blankForDeliveryDate(marketId, deliveryDateValue, timezone);
+  return {
+    ...draft,
+    orderOpensAt: businessFieldsToInstant({ date: startDate, time: "08:00" }, timezone),
   };
 }
 
@@ -405,6 +428,7 @@ export function DeliveryCyclesWorkspace({
             draft={draft}
             loading={loading}
             rangeIncomplete={rangeIncomplete}
+            canCreate={Boolean(page?.canManage) && !disabled}
             filters={
               <>
                 {page && page.markets.length > 1 ? (
@@ -473,6 +497,12 @@ export function DeliveryCyclesWorkspace({
               setSelectedCycleId(cycleId);
             }}
             onEmptyDate={(date) => page?.canManage && openNew(date)}
+            onDateRange={(startDate, endDateExclusive) => {
+              if (!page?.canManage) return;
+              setDraft(blankForPlanningRange(marketId, startDate, endDateExclusive, timezone));
+              setEditorMode("new");
+              setSelectedCycleId(null);
+            }}
             onRefresh={() => visibleRange && void loadRange(visibleRange)}
           />
         </div>

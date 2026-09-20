@@ -1,5 +1,32 @@
 import { test, expect } from "./admin-authenticated-fixture";
 
+function manilaDate(daysFromNow: number) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000));
+}
+
+function displayDate(value: string) {
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00+08:00`));
+}
+
+function calendarDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00+08:00`));
+}
+
 for (const width of [1440, 390]) {
   test(`operator plans, activates and deactivates one connected cycle with response recovery at ${width}px`, async ({
     adminPage: page,
@@ -20,20 +47,49 @@ for (const width of [1440, 390]) {
         "aria-pressed",
         "true",
       );
-    await page.getByRole("button", { name: "New cycle", exact: true }).click();
+    const openingDate = manilaDate(4);
+    const deliveryDate = manilaDate(6);
+    if (width >= 1280) {
+      const startCell = page.getByRole("gridcell", {
+        name: calendarDate(openingDate),
+        exact: true,
+      });
+      const endCell = page.getByRole("gridcell", {
+        name: calendarDate(deliveryDate),
+        exact: true,
+      });
+      await expect(startCell).toBeVisible();
+      await expect(endCell).toBeVisible();
+      const startBox = await startCell.boundingBox();
+      const endBox = await endCell.boundingBox();
+      expect(startBox).not.toBeNull();
+      expect(endBox).not.toBeNull();
+      await page.mouse.move(startBox!.x + startBox!.width / 2, startBox!.y + startBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(endBox!.x + endBox!.width / 2, endBox!.y + endBox!.height / 2, {
+        steps: 12,
+      });
+      await page.mouse.up();
+    } else await page.getByRole("button", { name: "New cycle", exact: true }).click();
     const editor =
       width >= 1280
         ? page.getByRole("complementary", { name: "Cycle workspace panel" })
         : page.getByRole("dialog");
     await expect(editor.getByRole("heading", { name: "New cycle" })).toBeVisible();
 
-    const deliveryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const deliveryDay = String(deliveryDate.getDate());
-    await editor.getByRole("button", { name: "Customer delivery date" }).click();
-    await page
-      .locator('[data-slot="calendar"] button[data-day]')
-      .filter({ hasText: new RegExp(`^${deliveryDay}$`) })
-      .click();
+    if (width >= 1280)
+      await expect(editor.getByRole("button", { name: "Customer delivery date" })).toContainText(
+        displayDate(deliveryDate),
+      );
+    else {
+      const mobileDeliveryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const deliveryDay = String(mobileDeliveryDate.getDate());
+      await editor.getByRole("button", { name: "Customer delivery date" }).click();
+      await page
+        .locator('[data-slot="calendar"] button[data-day]')
+        .filter({ hasText: new RegExp(`^${deliveryDay}$`) })
+        .click();
+    }
     await editor.getByLabel("Arrival starts", { exact: true }).fill("09:00");
     await editor.getByLabel("Arrival ends", { exact: true }).fill("12:00");
     const name = `Weekly delivery ${width} ${Date.now()}`;
@@ -43,6 +99,12 @@ for (const width of [1440, 390]) {
 
     await expect(editor.getByRole("heading", { name: "Build the schedule" })).toBeVisible();
     await expect(editor.getByLabel("Orders open time", { exact: true })).not.toHaveValue("");
+    if (width >= 1280) {
+      await expect(editor.getByRole("button", { name: "Orders open date" })).toContainText(
+        displayDate(openingDate),
+      );
+      await expect(editor.getByLabel("Orders open time", { exact: true })).toHaveValue("08:00");
+    }
     await editor.getByRole("button", { name: "Continue", exact: true }).click();
     await editor.getByLabel("Planning note", { exact: true }).fill("Prepare weekly service");
     await page.screenshot({
