@@ -1,5 +1,26 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-MUTATION-LATENCY-DEPLOY-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, deployed storefront cart acceptance. The owner authorized deployment of the committed
+cart-latency fix and will perform the authenticated target-browser verification. Acceptance: the
+verified Cart change is active on `freshmarkets.ph`, the documented Core/Web health boundaries pass,
+and no duplicate deployment or unrelated remote operation is performed.
+
+Deployment inspection started from clean synchronized `main`/`origin/main` at documentation revision
+`27330808`; the application revision remains `f84c8d06`, which contains cart fix `20a59a05`. Cloudflare
+deployment history confirms that application revision is already active: Core
+`freshmarkets-core-staging` version `cbbafcc7-4739-4774-9480-79480d25f0f6` and Web
+`freshmarkets-web-staging` version `60a7a231-831d-48f6-b03c-1e81e7d05fac`, with the
+`freshmarkets.ph` custom domain. A redundant identical Worker version was not created. Fresh checks
+returned HTTP 200 for direct Core `/health` and `/ready`, Web `/health`, Web `/api/core-health`, and
+the public storefront; Core reported `ready` in staging. No migration, provider transaction, outbound
+message or remote-data change occurred. `CART-MUTATION-LATENCY-DEPLOY-1` is complete at the staging
+deployment/readiness counting level. The next action is the owner's authenticated `+` interaction
+verification; if it remains slow, capture the single Cart POST timing before considering Core query
+optimization.
+
 ## Latest owner request — CHECKOUT-CURRENT-MODE-QUOTATION-DEPLOY-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
