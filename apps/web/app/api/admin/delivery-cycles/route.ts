@@ -26,10 +26,22 @@ export const GET = observeAdminRoute("admin.delivery-cycles.read", async (reques
     cursor: url.searchParams.get("cursor") ?? undefined,
   };
   const marketId = url.searchParams.get("marketId");
+  const rangeStart = url.searchParams.get("rangeStart");
+  const rangeEnd = url.searchParams.get("rangeEnd");
   return adminJson(
-    marketId
+    marketId && !rangeStart && !rangeEnd
       ? await coreClient(env.CORE).listAdminCycleDestinations({ ...metadata, marketId })
-      : await coreClient(env.CORE).listAdminDeliveryCycles(metadata),
+      : await coreClient(env.CORE).listAdminDeliveryCycles({
+          ...metadata,
+          rangeStart: rangeStart ?? "",
+          rangeEnd: rangeEnd ?? "",
+          marketId: marketId ?? undefined,
+          locationId: url.searchParams.get("locationId") ?? undefined,
+          status:
+            (url.searchParams.get("status") as
+              | import("@freshmarkets/contracts").DeliveryCycleState
+              | null) ?? undefined,
+        }),
   );
 });
 export const POST = observeAdminRoute("admin.delivery-cycles.command", async (request: Request) => {

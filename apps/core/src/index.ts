@@ -2264,9 +2264,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       input,
     );
   }
-  async listAdminDeliveryCycles(
-    input: import("@freshmarkets/contracts").AuthenticatedRequest & { cursor?: string },
-  ) {
+  async listAdminDeliveryCycles(input: import("@freshmarkets/contracts").AdminDeliveryCycleQuery) {
     return listAdminDeliveryCycles(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,

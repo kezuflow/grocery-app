@@ -44,6 +44,14 @@ export type AdminDeliveryCyclePage = {
   nextCursor: string | null;
   canManage: boolean;
 };
+export type AdminDeliveryCycleQuery = AuthenticatedRequest & {
+  rangeStart: string;
+  rangeEnd: string;
+  marketId?: string;
+  locationId?: string;
+  status?: DeliveryCycleState;
+  cursor?: string;
+};
 export type AdminCycleDestinations = {
   items: readonly { zoneId: string; zoneName: string; locationId: string; locationName: string }[];
   nextCursor: string | null;
@@ -70,7 +78,7 @@ export interface AdminDeliveryCyclesService {
     request: AuthenticatedRequest & { marketId: string; cursor?: string },
   ): Promise<RpcResult<AdminCycleDestinations>>;
   listAdminDeliveryCycles(
-    request: AuthenticatedRequest & { cursor?: string },
+    request: AdminDeliveryCycleQuery,
   ): Promise<RpcResult<AdminDeliveryCyclePage>>;
   saveAdminDeliveryCycleDraft(
     request: SaveAdminDeliveryCycleRequest,

@@ -1,10 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { DatesSetInfo } from "@fullcalendar/react";
+import { Plus } from "lucide-react";
 import { useAdminContext } from "../../app/admin/admin-context-provider";
 import type {
   AdminCycleDestinations,
   AdminDeliveryCyclePage,
+  AdminDeliveryCycleView,
   DeliveryCycleDraft,
+  DeliveryCycleState,
   RpcResult,
 } from "@freshmarkets/contracts";
 import { appErrorCodes } from "@freshmarkets/contracts";
@@ -19,9 +24,12 @@ import { PageHeader } from "./admin-shell";
 import { WorkspaceNavigation } from "./workspace-navigation";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Checkbox } from "../ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Sheet, SheetContent } from "../ui/sheet";
+import { CycleCalendar } from "./delivery-cycles/cycle-calendar";
+import { CycleDetailsPanel } from "./delivery-cycles/cycle-details-panel";
+import { CycleEditor } from "./delivery-cycles/cycle-editor";
+import { businessFieldsToInstant } from "./delivery-cycles/cycle-time";
 
 const failure = z.object({
   ok: z.literal(false),
@@ -42,16 +50,23 @@ const commandResult = z.union([
 type Command =
   | ({ action: "SAVE" } & DeliveryCycleDraft)
   | { action: "SCHEDULE" | "CANCEL"; cycleId: string; expectedVersion: number; reason: string };
-const activationReason = "Activated from the Scheduled cycles workspace.";
-const deactivationReason = "Deactivated from the Scheduled cycles workspace.";
-const times = ["orderOpensAt", "cutoffAt", "procurementAt", "preparationAt", "pickupAt"] as const;
-const timeLabels = {
-  orderOpensAt: "Orders open",
-  cutoffAt: "Order cutoff",
-  procurementAt: "Procurement starts",
-  preparationAt: "Preparation starts",
-  pickupAt: "Planned courier pickup",
-};
+type EditorMode = "new" | "edit" | "duplicate";
+type Range = { rangeStart: string; rangeEnd: string };
+
+const statuses: readonly DeliveryCycleState[] = [
+  "DRAFT",
+  "SCHEDULED",
+  "OPEN",
+  "CUTOFF_REACHED",
+  "PROCUREMENT",
+  "RECEIVING",
+  "PACKING",
+  "DISPATCHING",
+  "DELIVERING",
+  "CLOSED",
+  "CANCELED",
+];
+
 function blank(marketId: string): DeliveryCycleDraft {
   return {
     marketId,
@@ -67,12 +82,88 @@ function blank(marketId: string): DeliveryCycleDraft {
     reason: "",
   };
 }
-function localTime(value: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+
+function draftFromCycle(cycle: AdminDeliveryCycleView): DeliveryCycleDraft {
+  return {
+    cycleId: cycle.cycleId,
+    marketId: cycle.marketId,
+    name: cycle.name,
+    orderOpensAt: cycle.orderOpensAt,
+    cutoffAt: cycle.cutoffAt,
+    procurementAt: cycle.procurementAt ?? "",
+    preparationAt: cycle.preparationAt ?? "",
+    pickupAt: cycle.pickupAt ?? "",
+    windows: [
+      cycle.windows[0]
+        ? {
+            name: cycle.windows[0].name,
+            startsAt: cycle.windows[0].startsAt,
+            endsAt: cycle.windows[0].endsAt,
+          }
+        : { name: "Scheduled delivery", startsAt: "", endsAt: "" },
+    ],
+    participation: cycle.participation.map(({ zoneId, locationId }) => ({ zoneId, locationId })),
+    expectedVersion: cycle.version,
+    reason: "",
+  };
 }
-const toInstant = (value: string) => (value ? new Date(value).toISOString() : "");
+
+function duplicateFromCycle(cycle: AdminDeliveryCycleView): DeliveryCycleDraft {
+  const { cycleId: _cycleId, ...copy } = draftFromCycle(cycle);
+  return { ...copy, name: `${cycle.name} copy`, expectedVersion: 0 };
+}
+
+function blankForDeliveryDate(
+  marketId: string,
+  date: string,
+  timezone: string,
+): DeliveryCycleDraft {
+  const value = new Date(`${date}T12:00:00`);
+  return {
+    ...blank(marketId),
+    name: `${new Intl.DateTimeFormat("en-PH", { weekday: "long" }).format(value)} delivery · ${new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short" }).format(value)}`,
+    windows: [
+      {
+        name: "Scheduled delivery",
+        startsAt: businessFieldsToInstant({ date, time: "09:00" }, timezone),
+        endsAt: businessFieldsToInstant({ date, time: "12:00" }, timezone),
+      },
+    ],
+  };
+}
+
+function ResponsivePanel({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  children: ReactNode;
+}) {
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1536px)");
+    const update = () => setDocked(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  if (!open) return null;
+  if (docked)
+    return (
+      <aside className="min-h-[42rem] w-[26rem] shrink-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+        {children}
+      </aside>
+    );
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full gap-0 p-0 sm:w-[30rem] [&>button]:hidden">
+        {children}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 export function DeliveryCyclesWorkspace({
   initial,
@@ -81,99 +172,134 @@ export function DeliveryCyclesWorkspace({
 }) {
   const { state: adminState } = useAdminContext();
   const [page, setPage] = useState(initial.ok ? initial.value : null);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DeliveryCycleDraft | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>("new");
   const [destinations, setDestinations] = useState<AdminCycleDestinations>({
     items: [],
     nextCursor: null,
   });
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const [destinationsLoading, setDestinationsLoading] = useState(false);
+  const [marketFilter, setMarketFilter] = useState<string>(
+    initial.ok ? (initial.value.markets[0]?.marketId ?? "all") : "all",
+  );
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<DeliveryCycleState | "all">("all");
+  const [visibleRange, setVisibleRange] = useState<Range | null>(null);
   const [notice, setNotice] = useState(initial.ok ? "" : initial.error.message);
   const [loading, setLoading] = useState(false);
+  const [rangeIncomplete, setRangeIncomplete] = useState(false);
   const [pending, setPending] = useState<Command | null>(null);
+  const loadSequence = useRef(0);
+  const destinationLoadSequence = useRef(0);
   const intent = useAdminCommandIntent();
-  const marketId = draft?.marketId;
+  const marketId =
+    draft?.marketId ?? (marketFilter === "all" ? page?.markets[0]?.marketId : marketFilter) ?? "";
+  const timezone =
+    page?.markets.find((market) => market.marketId === marketId)?.timezone ??
+    page?.markets[0]?.timezone ??
+    "Asia/Manila";
+  const selectedCycle = page?.items.find((cycle) => cycle.cycleId === selectedCycleId) ?? null;
+
+  const loadDestinations = useCallback(async () => {
+    if (!marketId) return;
+    const sequence = ++destinationLoadSequence.current;
+    setDestinationsLoading(true);
+    let cursor: string | null = null;
+    let items: AdminCycleDestinations["items"] = [];
+    try {
+      for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+        const params = new URLSearchParams({ marketId });
+        if (cursor) params.set("cursor", cursor);
+        const result = destinationsResult.parse(
+          await (await fetch(`/api/admin/delivery-cycles?${params}`)).json(),
+        );
+        if (!result.ok) throw new Error(result.error.message);
+        items = [...items, ...result.value.items];
+        cursor = result.value.nextCursor;
+        if (!cursor) break;
+      }
+      if (cursor) throw new Error("The location list is larger than the supported planning limit.");
+      if (sequence !== destinationLoadSequence.current) return;
+      setDestinations({
+        items: [
+          ...new Map(items.map((item) => [`${item.zoneId}:${item.locationId}`, item])).values(),
+        ],
+        nextCursor: null,
+      });
+      setDestinationError(null);
+    } catch {
+      if (sequence !== destinationLoadSequence.current) return;
+      setDestinations({ items, nextCursor: null });
+      setDestinationError("Fulfillment locations could not be loaded. Retry the list.");
+    } finally {
+      if (sequence === destinationLoadSequence.current) setDestinationsLoading(false);
+    }
+  }, [marketId]);
+
   useEffect(() => {
-    let current = true;
     setDestinations({ items: [], nextCursor: null });
     setDestinationError(null);
-    setDestinationsLoading(Boolean(marketId));
-    if (marketId) {
-      fetch(`/api/admin/delivery-cycles?marketId=${encodeURIComponent(marketId)}`)
-        .then((response) => response.json())
-        .then((json: unknown) => {
-          const result = destinationsResult.parse(json);
-          if (!current) return;
-          if (result.ok) setDestinations(result.value);
-          else setDestinationError(result.error.message);
-        })
-        .catch(() => {
-          if (current) setDestinationError("Destinations could not be loaded. Retry the list.");
-        })
-        .finally(() => {
-          if (current) setDestinationsLoading(false);
-        });
-    }
-    return () => {
-      current = false;
-    };
-  }, [marketId]);
-  async function loadDestinations() {
-    if (!marketId || loading) return;
-    setLoading(true);
-    try {
-      const result = destinationsResult.parse(
-        await (
-          await fetch(
-            `/api/admin/delivery-cycles?marketId=${encodeURIComponent(marketId)}${destinations.nextCursor ? `&cursor=${encodeURIComponent(destinations.nextCursor)}` : ""}`,
-          )
-        ).json(),
-      );
-      if (result.ok) {
-        setDestinations({
-          items: destinations.nextCursor
-            ? [...destinations.items, ...result.value.items]
-            : result.value.items,
-          nextCursor: result.value.nextCursor,
-        });
-        setDestinationError(null);
-      } else setDestinationError(result.error.message);
-    } catch {
-      setDestinationError("Destinations could not be loaded. Retry the list.");
-    } finally {
-      setLoading(false);
-    }
-  }
-  async function load(more = false) {
-    setLoading(true);
-    try {
-      const result = listResult.parse(
-        await (
-          await fetch(
-            `/api/admin/delivery-cycles${more && page?.nextCursor ? `?cursor=${encodeURIComponent(page.nextCursor)}` : ""}`,
-          )
-        ).json(),
-      );
-      if (result.ok) {
-        setPage({
-          ...result.value,
-          items:
-            more && page
-              ? [
-                  ...new Map(
-                    [...page.items, ...result.value.items].map((item) => [item.cycleId, item]),
-                  ).values(),
-                ]
-              : result.value.items,
-        });
-        setNotice("");
-      } else setNotice(result.error.message);
-    } catch {
-      setNotice("Cycles could not be loaded. Retry refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }
+    void loadDestinations();
+  }, [loadDestinations]);
+
+  const loadRange = useCallback(
+    async (range: Range) => {
+      const sequence = ++loadSequence.current;
+      setLoading(true);
+      setRangeIncomplete(false);
+      let cursor: string | null = null;
+      let combined: AdminDeliveryCycleView[] = [];
+      try {
+        for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+          const params = new URLSearchParams(range);
+          if (marketFilter !== "all") params.set("marketId", marketFilter);
+          if (locationFilter !== "all") params.set("locationId", locationFilter);
+          if (statusFilter !== "all") params.set("status", statusFilter);
+          if (cursor) params.set("cursor", cursor);
+          const result = listResult.parse(
+            await (await fetch(`/api/admin/delivery-cycles?${params}`)).json(),
+          );
+          if (!result.ok) throw new Error(result.error.message);
+          combined = [...combined, ...result.value.items];
+          cursor = result.value.nextCursor;
+          if (!cursor) {
+            if (sequence !== loadSequence.current) return;
+            setPage((current) => ({
+              ...result.value,
+              markets: result.value.markets.length
+                ? result.value.markets
+                : (current?.markets ?? []),
+              items: [...new Map(combined.map((cycle) => [cycle.cycleId, cycle])).values()],
+              nextCursor: null,
+            }));
+            setNotice("");
+            return;
+          }
+        }
+        throw new Error("Cycle range exceeded the supported page limit.");
+      } catch (error) {
+        if (sequence !== loadSequence.current) return;
+        if (combined.length) {
+          setPage((current) => (current ? { ...current, items: combined } : current));
+          setRangeIncomplete(true);
+        } else {
+          setNotice(
+            error instanceof Error ? error.message : "Cycles could not be loaded. Retry refresh.",
+          );
+        }
+      } finally {
+        if (sequence === loadSequence.current) setLoading(false);
+      }
+    },
+    [locationFilter, marketFilter, statusFilter],
+  );
+
+  useEffect(() => {
+    if (visibleRange) void loadRange(visibleRange);
+  }, [loadRange, visibleRange]);
+
   async function submit(command: Command) {
     if (intent.pending) return;
     const submitted = pending ?? command;
@@ -192,18 +318,19 @@ export function DeliveryCyclesWorkspace({
       );
       setPending(null);
       if (result.ok) {
-        setPage((old) =>
-          old
+        setPage((current) =>
+          current
             ? {
-                ...old,
+                ...current,
                 items: [
                   result.value,
-                  ...old.items.filter((item) => item.cycleId !== result.value.cycleId),
+                  ...current.items.filter((cycle) => cycle.cycleId !== result.value.cycleId),
                 ],
               }
-            : old,
+            : current,
         );
         setDraft(null);
+        setSelectedCycleId(result.value.cycleId);
         setNotice(
           result.value.status === "DRAFT"
             ? "Draft saved. Activate it when the plan is ready for customers."
@@ -216,353 +343,196 @@ export function DeliveryCyclesWorkspace({
       setNotice("Response not confirmed. Retry the same cycle request to recover its result.");
     }
   }
-  const disabled = pending !== null || intent.pending || loading;
-  const deliveryWindow = draft?.windows[0];
-  const format = (value: string | null, timezone: string) =>
-    value
-      ? new Intl.DateTimeFormat("en-PH", {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone: timezone,
-        }).format(new Date(value))
-      : "Not configured";
+
+  const openNew = (date?: string) => {
+    setDraft(date ? blankForDeliveryDate(marketId, date, timezone) : blank(marketId));
+    setEditorMode("new");
+    setSelectedCycleId(null);
+  };
+  const onDatesSet = (info: DatesSetInfo) => {
+    const next = { rangeStart: info.startStr, rangeEnd: info.endStr };
+    setVisibleRange((current) =>
+      current?.rangeStart === next.rangeStart && current.rangeEnd === next.rangeEnd
+        ? current
+        : next,
+    );
+  };
+  const panelOpen = Boolean(draft || selectedCycle);
+  const disabled = pending !== null || intent.pending;
   if (adminState.phase === "ready" && adminState.selectedScope?.kind !== "GLOBAL" && !pending)
     return <p>Select Global to administer Scheduled cycles.</p>;
   return (
     <div className="space-y-4">
       <PageHeader
         title="Scheduled cycles"
-        description="Publish one ordering and fulfillment plan for participating locations."
+        description="Plan ordering, fulfillment, and customer delivery."
+        action={
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-[var(--fm-border)] px-3 py-1.5 text-xs font-medium text-[var(--fm-text-muted)]">
+              {timezone}
+            </span>
+            {page?.canManage ? (
+              <Button type="button" disabled={disabled} onClick={() => openNew()}>
+                <Plus aria-hidden className="size-4" /> New cycle
+              </Button>
+            ) : null}
+          </div>
+        }
       />
       <WorkspaceNavigation parentCode="settings" label="Settings administration" />
-      {notice && (
-        <p role="status" className="rounded-lg border p-3">
+      {notice ? (
+        <p
+          role="status"
+          className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 py-3 text-sm"
+        >
           {notice}
         </p>
-      )}
-      {pending && (
+      ) : null}
+      {pending && !panelOpen ? (
         <Button disabled={intent.pending} onClick={() => void submit(pending)}>
           Retry unconfirmed request
         </Button>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={loading || disabled} onClick={() => void load()}>
-          Refresh cycles
-        </Button>
-        {page?.canManage && (
-          <Button
-            disabled={disabled}
-            onClick={() => setDraft(blank(page.markets[0]?.marketId ?? ""))}
+      ) : null}
+      <div className="flex flex-wrap items-end gap-2 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3">
+        {page && page.markets.length > 1 ? (
+          <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
+            Market
+            <Select
+              value={marketFilter}
+              onValueChange={(value) => {
+                setMarketFilter(value);
+                setLocationFilter("all");
+              }}
+            >
+              <SelectTrigger className="min-w-40 bg-[var(--fm-admin-surface)]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {page.markets.map((market) => (
+                  <SelectItem key={market.marketId} value={market.marketId}>
+                    {market.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        ) : null}
+        <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
+          Location
+          <Select value={locationFilter} onValueChange={setLocationFilter}>
+            <SelectTrigger className="min-w-44 bg-[var(--fm-admin-surface)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All locations</SelectItem>
+              {destinations.items.map((item) => (
+                <SelectItem key={item.locationId} value={item.locationId}>
+                  {item.locationName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-[var(--fm-text-muted)]">
+          Status
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => setStatusFilter(value as DeliveryCycleState | "all")}
           >
-            New cycle
-          </Button>
-        )}
+            <SelectTrigger className="min-w-40 bg-[var(--fm-admin-surface)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {statuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status.toLowerCase().replaceAll("_", " ")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
       </div>
-      {draft && (
-        <form
-          className="space-y-4 rounded-lg border p-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const parsed = deliveryCycleDraftSchema.safeParse(draft);
-            if (!parsed.success) {
-              setNotice(
-                "Complete the schedule, customer delivery range, fulfillment locations and reason.",
-              );
-              return;
+      <div className="flex min-w-0 items-stretch gap-4">
+        <div className="min-w-0 flex-1">
+          <CycleCalendar
+            cycles={page?.items ?? []}
+            timezone={timezone}
+            selectedCycleId={selectedCycleId}
+            draft={draft}
+            loading={loading}
+            rangeIncomplete={rangeIncomplete}
+            onRangeChange={onDatesSet}
+            onSelectCycle={(cycleId) => {
+              setDraft(null);
+              setSelectedCycleId(cycleId);
+            }}
+            onEmptyDate={(date) => page?.canManage && openNew(date)}
+            onRefresh={() => visibleRange && void loadRange(visibleRange)}
+          />
+        </div>
+        <ResponsivePanel
+          open={panelOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDraft(null);
+              setSelectedCycleId(null);
             }
-            void submit({ action: "SAVE", ...parsed.data });
           }}
         >
-          <fieldset disabled={disabled} className="space-y-4">
-            <legend className="text-lg font-semibold">
-              {draft.cycleId ? "Edit draft" : "New cycle"}
-            </legend>
-            <Label htmlFor="cycle-name">Cycle name</Label>
-            <Input
-              id="cycle-name"
-              required
-              maxLength={120}
-              value={draft.name}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          {draft ? (
+            <CycleEditor
+              draft={draft}
+              mode={editorMode}
+              markets={page?.markets ?? []}
+              timezone={timezone}
+              destinations={destinations}
+              destinationsLoading={destinationsLoading}
+              destinationError={destinationError}
+              pending={disabled}
+              submitting={intent.pending}
+              retryAvailable={pending !== null}
+              onChange={setDraft}
+              onCancel={() => setDraft(null)}
+              onSave={(value) => {
+                const parsed = deliveryCycleDraftSchema.safeParse(value);
+                if (parsed.success) void submit({ action: "SAVE", ...parsed.data });
+                else
+                  setNotice("Review the highlighted schedule, location, and planning note fields.");
+              }}
+              onRetry={() => pending && void submit(pending)}
+              onLoadMoreDestinations={() => void loadDestinations()}
             />
-            <p className="text-sm text-muted-foreground">
-              Enter times in your device timezone (
-              {Intl.DateTimeFormat().resolvedOptions().timeZone}). Saved plans display the business
-              timezone.
-            </p>
-            <fieldset className="space-y-3">
-              <legend className="font-medium">Ordering period</legend>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {(["orderOpensAt", "cutoffAt"] as const).map((field) => (
-                  <div key={field} className="space-y-1">
-                    <Label htmlFor={`cycle-${field}`}>{timeLabels[field]}</Label>
-                    <Input
-                      id={`cycle-${field}`}
-                      type="datetime-local"
-                      required
-                      value={localTime(draft[field])}
-                      onChange={(event) =>
-                        setDraft({ ...draft, [field]: toInstant(event.target.value) })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="space-y-3">
-              <legend className="font-medium">Fulfillment plan</legend>
-              <p className="text-sm text-muted-foreground">
-                Each selected fulfillment location follows this procurement, preparation and courier
-                pickup plan for its assigned orders.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {(["procurementAt", "preparationAt", "pickupAt"] as const).map((field) => (
-                  <div key={field} className="space-y-1">
-                    <Label htmlFor={`cycle-${field}`}>{timeLabels[field]}</Label>
-                    <Input
-                      id={`cycle-${field}`}
-                      type="datetime-local"
-                      required
-                      value={localTime(draft[field])}
-                      onChange={(event) =>
-                        setDraft({ ...draft, [field]: toInstant(event.target.value) })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="space-y-3">
-              <legend className="font-medium">Customer delivery</legend>
-              <p className="text-sm text-muted-foreground">
-                This is the arrival range customers see at checkout. It must start at or after the
-                planned courier pickup.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {(["startsAt", "endsAt"] as const).map((field) => (
-                  <div key={field} className="space-y-1">
-                    <Label htmlFor={`delivery-${field}`}>
-                      Customer delivery {field === "startsAt" ? "starts" : "ends"}
-                    </Label>
-                    <Input
-                      id={`delivery-${field}`}
-                      type="datetime-local"
-                      required
-                      value={localTime(deliveryWindow?.[field] ?? "")}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          windows: [
-                            {
-                              name: deliveryWindow?.name ?? "Scheduled delivery",
-                              startsAt: deliveryWindow?.startsAt ?? "",
-                              endsAt: deliveryWindow?.endsAt ?? "",
-                              [field]: toInstant(event.target.value),
-                            },
-                          ],
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="space-y-2">
-              <legend className="font-medium">Fulfillment locations</legend>
-              {destinationError && <p role="alert">{destinationError}</p>}
-              {destinations.items.map((item) => (
-                <Label
-                  key={`${item.zoneId}:${item.locationId}`}
-                  className="flex items-center gap-2"
-                >
-                  <Checkbox
-                    checked={draft.participation.some(
-                      (selected) =>
-                        selected.zoneId === item.zoneId && selected.locationId === item.locationId,
-                    )}
-                    onCheckedChange={(checked) =>
-                      setDraft({
-                        ...draft,
-                        participation: checked
-                          ? [
-                              ...draft.participation,
-                              { zoneId: item.zoneId, locationId: item.locationId },
-                            ]
-                          : draft.participation.filter(
-                              (selected) =>
-                                selected.zoneId !== item.zoneId ||
-                                selected.locationId !== item.locationId,
-                            ),
-                      })
-                    }
-                  />
-                  {item.locationName}
-                </Label>
-              ))}
-              {!destinations.items.length && !destinationError && (
-                <p className="text-sm">
-                  {destinationsLoading
-                    ? "Loading eligible destinations…"
-                    : "No eligible destinations loaded. Configure active fulfillment locations and their capabilities first."}
-                </p>
-              )}
-              {(destinationError || destinations.nextCursor) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={loading}
-                  onClick={() => void loadDestinations()}
-                >
-                  {destinationError ? "Retry destinations" : "More destinations"}
-                </Button>
-              )}
-            </fieldset>
-            <Label htmlFor="cycle-reason">Reason</Label>
-            <Input
-              id="cycle-reason"
-              required
-              maxLength={500}
-              value={draft.reason}
-              onChange={(event) => setDraft({ ...draft, reason: event.target.value })}
+          ) : selectedCycle ? (
+            <CycleDetailsPanel
+              cycle={selectedCycle}
+              canManage={Boolean(page?.canManage)}
+              pending={disabled}
+              submitting={intent.pending}
+              retryAvailable={pending !== null}
+              onClose={() => setSelectedCycleId(null)}
+              onEdit={() => {
+                setDraft(draftFromCycle(selectedCycle));
+                setEditorMode("edit");
+              }}
+              onDuplicate={() => {
+                setDraft(duplicateFromCycle(selectedCycle));
+                setEditorMode("duplicate");
+                setSelectedCycleId(null);
+              }}
+              onCommand={(action, reason) =>
+                void submit({
+                  action,
+                  cycleId: selectedCycle.cycleId,
+                  expectedVersion: selectedCycle.version,
+                  reason,
+                })
+              }
+              onRetry={() => pending && void submit(pending)}
             />
-            <div className="flex gap-2">
-              <Button type="submit">Save draft</Button>
-              <Button type="button" variant="outline" onClick={() => setDraft(null)}>
-                Cancel editing
-              </Button>
-            </div>
-          </fieldset>
-        </form>
-      )}
-      {page?.items.length === 0 && <p>No cycles configured.</p>}
-      {page?.items.map((cycle) => (
-        <article key={cycle.cycleId} className="space-y-3 rounded-lg border p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">{cycle.name}</h2>
-              <p>
-                {cycle.status.replaceAll("_", " ")} · {cycle.timezone}
-              </p>
-            </div>
-            {page.canManage && cycle.status === "DRAFT" ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={disabled}
-                  onClick={() =>
-                    setDraft({
-                      cycleId: cycle.cycleId,
-                      marketId: cycle.marketId,
-                      name: cycle.name,
-                      orderOpensAt: cycle.orderOpensAt,
-                      cutoffAt: cycle.cutoffAt,
-                      procurementAt: cycle.procurementAt ?? "",
-                      preparationAt: cycle.preparationAt ?? "",
-                      pickupAt: cycle.pickupAt ?? "",
-                      windows: [
-                        cycle.windows[0]
-                          ? {
-                              name: cycle.windows[0].name,
-                              startsAt: cycle.windows[0].startsAt,
-                              endsAt: cycle.windows[0].endsAt,
-                            }
-                          : { name: "Scheduled delivery", startsAt: "", endsAt: "" },
-                      ],
-                      participation: cycle.participation.map(({ zoneId, locationId }) => ({
-                        zoneId,
-                        locationId,
-                      })),
-                      expectedVersion: cycle.version,
-                      reason: "",
-                    })
-                  }
-                >
-                  Edit
-                </Button>
-                <Button
-                  disabled={disabled || !cycle.pickupAt || cycle.windows.length !== 1}
-                  onClick={() =>
-                    void submit({
-                      action: "SCHEDULE",
-                      cycleId: cycle.cycleId,
-                      expectedVersion: cycle.version,
-                      reason: activationReason,
-                    })
-                  }
-                >
-                  Activate
-                </Button>
-              </div>
-            ) : page.canManage && ["SCHEDULED", "OPEN"].includes(cycle.status) ? (
-              cycle.cancellationUnavailableReason ? (
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Deactivate unavailable: {cycle.cancellationUnavailableReason}
-                </p>
-              ) : (
-                <Button
-                  variant="destructive"
-                  disabled={disabled}
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        `Deactivate ${cycle.name}? This closes unstarted checkout quotes and cannot be undone for this cycle.`,
-                      )
-                    )
-                      return;
-                    void submit({
-                      action: "CANCEL",
-                      cycleId: cycle.cycleId,
-                      expectedVersion: cycle.version,
-                      reason: deactivationReason,
-                    });
-                  }}
-                >
-                  Deactivate
-                </Button>
-              )
-            ) : null}
-          </div>
-          <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            {times.map((field) => (
-              <div key={field}>
-                <dt className="text-muted-foreground">{timeLabels[field]}</dt>
-                <dd>{format(cycle[field], cycle.timezone)}</dd>
-              </div>
-            ))}
-          </dl>
-          {cycle.windows.length === 1 ? (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Customer delivery</span>
-              <br />
-              {format(cycle.windows[0]?.startsAt ?? null, cycle.timezone)} –{" "}
-              {format(cycle.windows[0]?.endsAt ?? null, cycle.timezone)}
-            </p>
-          ) : cycle.windows.length > 1 ? (
-            <div className="text-sm">
-              <p className="text-muted-foreground">Legacy customer delivery windows</p>
-              <ul>
-                {cycle.windows.map((window) => (
-                  <li key={window.windowId}>
-                    {format(window.startsAt, cycle.timezone)} –{" "}
-                    {format(window.endsAt, cycle.timezone)}
-                  </li>
-                ))}
-              </ul>
-            </div>
           ) : null}
-          <p className="text-sm">
-            <span className="text-muted-foreground">Fulfillment locations</span>
-            <br />
-            {[...new Set(cycle.participation.map((item) => item.locationName))].join("; ") ||
-              "No fulfillment locations"}
-          </p>
-        </article>
-      ))}
-      {page?.nextCursor && (
-        <Button variant="outline" disabled={loading || disabled} onClick={() => void load(true)}>
-          More cycles
-        </Button>
-      )}
+        </ResponsivePanel>
+      </div>
     </div>
   );
 }

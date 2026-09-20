@@ -70,6 +70,26 @@ available. The ordinary workspace has no separate activation/deactivation reason
 requires a concise confirmation that it closes unstarted quotes and cannot be undone for that cycle;
 Core continues to block it when committed or unresolved work exists.
 
+Owner redesign, 2026-09-20: Scheduled cycles keeps the calendar as the primary workspace under
+`/admin/settings/scheduled-cycles`. Month is the default desktop view and shows one connected cycle as
+a compact ordering-period bar plus customer-delivery duration; Week adds exact milestone markers and
+Agenda is the chronological/mobile default. Every derived element selects the same parent cycle and
+highlights its related elements. Procurement, preparation and planned pickup remain timestamp markers,
+never invented durations or inferred completion. The selected cycle opens a customer-delivery-first
+timeline beside the calendar only when width permits; narrower screens use an overlay/full-screen panel
+without squeezing seven columns. Range, filters and calendar position remain mounted across panel work.
+
+Creation is delivery-first and uses business-timezone date/time controls. Clicking an empty calendar
+date prefills the customer delivery date explicitly; a new cycle may suggest an editable name and
+working schedule, while duplicate shifts proposed dates relative to the chosen delivery date without
+moving the original or overwriting edited business times. The three editor stages are Delivery and
+locations, Schedule, and Review and save. Inline chronology feedback preserves the existing weak
+ordering between cutoff/procurement/preparation/pickup, keeps the future-cutoff rule, and never silently
+repairs another field. An unsaved preview is visually distinct. Draft save remains separate from
+activation. Activation explains that the schedule locks; deactivation uses the named confirmation
+dialog and Core-provided blocked reason. Unknown command recovery stays inside the open panel with the
+original request and idempotency identity. Historical multiple delivery ranges remain readable.
+
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.
 At least three points form the shaded draft; the last joins the first. Coordinates are a secondary

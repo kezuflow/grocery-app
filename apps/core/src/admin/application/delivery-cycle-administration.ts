@@ -1,5 +1,6 @@
 import type {
   AdminDeliveryCyclePage,
+  AdminDeliveryCycleQuery,
   AdminCycleDestinations,
   AdminDeliveryCycleView,
   AppErrorCode,
@@ -13,6 +14,7 @@ import {
   z,
   adminDeliveryCycleViewSchema,
   deliveryCycleDraftSchema,
+  deliveryCycleStateSchema,
   identifierSchema,
   idempotencyKeySchema,
 } from "@freshmarkets/validation";
@@ -107,18 +109,80 @@ async function load(db: D1Database, cycleId: string) {
 
 export async function listAdminDeliveryCycles(
   deps: Deps,
-  input: AuthenticatedRequest & { cursor?: string },
+  input: AdminDeliveryCycleQuery,
 ): Promise<RpcResult<AdminDeliveryCyclePage>> {
   const parsed = authenticatedRequestSchema
-    .extend({ cursor: identifierSchema.optional() })
+    .extend({
+      rangeStart: z.iso.datetime({ offset: true }),
+      rangeEnd: z.iso.datetime({ offset: true }),
+      marketId: identifierSchema.optional(),
+      locationId: identifierSchema.optional(),
+      status: deliveryCycleStateSchema.optional(),
+      cursor: z.string().max(2000).optional(),
+    })
     .safeParse(input);
   if (!parsed.success) return failure("VALIDATION_FAILED", "Invalid cycle query", input.requestId);
+  const rangeStart = Date.parse(parsed.data.rangeStart);
+  const rangeEnd = Date.parse(parsed.data.rangeEnd);
+  if (rangeEnd <= rangeStart || rangeEnd - rangeStart > 370 * 24 * 60 * 60 * 1000)
+    return failure(
+      "VALIDATION_FAILED",
+      "Cycle range must be between one instant and one year",
+      input.requestId,
+    );
   const permitted = await access(deps, parsed.data, "fulfillment.read");
   if (!permitted.ok) return permitted;
+  let cursor: [number, number, string | null, string | null, string | null, number, string] | null =
+    null;
+  if (parsed.data.cursor) {
+    try {
+      cursor = z
+        .tuple([
+          z.number().safe(),
+          z.number().safe(),
+          identifierSchema.nullable(),
+          identifierSchema.nullable(),
+          deliveryCycleStateSchema.nullable(),
+          z.number().safe(),
+          identifierSchema,
+        ])
+        .parse(JSON.parse(decodeURIComponent(parsed.data.cursor)));
+    } catch {
+      return failure("VALIDATION_FAILED", "Invalid cycle cursor", input.requestId);
+    }
+    const signature = [
+      rangeStart,
+      rangeEnd,
+      parsed.data.marketId ?? null,
+      parsed.data.locationId ?? null,
+      parsed.data.status ?? null,
+    ];
+    if (cursor.slice(0, 5).some((value, index) => value !== signature[index]))
+      return failure("VALIDATION_FAILED", "Cycle cursor belongs to another range", input.requestId);
+  }
   const [rows, manage, markets] = await Promise.all([
     deps.db
-      .prepare(`${selection} WHERE (? IS NULL OR c.id>?) ORDER BY c.id LIMIT 21`)
-      .bind(parsed.data.cursor ?? null, parsed.data.cursor ?? "")
+      .prepare(`${selection} WHERE c.order_opens_at<?
+        AND EXISTS (SELECT 1 FROM delivery_cycle_window visible_window WHERE visible_window.cycle_id=c.id AND visible_window.ends_at>?)
+        AND (? IS NULL OR c.market_id=?)
+        AND (? IS NULL OR c.status=?)
+        AND (? IS NULL OR EXISTS (SELECT 1 FROM delivery_cycle_zone visible_destination WHERE visible_destination.cycle_id=c.id AND visible_destination.location_id=? AND visible_destination.status='ACTIVE'))
+        AND (? IS NULL OR c.order_opens_at>? OR (c.order_opens_at=? AND c.id>?))
+        ORDER BY c.order_opens_at,c.id LIMIT 101`)
+      .bind(
+        rangeEnd,
+        rangeStart,
+        parsed.data.marketId ?? null,
+        parsed.data.marketId ?? "",
+        parsed.data.status ?? null,
+        parsed.data.status ?? "",
+        parsed.data.locationId ?? null,
+        parsed.data.locationId ?? "",
+        cursor?.[5] ?? null,
+        cursor?.[5] ?? 0,
+        cursor?.[5] ?? 0,
+        cursor?.[6] ?? "",
+      )
       .all<Row>(),
     access(deps, parsed.data, "fulfillment.manage"),
     deps.db
@@ -127,14 +191,28 @@ export async function listAdminDeliveryCycles(
       )
       .all<AdminDeliveryCyclePage["markets"][number]>(),
   ]);
-  const page = rows.results.slice(0, 20);
+  const page = rows.results.slice(0, 100);
+  const last = page.at(-1);
   return {
     ok: true,
     requestId: input.requestId,
     value: {
       items: page.map(view),
       markets: markets.results,
-      nextCursor: rows.results.length > 20 ? (page.at(-1)?.cycleId ?? null) : null,
+      nextCursor:
+        rows.results.length > 100 && last
+          ? encodeURIComponent(
+              JSON.stringify([
+                rangeStart,
+                rangeEnd,
+                parsed.data.marketId ?? null,
+                parsed.data.locationId ?? null,
+                parsed.data.status ?? null,
+                last.orderOpensAt,
+                last.cycleId,
+              ]),
+            )
+          : null,
       canManage: manage.ok,
     },
   };

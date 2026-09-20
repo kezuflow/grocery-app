@@ -1,7 +1,7 @@
 import { test, expect } from "./admin-authenticated-fixture";
 
 for (const width of [1440, 390]) {
-  test(`operator creates, activates and deactivates one delivery range with response recovery at ${width}px`, async ({
+  test(`operator plans, activates and deactivates one connected cycle with response recovery at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
@@ -13,30 +13,40 @@ for (const width of [1440, 390]) {
       await scope.click();
       await page.getByRole("option", { name: "Global", exact: true }).click();
     }
+
+    await expect(page.getByRole("region", { name: "Scheduled cycle calendar" })).toBeVisible();
+    if (width === 390)
+      await expect(page.getByRole("button", { name: "agenda", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     await page.getByRole("button", { name: "New cycle", exact: true }).click();
+    const editor = page.getByRole("dialog");
+    await expect(editor.getByRole("heading", { name: "New cycle" })).toBeVisible();
+
+    const deliveryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const deliveryDay = String(deliveryDate.getDate());
+    await editor.getByRole("button", { name: "Customer delivery date" }).click();
+    await page
+      .locator('[data-slot="calendar"] button[data-day]')
+      .filter({ hasText: new RegExp(`^${deliveryDay}$`) })
+      .click();
+    await editor.getByLabel("Arrival starts", { exact: true }).fill("09:00");
+    await editor.getByLabel("Arrival ends", { exact: true }).fill("12:00");
     const name = `Weekly delivery ${width} ${Date.now()}`;
-    await page.getByLabel("Cycle name", { exact: true }).fill(name);
-    const now = Date.now();
-    const local = (hours: number) => {
-      const date = new Date(now + hours * 3600000);
-      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    };
-    for (const [label, hours] of [
-      ["Orders open", 1],
-      ["Order cutoff", 24],
-      ["Procurement starts", 25],
-      ["Preparation starts", 28],
-      ["Planned courier pickup", 30],
-    ] as const)
-      await page.getByLabel(label, { exact: true }).fill(local(hours));
-    await page.getByLabel("Customer delivery starts", { exact: true }).fill(local(31));
-    await page.getByLabel("Customer delivery ends", { exact: true }).fill(local(33));
-    await page.getByRole("checkbox", { name: "Central Cebu", exact: true }).first().check();
-    await page.getByLabel("Reason", { exact: true }).fill("Prepare weekly service");
+    await editor.getByLabel("Cycle name", { exact: true }).fill(name);
+    await editor.getByRole("checkbox", { name: "Central Cebu", exact: true }).check();
+    await editor.getByRole("button", { name: "Continue", exact: true }).click();
+
+    await expect(editor.getByRole("heading", { name: "Build the schedule" })).toBeVisible();
+    await expect(editor.getByLabel("Orders open time", { exact: true })).not.toHaveValue("");
+    await editor.getByRole("button", { name: "Continue", exact: true }).click();
+    await editor.getByLabel("Planning note", { exact: true }).fill("Prepare weekly service");
     await page.screenshot({
-      path: testInfo.outputPath("scheduled-cycle-form.png"),
+      path: testInfo.outputPath("scheduled-cycle-review.png"),
       fullPage: true,
     });
+
     const attempts: { key: string | undefined; body: string | null }[] = [];
     await page.route("**/api/admin/delivery-cycles", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
@@ -50,34 +60,37 @@ for (const width of [1440, 390]) {
         await route.abort("failed");
       else await route.fulfill({ response });
     });
-    await page.getByRole("button", { name: "Save draft", exact: true }).click();
-    await expect(page.getByLabel("Cycle name", { exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
-    const cycle = page
-      .getByRole("article")
-      .filter({ has: page.getByRole("heading", { name, exact: true }) });
-    await expect(cycle).toContainText("DRAFT");
-    await cycle.getByRole("button", { name: "Activate", exact: true }).click();
-    await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
-    await expect(cycle).toContainText("SCHEDULED");
-    await expect(cycle).toContainText("Customer delivery");
-    await expect(page.getByLabel("Market", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Add delivery window" })).toHaveCount(0);
+
+    await editor.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(editor.getByLabel("Planning note", { exact: true })).toBeDisabled();
+    await editor.getByRole("button", { name: "Retry unconfirmed request" }).click();
+    const details = page.getByRole("dialog");
+    await expect(details.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(details).toContainText("Draft");
+    await expect(details).toContainText("Customer delivery");
+    await expect(details).toContainText("Central Cebu");
+
+    await details.getByRole("button", { name: "Activate cycle", exact: true }).click();
+    const activate = page.getByRole("alertdialog");
+    await expect(activate).toContainText("locks the schedule for editing");
+    await activate.getByRole("button", { name: "Activate cycle", exact: true }).click();
+    await details.getByRole("button", { name: "Retry unconfirmed request" }).click();
+    await expect(details).toContainText("Scheduled");
+    await expect(details.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
     expect(attempts).toHaveLength(4);
     expect(attempts[1]).toEqual(attempts[0]);
     expect(attempts[3]).toEqual(attempts[2]);
-    await page.reload();
-    await expect(cycle).toContainText("SCHEDULED");
-    await expect(cycle.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("scheduled-cycle.png"), fullPage: true });
-    page.once("dialog", (dialog) => dialog.accept());
-    await cycle.getByRole("button", { name: "Deactivate", exact: true }).click();
-    await page.getByRole("button", { name: "Retry unconfirmed request" }).click();
-    await expect(cycle).toContainText("CANCELED");
+
+    await details.getByRole("button", { name: "Deactivate", exact: true }).click();
+    const deactivate = page.getByRole("alertdialog");
+    await expect(deactivate).toContainText(name);
+    await expect(deactivate).toContainText("closes unstarted checkout quotes");
+    await deactivate.getByRole("button", { name: "Deactivate cycle", exact: true }).click();
+    await details.getByRole("button", { name: "Retry unconfirmed request" }).click();
+    await expect(details).toContainText("Canceled");
     expect(attempts).toHaveLength(6);
     expect(attempts[5]).toEqual(attempts[4]);
-    await page.reload();
-    await expect(cycle).toContainText("CANCELED");
     await page.screenshot({ path: testInfo.outputPath("canceled-cycle.png"), fullPage: true });
   });
 }

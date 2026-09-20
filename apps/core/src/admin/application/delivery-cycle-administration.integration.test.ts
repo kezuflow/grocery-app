@@ -188,6 +188,8 @@ describe("Global cycle administration", () => {
       await core.listAdminDeliveryCycles({
         headers: staff.headers,
         requestId: crypto.randomUUID(),
+        rangeStart: new Date(Date.now() - 3_600_000).toISOString(),
+        rangeEnd: new Date(Date.now() + 7 * 24 * 3_600_000).toISOString(),
       }),
     ).toMatchObject({ ok: true, value: { canManage: true } });
     expect(
@@ -195,6 +197,86 @@ describe("Global cycle administration", () => {
         .bind(saved.value.cycleId)
         .first(),
     ).toEqual({ capacity: 0, allocated: 0 });
+  });
+  it("reads cycles that intersect the visible range and applies calendar filters", async () => {
+    const staff = await manager();
+    const request = draft(staff.headers);
+    const saved = await core.saveAdminDeliveryCycleDraft(request);
+    if (!saved.ok) throw new Error("Draft failed");
+    const inside = await core.listAdminDeliveryCycles({
+      headers: staff.headers,
+      requestId: crypto.randomUUID(),
+      rangeStart: new Date(Date.parse(request.pickupAt) - 30 * 60_000).toISOString(),
+      rangeEnd: new Date(Date.parse(request.windows[0]!.endsAt) + 30 * 60_000).toISOString(),
+      marketId: request.marketId,
+      locationId: request.participation[0]!.locationId,
+      status: "DRAFT",
+    });
+    expect(inside).toMatchObject({
+      ok: true,
+      value: { items: [{ cycleId: saved.value.cycleId }], nextCursor: null },
+    });
+    const after = await core.listAdminDeliveryCycles({
+      headers: staff.headers,
+      requestId: crypto.randomUUID(),
+      rangeStart: new Date(Date.parse(request.windows[0]!.endsAt)).toISOString(),
+      rangeEnd: new Date(Date.parse(request.windows[0]!.endsAt) + 3_600_000).toISOString(),
+    });
+    expect(after.ok).toBe(true);
+    if (after.ok)
+      expect(after.value.items.some((cycle) => cycle.cycleId === saved.value.cycleId)).toBe(false);
+    expect(
+      await core.listAdminDeliveryCycles({
+        headers: staff.headers,
+        requestId: crypto.randomUUID(),
+        rangeStart: request.orderOpensAt,
+        rangeEnd: request.windows[0]!.endsAt,
+        locationId: "another-location",
+      }),
+    ).toMatchObject({ ok: true, value: { items: [] } });
+  });
+  it("paginates more than one hundred cycles without losing the visible range", async () => {
+    const staff = await manager();
+    const base = Date.now() + 100 * 24 * 3_600_000;
+    const prefix = `range-${crypto.randomUUID()}`;
+    const statements: D1PreparedStatement[] = [];
+    for (let index = 0; index < 105; index += 1) {
+      const cycleId = `${prefix}-${index.toString().padStart(3, "0")}`;
+      const opensAt = base + index * 60_000;
+      const deliveryStart = opensAt + 24 * 3_600_000;
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO delivery_cycle(id,market_id,name,order_opens_at,cutoff_at,delivery_date,status,capacity,allocated,version) VALUES (?,'market-metro-cebu',?,?,?,?, 'DRAFT',0,0,1)",
+        ).bind(cycleId, cycleId, opensAt, opensAt + 12 * 3_600_000, deliveryStart),
+        env.DB.prepare(
+          "INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at) VALUES (?,?, 'Scheduled delivery',?,?,?)",
+        ).bind(`${cycleId}-window`, cycleId, deliveryStart, deliveryStart + 3_600_000, Date.now()),
+      );
+    }
+    for (let index = 0; index < statements.length; index += 80)
+      await env.DB.batch(statements.slice(index, index + 80));
+
+    const query = {
+      headers: staff.headers,
+      rangeStart: new Date(base - 60_000).toISOString(),
+      rangeEnd: new Date(base + 26 * 3_600_000).toISOString(),
+    };
+    const first = await core.listAdminDeliveryCycles({
+      ...query,
+      requestId: crypto.randomUUID(),
+    });
+    expect(first).toMatchObject({ ok: true, value: { items: { length: 100 } } });
+    if (!first.ok || !first.value.nextCursor) throw new Error("Expected a second range page");
+    const second = await core.listAdminDeliveryCycles({
+      ...query,
+      requestId: crypto.randomUUID(),
+      cursor: first.value.nextCursor,
+    });
+    expect(second).toMatchObject({ ok: true, value: { items: { length: 5 }, nextCursor: null } });
+    if (second.ok)
+      expect(
+        new Set([...first.value.items, ...second.value.items].map((cycle) => cycle.cycleId)).size,
+      ).toBe(105);
   });
   it.each([
     ["claim", "BEFORE INSERT ON idempotency_records"],

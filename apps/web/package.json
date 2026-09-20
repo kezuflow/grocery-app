@@ -23,6 +23,7 @@
     "@freshmarkets/config": "workspace:*",
     "@freshmarkets/contracts": "workspace:*",
     "@freshmarkets/validation": "workspace:*",
+    "@fullcalendar/react": "7.1.0",
     "@googlemaps/js-api-loader": "2.1.1",
     "@googlemaps/markerclusterer": "2.6.2",
     "@radix-ui/react-dialog": "^1.1.23",

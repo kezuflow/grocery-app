@@ -1,3 +1,6 @@
+@import "@fullcalendar/react/skeleton.css";
+@import "@fullcalendar/react/themes/pulse/theme.css";
+@import "@fullcalendar/react/themes/pulse/palettes/red.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -354,6 +357,59 @@ html.fm-admin-dark .fm-admin-sidebar-tooltip svg {
 
 .fm-admin-sidebar-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.fm-cycle-calendar {
+  --fc-page-bg-color: var(--fm-admin-surface);
+  --fc-neutral-bg-color: var(--fm-surface-muted);
+  --fc-neutral-text-color: var(--fm-text-muted);
+  --fc-border-color: var(--fm-border);
+  --fc-today-bg-color: color-mix(in srgb, var(--fm-admin-accent) 7%, transparent);
+  --fc-now-indicator-color: var(--fm-admin-accent);
+  color: var(--fm-text);
+}
+
+.fm-cycle-calendar :where(button, a) {
+  transition:
+    color var(--fm-motion-fast) var(--fm-ease-out),
+    background-color var(--fm-motion-fast) var(--fm-ease-out),
+    transform var(--fm-motion-fast) var(--fm-ease-out);
+}
+
+.fm-cycle-calendar :where(button, a):active {
+  transform: scale(0.97);
+}
+
+.fm-cycle-event {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--fm-admin-accent) 55%, var(--fm-border)) !important;
+  background: color-mix(in srgb, var(--fm-admin-accent) 13%, var(--fm-admin-surface)) !important;
+  color: var(--fm-text) !important;
+}
+
+.fm-cycle-event * {
+  color: var(--fm-text) !important;
+}
+
+.fm-cycle-event-delivery {
+  border-left: 3px solid var(--fm-admin-accent) !important;
+  background: var(--fm-admin-accent-soft) !important;
+}
+
+.fm-cycle-event-selected {
+  border-color: var(--fm-admin-accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fm-admin-accent) 24%, transparent);
+}
+
+.fm-cycle-event-preview {
+  border-style: dashed !important;
+  opacity: 0.82;
+}
+
+@media (max-width: 767px) {
+  .fm-cycle-calendar {
+    min-height: 28rem;
+  }
 }
 
 a {

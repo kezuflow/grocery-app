@@ -2,6 +2,19 @@ import { z } from "zod";
 
 const id = z.string().trim().min(1).max(200);
 const instant = z.iso.datetime({ offset: true });
+export const deliveryCycleStateSchema = z.enum([
+  "DRAFT",
+  "SCHEDULED",
+  "OPEN",
+  "CUTOFF_REACHED",
+  "PROCUREMENT",
+  "RECEIVING",
+  "PACKING",
+  "DISPATCHING",
+  "DELIVERING",
+  "CLOSED",
+  "CANCELED",
+]);
 const window = z.object({
   name: z.string().trim().min(1).max(120),
   startsAt: instant,
@@ -31,19 +44,7 @@ export const adminDeliveryCycleViewSchema = z.object({
   marketId: id,
   marketName: z.string(),
   name: z.string(),
-  status: z.enum([
-    "DRAFT",
-    "SCHEDULED",
-    "OPEN",
-    "CUTOFF_REACHED",
-    "PROCUREMENT",
-    "RECEIVING",
-    "PACKING",
-    "DISPATCHING",
-    "DELIVERING",
-    "CLOSED",
-    "CANCELED",
-  ]),
+  status: deliveryCycleStateSchema,
   version: z.number().int().safe().positive(),
   cancellationUnavailableReason: z.string().nullable(),
   timezone: z.string(),

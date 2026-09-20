@@ -1,5 +1,46 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SCHEDULED-CYCLES-CALENDAR-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**. The owner authorized replacing the Scheduled Cycles form-led route with a calendar-first
+planning workspace. Acceptance requires Month, Week and Agenda views; one connected-cycle event
+model; market, location and lifecycle filters; a read-only cycle detail surface; a delivery-first
+three-step editor with business-timezone inputs, chronology validation, duplicate preview and exact
+retry; and explicit activation/deactivation confirmation without moving business authority into Web.
+
+Work started from clean `main` and `origin/main` at
+`b5f42f9d8326e4479a90ee66f9539ff462d7c8c0`. The complete working tree adds the FullCalendar React
+integration and a responsive calendar workspace whose persistent toolbar, filters and selected state
+survive docked desktop and full-screen mobile detail/editor panels. Connected pickup, delivery and
+order-window events share one cycle identity; an unsaved duplicate is previewed in place. The
+delivery-first editor converts named-market business time through Temporal, suggests but does not
+silently couple milestones, reports field-level chronology errors and supports cross-midnight
+windows. Detail actions use dedicated activate/deactivate dialogs, display Core-owned blockers and
+retain the exact failed command for retry inside the active panel.
+
+Core now owns bounded calendar-range reads, optional market/location/state filters, deterministic
+100-row pages and query-bound opaque cursors; Web exhausts both cycle and eligible-location pages so
+calendar filters do not silently omit later records. The legacy destination lookup remains
+disambiguated at the existing BFF route. The typed contract, reusable lifecycle validation and the
+owning API/design guidance were updated with the new semantics. No schema migration or new business
+write authority was introduced.
+
+Verification on the complete working tree: formatting, naming, terminology, harness, migrations,
+commit-message, architecture and readiness checks pass; lint passes with the same two pre-existing
+address-book unused-variable warnings; every workspace typecheck passes. The complete Web suite
+passes 139 files / 587 tests. The focused Core delivery-cycle integration suite passes 18/18,
+including interval intersection, filtering and a 105-row cursor traversal; the complete Core suite
+passes 207 files / 1,686 tests when run independently. The first parallel aggregate Core process
+exited without an assertion report with Windows code `0xC0000409`; the independent complete rerun
+passed. Core Wrangler dry-run and the production vinext Web build pass. Managed Playwright acceptance
+passes desktop and mobile (2/2), covering creation, responsive Agenda, unsaved preview, exact retry,
+activation lock feedback and deactivation confirmation. Diff-whitespace review passes. This is
+source, local Worker/D1, managed-browser and build acceptance only: no deployment, provider
+transaction, outbound message or remote-data change was performed. SCHEDULED-CYCLES-CALENDAR-1 is
+complete at the one-ID application/local-acceptance counting level; zero implementation IDs remain.
+Next action, if separately authorized, is deployment and target-environment browser acceptance.
+
 ## Latest owner request — CHECKOUT-CART-SIMPLIFICATION-1 (2026-09-19)
 
 Plan: `docs/product/CHECKOUT_CART_SIMPLIFICATION_PLAN.md`, **Sequence E — integrated browser, Worker/D1 and regression verification**,
@@ -147,8 +188,7 @@ secret was rotated/deleted; no application/proxy/callback code defect was observ
 provider rejection. No credential was printed or copied during diagnosis.
 
 Owner follow-up replaced the staging secret through the deployed Worker secret boundary, producing
-Core secret-change version `f982cda6-3cb8-4246-a683-370ace292380`. Direct Core readiness remained HTTP
-200. The real browser flow then completed Google authorization, returned through the configured
+Core secret-change version `f982cda6-3cb8-4246-a683-370ace292380`. Direct Core readiness remained HTTP 200. The real browser flow then completed Google authorization, returned through the configured
 callback, established the FreshMarkets session and navigated to the authenticated storefront home.
 The bounded Core trace showed successful auth RPC outcomes and no provider or application exception.
 No secret value, OAuth code, state or raw provider payload was recorded. Completed ID:
