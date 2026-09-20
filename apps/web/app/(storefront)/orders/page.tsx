@@ -62,6 +62,7 @@ const incompleteResultSchema = z.discriminatedUnion("ok", [
               "EXPIRED",
             ]),
             actionType: z.enum(["NONE", "REDIRECT", "SDK"]),
+            paymentMethod: z.object({ kind: z.literal("TOKEN"), value: z.string() }).nullable(),
             redirectUrl: z.string().nullable(),
             clientToken: z.string().nullable(),
             expiresAt: z.string().nullable(),

@@ -11,6 +11,7 @@ export type PaymentIntentRow = {
   customerId: string;
   amountMinor: number;
   currency: string;
+  paymentMethodToken: string | null;
   status: string;
   idempotencyKey: string;
   version: number;
@@ -40,7 +41,7 @@ export function createPaymentRepository(database: D1Database) {
     async findIntentByIdempotencyKey(idempotencyKey: string): Promise<PaymentIntentRow | null> {
       const row = await database
         .prepare(
-          "SELECT id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version FROM payment_intent WHERE idempotency_key=?",
+          "SELECT id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, payment_method_token, status, idempotency_key, version FROM payment_intent WHERE idempotency_key=?",
         )
         .bind(idempotencyKey)
         .first<{
@@ -51,6 +52,7 @@ export function createPaymentRepository(database: D1Database) {
           customer_id: string;
           amount_minor: number;
           currency: string;
+          payment_method_token: string | null;
           status: string;
           idempotency_key: string;
           version: number;
@@ -64,6 +66,7 @@ export function createPaymentRepository(database: D1Database) {
             customerId: row.customer_id,
             amountMinor: row.amount_minor,
             currency: row.currency,
+            paymentMethodToken: row.payment_method_token,
             status: row.status,
             idempotencyKey: row.idempotency_key,
             version: row.version,
@@ -73,7 +76,7 @@ export function createPaymentRepository(database: D1Database) {
     async findIntentById(id: string): Promise<PaymentIntentRow | null> {
       const row = await database
         .prepare(
-          "SELECT id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version FROM payment_intent WHERE id=?",
+          "SELECT id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, payment_method_token, status, idempotency_key, version FROM payment_intent WHERE id=?",
         )
         .bind(id)
         .first<{
@@ -84,6 +87,7 @@ export function createPaymentRepository(database: D1Database) {
           customer_id: string;
           amount_minor: number;
           currency: string;
+          payment_method_token: string | null;
           status: string;
           idempotency_key: string;
           version: number;
@@ -97,6 +101,7 @@ export function createPaymentRepository(database: D1Database) {
             customerId: row.customer_id,
             amountMinor: row.amount_minor,
             currency: row.currency,
+            paymentMethodToken: row.payment_method_token,
             status: row.status,
             idempotencyKey: row.idempotency_key,
             version: row.version,
@@ -418,7 +423,7 @@ export function extendPaymentRepository(database: D1Database) {
     ): Promise<PaymentIntentRow[]> {
       const rows = await database
         .prepare(
-          "SELECT pi.id, pi.purpose, pi.subject_type, pi.subject_id, pi.customer_id, pi.amount_minor, pi.currency, pi.status, pi.idempotency_key, pi.version FROM payment_intent pi JOIN payment_attempt pa ON pa.payment_intent_id=pi.id WHERE pa.provider=? AND pa.provider_reference=? ORDER BY pi.created_at DESC",
+          "SELECT pi.id, pi.purpose, pi.subject_type, pi.subject_id, pi.customer_id, pi.amount_minor, pi.currency, pi.payment_method_token, pi.status, pi.idempotency_key, pi.version FROM payment_intent pi JOIN payment_attempt pa ON pa.payment_intent_id=pi.id WHERE pa.provider=? AND pa.provider_reference=? ORDER BY pi.created_at DESC",
         )
         .bind(provider, providerReference)
         .all<{
@@ -429,6 +434,7 @@ export function extendPaymentRepository(database: D1Database) {
           customer_id: string;
           amount_minor: number;
           currency: string;
+          payment_method_token: string | null;
           status: string;
           idempotency_key: string;
           version: number;
@@ -441,6 +447,7 @@ export function extendPaymentRepository(database: D1Database) {
         customerId: row.customer_id,
         amountMinor: row.amount_minor,
         currency: row.currency,
+        paymentMethodToken: row.payment_method_token,
         status: row.status,
         idempotencyKey: row.idempotency_key,
         version: row.version,

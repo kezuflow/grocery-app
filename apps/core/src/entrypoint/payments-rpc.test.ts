@@ -21,6 +21,7 @@ describe("Payments RPC adapter", () => {
       expectedDeliveryDiscountMinor: 0,
       expectedTaxMinor: 0,
       expectedTotalMinor: 100,
+      paymentMethod: { kind: "TOKEN", value: "qrph" },
       providerCode: "not-configured",
       returnUrl: "https://freshmarkets.test/checkout",
       idempotencyKey: "payments-adapter-key",

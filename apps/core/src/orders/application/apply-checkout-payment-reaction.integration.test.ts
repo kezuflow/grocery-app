@@ -216,6 +216,7 @@ function paymentCommandForQuote(
     expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
     expectedTaxMinor: quote.taxMinor,
     expectedTotalMinor: quote.totalMinor,
+    paymentMethod: { kind: "TOKEN" as const, value: "qrph" },
     returnUrl: "https://freshmarkets.ph/checkout/payment",
     idempotencyKey: crypto.randomUUID(),
   };

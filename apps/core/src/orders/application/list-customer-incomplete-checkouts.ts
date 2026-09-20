@@ -13,6 +13,7 @@ export async function listCustomerIncompleteCheckouts(
   const rows = await database
     .prepare(`SELECT p.id payment_intent_id,p.subject_id checkout_attempt_id,p.status,p.created_at,
       p.amount_minor,p.currency,q.fulfillment_mode,q.lines_json,
+      p.payment_method_token,
       a.action_type,a.redirect_url,a.client_token,a.expires_at
     FROM payment_intent p
     JOIN checkout_quote q ON p.subject_type='checkout_quote' AND q.id=p.subject_id AND q.customer_id=p.customer_id
@@ -29,6 +30,7 @@ export async function listCustomerIncompleteCheckouts(
       created_at: number;
       amount_minor: number;
       currency: string;
+      payment_method_token: string | null;
       fulfillment_mode: "INSTANT" | "SCHEDULED";
       lines_json: string;
       action_type: "REDIRECT" | "SDK" | null;
@@ -56,6 +58,9 @@ export async function listCustomerIncompleteCheckouts(
         const action: PaymentActionView = {
           paymentIntentId: row.payment_intent_id,
           state: row.status,
+          paymentMethod: row.payment_method_token
+            ? { kind: "TOKEN", value: row.payment_method_token }
+            : null,
           actionType: hasAction ? row.action_type! : "NONE",
           redirectUrl: hasAction ? row.redirect_url : null,
           clientToken: hasAction ? row.client_token : null,

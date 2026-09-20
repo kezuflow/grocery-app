@@ -358,6 +358,7 @@ it("holds exact size counts, commits after mock-provider confirmation and releas
       expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
       expectedTaxMinor: quote.taxMinor,
       expectedTotalMinor: quote.totalMinor,
+      paymentMethod: { kind: "TOKEN", value: "qrph" },
       returnUrl: "https://freshmarkets.ph/checkout/payment",
       idempotencyKey: crypto.randomUUID(),
     },

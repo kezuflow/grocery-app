@@ -164,6 +164,7 @@ describe("domain-grouped core services", () => {
     void ({
       paymentIntentId: "",
       state: "PROCESSING",
+      paymentMethod: null,
       actionType: "NONE",
       redirectUrl: null,
       clientToken: null,

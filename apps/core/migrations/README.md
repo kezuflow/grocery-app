@@ -122,6 +122,10 @@ booking use the fixed order-level 20 kg Motorcycle parcel in Core policy.
 retaining its lines for reconciliation, then creates one empty active successor Cart. Existing
 unsettled checkouts are upgraded without fabricating an Order or payment outcome.
 
+`0099_checkout_payment_method.sql` retains the customer-selected payment-method token on each new
+Payment Intent so an interrupted provider action resumes with the same method. Historical intents
+remain nullable and keep their existing continuation behavior.
+
 ## 0069 integrity boundary
 
 The policy-placement revision also removes promotion component-count uniqueness, the three promotion usage-count triggers, mode/cadence coupling CHECKs and service_fee_configuration.active_for_new_commerce. Benefit/claim/redemption identities remain unique; Core guards current stacking and usage within commitment transactions, validates supported cadence and never prices new quotes from retired fee configuration. Original historical migration boundaries remain reproducible. Update final-schema consumers with this baseline; do not apply a changed 0069 over an already-recorded 0069 without a tested forward upgrade.

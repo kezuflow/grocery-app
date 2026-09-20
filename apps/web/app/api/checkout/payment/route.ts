@@ -23,6 +23,7 @@ const bodySchema = z.object({
   expectedDeliveryDiscountMinor: z.number().int().nonnegative(),
   expectedTaxMinor: z.number().int().nonnegative(),
   expectedTotalMinor: z.number().int().nonnegative(),
+  paymentMethod: z.object({ kind: z.literal("TOKEN"), value: z.literal("qrph") }),
   returnUrl: z.string().url(),
 });
 
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
       expectedDeliveryDiscountMinor: parsed.value.expectedDeliveryDiscountMinor,
       expectedTaxMinor: parsed.value.expectedTaxMinor,
       expectedTotalMinor: parsed.value.expectedTotalMinor,
+      paymentMethod: parsed.value.paymentMethod,
       returnUrl: parsed.value.returnUrl,
       idempotencyKey,
     }),

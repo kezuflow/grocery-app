@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-PAYMENT-METHOD-SELECTION-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, customer payment-method selection and provider continuation. The owner requested that
+customers choose a PayMongo payment method on `/checkout` before entering `/checkout/payment`, with
+QR Ph and the account's other PayMongo channels represented. Acceptance: checkout requires an
+explicit method; only a verified and code-enabled channel is selectable; inactive channels remain
+visible but disabled; the selected method is immutable Payment/idempotency evidence; the provider
+step performs the selected method's client-side action; and only the signed provider outcome can
+confirm the Payment and Order.
+
+Work started from clean synchronized `main`/`origin/main` at `d06b131e`. Mobbin checkout research
+confirmed the selected payment instrument belongs in the main review step and method-specific entry
+follows that selection. The supplied PayMongo capability evidence shows QRPh active while the other
+requested channels are inactive or pending, so Web now requires an explicit QR Ph selection and
+shows GCash, GrabPay, Maya, ShopeePay, Google Pay, Visa/Mastercard and listed direct-debit channels as
+disabled. Core validates and persists the selected token, includes it in request identity, and limits
+the new checkout Payment Intent to QR Ph. The PayMongo continuation creates and attaches a QRPh
+Payment Method with the public client key, renders the returned single-use code, and directs the
+customer to authoritative payment status. Historical card continuations and the existing amendment
+path remain compatible; neither creates new card availability in checkout. Migration
+`0099_checkout_payment_method.sql` adds nullable forward-compatible evidence without rewriting
+historical intents.
+
+The complete `pnpm check` gate passes on the working tree: formatting, naming, terminology, harness,
+migration/integrity, commit-message, architecture, readiness, lint, all workspace typechecks and both
+production builds pass; Core passes 207 files / 1,688 tests, Web passes 141 files / 597 tests, and
+contracts pass 20 files / 69 tests. Lint retains the two previously recorded address-book
+unused-variable warnings. The first full run exposed one stale source-contract assertion for the old
+button label; it was updated to assert the required method choice and QR Ph continuation, and the
+complete rerun passed. No deployment, migration against shared D1, PayMongo transaction, provider
+capability change, outbound message or target-browser payment was performed. Completed task ID at
+the source/local-verification counting level: `CHECKOUT-PAYMENT-METHOD-SELECTION-1`. The next action,
+if separately authorized, is staging migration/deployment followed by an authenticated QR Ph sandbox
+or low-value acceptance through the signed webhook.
+
 ## Latest owner request — CART-MUTATION-LATENCY-DEPLOY-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

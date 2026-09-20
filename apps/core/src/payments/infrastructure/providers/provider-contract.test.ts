@@ -29,6 +29,7 @@ describe("mock payment provider contract", () => {
       currency: "PHP",
       returnUrl: "https://app.example/return",
       idempotencyKey: `contract-${crypto.randomUUID()}`,
+      paymentMethod: { kind: "TOKEN", value: "qrph" },
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -43,6 +44,7 @@ describe("mock payment provider contract", () => {
       currency: "PHP",
       returnUrl: "urn:freshmarkets:membership:renewal",
       idempotencyKey: `renewal-contract-${crypto.randomUUID()}`,
+      paymentMethod: { kind: "TOKEN", value: "card" },
     });
     expect(result).toMatchObject({ ok: true, actionType: "REDIRECT" });
     if (!result.ok) return;

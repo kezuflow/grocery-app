@@ -266,6 +266,14 @@ Fulfillment-option reads require a Maps-confirmed active Customer address inside
 - `checkout.getAttempt({ checkoutAttemptId }) -> CheckoutAttemptView`
 - `checkout.recoverCommitment({ checkoutAttemptId }) -> OrderCommitmentResult`
 
+`paymentMethod` is a provider-neutral token chosen on the checkout review surface before payment
+creation. Core validates and persists it with the Payment Intent, includes it in idempotency identity,
+and supplies it on every resumable action. The current enabled checkout token is `qrph`; other
+PayMongo methods remain visible but disabled until provider activation and explicit application
+enablement. PayMongo receives only the selected method in `payment_method_allowed`. The QR Ph
+continuation creates and attaches the provider Payment Method in the browser using the public key,
+then renders the returned single-use code. Browser attachment and code display never assert success.
+
 Core receives payment provider webhooks through a signed public webhook handler rather than Web RPC:
 
 - verify signature and timestamp;

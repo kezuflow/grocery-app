@@ -86,6 +86,7 @@ describe("checkout contracts", () => {
       expectedDeliveryDiscountMinor: 500,
       expectedTaxMinor: 0,
       expectedTotalMinor: 19_000,
+      paymentMethod: { kind: "TOKEN", value: "qrph" },
       returnUrl: "https://freshmarkets.ph/orders",
       idempotencyKey: "payment-1",
     } satisfies PaymentIntentCommandRequest;

@@ -386,6 +386,7 @@ describe("global commerce configuration", () => {
         expectedDeliveryDiscountMinor: 0,
         expectedTaxMinor: 0,
         expectedTotalMinor: 100,
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
         returnUrl: "https://example.test/return",
         idempotencyKey: "paused-payment",
       }),

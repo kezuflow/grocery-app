@@ -350,6 +350,7 @@ export const createPaymentIntentSchema = headersRequest.extend({
   expectedDeliveryDiscountMinor: z.number().int().nonnegative(),
   expectedTaxMinor: z.number().int().nonnegative(),
   expectedTotalMinor: z.number().int().nonnegative(),
+  paymentMethod: z.object({ kind: z.literal("TOKEN"), value: z.literal("qrph") }),
   returnUrl: z.string().url().max(2000),
   idempotencyKey: idempotencyKeySchema,
 });

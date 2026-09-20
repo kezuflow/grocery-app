@@ -1,7 +1,7 @@
 import { orderDeliveryWeightGuard } from "../../fulfillment/application/order-delivery-weight";
 import { recordPaymentCreation, recoverPaymentCreation } from "./recover-payment-creation";
 import { requestHash } from "../../idempotency";
-import type { AppErrorCode } from "@freshmarkets/contracts";
+import type { AppErrorCode, PaymentMethodToken } from "@freshmarkets/contracts";
 import type { PaymentPurpose } from "../domain/payment";
 import {
   createPaymentRepository,
@@ -18,6 +18,7 @@ export type CreatePaymentCommand = {
   amountMinor: number;
   currency: string;
   providerCode?: string;
+  paymentMethod?: PaymentMethodToken;
   returnUrl: string;
   idempotencyKey: string;
   requestId: string;
@@ -30,6 +31,7 @@ export type CreatePaymentCommand = {
 export type CreatedPaymentAction = {
   paymentIntentId: string;
   state: "INITIATED" | "REQUIRES_ACTION" | "PROCESSING" | "FAILED";
+  paymentMethod: PaymentMethodToken | null;
   actionType: "NONE" | "REDIRECT" | "SDK";
   redirectUrl: string | null;
   clientToken: string | null;
@@ -63,6 +65,7 @@ export async function createPayment(
   if (!command.currency || command.currency.trim() === "")
     return failure("VALIDATION_FAILED", "Currency is required", command.requestId);
   const repository: PaymentRepository = createPaymentRepository(database);
+  const paymentMethod = command.paymentMethod ?? { kind: "TOKEN", value: "card" };
 
   const hash = await requestHash({
     purpose: command.purpose,
@@ -71,6 +74,7 @@ export async function createPayment(
     customerId: command.customerId,
     amountMinor: command.amountMinor,
     currency: command.currency,
+    paymentMethod,
   });
 
   let existing = await repository.findIntentByIdempotencyKey(command.idempotencyKey);
@@ -81,7 +85,8 @@ export async function createPayment(
       existing.subjectId !== command.subjectId ||
       existing.customerId !== command.customerId ||
       existing.amountMinor !== command.amountMinor ||
-      existing.currency !== command.currency
+      existing.currency !== command.currency ||
+      (existing.paymentMethodToken !== null && existing.paymentMethodToken !== paymentMethod.value)
     )
       return failure(
         "IDEMPOTENCY_CONFLICT",
@@ -133,6 +138,9 @@ export async function createPayment(
       value: {
         paymentIntentId: existing.id,
         state,
+        paymentMethod: existing.paymentMethodToken
+          ? { kind: "TOKEN", value: existing.paymentMethodToken }
+          : null,
         actionType: action?.actionType ?? "NONE",
         redirectUrl: action?.redirectUrl ?? null,
         clientToken: action?.clientToken ?? null,
@@ -147,7 +155,7 @@ export async function createPayment(
   try {
     const insertIntent = database
       .prepare(
-        "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'INITIATED', ?, 1, ?, ?)",
+        "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, payment_method_token, status, idempotency_key, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'INITIATED', ?, 1, ?, ?)",
       )
       .bind(
         intentId,
@@ -157,6 +165,7 @@ export async function createPayment(
         command.customerId,
         command.amountMinor,
         command.currency,
+        paymentMethod.value,
         command.idempotencyKey,
         now,
         now,
@@ -334,6 +343,7 @@ export async function createPayment(
       currency: command.currency,
       returnUrl: command.returnUrl,
       idempotencyKey: command.idempotencyKey,
+      paymentMethod,
     });
   } catch {
     await repository.recordReconciliationCase({
@@ -448,6 +458,7 @@ export async function createPayment(
     value: {
       paymentIntentId: intentId,
       state: nextState,
+      paymentMethod,
       actionType: providerResult.actionType,
       redirectUrl: providerResult.redirectUrl,
       clientToken: providerResult.clientToken,

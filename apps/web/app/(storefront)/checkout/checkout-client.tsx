@@ -9,6 +9,7 @@ import type {
   CustomerProfileView,
   FulfillmentOptionView,
   PaymentActionView,
+  PaymentMethodToken,
   RpcResult,
 } from "@freshmarkets/contracts";
 import { useQueryEpoch } from "../../../components/query-provider";
@@ -16,6 +17,7 @@ import { OrderSummary } from "../../../components/storefront/marketplace/order-s
 import { AddressEditor } from "../../../components/storefront/address/address-editor";
 import { AddressList } from "../../../components/storefront/address/address-list";
 import { FulfillmentOptionPicker } from "../../../components/storefront/checkout/fulfillment-option-picker";
+import { PaymentMethodPicker } from "../../../components/storefront/checkout/payment-method-picker";
 import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
 import {
   readDeliveryLocationSelection,
@@ -165,6 +167,9 @@ export function CheckoutClient({
   const [status, setStatus] = useState("");
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodToken | null>(
+    null,
+  );
   const [quoteNeedsReplacement, setQuoteNeedsReplacement] = useState(false);
   const paymentInProgressRef = useRef(false);
   const paymentContinuationRef = useRef<PaymentActionView | null>(null);
@@ -757,7 +762,7 @@ export function CheckoutClient({
       setStatus("Wait for the current checkout reservation to be released.");
       return;
     }
-    if (!pendingQuote || quoteNeedsReplacement) return;
+    if (!pendingQuote || quoteNeedsReplacement || !selectedPaymentMethod) return;
     if (
       !quoteInputIsCurrent(pendingQuote.input) ||
       pendingQuote.attemptKey !== attemptKey.current
@@ -774,7 +779,7 @@ export function CheckoutClient({
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": pendingQuote.attemptKey,
+        "idempotency-key": `${pendingQuote.attemptKey}:payment:${selectedPaymentMethod.value}`,
       },
       body: JSON.stringify({
         checkoutAttemptId: pendingQuote.quoteId,
@@ -789,6 +794,7 @@ export function CheckoutClient({
         expectedDeliveryDiscountMinor: pendingQuote.deliveryDiscountMinor,
         expectedTaxMinor: pendingQuote.taxMinor,
         expectedTotalMinor: pendingQuote.totalMinor,
+        paymentMethod: selectedPaymentMethod,
         returnUrl: window.location.origin + "/orders",
       }),
     });
@@ -888,8 +894,8 @@ export function CheckoutClient({
                 Review your order
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--fm-text-muted)]">
-                Confirm your destination and courier. Your current total stays visible while you
-                complete the details.
+                Confirm your destination, courier, and payment method. Your current total stays
+                visible while you complete the details.
               </p>
             </div>
           </div>
@@ -1170,6 +1176,33 @@ export function CheckoutClient({
                     </div>
                   ) : null}
                 </section>
+
+                <section className="min-w-0 border-b border-[var(--fm-border)] py-7">
+                  <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
+                    <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
+                      <ShieldCheck className="size-5" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                        Payment
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold">Choose payment method</h2>
+                      <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+                        Select how you want to pay before continuing to PayMongo. Methods awaiting
+                        activation remain visible but cannot be selected.
+                      </p>
+                    </div>
+                  </div>
+                  <PaymentMethodPicker
+                    selected={selectedPaymentMethod}
+                    onSelect={(method) => {
+                      setSelectedPaymentMethod(method);
+                      setStatus(
+                        "QR Ph selected. Review the total, then continue to generate your secure code.",
+                      );
+                    }}
+                  />
+                </section>
               </div>
             )}
             {status ? (
@@ -1215,7 +1248,9 @@ export function CheckoutClient({
                       : pendingQuote
                         ? acceptingPayment
                           ? "Starting payment…"
-                          : "Continue to payment"
+                          : selectedPaymentMethod
+                            ? "Continue with QR Ph"
+                            : "Choose a payment method"
                         : quoteLoadState === "loading"
                           ? "Checking delivery fee…"
                           : selectedFulfillmentOption && !selectedFulfillmentOption.eligible
@@ -1233,6 +1268,7 @@ export function CheckoutClient({
                     quoteLoadState === "loading" ||
                     quoteNeedsReplacement ||
                     Boolean(cart?.checkoutBlocked) ||
+                    !selectedPaymentMethod ||
                     !pendingQuote
               }
               showItems

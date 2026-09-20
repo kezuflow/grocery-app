@@ -12,6 +12,8 @@ export type PaymentMethodToken = {
 export type PaymentActionView = {
   paymentIntentId: string;
   state: Exclude<PaymentState, "PARTIALLY_REFUNDED" | "REFUNDED">;
+  /** Customer-selected method retained with the payment for safe continuation. */
+  paymentMethod: PaymentMethodToken | null;
   /** Mutually exclusive safe client actions; never a fabricated success state. */
   actionType: "NONE" | "REDIRECT" | "SDK";
   redirectUrl: string | null;
@@ -122,6 +124,7 @@ export type PaymentIntentCommandRequest = AuthenticatedRequest & {
   expectedDeliveryDiscountMinor: number;
   expectedTaxMinor: number;
   expectedTotalMinor: number;
+  paymentMethod: PaymentMethodToken;
   providerCode?: string;
   returnUrl: string;
   idempotencyKey: string;

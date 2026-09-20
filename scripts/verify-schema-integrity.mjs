@@ -99,8 +99,14 @@ database
     1700000000000,
     1700000001000,
   );
+const paymentColumnsBeforeLookupRecovery = database
+  .prepare("PRAGMA table_info(payment_intent)")
+  .all()
+  .map((column) => column.name);
 const paymentsBeforeLookupRecovery = database
-  .prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid")
+  .prepare(
+    `SELECT rowid,${paymentColumnsBeforeLookupRecovery.map(quote).join(",")} FROM payment_intent ORDER BY rowid`,
+  )
   .all();
 const casesBeforeVersion = database
   .prepare("SELECT rowid,* FROM payment_reconciliation_case ORDER BY rowid")
@@ -405,7 +411,11 @@ assert.throws(
   /FOREIGN KEY constraint failed/,
 );
 assert.deepEqual(
-  database.prepare("SELECT rowid,* FROM payment_intent ORDER BY rowid").all(),
+  database
+    .prepare(
+      `SELECT rowid,${paymentColumnsBeforeLookupRecovery.map(quote).join(",")} FROM payment_intent ORDER BY rowid`,
+    )
+    .all(),
   paymentsBeforeLookupRecovery,
 );
 assert.deepEqual(

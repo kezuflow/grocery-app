@@ -61,6 +61,7 @@ describe("customer order history", () => {
       action: {
         paymentIntentId: "payment-pending",
         state: "REQUIRES_ACTION",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
         actionType: "REDIRECT",
         redirectUrl: "https://payments.example/continue",
         clientToken: null,

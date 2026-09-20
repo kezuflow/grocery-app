@@ -33,6 +33,7 @@ async function command(
     amountMinor: 29900,
     currency: "PHP",
     providerCode: "mock",
+    paymentMethod: { kind: "TOKEN", value: "card" },
     returnUrl: "https://app.example/membership",
     idempotencyKey: `pay-${crypto.randomUUID()}`,
     requestId: crypto.randomUUID(),
@@ -46,10 +47,10 @@ function testRegistry(): ProviderRegistry {
 
 async function intentRows(idempotencyKey: string) {
   const row = await env.DB.prepare(
-    "SELECT id, status, version FROM payment_intent WHERE idempotency_key=?",
+    "SELECT id, status, version, payment_method_token FROM payment_intent WHERE idempotency_key=?",
   )
     .bind(idempotencyKey)
-    .first<{ id: string; status: string; version: number }>();
+    .first<{ id: string; status: string; version: number; payment_method_token: string | null }>();
   const attempts = row
     ? await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM payment_attempt WHERE payment_intent_id=? AND status != 'SUCCEEDED'",
@@ -68,12 +69,17 @@ describe("payment intent creation", () => {
     if (!result.ok) return;
     expect(result.value.state).toBe("REQUIRES_ACTION");
     expect(result.value.actionType).toBe("REDIRECT");
+    expect(result.value.paymentMethod).toEqual({ kind: "TOKEN", value: "card" });
     expect(result.value.redirectUrl).toContain(
       "https://app.example/development/mock-payments/mock_pay_",
     );
     expect(result.value.redirectUrl).toContain("returnTo=%2Fmembership");
     const { row, attempts } = await intentRows(attempt.idempotencyKey);
-    expect(row).toMatchObject({ status: "REQUIRES_ACTION", version: 2 });
+    expect(row).toMatchObject({
+      status: "REQUIRES_ACTION",
+      version: 2,
+      payment_method_token: "card",
+    });
     expect(attempts).toBe(1);
   });
 
@@ -209,6 +215,16 @@ describe("payment intent creation", () => {
     const attempt = await command();
     await createPayment(env.DB, testRegistry(), attempt);
     const conflict = await createPayment(env.DB, testRegistry(), { ...attempt, amountMinor: 100 });
+    expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("treats the selected method as immutable idempotency evidence", async () => {
+    const attempt = await command({ paymentMethod: { kind: "TOKEN", value: "qrph" } });
+    await createPayment(env.DB, testRegistry(), attempt);
+    const conflict = await createPayment(env.DB, testRegistry(), {
+      ...attempt,
+      paymentMethod: { kind: "TOKEN", value: "card" },
+    });
     expect(conflict).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
   });
 

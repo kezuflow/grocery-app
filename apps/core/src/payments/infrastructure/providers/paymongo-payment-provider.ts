@@ -19,7 +19,6 @@ type Fetcher = typeof fetch;
 export type PayMongoPaymentProviderConfiguration = {
   secretKey: string;
   webhookSecret: string;
-  allowedPaymentMethods?: readonly string[];
   apiBaseUrl?: string;
   fetcher?: Fetcher;
   now?: () => number;
@@ -208,7 +207,6 @@ export function createPayMongoPaymentProvider(
   const fetcher = configuration.fetcher ?? fetch;
   const now = configuration.now ?? Date.now;
   const apiBaseUrl = (configuration.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
-  const allowedPaymentMethods = configuration.allowedPaymentMethods ?? ["card"];
   const authorization = `Basic ${btoa(`${configuration.secretKey}:`)}`;
 
   async function api(
@@ -269,6 +267,13 @@ export function createPayMongoPaymentProvider(
   return {
     code: "paymongo",
     async createPayment(input) {
+      // New checkout exposes only verified QR Ph. Card remains accepted here for
+      // already-issued continuations and the existing amendment-payment path.
+      if (
+        input.paymentMethod.kind !== "TOKEN" ||
+        !["qrph", "card"].includes(input.paymentMethod.value)
+      )
+        return { ok: false, errorCode: "PAYMENT_METHOD_UNAVAILABLE" };
       try {
         const payload = await api(
           "/v1/payment_intents",
@@ -279,7 +284,7 @@ export function createPayMongoPaymentProvider(
                 attributes: {
                   amount: input.amountMinor,
                   currency: input.currency.toUpperCase(),
-                  payment_method_allowed: allowedPaymentMethods,
+                  payment_method_allowed: [input.paymentMethod.value],
                   description: "FreshMarkets order payment",
                   metadata: { freshmarkets_idempotency_key: input.idempotencyKey },
                 },

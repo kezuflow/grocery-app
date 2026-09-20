@@ -26,6 +26,7 @@ function acceptedPrice(quote: CheckoutQuoteView) {
     expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
     expectedTaxMinor: quote.taxMinor,
     expectedTotalMinor: quote.totalMinor,
+    paymentMethod: { kind: "TOKEN" as const, value: "qrph" },
   };
 }
 

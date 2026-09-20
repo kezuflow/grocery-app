@@ -82,7 +82,9 @@ describe("PayMongo payment provider", () => {
       expect(headers.get("authorization")).toBe(`Basic ${btoa("sk_test_freshmarkets:")}`);
       expect(headers.get("idempotency-key")).toBe("payment-key");
       expect(JSON.parse(String(init?.body))).toMatchObject({
-        data: { attributes: { amount: 25000, currency: "PHP" } },
+        data: {
+          attributes: { amount: 25000, currency: "PHP", payment_method_allowed: ["qrph"] },
+        },
       });
       return Response.json({
         data: {
@@ -99,6 +101,7 @@ describe("PayMongo payment provider", () => {
         currency: "PHP",
         returnUrl: "https://freshmarkets.example/payments/return",
         idempotencyKey: "payment-key",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
       }),
     ).resolves.toMatchObject({
       ok: true,
@@ -106,6 +109,21 @@ describe("PayMongo payment provider", () => {
       actionType: "SDK",
       clientToken: "pi_1_client_secret",
     });
+  });
+
+  it("fails closed before provider creation for a method that is not enabled in code", async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch;
+    await expect(
+      provider(fetcher).createPayment({
+        providerCustomerId: null,
+        amountMinor: 25000,
+        currency: "PHP",
+        returnUrl: "https://freshmarkets.example/payments/return",
+        idempotencyKey: "unsupported-method",
+        paymentMethod: { kind: "TOKEN", value: "gcash" },
+      }),
+    ).resolves.toEqual({ ok: false, errorCode: "PAYMENT_METHOD_UNAVAILABLE" });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("creates an immutable scheduled monthly plan", async () => {

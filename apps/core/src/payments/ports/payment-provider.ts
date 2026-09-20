@@ -6,6 +6,7 @@ export type PaymentObservationIdentity = {
 };
 
 import type { PaymentDomainState } from "../domain/payment";
+import type { PaymentMethodToken } from "@freshmarkets/contracts";
 
 export type ProviderRefundLookupInput = {
   providerReference: string;
@@ -165,6 +166,7 @@ export interface PaymentProvider {
     currency: string;
     returnUrl: string;
     idempotencyKey: string;
+    paymentMethod: PaymentMethodToken;
   }): Promise<
     | {
         ok: true;

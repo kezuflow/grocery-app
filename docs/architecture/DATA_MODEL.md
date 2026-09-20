@@ -235,6 +235,8 @@ Historical migration `0044_financial_safety.sql` added explicit Quote/Order mone
 
 Migration `0046_cart_and_inbox_reliability.sql` reconciles historical duplicate `ACTIVE` carts before adding a partial unique customer index. The newest cart wins deterministically; its quantities remain authoritative and SKUs absent from it are copied from the newest older active cart that carries them. Superseded carts remain as history and a payload-safe domain event records the repair. The same migration adds bounded normalized-observation, retry-availability, and conditional-lease fields to the provider inbox. Migration `0054_paymongo_subscription_webhook_audit.sql` adds exact bounded payload retention after signature verification, provider plan/subscription/invoice mappings, and the canonical PayMongo-aligned `UNPAID` lifecycle projection. Raw payloads remain forbidden from diagnostic logs and ordinary Admin DTOs.
 
+Migration `0099_checkout_payment_method.sql` adds the nullable historical-compatible payment-method token to Payment Intent. New checkout Payments persist the customer choice before provider creation, compare it on idempotent replay, and return it with resumable provider actions; old in-flight actions remain usable without inventing a method.
+
 Migration `0049_payment_settlement_observations.sql` adds provider-neutral immutable settlement
 evidence linked to the verified provider event and canonical Payment identity. Insert occurs only
 with the winning Payment/Refund compare-and-swap application; duplicate events replay without a

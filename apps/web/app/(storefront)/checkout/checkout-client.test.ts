@@ -35,7 +35,9 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("updatingSkuId={updatingSkuId}");
     expect(checkout).not.toContain("<CheckoutTotalReview");
     expect(checkout).not.toContain("Discard current total and start again");
-    expect(checkout).toContain('"Continue to payment"');
+    expect(checkout).toContain('"Choose a payment method"');
+    expect(checkout).toContain('"Continue with QR Ph"');
+    expect(checkout).toContain("!selectedPaymentMethod");
     expect(checkout).toContain("automaticQuoteFingerprint");
     expect(checkout).toContain("quoteInputFingerprint");
     expect(checkout).toContain("settlePreviousQuoteWork");

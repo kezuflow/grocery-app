@@ -36,6 +36,7 @@ describe("checkout payment route", () => {
     expectedDeliveryDiscountMinor: 500,
     expectedTaxMinor: 0,
     expectedTotalMinor: 9_000,
+    paymentMethod: { kind: "TOKEN", value: "qrph" },
   };
 
   it("forwards the accepted quote version and every explicit financial component", async () => {
@@ -106,6 +107,7 @@ describe("checkout payment route", () => {
       value: {
         paymentIntentId: "pi1",
         state: "REQUIRES_ACTION",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
         actionType: "REDIRECT",
         redirectUrl: "https://pay/x",
         clientToken: null,
@@ -136,6 +138,7 @@ describe("checkout payment route", () => {
       value: {
         paymentIntentId: "pi-replay",
         state: "REQUIRES_ACTION",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
         actionType: "REDIRECT",
         redirectUrl: "https://pay.example/continue",
         clientToken: null,
