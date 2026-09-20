@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-MUTATION-LATENCY-1 (2026-09-20)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, storefront cart performance. The owner reported that the Product-card `+` action remained
+laggy for signed-in users and authorized the reviewed latency plan. Acceptance: a hydrated signed-in
+Cart issues one authoritative `POST /api/commerce/cart` with no preceding Cart or serviceability
+read; a hydrated guest Cart mutates locally; Core remains the price, stock, ownership and version
+authority; conflicts and unknown outcomes remain safe; immediate pending feedback is accessible; and
+measured client rendering no longer stalls the product grid.
+
+Work started from synchronized `main`/`origin/main` at `10487817` with unrelated, unfinished
+fulfillment/checkout/contracts/guidance files already modified; those files and their policy changes
+were preserved. Web now uses the hydrated Cart identity/version directly for quantity mutations,
+retains the same idempotency key when a response is unknown, refreshes only after a definite version
+conflict, and keeps subsequent guest increments local. Product-card buttons no longer subscribe every
+card to the complete Cart query; they read the shared projection at click time, show an accessible
+spinner/`aria-busy` state, and announce committed success before checkout invalidation finishes. No
+Core, contract, schema, provider or deployment behavior changed.
+
+Verification on the complete working tree: the focused Cart client/button/drawer suite passes 28
+tests; exact sequence coverage proves the hydrated signed-in path is one POST, cached guest follow-up
+is zero requests, version conflict is POST then recovery GET, and an unknown result replays the exact
+command. Web and all-workspace typechecks, formatting, lint (two pre-existing address-book warnings),
+naming, architecture, readiness, vinext compatibility (16 supported/0 issues) and the Web production
+build pass. The Web suite excluding the unrelated in-progress checkout source-contract test passes
+138 files/592 tests. The full 139-file/595-test Web run has exactly that one pre-existing failure:
+`checkout-client.test.ts` expects `className="grid gap-0"` while its concurrently edited source now
+uses a constrained grid class. Local browser evidence on the real dev page proves a cached guest
+increment makes zero Cart/serviceability requests and improves observed INP from 697 ms before the
+per-card subscription removal to 47 ms after it, with CLS 0. Signed-in browser timing and staging
+behavior are not claimed until the verified Web revision is deployed and exercised with an
+authenticated session. Completed task ID at the source/local-browser counting level:
+`CART-MUTATION-LATENCY-1`. Concrete next action: deploy the verified Web revision under separate
+release authority, then record signed-in single-POST p50/p95 samples before considering Core query
+optimization.
+
 ## Latest owner request — CHECKOUT-SCHEDULED-QUOTATION-DIAG-1 (2026-09-20)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

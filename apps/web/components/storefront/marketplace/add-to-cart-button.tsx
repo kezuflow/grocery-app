@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { LoaderCircle, Plus } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import { addToCart, announceToast, quantityForSku } from "../../../lib/storefront/cart-client";
+import {
+  addToCart,
+  announceToast,
+  cachedCart,
+  quantityForSku,
+} from "../../../lib/storefront/cart-client";
 import type { CatalogMedia } from "@freshmarkets/contracts";
-import { useAcceptCart, useCartQuery, useInvalidateCheckoutReads } from "../../../lib/query/cart";
+import { useAcceptCart, useInvalidateCheckoutReads } from "../../../lib/query/cart";
 
 /** Product cards keep a compact plus button; cart quantities are edited in the cart. */
 export function AddToCartButton({
@@ -23,15 +28,17 @@ export function AddToCartButton({
   currency?: string;
   className?: string;
 }) {
-  // The header can populate the browser cache before streamed cards hydrate.
-  // Keep the first render identical to SSR, then adopt that cache after hydration.
-  const { cart } = useCartQuery();
-  const quantity = cart ? quantityForSku(cart, skuId) : 0;
   const [pending, setPending] = useState(false);
   const acceptCart = useAcceptCart();
   const invalidateCheckout = useInvalidateCheckoutReads();
 
-  async function mutate(next: number) {
+  async function mutate() {
+    // Product cards do not display Cart state, so subscribing every card to the
+    // complete Cart makes the whole grid re-render after each click. Read the
+    // shared authoritative projection only when the user acts.
+    const current = cachedCart();
+    const quantity = current ? quantityForSku(current, skuId) : 0;
+    const next = quantity + 1;
     setPending(true);
     const result = await addToCart(skuId, next, {
       name: productName,
@@ -42,7 +49,6 @@ export function AddToCartButton({
     setPending(false);
     if (result.ok) {
       acceptCart(result.view);
-      await invalidateCheckout();
       if (next > quantity) {
         announceToast({
           message: result.requiresSignIn
@@ -52,6 +58,7 @@ export function AddToCartButton({
           signInHref: result.requiresSignIn ? "/auth/login?returnTo=/cart" : undefined,
         });
       }
+      await invalidateCheckout();
       return;
     }
     if (result.reason === "unauthenticated") {
@@ -68,15 +75,23 @@ export function AddToCartButton({
   return (
     <button
       type="button"
-      onClick={() => void mutate(quantity + 1)}
+      onClick={() => void mutate()}
       disabled={pending || unitPriceMinor == null}
-      aria-label={`Add ${productName} to cart`}
+      aria-busy={pending}
+      aria-label={pending ? `Adding ${productName} to cart` : `Add ${productName} to cart`}
       className={cn(
         "inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)] shadow-sm transition-colors hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-primary-lime)] disabled:opacity-60",
         className,
       )}
     >
-      <Plus className="size-4" aria-hidden="true" />
+      {pending ? (
+        <LoaderCircle
+          className="size-4 animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+      ) : (
+        <Plus className="size-4" aria-hidden="true" />
+      )}
     </button>
   );
 }

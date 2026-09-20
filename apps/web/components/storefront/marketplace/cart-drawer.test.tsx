@@ -103,8 +103,6 @@ it("uses the mutation response without repeating coverage and cart reads", async
     document.querySelector<HTMLButtonElement>('[aria-label="Increase Test fruit"]')?.click(),
   );
   expect(fetcher.mock.calls.slice(2).map(([url, init]) => [url, init?.method ?? "GET"])).toEqual([
-    ["/api/commerce/cart", "GET"],
-    ["/api/serviceability", "POST"],
     ["/api/commerce/cart", "POST"],
   ]);
   expect(document.body.textContent).toContain("Total 200");

@@ -200,11 +200,21 @@ export function clearGuestCart(): void {
   if (typeof window !== "undefined") window.localStorage.removeItem(GUEST_CART_KEY);
   cachedCartView = null;
   cachedCartLoadedAt = 0;
+  pendingCartItemCommand = null;
 }
 
 export function quantityForSku(view: CartView, skuId: string): number {
   return view.items.find((item) => item.skuId === skuId)?.quantity ?? 0;
 }
+
+type PendingCartItemCommand = {
+  cartId: string;
+  skuId: string;
+  quantity: number;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+let pendingCartItemCommand: PendingCartItemCommand | null = null;
 
 async function postCartQuantity(
   skuId: string,
@@ -219,12 +229,27 @@ async function postCartQuantity(
       message: loadError || "Your saved cart was updated. Review its quantities before editing.",
     };
   }
-  if (loadError && guestCartView()) {
+  const guest = guestCartView();
+  if ((loadError || cachedCartView?.id === "guest-cart") && guest) {
     const view = rememberGuestItem(skuId, quantity, metadata);
     return { ok: true, view, count: cartCountFromView(view) };
   }
-  let serverView: CartView | null = null;
-  if (!serverView) {
+  if (
+    pendingCartItemCommand &&
+    (pendingCartItemCommand.skuId !== skuId || pendingCartItemCommand.quantity !== quantity)
+  )
+    return {
+      ok: false,
+      reason: "error",
+      message:
+        "A previous cart update is not confirmed yet. Retry that item before making another change.",
+    };
+  // A hydrated server Cart already has the exact identity and optimistic version
+  // required by Core. Core revalidates mutable price, stock, ownership and Cart
+  // version at the write boundary, so another Cart + serviceability read here is
+  // both redundant and a visible interaction waterfall.
+  let serverView = cachedCartView?.id === "guest-cart" ? null : cachedCartView;
+  if (!serverView && !pendingCartItemCommand) {
     try {
       const loaded = await loadCartForLocation();
       if (loaded.ok) serverView = loaded.value;
@@ -250,31 +275,52 @@ async function postCartQuantity(
       message: "Delivery location changed. Review your cart before editing.",
     };
   }
+  const command =
+    pendingCartItemCommand ??
+    ({
+      cartId: serverView!.id,
+      skuId,
+      quantity,
+      expectedVersion: serverView!.version,
+      idempotencyKey: crypto.randomUUID(),
+    } satisfies PendingCartItemCommand);
+  pendingCartItemCommand = command;
   let result: CartRouteResult;
   try {
     const response = await fetch("/api/commerce/cart", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        cartId: serverView.id,
-        skuId,
-        quantity,
-        expectedVersion: serverView.version,
-        idempotencyKey: crypto.randomUUID(),
-      }),
+      body: JSON.stringify(command),
     });
     result = (await response.json()) as CartRouteResult;
   } catch {
-    return { ok: false, reason: "error", message: "The cart could not be reached." };
+    return {
+      ok: false,
+      reason: "error",
+      message: "The cart update is not confirmed yet. Retry to reconcile the same request.",
+    };
   }
   if (result.ok && result.value) {
+    pendingCartItemCommand = null;
     rememberCart(result.value);
     return { ok: true, view: result.value, count: cartCountFromView(result.value) };
   }
   const code = result.error?.code ?? "ERROR";
+  if (code !== "CONFLICT") pendingCartItemCommand = null;
   if (code === "UNAUTHENTICATED") {
     const view = rememberGuestItem(skuId, quantity, metadata);
     return { ok: true, view, count: cartCountFromView(view), requiresSignIn: true };
+  }
+  if (code === "CART_VERSION_CONFLICT" || code === "NOT_FOUND") {
+    cachedCartView = null;
+    cachedCartLoadedAt = 0;
+    try {
+      const current = await loadCartForLocation();
+      if (current.ok) rememberCart(current.value);
+    } catch {
+      // The mutation was definitively rejected. The authoritative recovery read
+      // remains retryable, and the original failure is still returned below.
+    }
   }
   return {
     ok: false,
@@ -532,6 +578,7 @@ export function resetCartSession(): void {
   loadingCart = null;
   refreshingCart = null;
   pendingClearCommand = null;
+  pendingCartItemCommand = null;
   if (typeof window !== "undefined")
     window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
 }
@@ -554,6 +601,7 @@ export function refreshCartForLocation(): Promise<CartView | null> {
   loadError = "";
   cachedCartView = null;
   cachedCartLoadedAt = 0;
+  pendingCartItemCommand = null;
   window.dispatchEvent(new CustomEvent(CART_CHANGED_EVENT, { detail: { count: 0, view: null } }));
   const refresh = runCartOperation(loadCart).finally(() => {
     if (refreshingCart === refresh) refreshingCart = null;

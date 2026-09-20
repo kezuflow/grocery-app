@@ -144,13 +144,37 @@ describe("addToCart", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch.mock.calls[0]?.[0].type).toBe(CART_CHANGED_EVENT);
   });
-  it("keeps anonymous items for sign-in with a distinct transfer identity", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        response({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
-      ),
+  it("uses a hydrated signed-in Cart for one direct mutation request", async () => {
+    const updated = view({ version: 3, items: [{ ...view().items[0]!, quantity: 3 }] });
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "POST"
+        ? response({ ok: true, value: updated })
+        : response({ ok: true, value: view() }),
     );
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await fetchCart()).toEqual(view());
+    expect(await addToCart("sku-a", 3)).toEqual({
+      ok: true,
+      view: updated,
+      count: 3,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/commerce/cart");
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      cartId: "cart-1",
+      skuId: "sku-a",
+      quantity: 3,
+      expectedVersion: 2,
+    });
+  });
+  it("keeps anonymous items for sign-in with a distinct transfer identity", async () => {
+    const fetchMock = vi.fn(async () =>
+      response({ ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
     expect(
       await addToCart("sku-a", 1, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" }),
     ).toMatchObject({ ok: true, view: { id: "guest-cart" }, count: 1, requiresSignIn: true });
@@ -158,6 +182,59 @@ describe("addToCart", () => {
     expect(first.items[0].skuId).toBe("sku-a");
     await addToCart("sku-a", 2, { name: "Avocado", unitPriceMinor: 9450, currency: "PHP" });
     expect(JSON.parse(saved.get(guestKey)!).transferId).not.toBe(first.transferId);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("refreshes the authoritative Cart after a definite version conflict", async () => {
+    const current = view();
+    const refreshed = view({ version: 4, items: [{ ...view().items[0]!, quantity: 4 }] });
+    let reads = 0;
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST")
+        return response({
+          ok: false,
+          error: { code: "CART_VERSION_CONFLICT", message: "Cart changed. Try again." },
+        });
+      reads++;
+      return response({ ok: true, value: reads === 1 ? current : refreshed });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchCart();
+    expect(await addToCart("sku-a", 3)).toEqual({
+      ok: false,
+      reason: "error",
+      message: "Cart changed. Try again.",
+    });
+
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual([
+      "GET",
+      "POST",
+      "GET",
+    ]);
+    expect(cachedCart()).toEqual(refreshed);
+  });
+  it("replays an unknown mutation outcome with the same command identity", async () => {
+    const bodies: string[] = [];
+    let attempts = 0;
+    const updated = view({ version: 3, items: [{ ...view().items[0]!, quantity: 3 }] });
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== "POST") return response({ ok: true, value: view() });
+      bodies.push(String(init.body));
+      attempts++;
+      if (attempts === 1) throw new Error("response lost");
+      return response({ ok: true, value: updated });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await addToCart("sku-a", 3)).toMatchObject({ ok: false, reason: "error" });
+    expect(await addToCart("sku-a", 3)).toMatchObject({ ok: true, view: updated });
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual([
+      "GET",
+      "POST",
+      "POST",
+    ]);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
   });
   it("reports fetch failure without claiming a mutation", async () => {
     vi.stubGlobal(
