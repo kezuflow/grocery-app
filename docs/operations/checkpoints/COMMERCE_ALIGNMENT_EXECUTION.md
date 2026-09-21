@@ -1,5 +1,21 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QUOTE-REFRESH-COPY-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout courier quotation presentation. The owner requested that the selected quote
+countdown label change from “Fee refresh in” to “Refreshes in.” Acceptance: the selected delivery row
+reads “Refreshes in MM:SS”; its countdown, reset and refresh behavior remain unchanged.
+
+Work started from clean synchronized `main`/`origin/main` at `84d6ea80`. The visible label and its
+regression assertions now use the requested copy. The combined checkout source/runtime suites pass
+23 tests across two files, including the countdown and refresh-boundary regression. Web typecheck,
+focused oxlint/oxfmt, diff whitespace and the vinext production build pass. No behavior, Core,
+contract, schema or provider integration changed. No deployment, remote-data operation, provider
+transaction or outbound message occurred. `CHECKOUT-QUOTE-REFRESH-COPY-1` is complete at the
+source/local-verification counting level. Next action, if separately authorized, is deploy and
+visually confirm the revised label in an authenticated browser checkout.
+
 ## Latest owner request — CHECKOUT-QUOTE-REFRESH-COUNTDOWN-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

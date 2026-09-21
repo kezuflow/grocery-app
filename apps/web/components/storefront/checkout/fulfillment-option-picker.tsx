@@ -113,7 +113,7 @@ export function FulfillmentOptionPicker({
                     role="timer"
                     className="mt-0.5 text-[0.6875rem] font-medium text-[var(--fm-text-muted)]"
                   >
-                    Fee refresh in {refreshCountdown(quoteRefreshRemainingSeconds)}
+                    Refreshes in {refreshCountdown(quoteRefreshRemainingSeconds)}
                   </small>
                 ) : null}
               </span>
