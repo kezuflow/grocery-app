@@ -10,16 +10,21 @@ principal, explicit reviewed role and Global scope, invitation acceptance throug
 audit/idempotency evidence. No credential or complete contact address is recorded here.
 
 Read-only production D1 inspection found three auth users, one active Staff identity with Global scope,
-one immutable completed initial-administrator receipt and no pending staff invitations. The requested
-address's domain has no MX or address records, and no existing auth user uses that domain. Production
+one immutable completed initial-administrator receipt and no pending staff invitations. Production
 requires email verification before staff invitation acceptance; the one-time initial-administrator
 path is correctly unavailable after the existing receipt/Global staff access. Creating an unverified
 account, seeding a password or directly inserting Staff grants would bypass the documented Core
-authorization boundary, so no account, invitation, credential, role, scope, session or database row
-was created or changed. Next action: the owner supplies a deliverable administrator inbox (or makes
-the requested domain able to receive verification mail) and signs in as the existing Global
-administrator; then issue and accept a reviewed Global staff invitation through the normal Web/Core
-workflow.
+authorization boundary.
+
+The owner selected a private non-role-revealing address on the production domain forwarded to an
+existing verified destination. Cloudflare Email Routing is now enabled and ready for the production
+domain; its three managed MX records resolve, one generated exact-match forwarding rule is enabled,
+and the catch-all remains disabled. A harmless delivery test was accepted into Cloudflare's sending
+queue for the private address, but destination-inbox receipt has not yet been observed. No address or
+credential is stored in tracked source or this checkpoint, and no auth account, Staff invitation,
+role, scope, session or D1 row was created or changed. Next action: the owner confirms receipt of the
+forwarding test and signs in as the existing Global administrator; then issue the reviewed Global
+staff invitation and complete normal registration, email verification and invitation acceptance.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
