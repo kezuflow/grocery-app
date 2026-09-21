@@ -1,5 +1,31 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QUOTE-STATUS-STABILITY-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout quotation presentation. The owner reported that the shared “Checking Lalamove
+route availability and delivery fee…” status still changes checkout height after the dedicated
+delivery loading row was removed. The owner also requested removal of the two stacked rules above
+“Delivery fee confirmed with Lalamove.” Acceptance: quote start adds no visible shared loading text;
+the selected delivery row retains inline loading; remove the payment section's bottom rule and the
+shared status's top rule; retain confirmed/error statuses and quote behavior.
+
+Work started from clean synchronized `main`/`origin/main` at `b37b291a`. Starting or retrying a quote
+now clears shared status instead of rendering the duplicate provider-specific loading sentence. The
+selected delivery row and order-summary action retain their compact “Checking fee…” states. The
+payment section's bottom border and the shared status's top border/padding were removed; the payment
+method list keeps its own final rule, leaving one clean list boundary before confirmed status. Quote
+success/error handling and all transaction behavior are unchanged.
+
+Verification: the checkout source contract asserts both removed loading messages stay absent, inline
+delivery loading remains connected, the final payment section is borderless and shared status has no
+top rule. The combined checkout source/runtime suites pass 22 tests across two files. Web typecheck,
+focused oxlint/oxfmt, diff whitespace and the vinext production build pass. No Core, contract, schema
+or provider behavior changed. No deployment, remote-data operation, provider transaction or outbound
+message occurred. `CHECKOUT-QUOTE-STATUS-STABILITY-1` is complete at the
+source/local-verification counting level. Next action, if separately authorized, is deploy and
+visually confirm quotation loading and completion no longer move or double-rule the layout.
+
 ## Latest owner request — CHECKOUT-QUOTE-LOADING-LAYOUT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

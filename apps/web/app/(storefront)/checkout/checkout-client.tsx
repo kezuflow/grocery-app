@@ -611,7 +611,7 @@ export function CheckoutClient({
     unresolvedQuoteRequest.current = request;
     setQuoteLoadState("loading");
     setQuoteError("");
-    setStatus(`Checking ${request.providerName} route availability and delivery fee…`);
+    setStatus("");
     try {
       const quoteResponse = await fetch("/api/checkout/quote", {
         method: "POST",
@@ -1176,7 +1176,7 @@ export function CheckoutClient({
                   ) : null}
                 </section>
 
-                <section className="min-w-0 border-b border-[var(--fm-border)] py-7">
+                <section className="min-w-0 py-7">
                   <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
                     <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                       <ShieldCheck className="size-5" aria-hidden="true" />
@@ -1205,10 +1205,7 @@ export function CheckoutClient({
               </div>
             )}
             {status ? (
-              <p
-                role="status"
-                className="mt-5 flex items-start gap-2 border-t border-[var(--fm-border)] pt-4 text-sm"
-              >
+              <p role="status" className="mt-5 flex items-start gap-2 text-sm">
                 <ShieldCheck
                   className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]"
                   aria-hidden="true"

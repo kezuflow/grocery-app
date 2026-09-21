@@ -18,6 +18,7 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).not.toContain(
       "Checking {deliveryPartnerName(selectedFulfillmentOption)} route",
     );
+    expect(checkout).not.toContain("route availability and delivery fee");
     expect(checkout).toContain("loadingOptionId={");
     expect(checkout).not.toContain("type CheckoutStep");
     expect(checkout).not.toContain('aria-label="Checkout progress"');
@@ -55,6 +56,8 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("bg-[var(--fm-background)]");
     expect(checkout).toContain('variant="row"');
     expect(checkout).toContain('surface="flat"');
+    expect(checkout).toContain('<section className="min-w-0 py-7">');
+    expect(checkout).toContain('className="mt-5 flex items-start gap-2 text-sm"');
     expect(checkout).toContain('className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0"');
     expect(checkout).not.toContain("Other saved addresses");
     expect(checkout).toContain("Scheduled delivery cutoff: Friday, 11:59 PM.");
