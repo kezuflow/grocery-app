@@ -57,7 +57,7 @@ and actual-provider verification under separate authorization. One next action: 
 owner separately authorizes it, then execute non-destructive retained/provider acceptance without
 manufacturing outcomes.
 
-## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-2 (2026-09-21)
+## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-3 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
 activation evidence**, Global Product administration. The owner approved controls inside the Global
@@ -65,10 +65,12 @@ Product preview to edit the Product name, set Product status, set each selling-o
 assign multiple categories without leaving the Product list. The owner clarified the reference
 presentation: the name is editable in place, Product and selling-option statuses are dropdowns with a
 visible up/down affordance, and categories use one field-like multi-select dropdown rather than pills.
-Acceptance: authorized Global operators see and can use those controls; unsaved name/category drafts
-cannot overwrite each other; location previews remain unchanged; writes keep their existing Core
-authorization, optimistic versioning, audit and idempotency behavior; uncertain browser writes preserve
-the original intent for retry.
+The owner then removed the separate category Save/Cancel step: every category checkbox change must
+immediately submit the complete ordered membership set. Acceptance: authorized Global operators see and
+can use those controls; another selection cannot overlap a pending category command; known rejection
+restores the server value; uncertain responses retain the submitted selection for exact retry; location
+previews remain unchanged; writes keep their existing Core authorization, optimistic versioning, audit
+and idempotency behavior.
 
 Observed baseline for this refinement was `main` at `8ceb7dda00fbd2747c63f0152cfe14fdc3e2fb06`,
 with unrelated Payments implementation and deleted legacy `.claude/skills` files already present and
@@ -78,15 +80,18 @@ contract. Product creation and full editing keep membership invariants; Global d
 categories; category counts/details and storefront category rails/search use every membership while
 ordinary Product projections retain the primary category. The Global preview now renders an editable
 Product-name field, Product and selling-option Active/Inactive selectors with explicit up/down
-affordances, and one Shopify-style multi-category dropdown with explicit save/cancel and retained-intent
-retry. It removes the category pills. Name and category drafts lock other immediate commands until saved
-or cancelled so a version-changing refresh cannot silently discard another draft. Core integration
-proves ordered replacement, exact replay, primary compatibility, full-edit retention and
-secondary-category storefront discovery.
+affordances, and one Shopify-style multi-category dropdown. It removes the category pills and submits
+each checkbox change immediately through the existing retained-intent command. Pending commands disable
+further category changes, known rejection restores the current server memberships, and uncertain
+responses preserve the selected memberships for retry. The unsaved Product-name draft still locks other
+immediate commands so a version-changing refresh cannot silently discard it. Core integration proves
+ordered replacement, exact replay, primary compatibility, full-edit retention and secondary-category
+storefront discovery.
 
-Verification for this refinement on the working-tree scope: the focused preview render test passed
-**1/1**, full Web passed **602/602**, Web typecheck and build passed, focused `oxlint`, formatting,
-naming, terminology and `git diff --check` passed. Managed browser acceptance passed **2/2** at 1440 px
+Verification for the immediate-save refinement on the working-tree scope: the focused preview render
+test passed **1/1**, full Web passed **602/602**, Web typecheck passed, focused `oxlint`, formatting,
+naming, terminology and `git diff --check` passed. The preceding control refinement's managed browser
+acceptance passed **2/2** at 1440 px
 and 390 px for the editable name and dropdown presentation. A subsequent strengthened browser revision
 that also saves and restores the name did not reach the page because a fresh shared Admin fixture failed
 provisioning on an unrelated foreign-key constraint; a later rerun was stopped rather than extending the

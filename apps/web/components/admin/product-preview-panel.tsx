@@ -72,8 +72,6 @@ export function GlobalProductPreviewPanel({
     .sort()
     .at(-1);
   const canManage = product.allowedActions.includes("UPDATE");
-  const categoryChanged =
-    categoryIds.join("\u0000") !== product.categories.map((item) => item.categoryId).join("\u0000");
   const nameChanged = name.trim() !== product.name;
   const frozen =
     productCommand.pending ||
@@ -82,7 +80,7 @@ export function GlobalProductPreviewPanel({
     skuCommand.uncertain ||
     categoryCommand.pending ||
     categoryCommand.uncertain;
-  const hasDraft = nameChanged || categoryChanged;
+  const hasDraft = nameChanged;
   const commandLocked = frozen || hasDraft;
   const selectedCategoryNames = categoryIds.map((categoryId) => {
     const category =
@@ -96,7 +94,7 @@ export function GlobalProductPreviewPanel({
       : (selectedCategoryNames[0] ?? "Choose categories");
 
   async function saveName() {
-    if (!nameChanged || frozen || categoryChanged) return;
+    if (!nameChanged || frozen) return;
     const body = adminProductUpdateBodySchema.safeParse({
       categoryId: product.categoryId,
       slug: product.slug,
@@ -164,13 +162,16 @@ export function GlobalProductPreviewPanel({
     }
   }
 
-  async function saveCategories() {
-    if (!categoryChanged || frozen) return;
+  async function saveCategories(nextCategoryIds: string[]) {
+    if (frozen) return;
     const body = adminProductCategoriesBodySchema.safeParse({
-      categoryIds,
+      categoryIds: nextCategoryIds,
       expectedVersion: product.version,
     });
-    if (!body.success) return setNotice("Choose at least one category.");
+    if (!body.success) {
+      setCategoryIds(product.categories.map((item) => item.categoryId));
+      return setNotice("Choose at least one category.");
+    }
     try {
       const result = await categoryCommand.submit(
         `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/categories`,
@@ -178,7 +179,10 @@ export function GlobalProductPreviewPanel({
         "PATCH",
       );
       if (!result) return;
-      if (!result.ok) return setNotice(result.error.message);
+      if (!result.ok) {
+        setCategoryIds(product.categories.map((item) => item.categoryId));
+        return setNotice(result.error.message);
+      }
       setNotice(null);
       await onSaved?.();
     } catch {
@@ -256,7 +260,7 @@ export function GlobalProductPreviewPanel({
                   className="mt-1 font-semibold"
                   value={name}
                   maxLength={160}
-                  disabled={frozen || categoryChanged}
+                  disabled={frozen}
                   onChange={(event) => setName(event.target.value)}
                 />
                 {nameChanged ? (
@@ -474,16 +478,18 @@ export function GlobalProductPreviewPanel({
                       >
                         <Checkbox
                           checked={checked}
-                          disabled={checked && categoryIds.length === 1}
-                          onCheckedChange={(next) =>
-                            setCategoryIds((current) =>
+                          disabled={frozen || (checked && categoryIds.length === 1)}
+                          onCheckedChange={(next) => {
+                            const nextCategoryIds =
                               next === true
-                                ? current.includes(category.categoryId)
-                                  ? current
-                                  : [...current, category.categoryId]
-                                : current.filter((id) => id !== category.categoryId),
-                            )
-                          }
+                                ? categoryIds.includes(category.categoryId)
+                                  ? categoryIds
+                                  : [...categoryIds, category.categoryId]
+                                : categoryIds.filter((id) => id !== category.categoryId);
+                            if (nextCategoryIds === categoryIds) return;
+                            setCategoryIds(nextCategoryIds);
+                            void saveCategories(nextCategoryIds);
+                          }}
                         />
                         <span className="min-w-0 flex-1 truncate">{category.name}</span>
                         {checked && categoryIds[0] === category.categoryId ? (
@@ -512,27 +518,6 @@ export function GlobalProductPreviewPanel({
           ) : (
             <p className="mt-3 text-sm font-medium">{categorySummary}</p>
           )}
-          {canManage && categoryChanged ? (
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={frozen}
-                onClick={() => setCategoryIds(product.categories.map((item) => item.categoryId))}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={frozen}
-                onClick={() => void saveCategories()}
-              >
-                Save categories
-              </Button>
-            </div>
-          ) : null}
         </section>
 
         <section

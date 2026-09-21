@@ -76,6 +76,7 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain('aria-label="Product name"');
     expect(html).toContain('aria-label="Product categories"');
     expect(html).not.toContain("Add categories");
+    expect(html).not.toContain("Save categories");
     expect(html).not.toContain("rounded-full");
     expect(html).toContain("Primary category");
     expect(html).toContain('aria-label="Product status"');
