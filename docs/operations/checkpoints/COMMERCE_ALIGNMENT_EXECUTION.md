@@ -31,7 +31,8 @@ in-progress Payments test proxy attempting to serialize a `LoopbackServiceStub`.
 blocked only by three pre-existing `payments-workspace.tsx` errors. Browser acceptance did not run:
 an existing workerd occupied port 3100 with a stale failing fixture, and that process locked
 `apps/web/dist`, preventing an isolated managed build on another port. No deployment or remote data
-mutation was performed.
+mutation was performed. The intended slice was committed as `90543845` and pushed directly to
+`origin/main`; the pre-push remote was the observed baseline `d8410b56`.
 
 Completion level: implementation and local Core/Web acceptance complete; **1 of 1 requested Global
 Product preview slice complete**. Actual browser rendering remains unaccepted at the browser counting
