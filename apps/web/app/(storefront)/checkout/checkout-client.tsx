@@ -1157,15 +1157,7 @@ export function CheckoutClient({
                       </div>
                     </div>
                   )}
-                  {quoteLoadState === "loading" ? (
-                    <p
-                      role="status"
-                      className="mt-4 border-t border-[var(--fm-border)] pt-3 text-sm text-[var(--fm-text-muted)]"
-                    >
-                      Checking {deliveryPartnerName(selectedFulfillmentOption)} route and delivery
-                      fee…
-                    </p>
-                  ) : quoteError ? (
+                  {quoteError ? (
                     <div
                       role="alert"
                       className="mt-4 border-t border-red-200 pt-3 text-sm text-red-800"

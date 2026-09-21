@@ -1,5 +1,29 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QUOTE-LOADING-LAYOUT-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout quotation presentation. The owner reported that the visible “Checking Lalamove
+route and delivery fee…” row changes the delivery section height and pushes its divider while a quote
+loads. Acceptance: remove that visible duplicate loading row; keep the selected delivery option's
+existing inline fee-loading state; retain visible quotation errors/retry and quotation behavior.
+
+Work started from clean synchronized `main`/`origin/main` at `7e22056c`. The delivery section no
+longer renders the separate quote-loading paragraph, its top border or spacing, so starting a
+Lalamove quotation does not change that section's height or move the following divider. The selected
+delivery row still receives `loadingOptionId` and displays its existing inline “Checking fee…” value.
+Quotation errors, retry action, global checkout status and all quote lifecycle behavior are
+unchanged.
+
+Verification: the checkout source contract now asserts the removed route/loading row stays absent
+and the inline option loading input remains wired. The combined checkout source/runtime suites pass
+22 tests across two files. Web typecheck, focused oxlint/oxfmt, diff whitespace and the vinext
+production build pass. No Core, contract, schema or provider behavior changed. No deployment,
+remote-data operation, provider transaction or outbound message occurred.
+`CHECKOUT-QUOTE-LOADING-LAYOUT-1` is complete at the source/local-verification counting level. Next
+action, if separately authorized, is deploy and visually confirm the delivery/payment divider stays
+fixed during an authenticated quotation.
+
 ## Latest owner request — CHECKOUT-LOCATION-HYDRATION-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

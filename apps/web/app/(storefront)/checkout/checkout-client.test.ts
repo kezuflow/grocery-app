@@ -15,6 +15,10 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("Choose delivery");
     expect(checkout).not.toContain("Choose when it arrives");
     expect(checkout).toContain("Available Instant and Scheduled options");
+    expect(checkout).not.toContain(
+      "Checking {deliveryPartnerName(selectedFulfillmentOption)} route",
+    );
+    expect(checkout).toContain("loadingOptionId={");
     expect(checkout).not.toContain("type CheckoutStep");
     expect(checkout).not.toContain('aria-label="Checkout progress"');
     expect(checkout).not.toContain("<PromotionEntry");
