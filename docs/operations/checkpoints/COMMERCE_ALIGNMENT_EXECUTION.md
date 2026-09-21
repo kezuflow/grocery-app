@@ -1,5 +1,26 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-SECTION-TITLE-ALIGNMENT-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout presentation. The owner requested that the address, delivery and payment section
+titles align with the Review your order heading, and that “Deliver to” become “Choose an address.”
+Acceptance: all three section title blocks share the main content's left edge; the renamed heading is
+visible; Add address, saved addresses, delivery and payment behavior remain unchanged.
+
+Work started from clean synchronized `main`/`origin/main` at `272134cc`. The decorative leading icon
+columns were removed from the three section headers, allowing their title/copy blocks to use the same
+left edge as Review your order. The address title now reads “Choose an address.” Icons that convey
+state inside address cards, delivery rows and other actionable feedback remain unchanged.
+
+Verification: the checkout source contract asserts the new address title and absence of the three
+decorative header icon columns. The combined checkout source/runtime suites pass 22 tests across two
+files. Web typecheck, focused oxlint/oxfmt, diff whitespace and the vinext production build pass. No
+Core, contract, schema or provider behavior changed. No deployment, remote-data operation, provider
+transaction or outbound message occurred. `CHECKOUT-SECTION-TITLE-ALIGNMENT-1` is complete at the
+source/local-verification counting level. Next action, if separately authorized, is deploy and
+visually confirm all three section titles align with Review your order at supported breakpoints.
+
 ## Latest owner request — CHECKOUT-SHARED-STATUS-LINE-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

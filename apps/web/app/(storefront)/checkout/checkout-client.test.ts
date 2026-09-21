@@ -13,6 +13,8 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain('aria-label="Address setup workspace"');
     expect(checkout).toContain("Your cart and order total remain available beside this guide.");
     expect(checkout).toContain("Saved addresses");
+    expect(checkout).toContain("Choose an address");
+    expect(checkout).not.toContain(">Deliver to</h2>");
     expect(checkout).toContain("Choose delivery");
     expect(checkout).not.toContain("Choose when it arrives");
     expect(checkout).toContain("Available Instant and Scheduled options");
@@ -21,6 +23,9 @@ describe("checkout address guide layout contract", () => {
     );
     expect(checkout).not.toContain(
       'className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5"',
+    );
+    expect(checkout).not.toContain(
+      'className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]"',
     );
     expect(checkout).not.toContain(
       "Checking {deliveryPartnerName(selectedFulfillmentOption)} route",

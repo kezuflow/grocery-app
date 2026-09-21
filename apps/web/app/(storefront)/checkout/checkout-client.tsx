@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CheckCircle2, Clock3, MapPin, Plus, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, Clock3, MapPin, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -982,20 +982,11 @@ export function CheckoutClient({
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0">
                 <section className="min-w-0 border-b border-[var(--fm-border)] pb-7">
                   <div className="flex items-start justify-between gap-4 pb-5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
-                        {selectedAddress?.confirmedAt ? (
-                          <CheckCircle2 className="size-5" aria-hidden="true" />
-                        ) : (
-                          <MapPin className="size-5" aria-hidden="true" />
-                        )}
-                      </span>
-                      <div className="min-w-0">
-                        <h2 className="mt-1 text-xl font-bold">Deliver to</h2>
-                        <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                          Review your current destination or choose another saved address.
-                        </p>
-                      </div>
+                    <div className="min-w-0">
+                      <h2 className="mt-1 text-xl font-bold">Choose an address</h2>
+                      <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+                        Review your current destination or choose another saved address.
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -1088,20 +1079,15 @@ export function CheckoutClient({
                 </section>
 
                 <section className="min-w-0 border-b border-[var(--fm-border)] py-7">
-                  <div className="flex items-start gap-3 pb-5">
-                    <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
-                      <Truck className="size-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                        Delivery
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold">Choose delivery</h2>
-                      <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                        Available Instant and Scheduled options confirm the route, delivery time,
-                        and current fee for this address.
-                      </p>
-                    </div>
+                  <div className="pb-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                      Delivery
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold">Choose delivery</h2>
+                    <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+                      Available Instant and Scheduled options confirm the route, delivery time, and
+                      current fee for this address.
+                    </p>
                   </div>
                   {fulfillmentOptions.length ? (
                     <FulfillmentOptionPicker
@@ -1173,20 +1159,15 @@ export function CheckoutClient({
                 </section>
 
                 <section className="min-w-0 py-7">
-                  <div className="flex items-start gap-3 pb-5">
-                    <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
-                      <ShieldCheck className="size-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
-                        Payment
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold">Choose payment method</h2>
-                      <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
-                        Select how you want to pay before continuing to PayMongo. Methods awaiting
-                        activation remain visible but cannot be selected.
-                      </p>
-                    </div>
+                  <div className="pb-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
+                      Payment
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold">Choose payment method</h2>
+                    <p className="mt-1 text-sm leading-6 text-[var(--fm-text-muted)]">
+                      Select how you want to pay before continuing to PayMongo. Methods awaiting
+                      activation remain visible but cannot be selected.
+                    </p>
                   </div>
                   <PaymentMethodPicker
                     selected={selectedPaymentMethod}
