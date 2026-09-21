@@ -22,6 +22,7 @@ import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/store
 import {
   readDeliveryLocationSelection,
   rememberDeliveryLocationSelection,
+  type DeliveryLocationSelection,
 } from "../../../lib/storefront/browsing-location";
 import { readJson } from "../../../lib/http/read-deadline";
 import {
@@ -131,7 +132,9 @@ export function CheckoutClient({
   browserApiKey?: string;
   mapId?: string;
 }) {
-  const carriedDestination = useRef(readDeliveryLocationSelection());
+  const carriedDestination = useRef<DeliveryLocationSelection | null>(null);
+  const [carriedDestinationView, setCarriedDestinationView] =
+    useState<DeliveryLocationSelection | null>(null);
   const queryEpoch = useQueryEpoch();
   const cartQuery = useCartQuery({ fresh: true });
   const cart = cartQuery.cart;
@@ -154,9 +157,7 @@ export function CheckoutClient({
   );
   const [editingAddress, setEditingAddress] = useState<CustomerAddressView>();
   const [showAddressEditor, setShowAddressEditor] = useState(false);
-  const initialAddressId =
-    carriedDestination.current?.savedAddressId ||
-    (carriedDestination.current ? "" : checkoutDraft.draft.addressId);
+  const initialAddressId = checkoutDraft.draft.addressId;
   const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
   const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
@@ -196,6 +197,11 @@ export function CheckoutClient({
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
   const addressSelectionGeneration = useRef(0);
+  useEffect(() => {
+    const destination = readDeliveryLocationSelection();
+    carriedDestination.current = destination;
+    setCarriedDestinationView(destination);
+  }, []);
   useEffect(() => {
     const continuation = readPaymentContinuation();
     paymentContinuationRef.current = continuation;
@@ -506,6 +512,7 @@ export function CheckoutClient({
       savedAddressId: selected.id,
     };
     carriedDestination.current = destination;
+    setCarriedDestinationView(destination);
     rememberDeliveryLocationSelection(destination);
     const refreshed = await refreshCartForLocation();
     if (generation !== addressSelectionGeneration.current) return;
@@ -852,7 +859,7 @@ export function CheckoutClient({
   const selectedEligibleFulfillmentOption = selectedFulfillmentOption?.eligible
     ? selectedFulfillmentOption
     : undefined;
-  const browsingDestination = selectedAddress ? null : carriedDestination.current;
+  const browsingDestination = selectedAddress ? null : carriedDestinationView;
   const automaticQuoteFingerprint =
     selectedAddress?.confirmedAt && selectedEligibleFulfillmentOption && cart?.items.length
       ? quoteInputFingerprint({

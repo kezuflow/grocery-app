@@ -1,5 +1,6 @@
 import { act, createElement, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
 import { JSDOM } from "jsdom";
@@ -404,6 +405,42 @@ describe("CheckoutClient delivery inputs", () => {
         multiStep: true,
       }),
     );
+  });
+
+  it("hydrates deterministically before reading the carried browser destination", async () => {
+    const client = createQueryClient();
+    const storedLocalStorage = globalThis.localStorage;
+    Reflect.deleteProperty(globalThis, "localStorage");
+    let serverMarkup: string;
+    try {
+      serverMarkup = renderToString(checkout(client));
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: storedLocalStorage,
+      });
+    }
+    window.localStorage.setItem(
+      "freshmarkets.delivery-location.v3",
+      JSON.stringify({
+        displayAddress: "Hydrated destination, Cebu City",
+        coordinate: { latitude: 10.329, longitude: 123.906 },
+        savedAddressId: null,
+      }),
+    );
+    vi.stubGlobal("fetch", successfulFetch());
+    const onRecoverableError = vi.fn();
+
+    act(() => root.unmount());
+    container.innerHTML = serverMarkup;
+    await act(async () => {
+      root = hydrateRoot(container, checkout(client), { onRecoverableError });
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Hydrated destination, Cebu City");
   });
 
   it("prefers a current explicit Deliver to identity over an older checkout draft", async () => {

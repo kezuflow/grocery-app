@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-LOCATION-HYDRATION-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout runtime correctness. The owner reported a React hydration mismatch on
+`/checkout`: the server rendered the empty-address prompt while the browser's first render produced
+the carried Current destination card. Acceptance: server and first client render are deterministic;
+the browser-only carried destination loads immediately after hydration; address preference and
+checkout behavior remain intact; a regression test exercises real server markup plus hydration.
+
+Diagnosis at clean synchronized `main`/`origin/main` revision `c06db072`: `CheckoutClient` called
+`readDeliveryLocationSelection()` in a render-time `useRef` initializer. The helper correctly returns
+null without browser storage during SSR but reads `localStorage` in the browser, so identical source
+props selected different render branches before hydration completed.
+
+The initial carried-destination ref/state is now deterministically null for SSR and the first browser
+render. A mount effect reads browser storage, updates both the internal workflow ref and render state,
+then the existing checkout bootstrap resolves the preferred saved/unsaved address. Applying a saved
+address also updates both representations. The initial address draft no longer depends on a
+render-time browser read. No suppression, client-only checkout shell or address-policy change was
+introduced.
+
+Verification: the new real render/hydrate regression seeds local storage only after server markup is
+created, hydrates the same checkout tree with `onRecoverableError`, observes zero hydration errors
+and then sees the carried destination. The focused runtime suite passes 19 tests; the combined
+checkout runtime/source-contract suites pass 22 tests across two files. Web typecheck, focused
+oxlint/oxfmt, diff whitespace and the vinext production build pass. No live address/cart/provider
+action, deployment, remote-data operation or outbound message occurred.
+`CHECKOUT-LOCATION-HYDRATION-1` is complete at the source/local-verification counting level. Next
+action, if separately authorized, is deploy and refresh checkout with a retained Deliver to value to
+confirm the deployed browser console remains clean.
+
 ## Owner correction — CHECKOUT-PAYMENT-METHOD-CATEGORIES-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
