@@ -1,5 +1,28 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-LOCATION-FULFILLMENT-NAV-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, location-scoped Admin operations navigation. The owner clarified that the
+Fulfillment workspace already exists and is reachable, but it is not presented inside a selected
+fulfillment-location scope such as Central Cebu. Acceptance: authorized staff selecting an exact
+location sees Fulfillment in Operations, Global presentation continues to hide the location-bound
+queue, and navigation visibility neither creates permission nor changes Order assignment.
+
+Implemented from clean `main` at `10dec72eb58809162efcb350226961e5335cd546`. Core now emits the
+existing `/admin/fulfillment` workspace when the principal holds `fulfillment.read` or
+`fulfillment.manage`, marks it Location-only, and leaves the existing queue/action authorization
+unchanged. Web recognizes the closed navigation code, orders Fulfillment between Inventory and
+Delivery, and renders it only after a location such as Central Cebu is selected. No Order,
+fulfillment assignment, role, scope, schema, provider, remote data or deployment behavior changed.
+
+Verification on the intended working-tree scope: Web navigation tests passed **14/14**; Core
+Worker/D1 Admin-context tests passed **15/15**; Core and Web typechecks, focused formatting/lint, and
+`git diff --check` passed. Browser acceptance was not run because the owner explicitly asked not to
+use browser automation with the currently signed-in account. Completion level: **1 of 1
+location-scoped Fulfillment navigation slice implemented and locally verified**. One next action:
+commit and push the verified source and checkpoint to `main`; deployment remains unauthorized.
+
 ## Latest owner request — CORE-PRODUCTION-AVAILABILITY-CHECK-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

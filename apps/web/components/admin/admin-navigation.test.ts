@@ -349,6 +349,15 @@ describe("admin navigation mapping", () => {
         parentCode: null,
         kind: "workspace" as const,
       },
+      {
+        code: "fulfillment",
+        label: "Fulfillment",
+        href: "/admin/fulfillment",
+        section: "operations" as const,
+        scopeKinds: ["LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
       audit,
     ];
 
@@ -358,7 +367,7 @@ describe("admin navigation mapping", () => {
         marketId: "market-metro-cebu",
         locationId: "location-cebu-central",
       }).map((item) => item.code),
-    ).toEqual(["overview", "orders", "location-products", "inventory", "audit"]);
+    ).toEqual(["overview", "orders", "location-products", "inventory", "fulfillment", "audit"]);
   });
 
   it("groups Memberships inside Customers instead of creating a top-level workspace", () => {
@@ -390,7 +399,7 @@ describe("admin navigation mapping", () => {
     expect(groups[0]?.items[0]?.children.map((child) => child.code)).toEqual(["memberships"]);
   });
 
-  it("hides location-only Inventory when Global is selected", () => {
+  it("hides location-only Inventory and Fulfillment when Global is selected", () => {
     expect(
       adminNavigationItemsForScope(
         [
@@ -398,6 +407,15 @@ describe("admin navigation mapping", () => {
             code: "inventory",
             label: "Inventory",
             href: "/admin/inventory",
+            section: "operations",
+            scopeKinds: ["LOCATION"],
+            parentCode: null,
+            kind: "workspace",
+          },
+          {
+            code: "fulfillment",
+            label: "Fulfillment",
+            href: "/admin/fulfillment",
             section: "operations",
             scopeKinds: ["LOCATION"],
             parentCode: null,

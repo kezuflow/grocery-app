@@ -174,6 +174,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilityMode: "ALL",
   },
   {
+    code: "fulfillment",
+    label: "Fulfillment",
+    href: "/admin/fulfillment",
+    section: "operations",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["fulfillment.read", "fulfillment.manage"],
+  },
+  {
     code: "delivery",
     label: "Delivery",
     href: "/admin/delivery",
@@ -331,6 +340,7 @@ const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "location-products",
   "inventory",
+  "fulfillment",
   "delivery",
 ]);
 
