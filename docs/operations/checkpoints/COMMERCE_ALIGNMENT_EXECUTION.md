@@ -37,8 +37,12 @@ deployment. Focused verification before execution passed the one-case Worker/D1 
 Core typecheck, production Wrangler dry-run, formatting and the migration aggregate. The initial
 migration-apply request received Cloudflare API code 7403 without changing schema; identity and pending
 migration checks passed, and the immediate retry applied 0100 successfully. `PRODUCTION-ADMIN-ACCOUNT-1`
-is complete at the production identity/access and durable-evidence counting level. Next action: the
-owner should refresh or sign in again and confirm `/admin` access through the normal browser session.
+is complete at the production identity/access and durable-evidence counting level. Final `pnpm check`
+passed at cleanup revision `4932eccc`: 1,689 Core tests/207 files, 604 Web tests/142 files, 69 contract
+tests/20 files, package/harness suites, migration/schema checks, architecture/readiness, formatting,
+lint, typechecks and both builds; only the two existing Web lint warnings and expected Wrangler
+environment warnings remained. Next action: the owner should refresh or sign in again and confirm
+`/admin` access through the normal browser session.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
