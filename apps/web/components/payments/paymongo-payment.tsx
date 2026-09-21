@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { PaymentMethodToken } from "@freshmarkets/contracts";
+
+const QR_PH_EXPIRY_SECONDS = 30 * 60;
 
 type StoredAction = {
   providerCode?: string;
@@ -11,6 +13,8 @@ type StoredAction = {
   actionType: "SDK";
   clientToken: string;
   expiresAt: string;
+  qrCode?: string;
+  qrCodeExpiresAt?: string;
 };
 type PayMongoResource = {
   data?: {
@@ -25,6 +29,10 @@ type PayMongoResource = {
   errors?: Array<{ detail?: string }>;
 };
 const basic = (key: string) => `Basic ${btoa(`${key}:`)}`;
+const countdown = (seconds: number) =>
+  `${Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
 export function PayMongoPayment({
   storageKey,
@@ -46,6 +54,10 @@ export function PayMongoPayment({
   const [message, setMessage] = useState("Loading secure payment setup…");
   const [busy, setBusy] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [qrCodeExpiresAt, setQrCodeExpiresAt] = useState<number | null>(null);
+  const [qrRemainingSeconds, setQrRemainingSeconds] = useState<number | null>(null);
+  const qrGenerationInFlight = useRef(false);
+  const qrAutoGenerationStarted = useRef(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(storageKey);
@@ -65,6 +77,18 @@ export function PayMongoPayment({
         Date.parse(parsed.expiresAt) <= Date.now()
       )
         throw new Error("expired");
+      const savedQrExpiry = parsed.qrCodeExpiresAt
+        ? Date.parse(parsed.qrCodeExpiresAt)
+        : Number.NaN;
+      if (parsed.qrCode && Number.isFinite(savedQrExpiry) && savedQrExpiry > Date.now()) {
+        setQrCode(parsed.qrCode);
+        setQrCodeExpiresAt(savedQrExpiry);
+        qrAutoGenerationStarted.current = true;
+      } else {
+        delete parsed.qrCode;
+        delete parsed.qrCodeExpiresAt;
+        sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+      }
       setAction({ ...parsed, providerReference });
     } catch {
       sessionStorage.removeItem(storageKey);
@@ -87,62 +111,138 @@ export function PayMongoPayment({
       .catch((error) => setMessage((error as Error).message));
   }, [storageKey]);
 
-  async function createMethod(attributes: Record<string, unknown>) {
-    if (!action || !publicKey) throw new Error("Payment setup is not ready.");
-    const methodResponse = await fetch("https://api.paymongo.com/v1/payment_methods", {
-      method: "POST",
-      headers: { authorization: basic(publicKey), "content-type": "application/json" },
-      body: JSON.stringify({ data: { attributes } }),
-    });
-    const method = (await methodResponse.json()) as PayMongoResource;
-    if (!methodResponse.ok || !method.data?.id)
-      throw new Error(method.errors?.[0]?.detail ?? "PayMongo could not prepare this payment.");
-    return method.data.id;
-  }
-
-  async function attachMethod(paymentMethodId: string, includeReturnUrl: boolean) {
-    if (!action || !publicKey) throw new Error("Payment setup is not ready.");
-    const attachResponse = await fetch(
-      `https://api.paymongo.com/v1/payment_intents/${encodeURIComponent(action.providerReference)}/attach`,
-      {
+  const createMethod = useCallback(
+    async (attributes: Record<string, unknown>) => {
+      if (!action || !publicKey) throw new Error("Payment setup is not ready.");
+      const methodResponse = await fetch("https://api.paymongo.com/v1/payment_methods", {
         method: "POST",
         headers: { authorization: basic(publicKey), "content-type": "application/json" },
-        body: JSON.stringify({
-          data: {
-            attributes: {
-              payment_method: paymentMethodId,
-              client_key: action.clientToken,
-              ...(includeReturnUrl ? { return_url: `${window.location.origin}${returnPath}` } : {}),
-            },
-          },
-        }),
-      },
-    );
-    const intent = (await attachResponse.json()) as PayMongoResource;
-    if (!attachResponse.ok)
-      throw new Error(intent.errors?.[0]?.detail ?? "PayMongo could not start this payment.");
-    return intent;
-  }
+        body: JSON.stringify({ data: { attributes } }),
+      });
+      const method = (await methodResponse.json()) as PayMongoResource;
+      if (!methodResponse.ok || !method.data?.id)
+        throw new Error(method.errors?.[0]?.detail ?? "PayMongo could not prepare this payment.");
+      return method.data.id;
+    },
+    [action, publicKey],
+  );
 
-  async function startQrPh() {
-    if (!action || !publicKey || busy || qrCode) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const paymentMethodId = await createMethod({ type: "qrph" });
-      const intent = await attachMethod(paymentMethodId, false);
-      const imageUrl = intent.data?.attributes?.next_action?.code?.image_url;
-      if (!imageUrl) throw new Error("PayMongo did not return a QR Ph code.");
-      setQrCode(imageUrl);
-      setMessage(
-        "Scan the code in your bank or e-wallet app. We will confirm the order after PayMongo reports payment.",
+  const attachMethod = useCallback(
+    async (paymentMethodId: string, includeReturnUrl: boolean) => {
+      if (!action || !publicKey) throw new Error("Payment setup is not ready.");
+      const attachResponse = await fetch(
+        `https://api.paymongo.com/v1/payment_intents/${encodeURIComponent(action.providerReference)}/attach`,
+        {
+          method: "POST",
+          headers: { authorization: basic(publicKey), "content-type": "application/json" },
+          body: JSON.stringify({
+            data: {
+              attributes: {
+                payment_method: paymentMethodId,
+                client_key: action.clientToken,
+                ...(includeReturnUrl
+                  ? { return_url: `${window.location.origin}${returnPath}` }
+                  : {}),
+              },
+            },
+          }),
+        },
       );
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
+      const intent = (await attachResponse.json()) as PayMongoResource;
+      if (!attachResponse.ok)
+        throw new Error(intent.errors?.[0]?.detail ?? "PayMongo could not start this payment.");
+      return intent;
+    },
+    [action, publicKey, returnPath],
+  );
+
+  const startQrPh = useCallback(
+    async (replaceExpiredCode = false) => {
+      if (!action || !publicKey || qrGenerationInFlight.current || (!replaceExpiredCode && qrCode))
+        return;
+      const actionExpiresAt = Date.parse(action.expiresAt);
+      const startedAt = Date.now();
+      const availableSeconds = Math.floor((actionExpiresAt - startedAt) / 1000);
+      if (availableSeconds < 60) {
+        sessionStorage.removeItem(storageKey);
+        setAction(null);
+        setQrCode(null);
+        setQrCodeExpiresAt(null);
+        setMessage("This payment setup has expired. Return to checkout and start again.");
+        return;
+      }
+      const expirySeconds = Math.min(QR_PH_EXPIRY_SECONDS, availableSeconds);
+      qrGenerationInFlight.current = true;
+      setBusy(true);
+      setMessage("");
+      if (replaceExpiredCode) {
+        setQrCode(null);
+        setQrCodeExpiresAt(null);
+        setQrRemainingSeconds(null);
+      }
+      try {
+        const paymentMethodId = await createMethod({
+          type: "qrph",
+          expiry_seconds: expirySeconds,
+        });
+        const intent = await attachMethod(paymentMethodId, false);
+        const imageUrl = intent.data?.attributes?.next_action?.code?.image_url;
+        if (!imageUrl) throw new Error("PayMongo did not return a QR Ph code.");
+        const expiresAt = Math.min(startedAt + expirySeconds * 1000, actionExpiresAt);
+        const persistedAction = {
+          ...action,
+          qrCode: imageUrl,
+          qrCodeExpiresAt: new Date(expiresAt).toISOString(),
+        };
+        sessionStorage.setItem(storageKey, JSON.stringify(persistedAction));
+        setAction(persistedAction);
+        setQrCode(imageUrl);
+        setQrCodeExpiresAt(expiresAt);
+        setMessage(
+          "Scan the code in your bank or e-wallet app. We will confirm the order after PayMongo reports payment.",
+        );
+      } catch (error) {
+        setMessage((error as Error).message);
+      } finally {
+        qrGenerationInFlight.current = false;
+        setBusy(false);
+      }
+    },
+    [action, attachMethod, createMethod, publicKey, qrCode, storageKey],
+  );
+
+  const method = action?.paymentMethod?.value ?? "card";
+
+  useEffect(() => {
+    if (
+      action &&
+      publicKey &&
+      method === "qrph" &&
+      !qrCode &&
+      !qrCodeExpiresAt &&
+      !qrAutoGenerationStarted.current
+    ) {
+      qrAutoGenerationStarted.current = true;
+      void startQrPh();
     }
-  }
+  }, [action, method, publicKey, qrCode, qrCodeExpiresAt, startQrPh]);
+
+  useEffect(() => {
+    if (!qrCodeExpiresAt) {
+      setQrRemainingSeconds(null);
+      return;
+    }
+    const update = () =>
+      setQrRemainingSeconds(Math.max(0, Math.ceil((qrCodeExpiresAt - Date.now()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [qrCodeExpiresAt]);
+
+  useEffect(() => {
+    if (method !== "qrph" || qrRemainingSeconds !== 0 || !qrCode) return;
+    void startQrPh(true);
+  }, [method, qrCode, qrRemainingSeconds, startQrPh]);
 
   async function submitCard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -176,8 +276,6 @@ export function PayMongoPayment({
     }
   }
 
-  const method = action?.paymentMethod?.value ?? "card";
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 px-4 py-10 sm:px-6">
       <div>
@@ -204,6 +302,15 @@ export function PayMongoPayment({
               {/* PayMongo returns a bounded data URL specifically for this one payment. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrCode} alt="QR Ph payment code" width={280} height={280} />
+              {qrRemainingSeconds !== null ? (
+                <p
+                  role="timer"
+                  aria-label={`QR Ph code refreshes in ${countdown(qrRemainingSeconds)}`}
+                  className="text-sm font-medium tabular-nums text-slate-600"
+                >
+                  Refreshes in {countdown(qrRemainingSeconds)}
+                </p>
+              ) : null}
               <Link
                 href={donePath}
                 className="inline-flex min-h-11 items-center justify-center rounded bg-emerald-700 px-4 font-medium text-white"
@@ -218,7 +325,7 @@ export function PayMongoPayment({
               disabled={busy}
               className="min-h-11 rounded bg-emerald-700 px-4 font-medium text-white disabled:opacity-50"
             >
-              {busy ? "Generating secure QR…" : "Generate QR Ph code"}
+              {busy ? "Generating secure QR…" : "Try generating QR Ph again"}
             </button>
           )}
         </section>

@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QRPH-AUTO-CODE-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment continuation. The owner requested that `/checkout/payment` automatically
+generate the QR Ph code and show a refresh timer based on PayMongo's documented behavior. Acceptance:
+entry with a valid QR Ph action creates and attaches the QR Ph method without another click; the
+provider-returned code is displayed; its countdown follows an explicit supported provider expiry; an
+unexpired code survives reload; expiry replaces the code under the same Payment Intent; browser state
+never asserts payment success.
+
+Work started from clean synchronized `main`/`origin/main` at `1cbf8a3e`. PayMongo's current official QR
+Ph documentation identifies `next_action.code.image_url` as the dynamic code, a 30-minute default
+lifetime, supported `expiry_seconds` range of 60–9000 seconds, and provider webhook confirmation as
+the production authority. The payment continuation now automatically creates QR Ph with an explicit
+1,800-second expiry, attaches it once, stores the active code/deadline in session storage, renders a
+second-level “Refreshes in MM:SS” timer, and replaces an expired code only while the original action
+still has at least the provider's 60-second minimum. A per-page in-flight guard prevents duplicate
+automatic creation. The four focused Web checkout route/source/runtime/QR-continuation suites pass
+31 tests. Fake-clock QR regressions prove automatic creation, the `expiry_seconds: 1800` request,
+`30:00` to `29:59` display, one replacement code after expiry, and reload restoration without a
+second attachment. Web typecheck, focused
+oxlint/oxfmt, diff whitespace and the vinext production build pass. No Core, contract, schema or
+provider adapter changed, and no deployment, remote-data operation, provider transaction or outbound
+message occurred. `CHECKOUT-QRPH-AUTO-CODE-1` is complete at the source/local-verification counting
+level. Next action, if separately authorized, is deploy or restart the local Web process and execute
+an authenticated PayMongo test-mode QR Ph journey through code display and signed webhook
+confirmation.
+
 ## Latest owner request — CHECKOUT-QRPH-STAGING-SCHEMA-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
