@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADDRESS-PREDICTION-CANONICAL-ID-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, customer delivery-address selection. The owner reported that selecting an
+autocomplete result from Choose map repeatedly showed “Address details could not be loaded.”
+Acceptance: every valid Philippine Google Places prediction resolves when Google returns complete
+details, including predictions whose requested Place ID is canonicalized to a different response ID;
+malformed details and non-Philippine results remain rejected; the temporary selected prediction key is
+preserved and no provider reference is persisted as customer address data.
+
+Observed baseline was pushed/deployed `main` at `f2d2da18`, with the 16 owner-deleted legacy
+`.claude/skills` files preserved. Read-only production reproduction succeeded for Ayala Center Cebu and
+failed for specific road/business suggestions including Cebu South Road in Pardo with
+`GEOCODER_INVALID_RESPONSE`. Additional public Cebu queries showed the same candidate-specific split.
+A bounded provider-shape inspection printed no address or credential payload and established the exact
+cause: Google Place Details returned HTTP 200 with valid Philippine coordinates/components but a
+canonical `id` different from the autocomplete prediction ID. The adapter incorrectly treated that
+provider-supported alias as malformed.
+
+The fix retains the existing validated candidate-key grammar and encoded resource URL, accepts a
+well-formed details response without requiring response-ID equality, and returns the originally selected
+temporary candidate key. A regression covers a canonical response alias; malformed coordinates and
+country checks remain. Focused Google Places plus customer-address tests passed **45/45**; Core
+typecheck, focused `oxlint`, formatting, naming, terminology, `git diff --check`, and the Core Wrangler
+dry-run build passed. No customer address, account data, production configuration or deployment changed
+during diagnosis. One next action: commit/push the fix, deploy Core under the owner's continuing
+production authorization, and re-run the previously failing public production suggestion.
+
 ## Latest owner request — PAYMENTS-SIMPLIFY-1 implementation (2026-09-21)
 
 Active plan: `docs/product/PAYMENTS_SIMPLIFICATION_PLAN.md`, sequences **PS-01 through PS-06**, under

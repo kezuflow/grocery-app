@@ -61,10 +61,9 @@ describe("Google Places autocomplete boundary", () => {
     );
     await expect(adapter.autocomplete(input)).rejects.toMatchObject({ code, message: code });
   });
-  it("rejects malformed coordinates, country and mismatched details", async () => {
+  it("rejects malformed coordinates and country", async () => {
     for (const payload of [
       { ...details, location: { latitude: 100, longitude: 123 } },
-      { ...details, id: "other" },
       { ...details, addressComponents: [] },
     ]) {
       await expect(
@@ -75,6 +74,17 @@ describe("Google Places autocomplete boundary", () => {
         }),
       ).rejects.toThrow();
     }
+  });
+  it("accepts a canonical Place ID alias while preserving the selected prediction key", async () => {
+    const result = await new GooglePlaces("key", async () =>
+      Response.json({ ...details, id: "canonical_place_1" }),
+    ).resolve({
+      requestId: "test",
+      candidateKey: "place_1",
+      sessionToken,
+    });
+    expect(result.candidateKey).toBe("place_1");
+    expect(result.coordinate).toEqual(details.location);
   });
   it("accepts an empty prediction response and rejects invalid provider data", async () => {
     expect(

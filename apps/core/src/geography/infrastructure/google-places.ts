@@ -114,8 +114,7 @@ export class GooglePlaces {
       headers: { "X-Goog-FieldMask": "id,formattedAddress,location,addressComponents,displayName" },
     });
     const parsed = detailsSchema.safeParse(payload);
-    if (!parsed.success || parsed.data.id !== input.candidateKey)
-      throw new GeocoderError("GEOCODER_INVALID_RESPONSE");
+    if (!parsed.success) throw new GeocoderError("GEOCODER_INVALID_RESPONSE");
     const place = parsed.data;
     const component = (type: string, short = false) => {
       const value = place.addressComponents.find((part) => part.types.includes(type));
@@ -124,7 +123,10 @@ export class GooglePlaces {
     const countryCode = component("country", true);
     if (countryCode !== "PH") throw new GeocoderError("GEOCODER_NO_RESULTS");
     return {
-      candidateKey: place.id,
+      // Google may canonicalize an alias and return a different `id` for the
+      // exact resource requested above. Preserve the validated prediction key
+      // for this temporary selection instead of rejecting a valid response.
+      candidateKey: input.candidateKey,
       displayAddress: place.displayName?.text
         ? `${place.displayName.text}, ${place.formattedAddress}`
         : place.formattedAddress,
