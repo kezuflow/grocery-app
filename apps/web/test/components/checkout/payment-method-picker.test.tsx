@@ -59,7 +59,7 @@ describe("PaymentMethodPicker", () => {
     expect(onSelect).toHaveBeenCalledWith({ kind: "TOKEN", value: "qrph" });
   });
 
-  it("lays out boxed methods in an automatically wrapping row", async () => {
+  it("lays out clean full-width rows with radio, logo, and name", async () => {
     await act(async () =>
       root.render(
         <PaymentMethodPicker selected={{ kind: "TOKEN", value: "qrph" }} onSelect={vi.fn()} />,
@@ -69,12 +69,12 @@ describe("PaymentMethodPicker", () => {
     const group = container.querySelector('[role="radiogroup"]');
     const methods = [...container.querySelectorAll('[role="radio"]')];
 
-    expect(group?.className).toContain(
-      "grid-cols-[repeat(auto-fill,minmax(min(100%,10.5rem),1fr))]",
-    );
+    expect(group?.className).toContain("divide-y");
+    expect(group?.className).toContain("border-y");
     expect(group?.className).not.toContain("overflow-x-auto");
     expect(methods).toHaveLength(13);
-    expect(methods[0]?.className).toContain("rounded-[var(--fm-radius-surface)]");
+    expect(methods[0]?.className).toContain("w-full");
+    expect(methods[0]?.className).not.toContain("rounded-[var(--fm-radius-surface)]");
     expect(methods[0]?.getAttribute("aria-checked")).toBe("true");
     expect(container.querySelectorAll('[data-state="checked"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-state="unchecked"]')).toHaveLength(12);

@@ -1,5 +1,32 @@
 # Commerce alignment — active checkpoint
 
+## Owner correction — CHECKOUT-PAYMENT-METHOD-ROWS-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment presentation. The owner supplied a cleaner payment reference and prefers
+its flat list treatment over the wrapping card grid. Acceptance: render full-width payment rows with
+the circle first, bordered provider logo second and method name third; separate rows with simple
+rules; retain all configured methods, disabled behavior and explicit selection; do not infer or add
+provider categories/channels from the reference.
+
+Work started from clean synchronized `main`/`origin/main` at `bac00454`. The wrapping card grid is
+replaced by one full-width list with top/bottom borders and simple row dividers. Each row follows the
+reference's scan order: circular radio, bordered provider logo and method name. The selected row has
+a restrained hover-colored background and filled FreshMarkets radio; inactive methods remain muted
+and disabled. Descriptions and status pills remain removed. The reference's category tabs were not
+copied because they would conceal configured methods and imply unsupported provider availability.
+`docs/design/DESIGN.md` records this owner correction. No payment authority or selection behavior
+changed.
+
+Verification: focused picker tests pass (2), covering the 13 configured brand paths, QR Ph selection,
+disabled GCash, flat divider layout, one checked/12 unchecked radio indicators and absence of removed
+copy. Web typecheck, focused oxlint/oxfmt, diff whitespace and the vinext production build pass. The
+owner-provided screenshot was the visual reference; post-change runtime browser acceptance was not
+performed. No Core, contract, schema or provider behavior changed, and no deployment, remote-data
+operation, provider transaction or outbound message occurred. `CHECKOUT-PAYMENT-METHOD-ROWS-1` is
+complete at the source/local-verification counting level. Next action, if separately authorized, is
+deploy and visually review authenticated checkout at desktop/mobile widths.
+
 ## Owner correction — CHECKOUT-PAYMENT-METHOD-WRAP-1 clean cards (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

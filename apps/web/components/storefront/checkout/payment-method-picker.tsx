@@ -99,7 +99,7 @@ export function PaymentMethodPicker({
 }) {
   return (
     <div
-      className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(min(100%,10.5rem),1fr))] gap-3"
+      className="mt-4 divide-y divide-[var(--fm-border)] border-y border-[var(--fm-border)]"
       role="radiogroup"
       aria-label="Payment method"
     >
@@ -114,25 +114,10 @@ export function PaymentMethodPicker({
             aria-disabled={!method.available}
             disabled={!method.available}
             onClick={() => onSelect({ kind: "TOKEN", value: method.value })}
-            className={`flex min-h-20 items-center gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100 ${
-              checked
-                ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
-                : "border-[var(--fm-border)] bg-white"
-            } disabled:bg-[var(--fm-surface-soft)] disabled:text-slate-400`}
+            className={`flex min-h-20 w-full items-center gap-4 px-3 py-3 text-left transition-[background-color,color,opacity,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.99] disabled:cursor-not-allowed disabled:active:scale-100 ${
+              checked ? "bg-[var(--fm-hover)] text-[var(--fm-primary-dark)]" : "bg-white"
+            } disabled:text-slate-400 disabled:opacity-65`}
           >
-            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
-              <img
-                src={method.logoSrc}
-                alt=""
-                aria-hidden="true"
-                width={40}
-                height={40}
-                className={`size-8 object-contain ${method.available ? "" : "opacity-65"}`}
-              />
-            </span>
-            <span className="min-w-0 flex-1 text-sm font-semibold leading-5 text-current">
-              {method.label}
-            </span>
             <span
               aria-hidden="true"
               data-state={checked ? "checked" : "unchecked"}
@@ -147,6 +132,19 @@ export function PaymentMethodPicker({
               <span
                 className={`size-2 rounded-full bg-white ${checked ? "opacity-100" : "opacity-0"}`}
               />
+            </span>
+            <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white p-1.5">
+              <img
+                src={method.logoSrc}
+                alt=""
+                aria-hidden="true"
+                width={40}
+                height={40}
+                className={`size-9 object-contain ${method.available ? "" : "opacity-65"}`}
+              />
+            </span>
+            <span className="min-w-0 flex-1 text-sm font-semibold leading-5 text-current">
+              {method.label}
             </span>
           </button>
         );
