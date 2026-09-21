@@ -22,13 +22,19 @@ domain; its three managed MX records resolve, one generated exact-match forwardi
 and the catch-all remains disabled. The first delivery test ran seconds after onboarding and failed
 before routing with Cloudflare's `routing_unknown_address`/SMTP 550 response; no routing event was
 created. After propagation, one retry reached terminal `delivered` state on the sending side and
-matched the exact forwarding rule with no routing error. Destination-inbox visibility remains a human
-check because no mailbox connector is authorized in this task. No address or credential is stored in
-tracked source or this checkpoint, and no auth account, Staff invitation, role, scope, session or D1
-row was created or changed. Next action: the owner confirms receipt of the second forwarding test
-(including Gmail All Mail/Spam) and signs in as the existing Global administrator; then issue the
-reviewed Global staff invitation and complete normal registration, email verification and invitation
-acceptance.
+matched the exact forwarding rule with no routing error; the owner confirmed destination-inbox
+receipt.
+
+The production auth identity was then created through Better Auth's normal signup endpoint using an
+internally generated one-time password that was immediately discarded; the password pasted earlier
+was not used. Remote D1 read-back shows exactly one matching auth user, one credential and
+`email_verified = false`. A verification resend returned HTTP 200, and Cloudflare telemetry records
+the FreshMarkets verification message as terminal `delivered` with the private forwarding rule
+matched and no routing error. No address or credential is stored in tracked source or this checkpoint.
+No Staff invitation, role, scope or session has been created. Next action: the owner opens the latest
+verification link from the forwarded inbox and confirms completion; then use the existing Global
+administrator to issue the reviewed Global invitation, accept it through Core, and initiate a password
+reset so the owner chooses a new private password.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
