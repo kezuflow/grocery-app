@@ -1,5 +1,29 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CUSTOMER-ORDER-TIMELINE-LAYOUT-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, customer Order detail presentation. The owner requested that the Order timeline
+be horizontal and appear above Items. Acceptance: the existing customer-safe timeline is the first
+detail card above Items, its entries form one connected horizontal progression, narrow viewports scroll
+the timeline within its card without widening the page, and the historical-empty state remains
+available and announced.
+
+Implemented from clean `main` at `c1659e005494fb672bed7118f273d2f200f85120`. The Order detail now
+places the timeline before Items in the main detail column. Timeline entries use the existing semantic
+ordered list as a connected horizontal stepper with equal flexible widths on larger screens and
+snap-aligned local horizontal scrolling when their readable minimum width exceeds the card. The main
+grid column explicitly permits this local overflow so the mobile page does not gain horizontal scroll.
+No Core, contract, storage, authorization, timeline fact, provider or deployment behavior changed.
+
+Verification on the complete intended working-tree scope: focused Web component/page tests pass **4/4
+across 2 files**; Web typecheck, focused formatting/lint and `git diff --check` pass. A managed local
+Web/Core browser run built the production application and passed **1/1**, proving the timeline appears
+above Items, all steps share one horizontal row at 1440px, and the timeline scrolls locally without
+page-wide overflow at 390px. No remote environment or customer data was touched. Completion level:
+**1 of 1 customer Order-timeline layout slice implemented and locally accepted**. Deployment remains
+unauthorized; no work remains at this slice level.
+
 ## Latest owner request — CURRENT-MAIN-PRODUCTION-DEPLOY-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

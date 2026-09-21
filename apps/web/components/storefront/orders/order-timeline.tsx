@@ -14,20 +14,32 @@ export function OrderTimeline({ entries }: { entries: readonly CustomerTimelineE
           Timeline updates are not available for this historical order.
         </p>
       ) : (
-        <ol className="mt-4 space-y-4 border-l-2 border-[var(--fm-border)] pl-5">
-          {entries.map((entry) => (
-            <li key={entry.eventId} className="relative">
+        <ol
+          aria-label="Order progress"
+          className="mt-5 flex snap-x snap-mandatory overflow-x-auto pb-2"
+        >
+          {entries.map((entry, index) => (
+            <li key={entry.eventId} className="relative min-w-48 flex-1 snap-start pr-5 last:pr-0">
+              {index < entries.length - 1 ? (
+                <span
+                  className="absolute left-3 right-0 top-[5px] h-0.5 bg-[var(--fm-border)]"
+                  aria-hidden="true"
+                />
+              ) : null}
               <span
-                className="absolute -left-[1.65rem] top-1.5 size-3 rounded-full border-2 border-white bg-[var(--fm-primary-dark)]"
+                className="relative z-10 block size-3 rounded-full border-2 border-white bg-[var(--fm-primary-dark)] ring-1 ring-[var(--fm-primary-dark)]"
                 aria-hidden="true"
               />
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-semibold">{entry.title}</h3>
-                <time className="text-xs text-[var(--fm-text-muted)]" dateTime={entry.occurredAt}>
+              <div className="mt-3">
+                <h3 className="font-semibold leading-tight">{entry.title}</h3>
+                <time
+                  className="mt-1 block text-xs text-[var(--fm-text-muted)]"
+                  dateTime={entry.occurredAt}
+                >
                   {new Date(entry.occurredAt).toLocaleString()}
                 </time>
+                <p className="mt-2 text-sm text-[var(--fm-text-muted)]">{entry.description}</p>
               </div>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">{entry.description}</p>
             </li>
           ))}
         </ol>

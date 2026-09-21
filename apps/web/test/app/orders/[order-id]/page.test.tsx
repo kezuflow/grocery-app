@@ -146,6 +146,7 @@ describe("customer order detail", () => {
     expect(html).toContain("Refund if canceled now");
     expect(html).toContain("₱285.00");
     expect(html).toContain("View transaction summary");
+    expect(html.indexOf("Order timeline")).toBeLessThan(html.indexOf("Items"));
   });
 
   it("states when historical monetary components are unavailable", () => {

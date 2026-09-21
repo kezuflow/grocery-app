@@ -20,6 +20,8 @@ describe("OrderTimeline", () => {
     );
 
     expect(html).toContain("<ol");
+    expect(html).toContain('aria-label="Order progress"');
+    expect(html).toContain("overflow-x-auto");
     expect(html).toContain("Order confirmed");
     expect(html).toContain('dateTime="2026-08-30T00:00:00.000Z"');
   });

@@ -78,7 +78,11 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
       </div>
 
       <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
+          <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
+            <OrderTimeline entries={order.timeline} />
+          </div>
+
           <section
             className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
             aria-labelledby="order-items-heading"
@@ -278,9 +282,6 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               </ul>
             </section>
           ) : null}
-          <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
-            <OrderTimeline entries={order.timeline} />
-          </div>
         </div>
 
         <aside className="space-y-5 xl:sticky xl:top-24">
