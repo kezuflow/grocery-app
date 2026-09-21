@@ -1,5 +1,35 @@
 # Commerce alignment — active checkpoint
 
+## Owner correction — CHECKOUT-PAYMENT-METHOD-CATEGORIES-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment presentation. The owner clarified that the supplied reference's category
+controls should be copied and each existing payment method displayed beneath its appropriate
+category. Acceptance: Cash on Delivery is visible but disabled; Payment / E-Wallet contains QR Ph
+and the configured wallets; Credit / Debit Card contains the card method; Online Banking contains
+the configured banks; selecting a category changes only the visible method list and never enables a
+provider channel.
+
+Work started from clean synchronized `main`/`origin/main` at `d52f8045`. The picker now has four
+wrapping category controls above the existing flat method rows. Cash on Delivery appears first and
+is disabled. Payment / E-Wallet is the default and contains QR Ph, GCash, Maya, GrabPay, ShopeePay
+and Google Pay. Credit / Debit Card contains Visa & Mastercard. Online Banking contains BDO, BPI,
+Landbank, Metrobank, RCBC and UnionBank. Category changes filter presentation only; QR Ph remains
+the sole selectable method, and every inactive provider row remains disabled. A preselected method
+initializes its owning category. The controls use tab/tab-panel semantics and preserve the existing
+radio group, focus states and branded row treatment. `docs/design/DESIGN.md` records the approved
+grouping. No payment authority or provider activation changed.
+
+Verification: focused picker tests pass (2), covering disabled Cash on Delivery, default wallet
+selection and its six assigned providers, card switching and its single assigned provider, online
+banking switching and its six assigned providers, QR Ph selection, disabled GCash and the absence of
+removed descriptions/status pills. Web typecheck, focused oxlint/oxfmt, diff whitespace and the
+vinext production build pass. No Core, contract, schema or provider behavior changed. No deployment,
+remote-data operation, provider transaction or outbound message occurred.
+`CHECKOUT-PAYMENT-METHOD-CATEGORIES-1` is complete at the source/local-verification counting level.
+Next action, if separately authorized, is deploy and visually review authenticated checkout at
+desktop/mobile widths.
+
 ## Owner correction — CHECKOUT-PAYMENT-METHOD-ROWS-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

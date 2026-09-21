@@ -45,8 +45,46 @@ describe("PaymentMethodPicker", () => {
       "/payment-methods/maya.svg",
       "/payment-methods/grabpay.svg",
       "/payment-methods/shopeepay.svg",
-      "/payment-methods/visa-mastercard.svg",
       "/payment-methods/google-pay.svg",
+    ]);
+
+    await act(async () => qrPh?.click());
+    expect(onSelect).toHaveBeenCalledWith({ kind: "TOKEN", value: "qrph" });
+  });
+
+  it("groups methods under category tabs and keeps cash on delivery disabled", async () => {
+    await act(async () =>
+      root.render(
+        <PaymentMethodPicker selected={{ kind: "TOKEN", value: "qrph" }} onSelect={vi.fn()} />,
+      ),
+    );
+
+    const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const cashOnDelivery = tabs.find((tab) => tab.textContent === "Cash on Delivery");
+    const wallet = tabs.find((tab) => tab.textContent === "Payment / E-Wallet");
+    const card = tabs.find((tab) => tab.textContent === "Credit / Debit Card");
+    const onlineBanking = tabs.find((tab) => tab.textContent === "Online Banking");
+
+    expect(tabs).toHaveLength(4);
+    expect(cashOnDelivery?.disabled).toBe(true);
+    expect(wallet?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelectorAll('[role="radio"]')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-state="checked"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-state="unchecked"]')).toHaveLength(5);
+
+    await act(async () => card?.click());
+    expect(card?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelectorAll('[role="radio"]')).toHaveLength(1);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/payment-methods/visa-mastercard.svg",
+    );
+
+    await act(async () => onlineBanking?.click());
+    expect(onlineBanking?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelectorAll('[role="radio"]')).toHaveLength(6);
+    expect(
+      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
+    ).toEqual([
       "/payment-methods/bdo.svg",
       "/payment-methods/bpi.svg",
       "/payment-methods/landbank.svg",
@@ -54,30 +92,6 @@ describe("PaymentMethodPicker", () => {
       "/payment-methods/rcbc.svg",
       "/payment-methods/unionbank.svg",
     ]);
-
-    await act(async () => qrPh?.click());
-    expect(onSelect).toHaveBeenCalledWith({ kind: "TOKEN", value: "qrph" });
-  });
-
-  it("lays out clean full-width rows with radio, logo, and name", async () => {
-    await act(async () =>
-      root.render(
-        <PaymentMethodPicker selected={{ kind: "TOKEN", value: "qrph" }} onSelect={vi.fn()} />,
-      ),
-    );
-
-    const group = container.querySelector('[role="radiogroup"]');
-    const methods = [...container.querySelectorAll('[role="radio"]')];
-
-    expect(group?.className).toContain("divide-y");
-    expect(group?.className).toContain("border-y");
-    expect(group?.className).not.toContain("overflow-x-auto");
-    expect(methods).toHaveLength(13);
-    expect(methods[0]?.className).toContain("w-full");
-    expect(methods[0]?.className).not.toContain("rounded-[var(--fm-radius-surface)]");
-    expect(methods[0]?.getAttribute("aria-checked")).toBe("true");
-    expect(container.querySelectorAll('[data-state="checked"]')).toHaveLength(1);
-    expect(container.querySelectorAll('[data-state="unchecked"]')).toHaveLength(12);
     expect(container.textContent).not.toContain("E-wallet");
     expect(container.textContent).not.toContain("Direct debit");
     expect(container.textContent).not.toContain("Not active");
