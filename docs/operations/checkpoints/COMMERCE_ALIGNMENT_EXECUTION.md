@@ -34,6 +34,22 @@ provider transaction or outbound message occurred. Completion level: **1 of 1 cu
 layout slice implemented, locally accepted, pushed and Web-deployed**. No work remains at this slice
 level.
 
+The owner then supplied the deployed timeline and a compact delivery-progress reference and requested
+a denser follow-up: a succeeded Payment must read green, marker circles must not be visually clipped,
+and only one descriptive subtext should appear. Implemented from clean pushed `main` at `b4e4af10`.
+The horizontal rail now gives an authoritative `PAYMENT_STATUS` / `SUCCEEDED` entry a semantic green
+marker and title, adds inset space around the scroll container so marker rings remain fully visible,
+keeps each step to its title and timestamp, and presents only the chronologically latest entry's safe
+description once beneath the rail. Other status meaning and all Core-supplied timeline facts remain
+unchanged.
+
+Focused Web component/page tests pass **4/4 across 2 files**; Web typecheck, focused formatting/lint
+and `git diff --check` pass. The rebuilt managed local browser acceptance passes **1/1**, covering the
+green successful-payment treatment, one shared description, visible marker bounds at 1440px, and
+contained timeline scrolling without page overflow at 390px. No remote environment or customer data
+was touched. Completion level: **1 of 1 customer Order-timeline compact-visual follow-up implemented
+and locally accepted**. This follow-up has not been deployed; no local implementation work remains.
+
 ## Latest owner request — CURRENT-MAIN-PRODUCTION-DEPLOY-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

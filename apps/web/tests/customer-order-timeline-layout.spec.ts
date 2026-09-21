@@ -1,18 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const timeline = [
-  ["confirmed", "Order confirmed"],
-  ["preparing", "Preparing your order"],
-  ["ready", "Ready for pickup"],
-  ["delivery", "Out for delivery"],
-].map(([eventId, title], index) => ({
-  eventId,
-  type: "ORDER_COMMITTED",
-  title,
-  description: `${title} update`,
-  status: "COMMITTED",
-  occurredAt: `2026-09-21T0${index}:00:00.000Z`,
-}));
+  {
+    eventId: "payment",
+    type: "PAYMENT_STATUS",
+    title: "Payment update",
+    description: "Your payment is now succeeded.",
+    status: "SUCCEEDED",
+    occurredAt: "2026-09-21T00:00:00.000Z",
+  },
+  ...[
+    ["preparing", "Preparing your order"],
+    ["ready", "Ready for pickup"],
+    ["delivery", "Out for delivery"],
+  ].map(([eventId, title], index) => ({
+    eventId,
+    type: "ORDER_COMMITTED",
+    title,
+    description: `${title} update`,
+    status: "COMMITTED",
+    occurredAt: `2026-09-21T0${index + 1}:00:00.000Z`,
+  })),
+];
 
 async function mockOrder(page: Page) {
   await page.route("**/api/commerce/orders/order-layout", (route) =>
@@ -112,6 +121,18 @@ test("places the horizontal order timeline above Items across responsive widths"
     desktopPositions.map(({ x }) => x).sort((a, b) => a - b),
   );
   expect(new Set(desktopPositions.map(({ y }) => Math.round(y))).size).toBe(1);
+  await expect(progress.getByRole("heading", { name: "Payment update" })).toHaveClass(
+    /text-\[var\(--fm-success\)\]/,
+  );
+  await expect(page.getByRole("region", { name: "Order timeline" }).locator("p")).toHaveText(
+    "Out for delivery update",
+  );
+  const [progressBox, firstMarkerBox] = await Promise.all([
+    progress.boundingBox(),
+    progress.locator("[data-timeline-marker]").first().boundingBox(),
+  ]);
+  expect(firstMarkerBox?.x).toBeGreaterThanOrEqual(progressBox?.x ?? 0);
+  expect(firstMarkerBox?.y).toBeGreaterThanOrEqual(progressBox?.y ?? 0);
 
   const timelineHeading = page.getByRole("heading", { name: "Order timeline" });
   const itemsHeading = page.getByRole("heading", { name: "Items" });
