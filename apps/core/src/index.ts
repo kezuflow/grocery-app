@@ -80,6 +80,10 @@ import {
   completeInitialAdministratorSetup,
 } from "./iam/application/initial-administrator";
 import {
+  administratorOwnershipTransferSchema,
+  transferAdministratorOwnership,
+} from "./iam/application/transfer-administrator-ownership";
+import {
   getAdminServiceability,
   publishAdminServiceArea,
   previewAdminServiceability,
@@ -1028,6 +1032,19 @@ const issueActionSchema = authenticatedRequestSchema.extend({
   idempotencyKey: idempotencyKeySchema,
 });
 
+async function administratorTransferAuthorized(request: Request, configuredSecret?: string) {
+  const supplied = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  if (!configuredSecret || configuredSecret.length < 32 || !supplied) return false;
+  const encode = (value: string) => new TextEncoder().encode(value);
+  const [expected, actual] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encode(configuredSecret)),
+    crypto.subtle.digest("SHA-256", encode(supplied)),
+  ]);
+  const left = new Uint8Array(expected);
+  const right = new Uint8Array(actual);
+  return left.every((byte, index) => byte === right[index]);
+}
+
 export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 
 /**
@@ -1098,6 +1115,52 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         status: readiness.status === "ready" ? 200 : 503,
         headers: { "x-request-id": id },
       });
+    }
+    if (path === "/internal/one-time/administrator-ownership-transfer") {
+      const transferEnv = this.env as Env & { ADMINISTRATOR_TRANSFER_SECRET?: string };
+      if (
+        transferEnv.ENVIRONMENT !== "production" ||
+        request.method !== "POST" ||
+        !(await administratorTransferAuthorized(request, transferEnv.ADMINISTRATOR_TRANSFER_SECRET))
+      )
+        return Response.json(
+          { error: { code: "NOT_FOUND", message: "Core route not found", requestId: id } },
+          { status: 404, headers: { "x-request-id": id } },
+        );
+      const body = await request.json().catch(() => null);
+      const validation = administratorOwnershipTransferSchema.safeParse(body);
+      if (!validation.success)
+        return Response.json(
+          {
+            error: {
+              code: "VALIDATION_FAILED",
+              message: validationMessage(validation.error),
+              requestId: id,
+            },
+          },
+          { status: 400, headers: { "x-request-id": id } },
+        );
+      try {
+        const value = await transferAdministratorOwnership(this.env.DB, {
+          ...validation.data,
+          requestId: id,
+        });
+        return Response.json(
+          { ok: true, value, requestId: id },
+          { headers: { "x-request-id": id } },
+        );
+      } catch {
+        return Response.json(
+          {
+            error: {
+              code: "CONFLICT",
+              message: "Administrator ownership transfer could not be completed",
+              requestId: id,
+            },
+          },
+          { status: 409, headers: { "x-request-id": id } },
+        );
+      }
     }
     if (path.startsWith("/webhooks/payments/"))
       return handleProviderWebhook(

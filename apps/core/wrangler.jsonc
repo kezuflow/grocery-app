@@ -183,6 +183,9 @@
           "GOOGLE_MAPS_SERVER_KEY",
           "PAYMONGO_SECRET_KEY",
           "PAYMONGO_WEBHOOK_SECRET",
+          // Temporary bearer gate for the owner-authorized one-time production
+          // administrator transfer. Removed after the immutable receipt exists.
+          "ADMINISTRATOR_TRANSFER_SECRET",
           // Production credentials are uploaded outside source control.
           "LALAMOVE_API_KEY",
           "LALAMOVE_API_SECRET",
