@@ -20,8 +20,10 @@ Verification on the intended working-tree scope: Web navigation tests passed **1
 Worker/D1 Admin-context tests passed **15/15**; Core and Web typechecks, focused formatting/lint, and
 `git diff --check` passed. Browser acceptance was not run because the owner explicitly asked not to
 use browser automation with the currently signed-in account. Completion level: **1 of 1
-location-scoped Fulfillment navigation slice implemented and locally verified**. One next action:
-commit and push the verified source and checkpoint to `main`; deployment remains unauthorized.
+location-scoped Fulfillment navigation slice implemented and locally verified**. The verified source
+and initial checkpoint were committed and pushed to `main` as `289db8dc`. No deployment occurred or
+was authorized. No implementation work remains at this slice level; production release requires a
+separate owner request.
 
 ## Latest owner request — CORE-PRODUCTION-AVAILABILITY-CHECK-1 (2026-09-21)
 
