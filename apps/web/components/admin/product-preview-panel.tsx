@@ -4,15 +4,6 @@ import Link from "next/link";
 import { Button } from "../ui/button";
 import { AdminStatusPill } from "./admin-status-pill";
 
-function money(amountMinor: number | null, currency: string | null): string {
-  if (amountMinor === null || currency === null) return "Price unavailable";
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amountMinor / 100);
-}
-
 function date(value: string | null): string {
   if (!value) return "Not recorded";
   return new Intl.DateTimeFormat("en-PH", {
@@ -32,7 +23,7 @@ function mediaUrl(product: AdminProductDetail): string | null {
   return `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${location}`;
 }
 
-export function ProductPreviewPanel({
+export function GlobalProductPreviewPanel({
   product,
   fromQuery,
   onClose,
@@ -54,7 +45,7 @@ export function ProductPreviewPanel({
       <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Product preview
+            Global product preview
           </p>
           <h2
             id="product-panel-title"
@@ -152,8 +143,8 @@ export function ProductPreviewPanel({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{sku.name}</p>
-                    <p className="mt-0.5 text-sm font-semibold">
-                      {money(sku.priceMinor, sku.currency)}
+                    <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
+                      {sku.code} · {sku.sellQuantity.toLocaleString()} {sku.unitSymbol}
                     </p>
                   </div>
                   <AdminStatusPill

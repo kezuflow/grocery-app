@@ -421,8 +421,9 @@ export type AdminInventoryLedgerRequest = AuthenticatedRequest & {
 /**
  * Global Catalog administration requires global scope. A location-scoped
  * Product projection requires catalog plus inventory read authority for that
- * location; only exact-location price and local selling-status commands may be
- * performed from it. Prices are versioned inserts; history is never rewritten.
+ * location; exact-location price and local selling-status commands require
+ * their dedicated capabilities over that location. Prices are versioned
+ * inserts; history is never rewritten.
  */
 export type AdminCatalogService = {
   listAdminCategories(request: AdminCategoryListRequest): Promise<RpcResult<AdminCategoryPage>>;

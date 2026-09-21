@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — LOCATION-PRODUCT-INLINE-PRICE-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, Admin Product continuation. The owner requested distinct Global and fulfillment-location
+Product previews, with exact-location price editing available by clicking a selling-option price in
+the selected location preview (Central Cebu in the current operating context), not from Global.
+Acceptance: Global preview remains catalog-focused; the location preview shows its location-owned
+price/selling/stock context; a staff member needs `prices.manage` plus operational scope over that
+exact location; one inline save writes a versioned price with retained unknown-response retry; another
+location remains forbidden.
+
+Work started from `main`/`origin/main` at `a686a755`. The workspace already contained an unrelated
+Product search-input extraction in `products-page-client.tsx` plus its new component/test; that work
+was preserved and committed independently as `2426ac21` while this slice was in progress. Core now
+applies operational location scope to `prices.read`/`prices.manage` while preserving the dedicated
+capability, active location/market/currency guards, transaction-time scope recheck, audit, versioning
+and idempotency. The Product list now selects a distinct Global catalog preview or fulfillment-
+location preview. The location preview shows exact location context and opens an immediate inline
+editor from the displayed price; uncertain transport retains the identical body/key and locks preview
+close/product switching until retry resolves. The obsolete Global price editor was removed from
+Global Product detail.
+
+Verification passes on the resulting working tree: 1,689 Core tests/207 files, 604 Web tests/142
+files and 69 contract tests/20 files; Core/Web/contracts typechecks; focused oxlint; repository format,
+naming, terminology, architecture and readiness gates; Core dry-run and Web production builds; and
+two controlled Playwright journeys at 1440px and 390px. The browser journeys select Onion in Central
+Cebu, open its distinct fulfillment preview, click the price and save PHP 25.50 against the exact
+location/version. Core acceptance proves a Central Cebu-scoped manager with the price capability can
+read/write there, cannot read/write another location, and managers at either Global or location scope
+remain forbidden without the dedicated price capability. Responsive screenshots were visually
+inspected. Wrangler emitted only its existing unspecified-environment dry-run warning; no deployment,
+remote-data operation, provider transaction or outbound message occurred.
+`LOCATION-PRODUCT-INLINE-PRICE-1` is complete at the source/local-browser-verification counting level.
+Next action, if separately authorized, is deploy and execute an authenticated operator acceptance
+against the intended non-production Central Cebu data before production activation.
+
 ## Latest owner request — ADMIN-PRODUCT-SEARCH-SUBMIT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

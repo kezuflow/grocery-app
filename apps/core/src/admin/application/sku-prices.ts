@@ -11,7 +11,7 @@ const requestSchema = authenticatedRequestSchema.extend({
   locationId: identifierSchema,
 });
 
-/** Global price history is independent of inventory and local activation authority. */
+/** Exact-location price history is authorized against the requested operational location. */
 export async function getAdminSkuPrices(
   deps: CatalogAdministrationDeps,
   input: AdminSkuPricesRequest,
@@ -27,7 +27,12 @@ export async function getAdminSkuPrices(
       },
     };
   const request = parsed.data;
-  const access = await resolveCatalogAdministrationAccess(deps, request, "prices.read");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "prices.read",
+    request.locationId,
+  );
   if (!access.ok) return access;
   const target = await deps.db
     .prepare(`SELECT location.market_id marketId,market.currency,
@@ -55,7 +60,7 @@ export async function getAdminSkuPrices(
         AND valid_from<=? AND (valid_to IS NULL OR valid_to>?) ORDER BY version DESC LIMIT 1`)
       .bind(request.skuId, request.locationId, target.currency, now, now)
       .first<{ amountMinor: number }>(),
-    resolveCatalogAdministrationAccess(deps, request, "prices.manage"),
+    resolveCatalogAdministrationAccess(deps, request, "prices.manage", request.locationId),
   ]);
   return {
     ok: true,

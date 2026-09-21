@@ -25,15 +25,9 @@ import {
 import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductImagesEditor } from "@/components/admin/product-images-editor";
-import {
-  GlobalPricePanel,
-  LocationPriceEditor,
-  type ProductPriceSelection,
-} from "../../../../../components/admin/global-price-panel";
 import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext } from "../../../admin-context-provider";
-import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
 import {
@@ -66,11 +60,6 @@ type VariantCommandConfirmation = {
   readIdentity: string;
 };
 
-type OwnedPriceSelection = {
-  selection: ProductPriceSelection;
-  readIdentity: string;
-};
-
 export default function ProductDetailPage({
   params,
 }: {
@@ -95,9 +84,6 @@ export default function ProductDetailPage({
     estimatedShippingWeightGrams: "",
   });
   const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
-  const [priceSelection, setPriceSelection] = useState<OwnedPriceSelection | null>(null);
-  const [priceRecoveryActive, setPriceRecoveryActive] = useState(false);
-  const [priceRevision, setPriceRevision] = useState(0);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
       ? "Product created."
@@ -126,7 +112,7 @@ export default function ProductDetailPage({
       : null;
 
   const load = useCallback(() => {
-    if (commandIntent.pending || priceRecoveryActive) return;
+    if (commandIntent.pending) return;
     if (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION") return;
     const readIdentity = adminProductReadIdentity(productId, selectedScope);
     const requestNumber = loadRequest.current + 1;
@@ -187,7 +173,7 @@ export default function ProductDetailPage({
         });
       }
     })();
-  }, [productId, selectedScope, commandIntent.pending, priceRecoveryActive]);
+  }, [productId, selectedScope, commandIntent.pending]);
 
   useEffect(() => load(), [load]);
   const acceptedProductChange = () => {
@@ -273,12 +259,6 @@ export default function ProductDetailPage({
     variantCommand?.readIdentity ?? null,
     state.readIdentity,
   );
-  const priceSelectionCurrent = isAdminProductTransientCurrent(
-    recordCurrent,
-    priceSelection?.readIdentity ?? null,
-    state.readIdentity,
-  );
-  const retainPriceEditor = priceSelection !== null && priceRecoveryActive;
   const from = searchParams.get("from");
   const countedSizes = product.inventoryPool.stockTracking === "COUNTED_SIZES";
   const variantBaseUnitCode = countedSizes ? "PIECE" : product.inventoryPool.baseUnitCode;
@@ -433,17 +413,6 @@ export default function ProductDetailPage({
             </div>
           </ListPageSection>
         </div>
-      ) : null}
-
-      {product.scope.kind === "GLOBAL" ? (
-        <GlobalPricePanel
-          key={`product-prices-${priceRevision}`}
-          skus={product.skus}
-          scopes={targetOptions}
-          onEditPrice={(selection) =>
-            setPriceSelection({ selection, readIdentity: state.readIdentity })
-          }
-        />
       ) : null}
 
       <div id="product-variants" className="scroll-mt-32">
@@ -897,27 +866,7 @@ export default function ProductDetailPage({
         hidden={!recordCurrent}
         inert={!recordCurrent}
       >
-        <AdminMasterDetailWorkspace
-          open={priceSelection !== null && (priceSelectionCurrent || retainPriceEditor)}
-          master={master}
-          detail={
-            priceSelection && (priceSelectionCurrent || retainPriceEditor) ? (
-              <LocationPriceEditor
-                key={`${priceSelection.selection.skuId}:${priceSelection.selection.locationId}`}
-                selection={priceSelection.selection}
-                onRecoveryStateChange={setPriceRecoveryActive}
-                onClose={() => setPriceSelection(null)}
-                onSaved={() => {
-                  void invalidateAdminProductQueries(queryClient, [productId]);
-                  setPriceRevision((revision) => revision + 1);
-                }}
-              />
-            ) : null
-          }
-          panelId="location-price-panel"
-          labelledBy="location-price-panel-title"
-          resizeLabel="Resize location price editor"
-        />
+        {master}
       </div>
     </>
   );

@@ -343,7 +343,8 @@ describe("shared Admin accessibility contract", () => {
     expect(productsPage).toContain("<NewProductWorkspace");
     expect(productsPage).toContain("fetchAdminProductDetail");
     expect(adminProductsQuery).toContain("catalogResultSchema(adminProductDetailSchema).parse");
-    expect(productsPage).toContain("<ProductPreviewPanel");
+    expect(productsPage).toContain("<GlobalProductPreviewPanel");
+    expect(productsPage).toContain("<LocationProductPreviewPanel");
     expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
     expect(categoriesPage).toContain("<NewCategoryWorkspace");
     expect(ordersPage).toContain('aria-controls="order-detail-panel"');

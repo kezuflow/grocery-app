@@ -1,7 +1,7 @@
 import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ProductPreviewPanel } from "./product-preview-panel";
+import { GlobalProductPreviewPanel } from "./product-preview-panel";
 
 const product: AdminProductDetail = {
   productId: "product-1",
@@ -32,14 +32,7 @@ const product: AdminProductDetail = {
     baseUnitSymbol: "g",
     position: null,
   },
-  scope: {
-    kind: "LOCATION",
-    marketId: "market-1",
-    marketName: "Metro Cebu",
-    locationId: "location-1",
-    locationName: "Central Cebu",
-    currency: "PHP",
-  },
+  scope: { kind: "GLOBAL" },
   allowedActions: ["UPDATE", "SET_STATUS"],
   recentAudit: [],
   skus: [
@@ -64,14 +57,14 @@ const product: AdminProductDetail = {
   ],
 };
 
-describe("ProductPreviewPanel", () => {
-  it("renders the selected product's authoritative preview and actions", () => {
+describe("GlobalProductPreviewPanel", () => {
+  it("renders the selected product's catalog preview without location pricing", () => {
     const html = renderToStaticMarkup(
-      <ProductPreviewPanel product={product} fromQuery="status=active" onClose={() => {}} />,
+      <GlobalProductPreviewPanel product={product} fromQuery="status=active" onClose={() => {}} />,
     );
 
     expect(html).toContain('id="product-panel-title"');
-    expect(html).toContain("Product preview");
+    expect(html).toContain("Global product preview");
     expect(html).toContain(
       'class="mt-6 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] pt-5"',
     );
@@ -80,13 +73,14 @@ describe("ProductPreviewPanel", () => {
     expect(html).toContain("Vegetables");
     expect(html).toContain("Selling options");
     expect(html).toContain("Zucchini · 1 kg");
-    expect(html).toContain("₱85.00");
+    expect(html).not.toContain("₱85.00");
+    expect(html).toContain("ZUCCHINI_1KG · 1 kg");
     expect(html).toContain("Add selling option");
     expect(html).toContain("View product");
     expect(html).toContain("Edit");
     expect(html).toContain("Catalog version");
     expect(html).toContain("Last recorded change");
-    expect(html).toContain("/media/media-1/content?v=2&amp;locationId=location-1");
+    expect(html).toContain("/media/media-1/content?v=2");
     expect(html).not.toContain("Date added");
   });
 });

@@ -88,10 +88,7 @@ export async function resolveCatalogAdministrationSession(
     };
   }
   const require = (capability: CapabilityPair): { ok: false; error: AppError } | null => {
-    // Price capabilities keep global-only authorization in the per-capability
-    // resolver; every other capability accepts the operational scope.
-    const scopeAuthorized = capability.startsWith("prices.") ? globalScope : operationalScope;
-    if (context.value.capabilities.includes(capability) && scopeAuthorized) return null;
+    if (context.value.capabilities.includes(capability) && operationalScope) return null;
     return {
       ok: false,
       error: {
@@ -124,8 +121,8 @@ type CapabilityPair =
 /**
  * Catalog identity administration is global. When an operational location is
  * supplied, Product projection reads and location-owned availability
- * commands may instead be authorized by global, parent-market, or exact
- * location scope. Inventory reads use the same operational scope rule.
+ * commands, exact-location prices and inventory reads may instead be
+ * authorized by global, parent-market, or exact location scope.
  */
 export async function resolveCatalogAdministrationAccess(
   deps: CatalogAdministrationDeps,
@@ -154,11 +151,7 @@ export async function resolveCatalogAdministrationAccess(
   const holdsCapability = context.value.capabilities.includes(capability);
   const globalScope = context.value.scopes.some((scope) => scope.kind === "global");
   let scopeAuthorized = globalScope;
-  if (
-    operationalLocationId !== undefined &&
-    capability !== "prices.read" &&
-    capability !== "prices.manage"
-  ) {
+  if (operationalLocationId !== undefined) {
     const marketRow = await deps.db
       .prepare("SELECT market_id FROM fulfillment_location WHERE id = ?")
       .bind(operationalLocationId)

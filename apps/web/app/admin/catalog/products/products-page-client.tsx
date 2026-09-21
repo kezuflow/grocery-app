@@ -14,7 +14,8 @@ import {
 import { useAdminContext } from "../../admin-context-provider";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
-import { ProductPreviewPanel } from "@/components/admin/product-preview-panel";
+import { GlobalProductPreviewPanel } from "@/components/admin/product-preview-panel";
+import { LocationProductPreviewPanel } from "@/components/admin/location-product-preview-panel";
 import { ProductSearchInput } from "@/components/admin/product-search-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ export function ProductsPageClient({
   const [selectedProduct, setSelectedProduct] = useState<ProductListItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
+  const [priceRecoveryActive, setPriceRecoveryActive] = useState(false);
   const [workspaceScopeKey, setWorkspaceScopeKey] = useState<string | null>(null);
   const pagination = useAdminUrlPagination("/admin/catalog/products");
   const adminContext = useAdminContext();
@@ -87,6 +89,10 @@ export function ProductsPageClient({
     adminContext.state.phase === "ready" &&
     adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
+  const canManageLocationPrices =
+    adminContext.state.phase === "ready" &&
+    adminContext.state.selectedScope?.kind === "LOCATION" &&
+    adminContext.state.context.capabilities.includes("prices.manage");
   const scopeKey = scopeTarget ? serializeProductScope(scopeTarget) : "unresolved";
   const serverPayloadMatches =
     initialPayload !== null &&
@@ -278,6 +284,7 @@ export function ProductsPageClient({
             deactivationPending={bulkPending}
             onDeactivateSelected={deactivateProducts}
             onOpenProduct={(product) => {
+              if (priceRecoveryActive) return;
               setSelectedProduct(product);
               setPanelMode("detail");
               setWorkspaceScopeKey(scopeKey);
@@ -321,11 +328,26 @@ export function ProductsPageClient({
   const previewResult = previewQuery.data;
   const productDetail = selectedProduct ? (
     previewResult?.ok ? (
-      <ProductPreviewPanel
-        product={previewResult.value}
-        fromQuery={searchParams.toString()}
-        onClose={() => setPanelOpen(false)}
-      />
+      previewResult.value.scope.kind === "LOCATION" ? (
+        <LocationProductPreviewPanel
+          product={previewResult.value}
+          fromQuery={searchParams.toString()}
+          canManagePrices={canManageLocationPrices}
+          onClose={() => {
+            if (!priceRecoveryActive) setPanelOpen(false);
+          }}
+          onPriceSaved={() => {
+            void invalidateAdminProductQueries(queryClient, [previewResult.value.productId]);
+          }}
+          onRecoveryStateChange={setPriceRecoveryActive}
+        />
+      ) : (
+        <GlobalProductPreviewPanel
+          product={previewResult.value}
+          fromQuery={searchParams.toString()}
+          onClose={() => setPanelOpen(false)}
+        />
+      )
     ) : (
       <>
         <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">

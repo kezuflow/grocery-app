@@ -10,6 +10,7 @@ const denseLinkSources = [
   "../../app/admin/catalog/categories/[category-id]/page.tsx",
   "../../app/admin/catalog/page.tsx",
   "./product-preview-panel.tsx",
+  "./location-product-preview-panel.tsx",
   "../../app/admin/customers/page.tsx",
   "../../app/admin/orders/page.tsx",
   "../../app/admin/payments/reconciliation/page.tsx",

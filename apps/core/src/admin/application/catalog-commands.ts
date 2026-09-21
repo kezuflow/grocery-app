@@ -472,7 +472,12 @@ export async function setAdminSkuPrice(
   const parsed = priceSchema.safeParse(input);
   if (!parsed.success) return invalid(input);
   const request = parsed.data;
-  const access = await resolveCatalogAdministrationAccess(deps, request, "prices.manage");
+  const access = await resolveCatalogAdministrationAccess(
+    deps,
+    request,
+    "prices.manage",
+    request.locationId,
+  );
   if (!access.ok) return access;
   const { skuId, marketId, locationId, currency, amountMinor, validFrom, expectedVersion } =
     request;
@@ -555,7 +560,7 @@ export async function setAdminSkuPrice(
     effects,
     skuReceipt(deps.db, command, skuId, now, locationId, id),
     adminCatalogSkuSummarySchema,
-    { capability: "prices.manage" },
+    { capability: "prices.manage", locationId },
   );
 }
 export {
