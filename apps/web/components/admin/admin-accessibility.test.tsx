@@ -75,6 +75,10 @@ const ordersPage = readFileSync(
   new URL("../../app/admin/orders/page.tsx", import.meta.url),
   "utf8",
 );
+const orderPreviewPanel = readFileSync(
+  new URL("./order-preview-panel.tsx", import.meta.url),
+  "utf8",
+);
 const customersPage = readFileSync(
   new URL("../../app/admin/customers/page.tsx", import.meta.url),
   "utf8",
@@ -348,6 +352,10 @@ describe("shared Admin accessibility contract", () => {
     expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
     expect(categoriesPage).toContain("<NewCategoryWorkspace");
     expect(ordersPage).toContain('aria-controls="order-detail-panel"');
+    expect(ordersPage).toContain("aria-label={`Preview order ${orderLabel(order)}`}");
+    expect(orderPreviewPanel).toContain("Order Preview");
+    expect(orderPreviewPanel).toContain('aria-label="Order status"');
+    expect(orderPreviewPanel).toContain("<Table");
     expect(customersPage).toContain('aria-controls="customer-detail-panel"');
     expect(bannersPage).toContain('aria-controls="banner-detail-panel"');
     expect(promotionsPage).toContain(

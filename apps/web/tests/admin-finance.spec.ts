@@ -34,6 +34,117 @@ test("a provisioned Staff reader opens the real Orders workspace", async ({ admi
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 });
 
+test("clicking an Order row opens the authoritative item preview and status selector", async ({
+  adminPage,
+}) => {
+  let currentStatus = "COMMITTED";
+  const summary = {
+    orderId: "order-preview-1",
+    orderNumber: "FM-PREVIEW-1",
+    customerName: "Preview Customer",
+    customerEmail: "preview@example.test",
+    fulfillmentMode: "INSTANT",
+    status: "COMMITTED",
+    totalMinor: 12_500,
+    currency: "PHP",
+    paymentStatus: "SUCCEEDED",
+    fulfillmentStatus: "NOT_STARTED",
+    deliveryStatus: null,
+    committedAt: "2026-09-21T08:00:00.000Z",
+    version: 2,
+  };
+  await adminPage.route("**/api/admin/orders?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "preview-list",
+        value: { items: [summary], nextCursor: null },
+      }),
+    }),
+  );
+  await adminPage.route("**/api/admin/orders/order-preview-1", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "preview-detail",
+        value: {
+          ...summary,
+          status: currentStatus,
+          allowedActions: currentStatus === "COMMITTED" ? ["CANCEL"] : [],
+          customer: {
+            name: summary.customerName,
+            email: summary.customerEmail,
+            phone: null,
+            addressLines: ["Cebu City"],
+          },
+          financial: {
+            subtotalMinor: 12_500,
+            discountMinor: 0,
+            deliveryFeeMinor: 0,
+            serviceFeeMinor: 0,
+            taxMinor: 0,
+            totalMinor: 12_500,
+            currency: "PHP",
+            source: "CHECKOUT_QUOTE",
+          },
+          items: [
+            {
+              productName: "Fresh Carrots",
+              variantName: "1 kg",
+              unit: "GRAM",
+              quantity: 1,
+              baseQuantity: 1_000,
+              unitPriceMinor: 12_500,
+              lineTotalMinor: 12_500,
+            },
+          ],
+          payments: [],
+          amendments: [],
+          fulfillment: null,
+          delivery: null,
+          exceptions: [],
+          timeline: [],
+          recentAudit: [],
+        },
+      }),
+    }),
+  );
+  await adminPage.route("**/api/admin/orders/order-preview-1/cancel", async (route) => {
+    expect(route.request().headers()["idempotency-key"]).toBeTruthy();
+    expect(route.request().postDataJSON()).toEqual({
+      reasonCode: "Customer requested cancellation",
+      expectedVersion: 2,
+    });
+    currentStatus = "CANCELED";
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "preview-cancel",
+        value: { orderId: summary.orderId, state: "CANCELED", cancellation: null },
+      }),
+    });
+  });
+
+  await adminPage.goto("/admin/orders");
+  await adminPage.getByText("Preview Customer").click();
+
+  await expect(adminPage.getByText("Order Preview", { exact: true })).toBeVisible();
+  await expect(
+    adminPage.getByRole("table", { name: "Ordered items for FM-PREVIEW-1" }),
+  ).toContainText("Fresh Carrots");
+  await expect(adminPage.getByRole("combobox", { name: "Order status" })).toBeVisible();
+
+  await adminPage.getByRole("combobox", { name: "Order status" }).click();
+  await adminPage.getByRole("option", { name: "Canceled" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText("Confirm order cancellation");
+  await adminPage.getByLabel("Confirmation reason").fill("Customer requested cancellation");
+  await adminPage.getByRole("button", { name: "Confirm" }).click();
+  await expect(adminPage.getByRole("combobox", { name: "Order status" })).toContainText("Canceled");
+});
+
 test("retired membership pricing leads to current settings and rejects writes", async ({
   adminPage,
 }) => {

@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-ORDER-PREVIEW-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin Orders presentation. The owner requested that clicking an Order list row
+open an Order Preview containing the Order's entries in a table and a status dropdown. Acceptance:
+every non-interactive row area opens a keyboard-accessible right-side preview; the preview reads the
+authoritative Order detail, presents all immutable ordered-item snapshots in a semantic table, and
+offers only Core-authorized status changes without creating a generic lifecycle setter.
+
+Implemented from clean `main` at `f354df23b2414cdc805fc6e2ec8f28880e062e0e`. Order rows now open
+the preview by pointer, Enter or Space while checkboxes, links and menus retain their own behavior. The
+new preview loads `/api/admin/orders/{orderId}`, includes selected Order/customer identity, item count,
+product/variant/quantity/price/total rows, total, commitment time, fulfillment mode and the existing
+full-detail link. Its compact status selector derives change availability from `allowedActions`; an
+eligible cancellation uses the existing versioned/idempotent cancellation command and mandatory
+consequence/reason confirmation, then reloads Core-confirmed detail. Fulfillment and delivery status
+progression remains with the existing scoped operational workflows. No Core, contract, schema,
+authorization or new business-write path changed. An unrelated untracked
+`apps/web/public/location_pin.lottie` appeared during implementation and remains preserved and excluded
+from this slice.
+
+Verification on the complete intended working-tree scope: focused `oxfmt` and `oxlint`, Web typecheck,
+terminology, naming and `git diff --check` passed; Order Preview and Admin accessibility tests passed
+**16/16 across 2 files**. A managed local Web/Core browser journey built the application, clicked a
+non-link Order row area, verified the Order Preview and ordered-items table, selected Canceled, supplied
+the required reason, asserted the idempotency/version request and observed the confirmed Canceled
+status; **1/1 passed**. No remote environment, provider or customer data was touched. Completion
+level: **1 of 1 Admin Order-preview slice complete**; no remaining work at this slice level.
+
 ## Latest owner request — ADMIN-PROMOTION-LABELS-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

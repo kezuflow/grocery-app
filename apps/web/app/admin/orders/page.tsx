@@ -1,8 +1,12 @@
 "use client";
 
-import type { AdminOrderPage, AdminOrderSummary, RpcResult } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, ExternalLink, Eye, X } from "lucide-react";
-import Link from "next/link";
+import type {
+  AdminOrderDetail,
+  AdminOrderPage,
+  AdminOrderSummary,
+  RpcResult,
+} from "@freshmarkets/contracts";
+import { Clipboard, EllipsisVertical, Eye, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AdminCursorPagination,
@@ -12,6 +16,7 @@ import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { OrderStatusBadge } from "../../../components/admin/order-status-badge";
+import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
@@ -120,6 +125,27 @@ export default function OrdersPage() {
       setCopiedId((current) => (current === order.orderId ? null : current));
     }, 2_000);
   }
+
+  function openOrderPreview(order: AdminOrderSummary) {
+    setSelectedOrder(order);
+    setPanelOpen(true);
+  }
+
+  const updateSelectedOrder = useCallback(
+    (order: AdminOrderDetail) => {
+      setSelectedOrder((current) => (current?.orderId === order.orderId ? order : current));
+      setPage((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.orderId === order.orderId ? order : item)),
+            }
+          : current,
+      );
+      if (status && status !== order.status) void load(status, pagination.cursor);
+    },
+    [load, pagination.cursor, status],
+  );
 
   const master = (
     <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
@@ -230,6 +256,21 @@ export default function OrdersPage() {
                 <TableRow
                   key={order.orderId}
                   data-state={selectedIds.has(order.orderId) ? "selected" : undefined}
+                  tabIndex={0}
+                  aria-label={`Preview order ${orderLabel(order)}`}
+                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-focus)]"
+                  onClick={(event) => {
+                    if ((event.target as Element).closest("button, a, input, [role='menuitem']"))
+                      return;
+                    openOrderPreview(order);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openOrderPreview(order);
+                    }
+                  }}
                 >
                   <TableCell>
                     <Checkbox
@@ -244,10 +285,7 @@ export default function OrdersPage() {
                       aria-expanded={panelOpen && selectedOrder?.orderId === order.orderId}
                       aria-controls="order-detail-panel"
                       className="font-medium hover:underline"
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setPanelOpen(true);
-                      }}
+                      onClick={() => openOrderPreview(order)}
                     >
                       {orderLabel(order)}
                     </button>
@@ -286,12 +324,7 @@ export default function OrdersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSelectedOrder(order);
-                            setPanelOpen(true);
-                          }}
-                        >
+                        <DropdownMenuItem onSelect={() => openOrderPreview(order)}>
                           <Eye aria-hidden="true" />
                           View details
                         </DropdownMenuItem>
@@ -321,61 +354,11 @@ export default function OrdersPage() {
   );
 
   const detail = selectedOrder ? (
-    <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Order details
-          </p>
-          <h2 id="order-panel-title" className="mt-1 truncate text-xl font-bold tracking-[-0.03em]">
-            {orderLabel(selectedOrder)}
-          </h2>
-          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-            {selectedOrder.customerName ?? "Customer"} · {selectedOrder.customerEmail}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close order details"
-          onClick={() => setPanelOpen(false)}
-        >
-          <X aria-hidden="true" />
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-5">
-          <OrderStatusBadge status={selectedOrder.status} />
-        </div>
-        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
-          {[
-            ["Amount", money(selectedOrder.totalMinor, selectedOrder.currency)],
-            ["Committed", date(selectedOrder.committedAt)],
-            ["Fulfillment", selectedOrder.fulfillmentMode.toLowerCase()],
-            ["Customer", selectedOrder.customerName ?? "Customer"],
-            ["Email", selectedOrder.customerEmail],
-            ["Order ID", selectedOrder.orderId],
-          ].map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
-              <dd className="max-w-64 break-all text-right font-medium capitalize">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
-        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
-          Close
-        </Button>
-        <Button asChild>
-          <Link href={`/admin/orders/${selectedOrder.orderId}`} prefetch={false}>
-            <ExternalLink aria-hidden="true" />
-            Full order
-          </Link>
-        </Button>
-      </div>
-    </>
+    <OrderPreviewPanel
+      order={selectedOrder}
+      onClose={() => setPanelOpen(false)}
+      onUpdated={updateSelectedOrder}
+    />
   ) : null;
 
   return (
@@ -385,7 +368,7 @@ export default function OrdersPage() {
       detail={detail}
       panelId="order-detail-panel"
       labelledBy="order-panel-title"
-      resizeLabel="Resize order details"
+      resizeLabel="Resize order preview"
     />
   );
 }
