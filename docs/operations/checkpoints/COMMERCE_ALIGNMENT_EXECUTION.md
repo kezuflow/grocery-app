@@ -14,11 +14,14 @@ inserts and reads that column. Wrangler reports exactly one pending migration,
 `0099_checkout_payment_method.sql`, which adds that nullable column without rewriting historical
 intents. The latest reported click created no new `payment_intent`, provider attempt or provider
 reference, so the failure occurred before PayMongo submission and does not require payment-outcome
-reconciliation. No source defect or additional migration is required. Applying the existing migration
-to the remote staging database is pending explicit owner authorization because it is a remote schema
-write. No deployment, remote write, provider transaction or outbound message occurred. Next action:
-apply staging migration `0099`, verify the column and migration ledger read-only, then have the owner
-retry the same checkout payment identity.
+reconciliation. No source defect or additional migration was required. After explicit owner
+authorization, migration `0099_checkout_payment_method.sql` was applied to
+`freshmarkets-core-staging`; Wrangler reports no remaining migrations, and a remote schema query
+confirms nullable TEXT column `payment_intent.payment_method_token` is present. No Worker deployment,
+provider transaction or outbound message occurred. `CHECKOUT-QRPH-STAGING-SCHEMA-1` is complete at the
+staging-schema counting level. Actual QR Ph continuation is not yet re-accepted after the migration.
+Next action: retry Continue with QR Ph from the same checkout and verify PayMongo code continuation;
+retain the same payment identity if any response is ambiguous.
 
 ## Latest owner request — CHECKOUT-QUOTE-REFRESH-COPY-1 (2026-09-21)
 
