@@ -79,6 +79,16 @@ source of truth. Core remains behind Web's Service Binding; only Core's
 signature-verified PayMongo webhook stays public on its staging `workers.dev`
 hostname.
 
+The checked-in `production` environments prepare isolated
+`freshmarkets-*-production` Workers, D1, R2 and Queue resources. The production
+Web environment deliberately does not claim the `freshmarkets.ph` Custom Domain;
+traffic remains on staging until an explicit cutover. Its live PayMongo public
+key is a required Web Worker secret binding so the value is supplied outside
+Git, while Core requires the matching live secret key and the live webhook
+endpoint secret. Creating the configuration does not provision queues, migrate
+the production D1 database, register the webhook, upload secrets, deploy either
+Worker or move traffic.
+
 Before changing the staging public origin, update the same release's
 `PUBLIC_APP_ORIGIN`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` values together.
 Register `https://freshmarkets.ph/api/auth/callback/google` as an authorized

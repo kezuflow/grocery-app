@@ -108,6 +108,9 @@
         "ROUTE_DISTANCE_PROVIDER": "google_maps",
       },
       "secrets": {
+        // `wrangler dev --env staging` loads only these names from
+        // .dev.vars.staging (or .dev.vars when no environment-specific file
+        // exists). Deployments require the same names as Worker secrets.
         "required": [
           "BETTER_AUTH_SECRET",
           "INITIAL_GLOBAL_ADMIN_EMAIL",
@@ -148,6 +151,66 @@
           "binding": "DB",
           "database_name": "freshmarkets-core-staging",
           "database_id": "48aaa957-2be1-4883-9998-5321a49d2825",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+    "production": {
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "BETTER_AUTH_URL": "https://freshmarkets.ph",
+        "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-production.ilyreggie.workers.dev",
+        "PAYMENT_PROVIDER": "paymongo",
+        // Production delivery stays fail-closed until its separate provider
+        // credentials, wallet and acceptance journey are approved.
+        "DELIVERY_PROVIDER": "disabled",
+        "DELIVERY_PROVIDERS": "disabled",
+        "LALAMOVE_MARKET": "",
+        "LALAMOVE_LANGUAGE": "",
+        "LALAMOVE_SERVICE_TYPE": "",
+        "ROUTE_DISTANCE_PROVIDER": "google_maps",
+      },
+      "secrets": {
+        "required": [
+          "BETTER_AUTH_SECRET",
+          "INITIAL_GLOBAL_ADMIN_EMAIL",
+          "AUTH_EMAIL_FROM",
+          "GOOGLE_CLIENT_ID",
+          "GOOGLE_CLIENT_SECRET",
+          "GOOGLE_MAPS_SERVER_KEY",
+          "PAYMONGO_SECRET_KEY",
+          "PAYMONGO_WEBHOOK_SECRET",
+        ],
+      },
+      "send_email": [{ "name": "EMAIL" }],
+      "queues": {
+        "producers": [
+          { "binding": "NOTIFICATION_QUEUE", "queue": "freshmarkets-notifications-production" },
+        ],
+        "consumers": [
+          {
+            "queue": "freshmarkets-notifications-production",
+            "dead_letter_queue": "freshmarkets-notifications-dlq-production",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "retry_delay": 60,
+          },
+        ],
+      },
+      "r2_buckets": [
+        {
+          "binding": "PRODUCT_MEDIA",
+          "bucket_name": "freshmarkets-product-media-production",
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "freshmarkets-core-production",
+          // Wrangler resolves or provisions this isolated database at deploy;
+          // do not copy staging's database UUID into production.
           "migrations_dir": "migrations",
         },
       ],

@@ -30,8 +30,8 @@ processing. Only verified provider observations establish canonical success.
 ## Runtime configuration
 
 For local test-mode development, keep Core's source-controlled default on `disabled` and place the
-test credentials and `PAYMENT_PROVIDER=paymongo` in the Git-ignored `apps/core/.dev.vars`. Put only
-browser-safe public keys in Web's local Worker variables, then start local development with
+test credentials in the Git-ignored `apps/core/.dev.vars`. Put the matching browser-safe
+`PAYMONGO_PUBLIC_KEY` in `apps/web/.dev.vars`, then start local development with
 `pnpm dev`. This runs real PayMongo test-sandbox API calls, so test Customers, Payments and Refunds appear
 in the PayMongo test dashboard. Automated Core tests
 override the provider back to `mock` and never call PayMongo.
@@ -55,8 +55,14 @@ interactively as Cloudflare Worker secrets from `apps/core`; never put their val
 command history, tickets, or logs:
 
 ```text
-pnpm exec wrangler secret put PAYMONGO_SECRET_KEY --config wrangler.jsonc --env <environment>
-pnpm exec wrangler secret put PAYMONGO_WEBHOOK_SECRET --config wrangler.jsonc --env <environment>
+pnpm exec wrangler secret put PAYMONGO_SECRET_KEY --config wrangler.jsonc --env staging
+pnpm exec wrangler secret put PAYMONGO_WEBHOOK_SECRET --config wrangler.jsonc --env staging
+```
+
+Add the matching test public key from `apps/web`:
+
+```text
+pnpm exec wrangler secret put PAYMONGO_PUBLIC_KEY --config wrangler.jsonc --env staging
 ```
 
 Use `sk_test_` outside production and `sk_live_` in production. Core rejects a key whose mode does
@@ -66,14 +72,23 @@ webhook keys must never do so.
 
 ## Webhook endpoint
 
-Register the public Core URL ending in `/webhooks/payments/paymongo`. Subscribe to:
+In PayMongo **Test Mode**, register this staging endpoint under **Developers → Webhooks → Add
+Endpoint**:
+
+```text
+https://freshmarkets-core-staging.ilyreggie.workers.dev/webhooks/payments/paymongo
+```
+
+Subscribe to only the events currently handled by Core:
 
 - `payment.paid`
 - `payment.failed`
 - `payment.refunded`
 - `payment.refund.updated`
 
-Copy the endpoint's signing secret into `PAYMONGO_WEBHOOK_SECRET`. Core verifies the `te` signature
+PayMongo displays a new endpoint-specific signing secret after the webhook is created. It is not
+the `sk_test_` API key. Upload that value to the `freshmarkets-core-staging` Worker as
+`PAYMONGO_WEBHOOK_SECRET`; do not put it in JSONC or Git. Core verifies the `te` signature
 for test keys or `li` for live keys, enforces a five-minute timestamp tolerance, hashes the exact
 raw request body, retains every verified delivery, and deduplicates business processing by provider
 event ID. Invalid signatures create neither receipt nor inbox evidence.

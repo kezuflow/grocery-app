@@ -1,5 +1,44 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STAGING-PAYMONGO-BINDINGS-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, staging provider configuration. After requesting prepared `env.production` blocks, the
+owner chose to complete PayMongo staging first and asked that both Worker JSONC files load their local
+PayMongo values from `.dev.vars`, with the exact staging webhook endpoint and signing-secret workflow.
+Acceptance: no PayMongo key value remains in tracked JSONC; Web and Core declare their PayMongo names
+per local/staging/production environment; staging build output binds the staging Workers; the runbook
+states the exact test-mode webhook URL and handled events; no secret value, webhook, deploy or provider
+transaction is created by this source change.
+
+Work started from synchronized `main`/`origin/main` at `6a00cdd7` with unrelated owner deletions under
+`.claude/skills` preserved. Core and Web retain isolated prepared production environments, while
+staging remains the active domain and immediate setup target. Web's previously tracked test public key
+was removed from top-level and staging `vars`; `PAYMONGO_PUBLIC_KEY` is now a required secret name in
+every Web environment, so local Vinext/Wrangler reads it from ignored `apps/web/.dev.vars` and deployed
+staging requires a `freshmarkets-web-staging` secret binding. Core already declared
+`PAYMONGO_SECRET_KEY` and `PAYMONGO_WEBHOOK_SECRET`; comments now distinguish local `.dev.vars` loading
+from deployed Worker secrets. The PayMongo runbook records the staging endpoint
+`https://freshmarkets-core-staging.ilyreggie.workers.dev/webhooks/payments/paymongo`, the four event
+subscriptions Core currently handles and the three environment-specific `wrangler secret put` steps.
+
+Read-only external checks found staging Core `/health` at HTTP 200 and the webhook's GET at the expected
+HTTP 404 (POST-only). Cloudflare secret-name listing found both Core PayMongo names already present but
+cannot establish their values; Web staging lacks `PAYMONGO_PUBLIC_KEY`. The new webhook's displayed
+endpoint signing secret must therefore replace the existing Core value, and the matching `pk_test_`
+value must be uploaded to Web before deployment/acceptance. Focused binding tests pass 5/5, Core staging
+dry-run passes, generated Worker types are current, and a `CLOUDFLARE_ENV=staging` Web build produces
+`freshmarkets-web-staging` bound to `freshmarkets-core-staging` with the PayMongo key required and no
+key value in generated vars. The complete `pnpm check` working-tree aggregate passes: 1,689 Core tests,
+604 Web tests, 69 contract tests, package/harness suites, formatting, naming, terminology, migrations,
+architecture, readiness, lint, typechecks and both builds. Only two pre-existing Web lint warnings and
+Wrangler's existing optional initial-admin/environment-selection warnings remain. No secret value was
+read or written; no webhook registration, deployment, migration, resource/traffic change, provider
+transaction or outbound message occurred. `STAGING-PAYMONGO-BINDINGS-1` is complete at the tracked
+configuration/local-verification level. Next action is the owner creating the endpoint in PayMongo Test
+Mode, then uploading the newly displayed signing secret and matching test keys before a separately
+authorized staging deployment and QR Ph acceptance payment.
+
 ## Latest owner request — LOCATION-PRODUCT-INLINE-PRICE-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

@@ -22,14 +22,12 @@
     // PUBLIC_APP_ORIGIN through environment configuration, never a source default.
     "PUBLIC_APP_ORIGIN": "http://localhost:3000",
     "ENVIRONMENT": "development",
-    // Browser-safe PayMongo public key. Deployed environments set the matching
-    // pk_test_ or pk_live_ value; the secret key exists only in Core.
-    "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
   },
   "secrets": {
-    // Browser-delivered but kept out of source control so GitHub push protection
-    // and origin restrictions remain the only token-distribution authorities.
-    "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID"],
+    // PAYMONGO_PUBLIC_KEY is browser-safe, but declaring it here keeps the
+    // environment-specific pk_test_/pk_live_ selection out of source control.
+    // Local development reads these names from apps/web/.dev.vars.
+    "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID", "PAYMONGO_PUBLIC_KEY"],
   },
   "observability": {
     "enabled": true,
@@ -63,10 +61,34 @@
       "vars": {
         "PUBLIC_APP_ORIGIN": "https://freshmarkets.ph",
         "ENVIRONMENT": "staging",
-        "PAYMONGO_PUBLIC_KEY": "pk_test_4H9rTzNx2r6AQdxaz4LpGKJf",
       },
       "secrets": {
-        "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID"],
+        // `CLOUDFLARE_ENV=staging` loads these names from .dev.vars.staging
+        // (or .dev.vars when no environment-specific file exists). Deployments
+        // require the same names on the freshmarkets-web-staging Worker.
+        "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID", "PAYMONGO_PUBLIC_KEY"],
+      },
+    },
+    "production": {
+      "images": { "binding": "IMAGES" },
+      "workers_dev": true,
+      // freshmarkets.ph remains on staging until the separately controlled
+      // production traffic cutover; do not claim the Custom Domain on deploy.
+      "services": [
+        {
+          "binding": "CORE",
+          "service": "freshmarkets-core-production",
+          "entrypoint": "CoreEntrypoint",
+        },
+      ],
+      "vars": {
+        "PUBLIC_APP_ORIGIN": "https://freshmarkets.ph",
+        "ENVIRONMENT": "production",
+      },
+      "secrets": {
+        // The PayMongo public key reaches the browser, but keeping its live
+        // value out of Git makes environment selection explicit at deploy.
+        "required": ["GOOGLE_MAPS_BROWSER_KEY", "GOOGLE_MAPS_MAP_ID", "PAYMONGO_PUBLIC_KEY"],
       },
     },
   },
