@@ -11,9 +11,9 @@ Technical diagnostics are collapsed and no separate overview/reconciliation dash
 Retain the existing one-hour payment continuation and up-to-30-minute QR lifetime; no 24-hour change
 was approved. Window expiry never manufactures a terminal financial outcome or blocks a later valid
 provider confirmation. No deletion/retention period or purge is authorized by this simplification.
-These are approved product decisions, with implementation pending under
-[PAYMENTS_SIMPLIFICATION_PLAN.md](PAYMENTS_SIMPLIFICATION_PLAN.md); the current request is to save an
-execution plan for Sol 5.6 Medium, not to implement or deploy it.
+These decisions are implemented locally by `PAYMENTS-SIMPLIFY-1` under
+[PAYMENTS_SIMPLIFICATION_PLAN.md](PAYMENTS_SIMPLIFICATION_PLAN.md). Deployment, retained-data review
+and actual-provider acceptance remain separate; local implementation does not assert any of them.
 Processing remains an internal pending-confirmation distinction, not staff work or a manual payment
 step. Where already shown to the customer, label it Confirming payment. Only an exhausted or
 unrecoverable confirmation issue calls for staff attention; awaiting confirmation is neither success

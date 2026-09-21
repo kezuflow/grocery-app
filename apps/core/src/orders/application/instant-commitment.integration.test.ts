@@ -9,6 +9,7 @@ import {
 import { requestRefund } from "../../payments/application/request-refund";
 import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
 import { env, exports } from "cloudflare:workers";
+import { completeResolvedReconciliationCases } from "../../payments/application/complete-reconciliation-cases";
 import { locationManager } from "../../test-location-fixtures";
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
@@ -23,6 +24,18 @@ import { getCart } from "../../checkout/application/cart";
 import { abandonCheckoutAttempt } from "../../checkout/application/abandon-checkout-attempt";
 
 const LOCATION = "location-cebu-central";
+async function automaticCompletion(command: { caseId: string; [key: string]: unknown }) {
+  await completeResolvedReconciliationCases(env.DB, Date.now());
+  const row = await env.DB.prepare("SELECT status FROM payment_reconciliation_case WHERE id=?")
+    .bind(command.caseId)
+    .first<{ status: string }>();
+  return row?.status === "RESOLVED"
+    ? {
+        ok: true as const,
+        value: { status: "RESOLVED", resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
+      }
+    : { ok: false as const, error: { code: "CONFLICT" } };
+}
 const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
   routeDistance: buildRouteDistancePort({
@@ -636,7 +649,7 @@ describe("instant order commitment", () => {
     await env.DB.prepare("UPDATE payment_reaction SET status='FAILED' WHERE id=?")
       .bind(f.reactionId)
       .run();
-    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+    expect(await automaticCompletion(f.command)).toMatchObject({
       ok: true,
       value: { resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
     });
@@ -671,7 +684,7 @@ describe("instant order commitment", () => {
       },
     );
     expect(other).toMatchObject({ ok: true });
-    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+    expect(await automaticCompletion(f.command)).toMatchObject({
       ok: true,
     });
     expect(
@@ -705,7 +718,7 @@ describe("instant order commitment", () => {
       if (fault !== "none") {
         await env.DB.exec(trigger);
         try {
-          expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+          expect(await automaticCompletion(f.command)).toMatchObject({
             ok: false,
             error: { code: "CONFLICT" },
           });
@@ -732,12 +745,12 @@ describe("instant order commitment", () => {
           await env.DB.exec("DROP TRIGGER ignore_refunded_cleanup");
         }
       }
-      const accepted = await exports.default.resolveAdminReconciliationCase(f.command);
+      const accepted = await automaticCompletion(f.command);
       expect(accepted).toMatchObject({
         ok: true,
         value: { status: "RESOLVED", resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
       });
-      expect(await exports.default.resolveAdminReconciliationCase(f.command)).toEqual(accepted);
+      expect(await automaticCompletion(f.command)).toEqual(accepted);
       expect(
         await env.DB.prepare("SELECT status,last_error_code FROM payment_reaction WHERE id=?")
           .bind(f.reactionId)
@@ -768,11 +781,11 @@ describe("instant order commitment", () => {
   );
   it("requires the entire captured amount to be refunded before completing the failed commitment", async () => {
     const f = await refundedUncommittedFixture(true);
-    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+    expect(await automaticCompletion(f.command)).toMatchObject({
       ok: false,
     });
     await f.refund(1);
-    expect(await exports.default.resolveAdminReconciliationCase(f.command)).toMatchObject({
+    expect(await automaticCompletion(f.command)).toMatchObject({
       ok: true,
     });
   });
@@ -964,7 +977,7 @@ describe("instant order commitment", () => {
       );
       try {
         expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({ applied: false });
-        expect(await exports.default.resolveAdminReconciliationCase(resolution)).toMatchObject({
+        expect(await automaticCompletion(resolution)).toMatchObject({
           ok: false,
           error: { code: "CONFLICT" },
         });
@@ -988,9 +1001,9 @@ describe("instant order commitment", () => {
       } finally {
         await env.DB.exec("DROP TRIGGER ignore_recovered_projection");
       }
-      const resolved = await exports.default.resolveAdminReconciliationCase(resolution);
+      const resolved = await automaticCompletion(resolution);
       expect(resolved).toMatchObject({ ok: true });
-      expect(await exports.default.resolveAdminReconciliationCase(resolution)).toEqual(resolved);
+      expect(await automaticCompletion(resolution)).toEqual(resolved);
       expect(await applyCheckoutPaymentReaction(env.DB, input)).toMatchObject({ applied: true });
       expect(
         await env.DB.prepare(

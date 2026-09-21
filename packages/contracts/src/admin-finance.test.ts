@@ -7,7 +7,6 @@ import {
   type AdminOrderSummary,
   type AdminOrderDetail,
   type AdminPaymentDetail,
-  type AdminPaymentOverview,
   type AdminPaymentSummary,
   type AdminMembershipSummary,
   type AdminOrderIssueView,
@@ -62,7 +61,10 @@ describe("finance contracts", () => {
     void ({
       paymentIntentId: "pi-1",
       purpose: "GROCERY_CHECKOUT",
+      customerName: "Customer",
       customerEmail: "c@example.com",
+      orderId: "ord-1",
+      orderNumber: "FM-2026-000001",
       amountMinor: 50000,
       currency: "PHP",
       status: "SUCCEEDED",
@@ -195,7 +197,10 @@ describe("finance contracts", () => {
       purpose: "GROCERY_CHECKOUT",
       subjectType: "checkout_quote",
       subjectId: "quote-1",
+      customerName: "Customer",
       customerEmail: "c@example.com",
+      orderId: "ord-1",
+      orderNumber: "FM-2026-000001",
       amountMinor: 50_000,
       refundedMinor: 10_000,
       remainingRefundableMinor: 40_000,
@@ -210,6 +215,8 @@ describe("finance contracts", () => {
       },
       currency: "PHP",
       status: "PARTIALLY_REFUNDED",
+      canonicalStatus: "PARTIALLY_REFUNDED",
+      displayStatus: "PARTIALLY_REFUNDED",
       version: 3,
       createdAt: "2026-08-20T00:00:00.000Z",
       updatedAt: "2026-08-20T01:00:00.000Z",
@@ -221,20 +228,6 @@ describe("finance contracts", () => {
       reconciliationCases: [],
       recentAudit: [],
     } satisfies AdminPaymentDetail;
-
-    void ({
-      intentCounts: {
-        total: 4,
-        actionRequired: 1,
-        processing: 1,
-        succeeded: 2,
-        failed: 0,
-      },
-      openReconciliationCount: 1,
-      pendingRefundCount: 1,
-      totalsByCurrency: [{ currency: "PHP", succeededMinor: 100_000, refundedMinor: 10_000 }],
-      recentTransactions: [payment],
-    } satisfies AdminPaymentOverview);
 
     expect(order.financial.source).toBe("CHECKOUT_QUOTE");
     expect(payment).not.toHaveProperty("providerReference");

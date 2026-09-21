@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
+import { completeResolvedReconciliationCases } from "../../payments/application/complete-reconciliation-cases";
 import { locationManager } from "../../test-location-fixtures";
 import { seedTestCycle } from "../../test-commerce-fixtures";
 import { hasUnresolvedScheduledCommitment } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
@@ -20,6 +21,18 @@ import { ProviderRegistry } from "../../payments/infrastructure/providers/provid
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
 
 let counter = 0;
+async function automaticCompletion(command: { caseId: string; [key: string]: unknown }) {
+  await completeResolvedReconciliationCases(env.DB, Date.now());
+  const row = await env.DB.prepare("SELECT status FROM payment_reconciliation_case WHERE id=?")
+    .bind(command.caseId)
+    .first<{ status: string }>();
+  return row?.status === "RESOLVED"
+    ? {
+        ok: true as const,
+        value: { status: "RESOLVED", resolutionAction: "CONFIRM_REFUNDED_COMMITMENT" },
+      }
+    : { ok: false as const, error: { code: "CONFLICT" } };
+}
 async function committedOrder(cycleIdOverride?: string) {
   const n = ++counter;
   const customerId = `cust-amd-${n}-${crypto.randomUUID().slice(0, 8)}`;
@@ -447,7 +460,7 @@ describe("paid-order amendments", () => {
       .bind(manager.id)
       .run();
     expect(
-      await exports.default.resolveAdminReconciliationCase({
+      await automaticCompletion({
         headers: manager.headers,
         caseId: record.id,
         expectedVersion: record.version,

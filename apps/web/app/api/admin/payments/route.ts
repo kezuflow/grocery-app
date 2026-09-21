@@ -24,16 +24,7 @@ function parseLimit(params: URLSearchParams, requestId: string): number | undefi
   return parsed;
 }
 
-const PAYMENT_STATUSES = [
-  "INITIATED",
-  "REQUIRES_ACTION",
-  "PROCESSING",
-  "SUCCEEDED",
-  "FAILED",
-  "EXPIRED",
-  "PARTIALLY_REFUNDED",
-  "REFUNDED",
-] as const;
+const PAYMENT_STATUSES = ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] as const;
 
 /** Thin same-origin BFF adapter for the payments list. Transport only. */
 async function GETHandler(request: Request) {

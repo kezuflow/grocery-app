@@ -1,5 +1,62 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PAYMENTS-SIMPLIFY-1 implementation (2026-09-21)
+
+Active plan: `docs/product/PAYMENTS_SIMPLIFICATION_PLAN.md`, sequences **PS-01 through PS-06**, under
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**.
+The owner authorized the approved Payments simplification across recovery, automatic issue completion,
+Core authorization/read projections, the compact Admin workspace, obsolete-surface removal and local
+integrated acceptance. Acceptance requires captured payments/refunds only in Payments, grouped genuine
+issues in Needs attention, no routine awaiting/processing staff work, automatic verified closure,
+preserved one-hour/up-to-30-minute continuation rules and delayed/duplicate exactly-once behavior.
+
+The implementation began from `d8410b56` on `main`, preserving the 16 deleted legacy `.claude/skills`
+files. During the work the separately owned Global Product preview slice was committed and pushed as
+`90543845` plus checkpoint `8ceb7dda`; Payments was rebased naturally by the shared checkout and its
+uncommitted preview refinements remain excluded from this slice. No schema migration was required.
+
+PS-01 now classifies provider lookup outcomes explicitly. Verified pre-deadline customer waiting resets
+the lookup failure budget and parks at the persisted continuation deadline. An exact post-deadline
+waiting observation atomically completes lookup metadata and audits `PAYMENT.UNPAID_WINDOW_CONFIRMED`
+without changing canonical Payment/Attempt state, so later valid success still follows the guarded
+exactly-once Order/addition reaction. Background unavailable lookups no longer create routine cases;
+historical pending-only exhaustion receives one bounded marked recheck.
+
+PS-02 adds bounded oldest-first system completion after lookup redrive. Exact financial evidence,
+refunded-uncommitted owning cleanup, case version, distinct per-case audit and immutable receipt commit
+together; stale/new work or ignored effects leave cases open. The staff manual case-close contract,
+route and UI are removed. PS-03 makes payment listing a closed captured-state projection, supplies one
+Core-grouped attention read/count with legal actions, actual customer/Order links, typed display status,
+honest refund balances and stopped-recovery recheck guards. PS-04 supplies one server-initialized,
+URL-owned Payments/Needs attention master-detail workspace with collapsed diagnostics, responsive
+desktop/mobile panes, action-first reason entry and exact saved-command replay. PS-05 redirects legacy
+URLs, removes duplicate overview/navigation/raw-case surfaces and updates PRODUCT, DESIGN, API,
+state-machine and data-model guidance.
+
+Verification on the working tree based on `8ceb7dda`: focused Core suites passed **50/50 across 4
+files** for lookup/reconciliation/automatic completion/Admin finance and **70/70 across 5 files** for
+refund, reaction, event and scheduled redrive behavior. The final aggregate `pnpm check` passed:
+Core **1692/1692 across 207 files**, Web **602/602 across 140 files**, contracts **69/69 across 20
+files**, config/domain-shared/validation **2/2 each**, workspace typecheck, architecture/security and
+repository-policy gates, Core dry-run build and Web production build. `oxlint` reported only two
+pre-existing address-book test warnings outside this slice. The managed
+browser harness used only resolved disposable state
+`apps/core/.wrangler/e2e-commerce-alignment-20260907`. The requested desktop/mobile journeys have
+**12/12 passing evidence across isolated managed runs**: Payments simplification, payment lookup and
+reaction recovery passed six journeys before a long-run Windows Wrangler native exit; refund recovery
+passed **2/2** in a fresh short run; reconciliation and refunded-work behavior passed **4/4** in the
+final short run (`test-results/.last-run.json` status `passed`). A single long 12-test process is not
+claimed: Wrangler exited with native code `3221226505` after its first six passes, and a separate
+catalog build earlier replaced shared `dist` during startup. No assertion failure remains in the split
+acceptance runs.
+
+Implementation is locally complete at **6 of 6 payment sequence IDs**: PS-01, PS-02, PS-03, PS-04,
+PS-05 and PS-06. No deployment, retained production-data mutation, real PayMongo payment/refund or
+actual-provider acceptance occurred. Remaining acceptance obligations are deployment plus retained-data
+and actual-provider verification under separate authorization. One next action: deploy only when the
+owner separately authorizes it, then execute non-destructive retained/provider acceptance without
+manufacturing outcomes.
+
 ## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

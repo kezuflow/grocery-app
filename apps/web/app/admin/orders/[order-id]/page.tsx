@@ -545,7 +545,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                         </div>
                         <Link
                           className="block truncate font-mono text-xs text-[var(--fm-text-muted)] hover:underline"
-                          href={`/admin/payments/transactions/${payment.paymentIntentId}`}
+                          href={`/admin/payments?payment=${encodeURIComponent(payment.paymentIntentId)}`}
                         >
                           {payment.paymentIntentId}
                         </Link>

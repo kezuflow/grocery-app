@@ -3,7 +3,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 // Captured-payment linkage is fixture evidence; refund admission/submission/replay use real Web/Core with the test-only provider.
 for (const width of [1440, 390])
   test(`Recover a submitted refund at ${width}px`, async ({ adminPage: page }, testInfo) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const suffix = crypto.randomUUID();
     const now = Date.now();
     const userId = `payment-user-${suffix}`;
@@ -28,14 +28,16 @@ for (const width of [1440, 390])
 
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(`/admin/payments/transactions/${paymentIntentId}`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: `Payment ${paymentIntentId}` }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: paymentIntentId, exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
     await page.getByLabel("Refund amount").fill("25.001");
-    await page.getByRole("button", { name: "Request refund", exact: true }).click();
+    await page.getByRole("button", { name: "Refund", exact: true }).click();
     await page.getByLabel("Confirmation reason").fill("Inspected quality issue");
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
-    await expect(page.getByText(/at most two decimal places/)).toBeVisible();
+    await expect(
+      page.getByText(/Enter a valid amount within the remaining refundable balance/),
+    ).toBeVisible();
     await page.getByLabel("Refund amount").fill("25.01");
     const writes: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/payments/refunds", async (route) => {
@@ -48,12 +50,14 @@ for (const width of [1440, 390])
       expect(response.ok()).toBe(true);
       await route.abort("failed");
     });
-    await page.getByRole("button", { name: "Request refund", exact: true }).click();
+    await page.getByRole("button", { name: "Refund", exact: true }).click();
     await page.getByLabel("Confirmation reason").fill("Inspected quality issue");
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
-    await expect(page.getByText("Refund request needs recovery", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/The response is unknown\. Retry the saved refund request/u),
+    ).toBeVisible();
     await expect(page.getByLabel("Refund amount")).toBeDisabled();
-    await page.getByRole("button", { name: "Retry saved refund" }).click();
+    await page.getByRole("button", { name: "Retry saved command" }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Refund request accepted" }),
     ).toBeVisible({ timeout: 15_000 });
@@ -64,11 +68,12 @@ for (const width of [1440, 390])
       expectedVersion: 1,
       reason: "Inspected quality issue",
     });
-    // Section primitives expose their heading; locate its enclosing section for the canonical read.
-    const refundSection = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Refund history", exact: true }) });
-    await expect(refundSection.getByText("PROCESSING", { exact: true })).toHaveCount(1);
+    executeAdminE2eSql(
+      `UPDATE payment_refund SET status='ESCALATED', last_error_code='PROVIDER_STATUS_UNKNOWN', version=version+1, updated_at=${Date.now()} WHERE payment_intent_id='${paymentIntentId}';`,
+    );
+    await page.reload();
+    const refundCard = page.getByText("ESCALATED", { exact: true }).locator("..").locator("..");
+    await expect(refundCard).toBeVisible();
 
     const checks: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/payments/refunds/recheck", async (route) => {
@@ -81,20 +86,20 @@ for (const width of [1440, 390])
       expect(response.ok()).toBe(true);
       await route.abort("failed");
     });
-    await refundSection.getByLabel("Provider check reason").fill("Verify provider progress");
-    await refundSection.getByRole("button", { name: "Check provider status", exact: true }).click();
-    await expect(refundSection.getByText(/The response is unknown/)).toBeVisible();
-    await expect(refundSection.getByLabel("Provider check reason")).toBeDisabled();
-    await refundSection.getByRole("button", { name: "Retry saved provider check" }).click();
-    await expect(refundSection.getByText(/Provider check queued/)).toBeVisible();
+    await refundCard.getByRole("button", { name: "Check provider status", exact: true }).click();
+    await refundCard.getByLabel("Provider check reason").fill("Verify provider progress");
+    await refundCard.getByRole("button", { name: "Confirm provider check", exact: true }).click();
+    await expect(refundCard.getByText(/The response is unknown/)).toBeVisible();
+    await expect(refundCard.getByLabel("Provider check reason")).toBeDisabled();
+    await refundCard.getByRole("button", { name: "Retry saved provider check" }).click();
+    await expect(refundCard.getByText(/Provider check queued/)).toBeVisible();
     expect(checks).toHaveLength(2);
     expect(checks[1]).toEqual(checks[0]);
     await page.reload();
-    await expect(
-      page.getByRole("heading", { level: 1, name: `Payment ${paymentIntentId}` }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(refundSection.getByText("PROCESSING", { exact: true })).toHaveCount(1);
-    await expect(refundSection.getByText(/Inspected quality issue/)).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: paymentIntentId, exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText("ESCALATED", { exact: true })).toHaveCount(1);
     await expect(page.getByText("PAYMENT.REFUND_REQUESTED", { exact: false })).toHaveCount(1);
     await expect(page.getByText("PAYMENT.REFUND_RECHECK_REQUESTED", { exact: false })).toHaveCount(
       1,

@@ -1,8 +1,9 @@
 # Payments Simplification Execution Plan
 
 Prepared 21 September 2026 for **Sol 5.6, Medium reasoning**. Parent task:
-`PAYMENTS-SIMPLIFY-1`. This is a decision-complete handoff for later implementation, not a claim that
-the feature has shipped. The current owner request authorizes preparing and saving this plan only.
+`PAYMENTS-SIMPLIFY-1`. The owner subsequently authorized PS-01 through PS-06, which are implemented
+and locally verified as recorded in the active checkpoint. This remains distinct from deployment,
+retained production-data review and actual-provider acceptance.
 
 This continues [COMMERCE_ALIGNMENT_E2E_PLAN.md](COMMERCE_ALIGNMENT_E2E_PLAN.md), **Phase 7 — Complete
 journeys and activation evidence**. Follow [AGENTS.md](../../AGENTS.md), the active checkpoint and the

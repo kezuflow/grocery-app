@@ -89,6 +89,84 @@ async function manager(
   };
 }
 describe("bounded payment lookup recovery", () => {
+  it("parks verified customer waiting at the continuation deadline and completes it without changing canonical state", async () => {
+    const f = await fixture();
+    setMockObservedState(f.provider, f.reference, "REQUIRES_ACTION");
+    await env.DB.prepare(
+      "UPDATE payment_provider_action SET expires_at=expires_at+2700000 WHERE payment_intent_id=?",
+    )
+      .bind(f.paymentIntentId)
+      .run();
+    const action = await env.DB.prepare(
+      "SELECT expires_at FROM payment_provider_action WHERE payment_intent_id=?",
+    )
+      .bind(f.paymentIntentId)
+      .first<{ expires_at: number }>();
+    if (!action) throw new Error("Missing action deadline");
+    const lookup = vi.spyOn(f.provider, "getPayment");
+    await reconcileStuckPayments(env.DB, f.registry, action.expires_at - 1);
+    expect(await state(f.paymentIntentId)).toMatchObject({
+      status: "PENDING",
+      attempts: 0,
+      available_at: action.expires_at,
+      lease_token: null,
+    });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    await reconcileStuckPayments(env.DB, f.registry, action.expires_at);
+    expect(await state(f.paymentIntentId)).toMatchObject({ status: "COMPLETED", attempts: 0 });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+        .bind(f.paymentIntentId)
+        .first(),
+    ).toEqual({ status: "REQUIRES_ACTION" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM payment_reconciliation_case WHERE payment_intent_id=?",
+      )
+        .bind(f.paymentIntentId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=? AND action='PAYMENT.UNPAID_WINDOW_CONFIRMED'",
+      )
+        .bind(f.paymentIntentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it("keeps late provider success legal after the unpaid window conclusion", async () => {
+    const f = await fixture();
+    setMockObservedState(f.provider, f.reference, "REQUIRES_ACTION");
+    const action = await env.DB.prepare(
+      "SELECT expires_at FROM payment_provider_action WHERE payment_intent_id=?",
+    )
+      .bind(f.paymentIntentId)
+      .first<{ expires_at: number }>();
+    if (!action) throw new Error("Missing action deadline");
+    await reconcileStuckPayments(env.DB, f.registry, action.expires_at);
+    setMockObservedState(f.provider, f.reference, "SUCCEEDED");
+    const { reconcilePayment } = await import("./reconcile-payment");
+    expect(
+      await reconcilePayment(env.DB, f.registry, {
+        paymentIntentId: f.paymentIntentId,
+        idempotencyKey: crypto.randomUUID(),
+        actorId: "system:test",
+        requestId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { canonicalState: "SUCCEEDED" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?")
+        .bind(f.paymentIntentId)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_reaction WHERE payment_intent_id=?")
+        .bind(f.paymentIntentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
   it("claims concurrent sweeps once and applies a provider-confirmed terminal observation", async () => {
     const f = await fixture();
     setMockObservedState(f.provider, f.reference, "FAILED");
@@ -170,11 +248,16 @@ describe("bounded payment lookup recovery", () => {
       ok: false,
       error: { code: "FORBIDDEN" },
     });
-    const command = await manager(f);
+    const command = { ...(await manager(f)), expectedRecoveryVersion: 1 };
     expect(await recheckStaffPayment(env.DB, { ...command, expectedVersion: 999 })).toMatchObject({
       ok: false,
     });
     expect(await state(f.paymentIntentId)).toBeNull();
+    await env.DB.prepare(
+      "INSERT INTO payment_lookup_recovery(payment_intent_id,status,attempts,available_at,created_at,updated_at) VALUES (?,'EXHAUSTED',5,?,?,?)",
+    )
+      .bind(f.paymentIntentId, f.now, f.now, f.now)
+      .run();
     await env.DB.exec(
       "CREATE TRIGGER ignore_lookup_audit BEFORE INSERT ON audit_event WHEN NEW.action='PAYMENT.LOOKUP_RECHECK_REQUESTED' BEGIN SELECT RAISE(IGNORE); END",
     );
@@ -183,7 +266,7 @@ describe("bounded payment lookup recovery", () => {
     } finally {
       await env.DB.exec("DROP TRIGGER ignore_lookup_audit");
     }
-    expect(await state(f.paymentIntentId)).toBeNull();
+    expect(await state(f.paymentIntentId)).toMatchObject({ status: "EXHAUSTED", version: 1 });
     const results = await Promise.all([
       recheckStaffPayment(env.DB, command),
       recheckStaffPayment(env.DB, { ...command, idempotencyKey: crypto.randomUUID() }),
@@ -247,7 +330,12 @@ describe("bounded payment lookup recovery", () => {
   });
   it("revalidates current authority in the admission batch and rejects revoked replay", async () => {
     const f = await fixture(),
-      command = await manager(f);
+      command = { ...(await manager(f)), expectedRecoveryVersion: 1 };
+    await env.DB.prepare(
+      "INSERT INTO payment_lookup_recovery(payment_intent_id,status,attempts,available_at,created_at,updated_at) VALUES (?,'EXHAUSTED',5,?,?,?)",
+    )
+      .bind(f.paymentIntentId, f.now, f.now, f.now)
+      .run();
     const database = new Proxy(env.DB, {
       get(target, key) {
         if (key === "batch")
@@ -263,7 +351,7 @@ describe("bounded payment lookup recovery", () => {
       },
     });
     expect(await recheckStaffPayment(database, command)).toMatchObject({ ok: false });
-    expect(await state(f.paymentIntentId)).toBeNull();
+    expect(await state(f.paymentIntentId)).toMatchObject({ status: "EXHAUSTED", version: 1 });
     await env.DB.prepare("UPDATE staff_identity SET status='active' WHERE auth_user_id=?")
       .bind(command.actorAuthUserId)
       .run();

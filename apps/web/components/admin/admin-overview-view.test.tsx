@@ -16,7 +16,7 @@ const overview: AdminOverviewView = {
       href: "/admin/orders",
     },
     {
-      code: "ACTION_REQUIRED_PAYMENTS",
+      code: "PAYMENT_ATTENTION",
       label: "Payments requiring action",
       value: null,
       unavailableReason: "Global payments.read access is required.",

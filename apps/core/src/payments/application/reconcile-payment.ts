@@ -9,10 +9,19 @@ export type ReconcilePaymentCommand = {
   idempotencyKey: string;
   actorId: string;
   requestId: string;
+  /** Bounded background recovery owns its single escalation case. */
+  recordUnavailableCase?: boolean;
 };
 
 export type ReconciliationOutcome = ObservationApplication & {
   source: "PROVIDER_LOOKUP" | "ALREADY_CONSISTENT";
+  lookupOutcome:
+    | "AWAITING_CUSTOMER"
+    | "PROCESSING"
+    | "TERMINAL"
+    | "LOOKUP_UNAVAILABLE"
+    | "IDENTITY_MISMATCH"
+    | "APPLICATION_CONFLICT";
 };
 
 /**
@@ -46,12 +55,13 @@ export async function reconcilePayment(
     .bind(intent.id)
     .first<{ provider: string; provider_reference: string }>();
   if (!attempt) {
-    await repository.recordReconciliationCase({
-      intentId: intent.id,
-      category: "UNMAPPED_PROVIDER_REFERENCE",
-      detailsJson: JSON.stringify({ reason: "no provider attempt linked" }),
-      now: Date.now(),
-    });
+    if (command.recordUnavailableCase !== false)
+      await repository.recordReconciliationCase({
+        intentId: intent.id,
+        category: "UNMAPPED_PROVIDER_REFERENCE",
+        detailsJson: JSON.stringify({ reason: "no provider attempt linked" }),
+        now: Date.now(),
+      });
     return {
       ok: true,
       value: {
@@ -59,6 +69,7 @@ export async function reconcilePayment(
         paymentIntentId: intent.id,
         canonicalState: toDomainState(intent.status),
         source: "PROVIDER_LOOKUP",
+        lookupOutcome: "LOOKUP_UNAVAILABLE",
       },
       requestId: command.requestId,
     };
@@ -78,14 +89,15 @@ export async function reconcilePayment(
     view.amountMinor !== intent.amountMinor ||
     view.currency !== intent.currency
   ) {
-    await repository.recordReconciliationCase({
-      intentId: intent.id,
-      category: "AMBIGUOUS_OUTCOME",
-      detailsJson: JSON.stringify({
-        reason: !view ? "PROVIDER_LOOKUP_UNAVAILABLE" : "PROVIDER_LOOKUP_IDENTITY_MISMATCH",
-      }),
-      now: Date.now(),
-    });
+    if (command.recordUnavailableCase !== false)
+      await repository.recordReconciliationCase({
+        intentId: intent.id,
+        category: "AMBIGUOUS_OUTCOME",
+        detailsJson: JSON.stringify({
+          reason: !view ? "PROVIDER_LOOKUP_UNAVAILABLE" : "PROVIDER_LOOKUP_IDENTITY_MISMATCH",
+        }),
+        now: Date.now(),
+      });
     return {
       ok: true,
       value: {
@@ -93,6 +105,7 @@ export async function reconcilePayment(
         paymentIntentId: intent.id,
         canonicalState: toDomainState(intent.status),
         source: "PROVIDER_LOOKUP",
+        lookupOutcome: !view ? "LOOKUP_UNAVAILABLE" : "IDENTITY_MISMATCH",
       },
       requestId: command.requestId,
     };
@@ -105,7 +118,18 @@ export async function reconcilePayment(
   await synchronizeOrderCancellationForPayment(database, intent.id);
   return {
     ok: true,
-    value: { ...application, source: "PROVIDER_LOOKUP" },
+    value: {
+      ...application,
+      source: "PROVIDER_LOOKUP",
+      lookupOutcome:
+        application.processingStatus !== "APPLIED"
+          ? "APPLICATION_CONFLICT"
+          : view.canonicalState === "REQUIRES_ACTION" || view.canonicalState === "INITIATED"
+            ? "AWAITING_CUSTOMER"
+            : view.canonicalState === "PROCESSING"
+              ? "PROCESSING"
+              : "TERMINAL",
+    },
     requestId: command.requestId,
   };
 }

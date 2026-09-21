@@ -10,7 +10,7 @@ export function completeRefundedCommitmentStatements(
     subjectType: "checkout_quote" | "paid_order_amendment";
     subjectId: string;
     customerId: string;
-    actorAuthUserId: string;
+    actorAuthUserId: string | null;
     reason: string;
     idempotencyKey: string;
     requestId: string;

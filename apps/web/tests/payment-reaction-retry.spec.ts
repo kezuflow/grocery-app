@@ -9,7 +9,7 @@ for (const width of [1440, 390])
     const paymentId = `reaction-payment-${id}`,
       caseId = `reaction-case-${id}`;
     executeAdminE2eSql(`
- INSERT INTO user(id,name,email,email_verified,created_at,updated_at) VALUES ('u-${id}','Event Customer','event-${id}@example.com',1,${now},${now});
+ INSERT INTO user(id,name,email,email_verified,created_at,updated_at) VALUES ('u-${id}','Event Customer ${id}','event-${id}@example.com',1,${now},${now});
  INSERT INTO customer_principal(id,auth_user_id,status,created_at,updated_at) VALUES ('cp-${id}','u-${id}','active',${now},${now});
  INSERT INTO customer(id,auth_user_id,principal_id,status,version,created_at,updated_at) VALUES ('c-${id}','u-${id}','cp-${id}','active',1,${now},${now});
  INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES ('${paymentId}','GROCERY_CHECKOUT','checkout_quote','quote-${id}','c-${id}',1000,'PHP','SUCCEEDED','pi-${id}',2,${now},${now});
@@ -18,14 +18,11 @@ for (const width of [1440, 390])
  INSERT INTO payment_reconciliation_case(id,payment_intent_id,category,status,details_json,created_at) VALUES ('${caseId}','${paymentId}','REACTION_FAILURE','OPEN','${JSON.stringify({ reactionId: `reaction-${id}`, errorCode: "MAX_ATTEMPTS_EXCEEDED" })}',${now});
  `);
     await page.setViewportSize({ width, height: 1000 });
-    await page.goto("/admin/payments/reconciliation");
-    const target = page
-      .getByRole("listitem")
-      .filter({ has: page.locator(`a[href="/admin/payments/transactions/${paymentId}"]`) });
-    await expect(
-      target.getByRole("button", { name: "Retry paid commitment", exact: true }),
-    ).toBeVisible({ timeout: 15000 });
-    await expect(target.getByRole("button", { name: "Review resolution" })).toBeDisabled();
+    await page.goto("/admin/payments?tab=attention");
+    const target = page.getByRole("row", { name: new RegExp(`Event Customer ${id}`, "u") });
+    await expect(target).toBeVisible({ timeout: 15000 });
+    await target.click();
+    await page.getByRole("button", { name: "Retry Order confirmation", exact: true }).click();
     const writes: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/payments/reaction-retry", async (route) => {
       writes.push({
@@ -37,23 +34,17 @@ for (const width of [1440, 390])
       expect(response.ok()).toBe(true);
       await route.abort("failed");
     });
-    await target
-      .getByLabel("Commitment retry reason")
-      .fill("Reviewed local event processing readiness");
-    await target.getByRole("button", { name: "Retry paid commitment", exact: true }).click();
-    await expect(target.getByText(/The response is unknown/)).toBeVisible();
-    await target.getByRole("button", { name: "Retry saved commitment request" }).click();
-    await expect(
-      target.getByText("Commitment retry queued. Refresh for current progress.", { exact: true }),
-    ).toBeVisible();
+    await page.getByLabel("Recovery reason").fill("Reviewed local event processing readiness");
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByText(/The response is unknown/)).toBeVisible();
+    await page.getByRole("button", { name: "Retry saved command" }).click();
+    await expect(page.getByText(/Recovery queued\. The issue remains visible/u)).toBeVisible();
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     expect(JSON.parse(writes[0].body ?? "{}")).toMatchObject({ caseId, expectedVersion: 1 });
     await page.reload();
-    await expect(target.getByText(/Paid commitment: PENDING/)).toBeVisible();
-    await expect(
-      target.getByRole("button", { name: "Retry paid commitment", exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByText("Checking automatically", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry Order confirmation" })).toHaveCount(0);
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);

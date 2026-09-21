@@ -2,7 +2,7 @@
 
 ## Payments simplification — owner decisions 2026-09-21
 
-Approved design intent; implementation is pending under
+Implemented locally under
 [PAYMENTS_SIMPLIFICATION_PLAN.md](../product/PAYMENTS_SIMPLIFICATION_PLAN.md). Use one Payments
 destination with a paid-payments/refunds list and a Needs attention view. Ordinary unpaid/expired
 attempts have no collection view or All attempts filter. Reuse the full-width Admin master/detail
@@ -14,6 +14,10 @@ Resolved issues disappear automatically after verified completion; no Close case
 Keep refund confirmation and identical-command recovery where required, and never display an unpaid
 amount as received or refundable. Existing unpaid deep links may show read-only context without
 restoring an unpaid collection. The owning PRODUCT supplement defines financial and expiry meaning.
+The implementation uses the shared resizable desktop/mobile master-detail workspace, URL-owned tab,
+paid-status, cursor and mutually exclusive payment/issue selection, and distinct unavailable/error/
+empty states. Local browser acceptance is recorded in the active checkpoint; production remains
+unchanged until separately authorized.
 
 ## Notification panels — owner approval 2026-09-13
 

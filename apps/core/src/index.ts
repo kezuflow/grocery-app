@@ -262,9 +262,8 @@ import {
   listAdminOrders as listAdminOrdersQuery,
   getAdminOrder as getAdminOrderQuery,
   getAdminPayment as getAdminPaymentQuery,
-  getAdminPaymentOverview as getAdminPaymentOverviewQuery,
   listAdminPayments as listAdminPaymentsQuery,
-  listAdminReconciliationCases as listAdminReconciliationCasesQuery,
+  listAdminPaymentAttention as listAdminPaymentAttentionQuery,
   listAdminMemberships as listAdminMembershipsQuery,
   getAdminMembership as getAdminMembershipQuery,
   listAdminOrderIssues as listAdminOrderIssuesQuery,
@@ -277,7 +276,6 @@ import {
   recheckAdminPayment as recheckAdminPaymentCommand,
   retryAdminProviderEvent as retryAdminProviderEventCommand,
   retryAdminPaymentReaction as retryAdminPaymentReactionCommand,
-  resolveAdminReconciliationCase as resolveAdminReconciliationCaseCommand,
   changeAdminMembership as changeAdminMembershipCommand,
   applyAdminOrderIssueAction as applyAdminOrderIssueActionCommand,
 } from "./admin/application/finance-commands";
@@ -938,24 +936,18 @@ const orderCancelSchema = authenticatedRequestSchema.extend({
 });
 
 const paymentListSchema = authenticatedRequestSchema.extend({
-  status: validationSchema
-    .enum([
-      "INITIATED",
-      "REQUIRES_ACTION",
-      "PROCESSING",
-      "SUCCEEDED",
-      "FAILED",
-      "EXPIRED",
-      "PARTIALLY_REFUNDED",
-      "REFUNDED",
-    ])
-    .optional(),
+  status: validationSchema.enum(["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"]).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
 const paymentDetailSchema = authenticatedRequestSchema.extend({
   paymentIntentId: validationSchema.string().trim().min(1).max(200),
+});
+
+const paymentAttentionListSchema = authenticatedRequestSchema.extend({
+  cursor: validationSchema.string().min(1).max(512).optional(),
+  limit: validationSchema.number().int().min(1).max(100).optional(),
 });
 
 const refundRequestSchema = authenticatedRequestSchema.extend({
@@ -969,19 +961,6 @@ const refundRequestSchema = authenticatedRequestSchema.extend({
 const refundRecheckSchema = authenticatedRequestSchema.extend({
   refundId: validationSchema.string().trim().min(1).max(200),
   expectedVersion: validationSchema.number().int().safe().positive(),
-  reason: validationSchema.string().trim().min(1).max(500),
-  idempotencyKey: idempotencyKeySchema,
-});
-
-const reconciliationListSchema = authenticatedRequestSchema.extend({
-  status: validationSchema.enum(["OPEN", "RESOLVED"]).optional(),
-  cursor: validationSchema.string().min(1).max(512).optional(),
-  limit: validationSchema.number().int().min(1).max(100).optional(),
-});
-
-const reconciliationResolveSchema = authenticatedRequestSchema.extend({
-  expectedVersion: validationSchema.number().int().safe().positive(),
-  caseId: validationSchema.string().trim().min(1).max(200),
   reason: validationSchema.string().trim().min(1).max(500),
   idempotencyKey: idempotencyKeySchema,
 });
@@ -2745,11 +2724,13 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
-  async getAdminPaymentOverview(input: AuthenticatedRequest) {
-    const validation = authenticatedRequestSchema.safeParse(input);
+  async listAdminPaymentAttention(
+    input: import("@freshmarkets/contracts").AdminPaymentAttentionListRequest,
+  ) {
+    const validation = paymentAttentionListSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return getAdminPaymentOverviewQuery(
+    return listAdminPaymentAttentionQuery(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
@@ -2840,28 +2821,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         db: this.env.DB,
         payments: buildProviderRegistry(this.runtimeConfiguration()),
       },
-      validation.data,
-    );
-  }
-  async listAdminReconciliationCases(
-    input: import("@freshmarkets/contracts").AdminReconciliationListRequest,
-  ) {
-    const validation = reconciliationListSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return listAdminReconciliationCasesQuery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
-    );
-  }
-  async resolveAdminReconciliationCase(
-    input: import("@freshmarkets/contracts").AdminReconciliationResolveRequest,
-  ) {
-    const validation = reconciliationResolveSchema.safeParse(input);
-    if (!validation.success)
-      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return resolveAdminReconciliationCaseCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
   }

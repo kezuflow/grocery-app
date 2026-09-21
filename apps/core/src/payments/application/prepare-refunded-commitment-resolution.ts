@@ -8,7 +8,7 @@ export async function prepareRefundedCommitmentResolution(
   input: {
     caseId: string;
     expectedVersion: number;
-    actorAuthUserId: string;
+    actorAuthUserId: string | null;
     reason: string;
     idempotencyKey: string;
     requestId: string;

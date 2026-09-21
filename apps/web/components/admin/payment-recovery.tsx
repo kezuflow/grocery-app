@@ -25,6 +25,7 @@ export function PaymentRecovery({
 }) {
   const [reason, setReason] = useState("");
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
+  const [selected, setSelected] = useState(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   async function submit() {
@@ -53,6 +54,7 @@ export function PaymentRecovery({
       if (result.data.ok && result.data.value.paymentIntentId !== payment.paymentIntentId)
         throw new Error("Mismatched acceptance");
       setSaved(null);
+      setSelected(false);
       setNotice(
         result.data.ok
           ? "Provider check queued. Refresh for current progress."
@@ -90,7 +92,12 @@ export function PaymentRecovery({
           then request another check.
         </p>
       ) : null}
-      {payment.lookupRecovery.canRecheck || saved ? (
+      {payment.lookupRecovery.canRecheck && !selected && !saved ? (
+        <Button variant="outline" onClick={() => setSelected(true)}>
+          Check provider status
+        </Button>
+      ) : null}
+      {selected || saved ? (
         <div className="flex flex-wrap gap-2">
           <Input
             aria-label="Provider check reason"
@@ -110,7 +117,7 @@ export function PaymentRecovery({
               ? "Queuing check…"
               : saved
                 ? "Retry saved provider check"
-                : "Check provider status"}
+                : "Confirm provider check"}
           </Button>
         </div>
       ) : null}

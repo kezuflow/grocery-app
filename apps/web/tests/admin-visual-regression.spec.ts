@@ -34,7 +34,7 @@ async function installDeterministicReads(page: Page) {
           href: "/admin/orders",
         },
         {
-          code: "ACTION_REQUIRED_PAYMENTS",
+          code: "PAYMENT_ATTENTION",
           label: "Payments requiring action",
           value: 3,
           unavailableReason: null,

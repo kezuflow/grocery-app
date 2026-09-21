@@ -85,9 +85,12 @@ export async function recheckStaffRefund(
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
       database
         .prepare(
-          "UPDATE payment_refund SET next_retry_at=?,attempt_count=0,processing_started_at=NULL,last_error_code=NULL,version=version+1,updated_at=? WHERE id=? AND version=? AND (processing_started_at IS NULL OR next_retry_at<=?) AND (status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED') OR (status IN ('SUCCEEDED','FAILED') AND next_retry_at IS NOT NULL))",
+          `UPDATE payment_refund SET next_retry_at=?,attempt_count=0,processing_started_at=NULL,last_error_code=NULL,version=version+1,updated_at=?
+           WHERE id=? AND version=? AND processing_started_at IS NULL AND next_retry_at IS NULL
+           AND (status='ESCALATED' OR (status IN ('SUCCEEDED','FAILED') AND last_error_code IS NOT NULL))
+           AND EXISTS (SELECT 1 FROM payment_attempt attempt WHERE attempt.payment_intent_id=payment_refund.payment_intent_id AND length(trim(attempt.provider_reference))>0)`,
         )
-        .bind(now, now, command.refundId, command.expectedVersion, now),
+        .bind(now, now, command.refundId, command.expectedVersion),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
       auditEventStatement(database, {
         actorUserId: command.actorAuthUserId,

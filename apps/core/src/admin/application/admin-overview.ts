@@ -17,6 +17,7 @@ import { listOperationalExceptionsForLocations } from "../../audit/application/l
 import { iamSchema } from "../../iam/schema";
 import { setD1SpanAttributes, traceOperation } from "../../observability";
 import { readAdminNotifications } from "./admin-notifications";
+import { listAdminPaymentAttention } from "./finance-reads";
 
 export type AdminOverviewDeps = {
   auth: AuthInstance;
@@ -173,7 +174,7 @@ export async function getAdminOverview(
     capabilities,
   });
 
-  const [openOrders, actionRequiredPayments, activeProducts] = await Promise.all([
+  const [openOrders, paymentAttention, activeProducts] = await Promise.all([
     canReadOrders
       ? deps.db
           .prepare(
@@ -182,9 +183,7 @@ export async function getAdminOverview(
           .first<{ count: number }>()
       : Promise.resolve(null),
     canReadPayments
-      ? deps.db
-          .prepare("SELECT COUNT(*) AS count FROM payment_intent WHERE status='REQUIRES_ACTION'")
-          .first<{ count: number }>()
+      ? listAdminPaymentAttention(deps, { ...request, limit: 1 })
       : Promise.resolve(null),
     canReadCatalog
       ? deps.db
@@ -267,11 +266,11 @@ export async function getAdminOverview(
       href: "/admin/orders",
     },
     {
-      code: "ACTION_REQUIRED_PAYMENTS",
-      label: "Payments requiring action",
-      value: canReadPayments ? (actionRequiredPayments?.count ?? 0) : null,
+      code: "PAYMENT_ATTENTION",
+      label: "Payments needing attention",
+      value: canReadPayments && paymentAttention?.ok ? paymentAttention.value.total : null,
       unavailableReason: canReadPayments ? null : "Global payments.read access is required.",
-      href: "/admin/payments",
+      href: "/admin/payments?tab=attention",
     },
     {
       code: "OPEN_EXCEPTIONS",

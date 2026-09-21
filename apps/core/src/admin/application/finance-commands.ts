@@ -7,7 +7,6 @@ import {
 import { retryPaymentReaction } from "../../payments/application/retry-payment-reaction";
 import { retryProviderEvent } from "../../payments/application/retry-provider-event";
 import { recheckStaffPayment } from "../../payments/application/recheck-staff-payment";
-import { resolveReconciliationCase } from "../../payments/application/resolve-reconciliation-case";
 import { recheckStaffRefund } from "../../payments/application/recheck-staff-refund";
 import type {
   AdminMembershipLifecycleRequest,
@@ -15,7 +14,6 @@ import type {
   AdminOrderCancelRequest,
   AdminOrderIssueActionRequest,
   AdminOrderIssueView,
-  AdminReconciliationCaseView,
   AdminRefundRequest,
   AdminRefundView,
   AppErrorCode,
@@ -170,19 +168,6 @@ export async function requestAdminRefund(
     idempotencyKey: request.idempotencyKey,
     actorAuthUserId: access.value.authUserId,
     requestId: request.requestId,
-  });
-}
-
-/** Payments owns guarded resolution; Admin supplies the trusted Global actor. */
-export async function resolveAdminReconciliationCase(
-  deps: FinanceAdministrationDeps,
-  request: import("@freshmarkets/contracts").AdminReconciliationResolveRequest,
-): Promise<RpcResult<AdminReconciliationCaseView>> {
-  const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
-  if (!access.ok) return access;
-  return resolveReconciliationCase(deps.db, {
-    ...request,
-    actorAuthUserId: access.value.authUserId,
   });
 }
 

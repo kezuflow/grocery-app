@@ -198,10 +198,13 @@ export type AdminOrderCancellationResult = {
 export type AdminPaymentSummary = {
   paymentIntentId: string;
   purpose: string;
+  customerName: string | null;
   customerEmail: string;
+  orderId: string | null;
+  orderNumber: string | null;
   amountMinor: number;
   currency: string;
-  status: string;
+  status: "SUCCEEDED" | "PARTIALLY_REFUNDED" | "REFUNDED";
   refundedMinor: number;
   createdAt: string;
 };
@@ -212,7 +215,7 @@ export type AdminPaymentPage = {
 };
 
 export type AdminPaymentListRequest = AuthenticatedRequest & {
-  status?: string;
+  status?: "SUCCEEDED" | "PARTIALLY_REFUNDED" | "REFUNDED";
   cursor?: string;
   limit?: number;
 };
@@ -254,9 +257,21 @@ export type AdminPaymentReactionView = {
 
 export type AdminPaymentReconciliationView = AdminReconciliationCaseView;
 
-export type AdminPaymentDetail = AdminPaymentSummary & {
+export type AdminPaymentDetail = Omit<AdminPaymentSummary, "status"> & {
+  purpose: string;
   subjectType: string;
   subjectId: string;
+  canonicalStatus: string;
+  status: string;
+  displayStatus:
+    | "AWAITING_PAYMENT"
+    | "PAYMENT_WINDOW_EXPIRED"
+    | "CONFIRMING_PAYMENT"
+    | "PAID"
+    | "PARTIALLY_REFUNDED"
+    | "REFUNDED"
+    | "PAYMENT_FAILED"
+    | "PAYMENT_OUTCOME_UNKNOWN";
   remainingRefundableMinor: number;
   refundUnavailableReason: string | null;
   lookupRecovery: AdminPaymentLookupRecovery;
@@ -274,24 +289,6 @@ export type AdminPaymentDetail = AdminPaymentSummary & {
     action: string;
     reason: string | null;
   }>;
-};
-
-export type AdminPaymentOverview = {
-  intentCounts: {
-    total: number;
-    actionRequired: number;
-    processing: number;
-    succeeded: number;
-    failed: number;
-  };
-  openReconciliationCount: number;
-  pendingRefundCount: number;
-  totalsByCurrency: ReadonlyArray<{
-    currency: string;
-    succeededMinor: number;
-    refundedMinor: number;
-  }>;
-  recentTransactions: ReadonlyArray<AdminPaymentSummary>;
 };
 
 export type AdminRefundRequest = AuthenticatedRequest & {
@@ -359,22 +356,38 @@ export type AdminReconciliationCaseView = {
   resolvedAt: string | null;
 };
 
-export type AdminReconciliationPage = {
-  items: ReadonlyArray<AdminReconciliationCaseView>;
+export type AdminPaymentAttentionAction = {
+  kind: "RECHECK_PAYMENT" | "RETRY_PROVIDER_EVENT" | "RETRY_PAYMENT_REACTION" | "RECHECK_REFUND";
+  caseId: string | null;
+  refundId: string | null;
+  expectedVersion: number;
+  expectedPaymentVersion: number | null;
+  expectedRecoveryVersion: number | null;
+};
+
+export type AdminPaymentAttentionItem = {
+  groupKey: string;
+  paymentIntentId: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  amountMinor: number | null;
+  currency: string | null;
+  problem: string;
+  state: "NEEDS_ATTENTION" | "CHECKING_AUTOMATICALLY";
+  caseIds: ReadonlyArray<string>;
+  actions: ReadonlyArray<AdminPaymentAttentionAction>;
+  openedAt: string;
+};
+
+export type AdminPaymentAttentionPage = {
+  items: ReadonlyArray<AdminPaymentAttentionItem>;
+  total: number;
   nextCursor: string | null;
 };
 
-export type AdminReconciliationListRequest = AuthenticatedRequest & {
-  status?: "OPEN" | "RESOLVED";
+export type AdminPaymentAttentionListRequest = AuthenticatedRequest & {
   cursor?: string;
   limit?: number;
-};
-
-export type AdminReconciliationResolveRequest = AuthenticatedRequest & {
-  expectedVersion: number;
-  caseId: string;
-  reason: string;
-  idempotencyKey: string;
 };
 
 export type AdminProviderEventRetryRequest = AuthenticatedRequest & {
@@ -487,8 +500,10 @@ export type AdminOrdersService = {
 };
 
 export type AdminPaymentsService = {
-  getAdminPaymentOverview(request: AuthenticatedRequest): Promise<RpcResult<AdminPaymentOverview>>;
   listAdminPayments(request: AdminPaymentListRequest): Promise<RpcResult<AdminPaymentPage>>;
+  listAdminPaymentAttention(
+    request: AdminPaymentAttentionListRequest,
+  ): Promise<RpcResult<AdminPaymentAttentionPage>>;
   getAdminPayment(request: AdminPaymentDetailRequest): Promise<RpcResult<AdminPaymentDetail>>;
   recheckAdminPayment(
     request: AdminPaymentRecheckRequest,
@@ -503,12 +518,6 @@ export type AdminPaymentsService = {
     request: AdminRefundRecheckRequest,
   ): Promise<RpcResult<AdminRefundRecheckResult>>;
   requestAdminRefund(request: AdminRefundRequest): Promise<RpcResult<AdminRefundView>>;
-  listAdminReconciliationCases(
-    request: AdminReconciliationListRequest,
-  ): Promise<RpcResult<AdminReconciliationPage>>;
-  resolveAdminReconciliationCase(
-    request: AdminReconciliationResolveRequest,
-  ): Promise<RpcResult<AdminReconciliationCaseView>>;
 };
 
 export type AdminMembershipsService = {

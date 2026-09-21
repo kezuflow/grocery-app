@@ -92,16 +92,12 @@ export async function recheckStaffPayment(
           "INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT EXISTS (SELECT 1 FROM payment_intent WHERE id=? AND version=? AND status IN ('INITIATED','REQUIRES_ACTION','PROCESSING'))",
         )
         .bind(command.paymentIntentId, command.expectedVersion),
-      command.expectedRecoveryVersion === 0
-        ? database
-            .prepare(
-              "INSERT INTO payment_lookup_recovery(payment_intent_id,status,available_at,created_at,updated_at) VALUES (?,'PENDING',?,?,?) ON CONFLICT(payment_intent_id) DO NOTHING",
-            )
-            .bind(command.paymentIntentId, now, now, now)
-        : database
-            .prepare(`UPDATE payment_lookup_recovery SET status='PENDING',attempts=0,lease_token=NULL,last_error_code=NULL,available_at=?,version=version+1,updated_at=?
-        WHERE payment_intent_id=? AND version=? AND (lease_token IS NULL OR available_at<=?)`)
-            .bind(now, now, command.paymentIntentId, command.expectedRecoveryVersion, now),
+      database
+        .prepare(`UPDATE payment_lookup_recovery SET status='PENDING',attempts=0,lease_token=NULL,last_error_code=NULL,available_at=?,version=version+1,updated_at=?
+          WHERE payment_intent_id=? AND version=? AND status='EXHAUSTED'
+          AND (lease_token IS NULL OR available_at<=?)
+          AND EXISTS (SELECT 1 FROM payment_attempt attempt WHERE attempt.payment_intent_id=payment_lookup_recovery.payment_intent_id AND length(trim(attempt.provider_reference))>0)`)
+        .bind(now, now, command.paymentIntentId, command.expectedRecoveryVersion, now),
       database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
       auditEventStatement(database, {
         actorUserId: command.actorAuthUserId,

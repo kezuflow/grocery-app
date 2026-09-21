@@ -5,11 +5,9 @@ const coreMocks = vi.hoisted(() => ({
   getAdminOrder: vi.fn(),
   cancelAdminOrder: vi.fn(),
   listAdminPayments: vi.fn(),
+  listAdminPaymentAttention: vi.fn(),
   getAdminPayment: vi.fn(),
-  getAdminPaymentOverview: vi.fn(),
   requestAdminRefund: vi.fn(),
-  listAdminReconciliationCases: vi.fn(),
-  resolveAdminReconciliationCase: vi.fn(),
   listAdminMemberships: vi.fn(),
   getAdminMembership: vi.fn(),
   cancelAdminMembership: vi.fn(),
@@ -26,10 +24,8 @@ vi.mock("cloudflare:workers", () => ({
 import { GET as listOrders } from "@/app/api/admin/orders/route";
 import { POST as cancelOrder } from "@/app/api/admin/orders/[order-id]/cancel/route";
 import { POST as requestRefund } from "@/app/api/admin/payments/refunds/route";
-import { GET as paymentOverview } from "@/app/api/admin/payments/overview/route";
+import { GET as paymentAttention } from "@/app/api/admin/payments/attention/route";
 import { GET as paymentDetail } from "@/app/api/admin/payments/[payment-intent-id]/route";
-import { GET as listCases } from "@/app/api/admin/payments/reconciliation/route";
-import { POST as resolveCase } from "@/app/api/admin/payments/reconciliation/[case-id]/resolve/route";
 import { GET as listIssues } from "@/app/api/admin/order-issues/route";
 import { POST as issueAction } from "@/app/api/admin/order-issues/[issue-id]/actions/route";
 import { GET as listMemberships } from "@/app/api/admin/memberships/route";
@@ -74,16 +70,11 @@ describe("finance BFF routes", () => {
     });
   });
 
-  it("delegates refunds, reconciliation list, and case resolution", async () => {
+  it("delegates refunds and grouped payment attention", async () => {
     coreMocks.requestAdminRefund.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
-    coreMocks.listAdminReconciliationCases.mockResolvedValue({
+    coreMocks.listAdminPaymentAttention.mockResolvedValue({
       ok: true,
-      value: { items: [] },
-      requestId: "r",
-    });
-    coreMocks.resolveAdminReconciliationCase.mockResolvedValue({
-      ok: true,
-      value: {},
+      value: { items: [], total: 0, nextCursor: null },
       requestId: "r",
     });
 
@@ -95,12 +86,8 @@ describe("finance BFF routes", () => {
         reason: "goodwill",
       }),
     );
-    await listCases(new Request("https://x/reconciliation?status=OPEN", { headers: COOKIE }));
-    await resolveCase(
-      jsonRequest("https://x/reconciliation/c1/resolve", { reason: "matched", expectedVersion: 1 }),
-      {
-        params: Promise.resolve({ "case-id": "c1" }),
-      },
+    await paymentAttention(
+      new Request("https://x/payments/attention?limit=25", { headers: COOKIE }),
     );
 
     expect(coreMocks.requestAdminRefund.mock.calls[0][0]).toMatchObject({
@@ -108,8 +95,7 @@ describe("finance BFF routes", () => {
       amountMinor: 500,
       expectedVersion: 1,
     });
-    expect(coreMocks.listAdminReconciliationCases.mock.calls[0][0].status).toBe("OPEN");
-    expect(coreMocks.resolveAdminReconciliationCase.mock.calls[0][0].caseId).toBe("c1");
+    expect(coreMocks.listAdminPaymentAttention.mock.calls[0][0].limit).toBe(25);
   });
 
   it("rejects a refund without the displayed payment version before calling Core", async () => {
@@ -125,16 +111,13 @@ describe("finance BFF routes", () => {
     expect(coreMocks.requestAdminRefund.mock.calls.length).toBe(before);
   });
 
-  it("delegates payment overview and detail through typed Core methods", async () => {
-    coreMocks.getAdminPaymentOverview.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+  it("delegates payment detail through the typed Core method", async () => {
     coreMocks.getAdminPayment.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
 
-    await paymentOverview(new Request("https://x/payments/overview", { headers: COOKIE }));
     await paymentDetail(new Request("https://x/payments/pi-1", { headers: COOKIE }), {
       params: Promise.resolve({ "payment-intent-id": "pi-1" }),
     });
 
-    expect(coreMocks.getAdminPaymentOverview).toHaveBeenCalledOnce();
     expect(coreMocks.getAdminPayment.mock.calls[0][0]).toMatchObject({ paymentIntentId: "pi-1" });
   });
 

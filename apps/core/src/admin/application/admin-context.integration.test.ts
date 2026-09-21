@@ -198,15 +198,9 @@ describe("scoped admin context", () => {
     expect(context.value.navigation).not.toContainEqual(
       expect.objectContaining({ code: "products-create" }),
     );
-    expect(context.value.navigation).toContainEqual({
-      code: "payments-transactions",
-      label: "Transactions",
-      href: "/admin/payments/transactions",
-      section: "finance",
-      scopeKinds: ["GLOBAL"],
-      parentCode: "payments",
-      kind: "destination",
-    });
+    expect(context.value.navigation).not.toContainEqual(
+      expect.objectContaining({ parentCode: "payments" }),
+    );
     expect(context.value.navigation).not.toContainEqual({
       code: "commerce-configuration",
       label: "Membership pricing",

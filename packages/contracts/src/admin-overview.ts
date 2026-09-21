@@ -9,7 +9,7 @@ import type { RpcResult } from "./common";
 import type { OperationalExceptionItem } from "./operations";
 
 export type AdminOverviewCard = {
-  code: "OPEN_ORDERS" | "ACTION_REQUIRED_PAYMENTS" | "OPEN_EXCEPTIONS" | "ACTIVE_PRODUCTS";
+  code: "OPEN_ORDERS" | "PAYMENT_ATTENTION" | "OPEN_EXCEPTIONS" | "ACTIVE_PRODUCTS";
   label: string;
   value: number | null;
   unavailableReason: string | null;

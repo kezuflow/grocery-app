@@ -1,56 +1,62 @@
-"use client";
-import { useCallback, useEffect, useState } from "react";
-import type { AdminPaymentOverview, RpcResult } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import { Button } from "../../../components/ui/button";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { PageHeader } from "../../../components/admin/admin-shell";
-import { PaymentNavigation } from "../../../components/admin/payment-navigation";
-import { PaymentOverviewView } from "../../../components/admin/payment-overview-view";
+import type {
+  AdminPaymentAttentionPage,
+  AdminPaymentDetail,
+  AdminPaymentPage,
+  RpcResult,
+} from "@freshmarkets/contracts";
+import { env } from "cloudflare:workers";
+import { headers } from "next/headers";
+import { coreClient } from "@/lib/core-client/core";
+import { coreRequestHeaders } from "@/lib/core-client/request";
+import { PaymentsWorkspace } from "@/components/admin/payments-workspace";
 
-export default function PaymentsOverviewPage() {
-  const [overview, setOverview] = useState<AdminPaymentOverview | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const payload = (await (
-        await fetch("/api/admin/payments/overview")
-      ).json()) as RpcResult<AdminPaymentOverview>;
-      if (!payload.ok) return setError(payload.error.message);
-      setOverview(payload.value);
-    } catch {
-      setError("Network error loading the payment overview.");
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
+type Params = { tab?: string; status?: string; cursor?: string; payment?: string; issue?: string };
+function plain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const params = await searchParams;
+  const requestHeaders = coreRequestHeaders(await headers());
+  const tab = params.tab === "attention" ? "attention" : "payments";
+  const status =
+    params.status === "paid"
+      ? "SUCCEEDED"
+      : params.status === "partially-refunded"
+        ? "PARTIALLY_REFUNDED"
+        : params.status === "refunded"
+          ? "REFUNDED"
+          : undefined;
+  const [payments, attention, detail] = await Promise.all([
+    coreClient(env.CORE).listAdminPayments({
+      requestId: crypto.randomUUID(),
+      headers: requestHeaders,
+      status,
+      cursor: tab === "payments" ? params.cursor : undefined,
+      limit: 50,
+    }),
+    coreClient(env.CORE).listAdminPaymentAttention({
+      requestId: crypto.randomUUID(),
+      headers: requestHeaders,
+      cursor: tab === "attention" ? params.cursor : undefined,
+      limit: 50,
+    }),
+    params.payment
+      ? coreClient(env.CORE).getAdminPayment({
+          requestId: crypto.randomUUID(),
+          headers: requestHeaders,
+          paymentIntentId: params.payment,
+        })
+      : Promise.resolve(null),
+  ]);
   return (
-    <div className="w-full space-y-6">
-      <PageHeader
-        title="Payments"
-        description="Canonical payment outcomes, refund exposure, and reconciliation workload."
-      />
-      <PaymentNavigation />
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Payments could not be loaded</AlertTitle>
-          <AlertDescription>
-            {error}
-            <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load()}>
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {!overview && !error ? (
-        <div role="status" aria-label="Loading payment overview">
-          <Skeleton className="h-28 w-full" />
-        </div>
-      ) : null}
-      {overview ? <PaymentOverviewView overview={overview} /> : null}
-    </div>
+    <PaymentsWorkspace
+      initialTab={tab}
+      initialStatus={params.status ?? "all"}
+      initialPayments={plain(payments as RpcResult<AdminPaymentPage>)}
+      initialAttention={plain(attention as RpcResult<AdminPaymentAttentionPage>)}
+      initialDetail={plain(detail as RpcResult<AdminPaymentDetail> | null)}
+      initialIssue={params.issue ?? null}
+    />
   );
 }

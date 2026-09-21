@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { completeResolvedReconciliationCases } from "../../payments/application/complete-reconciliation-cases";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -243,7 +244,7 @@ describe("finance administration", () => {
     const { paymentIntentId } = await seedOrderWithPayment();
 
     expect(
-      await core.getAdminPaymentOverview({
+      await core.listAdminPaymentAttention({
         requestId: crypto.randomUUID(),
         headers: { cookie: scopedReader.cookie },
       }),
@@ -388,17 +389,13 @@ describe("finance administration", () => {
       ).bind(crypto.randomUUID(), paymentIntentId, now),
     ]);
 
-    const overview = await core.getAdminPaymentOverview({
+    const overview = await core.listAdminPaymentAttention({
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
     });
     expect(overview.ok).toBe(true);
     if (overview.ok) {
-      expect(overview.value.intentCounts.total).toBeGreaterThan(0);
-      expect(overview.value.openReconciliationCount).toBeGreaterThan(0);
-      expect(overview.value.totalsByCurrency).toEqual(
-        expect.arrayContaining([expect.objectContaining({ currency: "PHP" })]),
-      );
+      expect(overview.value.total).toBe(0);
     }
 
     const detail = await core.getAdminPayment({
@@ -418,6 +415,104 @@ describe("finance administration", () => {
     expect(JSON.stringify(detail.value)).not.toContain("provider-secret");
     expect(JSON.stringify(detail.value)).not.toContain("hash-secret");
     expect(JSON.stringify(detail.value)).not.toContain("event-secret");
+  });
+
+  it("lists only captured payments and rejects internal payment states as filters", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    const now = Date.now();
+    const unpaidId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_intent (id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) SELECT ?,'GROCERY_CHECKOUT','checkout_quote',?,customer_id,1000,'PHP','REQUIRES_ACTION',?,1,?,? FROM payment_intent WHERE id=?",
+    )
+      .bind(unpaidId, `quote-${unpaidId}`, `key-${unpaidId}`, now + 1, now + 1, paymentIntentId)
+      .run();
+
+    const listed = await core.listAdminPayments({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+    });
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.value.items.some((item) => item.paymentIntentId === paymentIntentId)).toBe(
+        true,
+      );
+      expect(listed.value.items.some((item) => item.paymentIntentId === unpaidId)).toBe(false);
+    }
+    expect(
+      await core.listAdminPayments({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        status: "PROCESSING" as never,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("groups linked cases while keeping unmatched provider events distinct", async () => {
+    const manager = await seedManager([...FINANCE_CAPABILITIES, "payments.manage"]);
+    const { orderId, paymentIntentId } = await seedOrderWithPayment();
+    const now = Date.now();
+    const reactionId = crypto.randomUUID();
+    const linkedCases = [crypto.randomUUID(), crypto.randomUUID()];
+    const unlinkedCases = [crypto.randomUUID(), crypto.randomUUID()];
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_reaction(id,payment_intent_id,reaction_type,subject_type,subject_id,status,idempotency_key,attempts,available_at,created_at,updated_at) VALUES (?,?,'COMMIT_ORDER','order',?,'ESCALATED',?,5,?,?,?)",
+      ).bind(reactionId, paymentIntentId, orderId, `reaction-${reactionId}`, now, now, now),
+      ...linkedCases.map((caseId, index) =>
+        env.DB.prepare(
+          "INSERT INTO payment_reconciliation_case(id,payment_intent_id,category,status,details_json,created_at) VALUES (?,?,'REACTION_FAILURE','OPEN',?,?)",
+        ).bind(
+          caseId,
+          paymentIntentId,
+          JSON.stringify({ reactionId, errorCode: "MAX_ATTEMPTS_EXCEEDED" }),
+          now + index,
+        ),
+      ),
+      ...unlinkedCases.map((caseId, index) =>
+        env.DB.prepare(
+          "INSERT INTO payment_reconciliation_case(id,category,status,details_json,created_at) VALUES (?,'UNMAPPED_PROVIDER_REFERENCE','OPEN',?,?)",
+        ).bind(
+          caseId,
+          JSON.stringify({ provider: "mock", providerEventId: `unmatched-${index}-${caseId}` }),
+          now + 10 + index,
+        ),
+      ),
+    ]);
+
+    const attention = await core.listAdminPaymentAttention({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      limit: 100,
+    });
+    expect(attention.ok).toBe(true);
+    if (!attention.ok) return;
+    const linked = attention.value.items.filter((item) => item.paymentIntentId === paymentIntentId);
+    expect(linked).toHaveLength(1);
+    expect(linked[0]?.caseIds).toEqual(expect.arrayContaining(linkedCases));
+    expect(linked[0]?.actions).toEqual([
+      expect.objectContaining({ kind: "RETRY_PAYMENT_REACTION" }),
+    ]);
+    expect(
+      attention.value.items.filter((item) => unlinkedCases.some((id) => item.caseIds.includes(id))),
+    ).toHaveLength(2);
+  });
+
+  it("reports no refundable balance for an unpaid intent", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    await env.DB.prepare("UPDATE payment_intent SET status='REQUIRES_ACTION' WHERE id=?")
+      .bind(paymentIntentId)
+      .run();
+    const detail = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      paymentIntentId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: { remainingRefundableMinor: 0, allowedActions: [] },
+    });
   });
 
   it("cancels an order through the canonical command with reason and audit", async () => {
@@ -707,22 +802,13 @@ describe("finance administration", () => {
   });
 
   it("does not close an unlinked financial exception without evidence", async () => {
-    const manager = await seedManager();
     const caseId = crypto.randomUUID();
     await env.DB.prepare(
       "INSERT INTO payment_reconciliation_case(id,category,status,details_json,created_at) VALUES (?,'REACTION_FAILURE','OPEN','{}',?)",
     )
       .bind(caseId, Date.now())
       .run();
-    const result = await core.resolveAdminReconciliationCase({
-      headers: { cookie: manager.cookie },
-      caseId,
-      expectedVersion: 1,
-      reason: "Manually reviewed",
-      idempotencyKey: crypto.randomUUID(),
-      requestId: crypto.randomUUID(),
-    });
-    expect(result).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    await completeResolvedReconciliationCases(env.DB, Date.now());
     expect(
       await env.DB.prepare("SELECT status,version FROM payment_reconciliation_case WHERE id=?")
         .bind(caseId)

@@ -68,6 +68,7 @@ export function useAdminPagination(resetKey: string | null = null) {
   }, [resetKey]);
   return {
     cursor,
+    previousCursor: cursors.length > 1 ? (cursors.at(-2) ?? null) : null,
     pageNumber: cursors.length,
     next(nextCursor: string) {
       setPagination((current) => ({

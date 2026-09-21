@@ -22,14 +22,13 @@ import type {
   AdminOrderPage,
   AdminOrderSummary,
   AdminPaymentListRequest,
+  AdminPaymentAttentionListRequest,
+  AdminPaymentAttentionPage,
+  AdminPaymentAttentionItem,
   AdminPaymentDetail,
   AdminPaymentDetailRequest,
-  AdminPaymentOverview,
   AdminPaymentPage,
   AdminPaymentSummary,
-  AdminReconciliationCaseView,
-  AdminReconciliationListRequest,
-  AdminReconciliationPage,
   RpcResult,
 } from "@freshmarkets/contracts";
 import {
@@ -45,6 +44,41 @@ import {
   type FinanceAdministrationDeps,
 } from "./finance-administration-access";
 import { allowedOrderIssueActions } from "./order-issue-policy";
+
+const PAYMENT_ATTENTION_CASE_PREDICATE = `payment_reconciliation_case.status='OPEN'
+  AND NOT ((${reconciliationResolutionEvidence}) OR (${refundedCommitmentResolutionEvidence}))
+  AND (
+    payment_reconciliation_case.id='payment-lookup:'||payment_reconciliation_case.payment_intent_id
+    OR payment_reconciliation_case.category IN ('UNMAPPED_PROVIDER_REFERENCE','AMBIGUOUS_OUTCOME','PROVIDER_TIMEOUT','REACTION_FAILURE','REFUND_UNRESOLVED')
+  )`;
+
+const PAYMENT_ATTENTION_CTE = `WITH attention_cases AS (
+  SELECT payment_reconciliation_case.*,
+    CASE
+      WHEN payment_reconciliation_case.payment_intent_id IS NOT NULL THEN 'payment:'||payment_reconciliation_case.payment_intent_id
+      WHEN json_valid(payment_reconciliation_case.details_json) AND json_extract(payment_reconciliation_case.details_json,'$.providerEventId') IS NOT NULL
+        THEN 'event:'||COALESCE(json_extract(payment_reconciliation_case.details_json,'$.provider'),'unknown')||':'||json_extract(payment_reconciliation_case.details_json,'$.providerEventId')
+      ELSE 'case:'||payment_reconciliation_case.id
+    END AS group_key
+  FROM payment_reconciliation_case
+  WHERE ${PAYMENT_ATTENTION_CASE_PREDICATE}
+), attention_groups AS (
+  SELECT group_key,MAX(payment_intent_id) payment_intent_id,MIN(created_at) opened_at,
+    GROUP_CONCAT(id) case_ids,GROUP_CONCAT(category) categories
+  FROM attention_cases GROUP BY group_key
+)`;
+
+function attentionProblem(categories: string): string {
+  const values = new Set(categories.split(","));
+  if (values.has("REACTION_FAILURE"))
+    return "Payment received, but Order confirmation needs recovery";
+  if (values.has("REFUND_UNRESOLVED"))
+    return "Refund confirmation or required local updates need recovery";
+  if (values.has("UNMAPPED_PROVIDER_REFERENCE"))
+    return "Provider payment evidence could not be matched";
+  if (values.has("PROVIDER_TIMEOUT")) return "Provider outcome remains unknown after recovery";
+  return "Payment outcome requires verified recovery";
+}
 
 function parseRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -167,7 +201,7 @@ export async function listAdminOrders(
 
   const clauses: string[] = [];
   const binds: unknown[] = [];
-  if (request.status !== undefined && request.status !== "") {
+  if (request.status !== undefined) {
     clauses.push("o.status = ?");
     binds.push(request.status);
   }
@@ -616,7 +650,18 @@ function allowedOrderActions(
 }
 
 const PAYMENT_SELECT = `
-  SELECT pi.id AS paymentIntentId, pi.purpose, u.email AS customerEmail,
+  SELECT pi.id AS paymentIntentId, pi.purpose, u.name AS customerName, u.email AS customerEmail,
+         CASE WHEN c.status='closed' OR u.id IS NULL THEN 1 ELSE 0 END AS deletedCustomer,
+         COALESCE(
+           (SELECT link.order_id FROM order_payment_reaction link WHERE link.payment_intent_id=pi.id LIMIT 1),
+           (SELECT amendment.order_id FROM paid_order_amendment amendment WHERE amendment.payment_intent_id=pi.id LIMIT 1),
+           (SELECT orders.id FROM grocery_order orders JOIN payment_attempt attempt ON attempt.id=orders.payment_id WHERE attempt.payment_intent_id=pi.id LIMIT 1)
+         ) AS orderId,
+         COALESCE(
+           (SELECT orders.order_number FROM order_payment_reaction link JOIN grocery_order orders ON orders.id=link.order_id WHERE link.payment_intent_id=pi.id LIMIT 1),
+           (SELECT orders.order_number FROM paid_order_amendment amendment JOIN grocery_order orders ON orders.id=amendment.order_id WHERE amendment.payment_intent_id=pi.id LIMIT 1),
+           (SELECT orders.order_number FROM grocery_order orders JOIN payment_attempt attempt ON attempt.id=orders.payment_id WHERE attempt.payment_intent_id=pi.id LIMIT 1)
+         ) AS orderNumber,
          pi.amount_minor AS amountMinor, pi.currency, pi.status,
          pi.created_at AS createdAt,
          (SELECT COALESCE(SUM(r.amount_minor), 0) FROM payment_refund r
@@ -661,9 +706,9 @@ export async function listAdminPayments(
     }
   }
 
-  const clauses: string[] = [];
+  const clauses: string[] = ["pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')"];
   const binds: unknown[] = [];
-  if (request.status !== undefined && request.status !== "") {
+  if (request.status !== undefined) {
     clauses.push("pi.status = ?");
     binds.push(request.status);
   }
@@ -678,7 +723,11 @@ export async function listAdminPayments(
     .all<{
       paymentIntentId: string;
       purpose: string;
+      customerName: string | null;
       customerEmail: string | null;
+      deletedCustomer: number;
+      orderId: string | null;
+      orderNumber: string | null;
       amountMinor: number;
       currency: string;
       status: string;
@@ -690,10 +739,13 @@ export async function listAdminPayments(
   const items: AdminPaymentSummary[] = rows.results.slice(0, limit).map((row) => ({
     paymentIntentId: row.paymentIntentId,
     purpose: row.purpose,
-    customerEmail: row.customerEmail ?? "—",
+    customerName: row.deletedCustomer ? "Deleted customer" : row.customerName,
+    customerEmail: row.deletedCustomer ? "Deleted customer" : (row.customerEmail ?? "—"),
+    orderId: row.orderId,
+    orderNumber: row.orderNumber,
     amountMinor: row.amountMinor,
     currency: row.currency,
-    status: row.status,
+    status: row.status as AdminPaymentSummary["status"],
     refundedMinor: row.refundedMinor,
     createdAt: new Date(row.createdAt).toISOString(),
   }));
@@ -704,71 +756,6 @@ export async function listAdminPayments(
       ? encodeStaffCursor({ createdAt: last.createdAt, id: last.paymentIntentId })
       : null;
   return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
-}
-
-/** Finance landing metrics derived from canonical payment and refund state. */
-export async function getAdminPaymentOverview(
-  deps: FinanceAdministrationDeps,
-  request: import("@freshmarkets/contracts").AuthenticatedRequest,
-): Promise<RpcResult<AdminPaymentOverview>> {
-  const access = await resolveFinanceAdministrationAccess(deps, request, "payments.read");
-  if (!access.ok) return access;
-
-  const counts = await deps.db
-    .prepare(
-      `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN status='REQUIRES_ACTION' THEN 1 ELSE 0 END) AS actionRequired,
-              SUM(CASE WHEN status IN ('INITIATED','PROCESSING') THEN 1 ELSE 0 END) AS processing,
-              SUM(CASE WHEN status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') THEN 1 ELSE 0 END) AS succeeded,
-              SUM(CASE WHEN status IN ('FAILED','EXPIRED') THEN 1 ELSE 0 END) AS failed
-       FROM payment_intent`,
-    )
-    .first<{
-      total: number;
-      actionRequired: number;
-      processing: number;
-      succeeded: number;
-      failed: number;
-    }>();
-  const openCases = await deps.db
-    .prepare("SELECT COUNT(*) AS count FROM payment_reconciliation_case WHERE status='OPEN'")
-    .first<{ count: number }>();
-  const pendingRefunds = await deps.db
-    .prepare(
-      "SELECT COUNT(*) AS count FROM payment_refund WHERE status IN ('REQUESTED','APPROVED','PROCESSING')",
-    )
-    .first<{ count: number }>();
-  const totals = await deps.db
-    .prepare(
-      `SELECT pi.currency,
-              SUM(CASE WHEN pi.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')
-                       THEN pi.amount_minor ELSE 0 END) AS succeededMinor,
-              COALESCE((SELECT SUM(pr.amount_minor) FROM payment_refund pr
-                        JOIN payment_intent inner_pi ON inner_pi.id=pr.payment_intent_id
-                        WHERE inner_pi.currency=pi.currency AND pr.status='SUCCEEDED'),0) AS refundedMinor
-       FROM payment_intent pi GROUP BY pi.currency ORDER BY pi.currency`,
-    )
-    .all<{ currency: string; succeededMinor: number; refundedMinor: number }>();
-  const recent = await listAdminPayments(deps, { ...request, limit: 10 });
-  if (!recent.ok) return recent;
-
-  return {
-    ok: true,
-    value: {
-      intentCounts: {
-        total: counts?.total ?? 0,
-        actionRequired: counts?.actionRequired ?? 0,
-        processing: counts?.processing ?? 0,
-        succeeded: counts?.succeeded ?? 0,
-        failed: counts?.failed ?? 0,
-      },
-      openReconciliationCount: openCases?.count ?? 0,
-      pendingRefundCount: pendingRefunds?.count ?? 0,
-      totalsByCurrency: totals.results,
-      recentTransactions: recent.value.items,
-    },
-    requestId: request.requestId,
-  };
 }
 
 /** One payment intent's operational workspace with provider-safe projections. */
@@ -784,7 +771,11 @@ export async function getAdminPayment(
     .first<{
       paymentIntentId: string;
       purpose: string;
+      customerName: string | null;
       customerEmail: string | null;
+      deletedCustomer: number;
+      orderId: string | null;
+      orderNumber: string | null;
       amountMinor: number;
       currency: string;
       status: string;
@@ -903,8 +894,10 @@ export async function getAdminPayment(
     )
     .bind(request.paymentIntentId, request.paymentIntentId)
     .all<{ id: string; occurredAt: number; action: string; reason: string | null }>();
-  const remainingRefundableMinor = Math.max(0, row.amountMinor - row.reservedRefundMinor);
   const refundable = ["SUCCEEDED", "PARTIALLY_REFUNDED"].includes(row.status);
+  const remainingRefundableMinor = refundable
+    ? Math.max(0, row.amountMinor - row.reservedRefundMinor)
+    : 0;
   const activeCancellation = await deps.db
     .prepare(`SELECT 1 FROM order_cancellation_refund_member member
     JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
@@ -914,6 +907,12 @@ export async function getAdminPayment(
   const capturedAttempt = await deps.db
     .prepare(
       "SELECT provider,provider_reference FROM payment_attempt WHERE payment_intent_id=? AND status='SUCCEEDED' ORDER BY created_at DESC,id LIMIT 1",
+    )
+    .bind(request.paymentIntentId)
+    .first<{ provider: string; provider_reference: string | null }>();
+  const latestAttempt = await deps.db
+    .prepare(
+      "SELECT provider,provider_reference FROM payment_attempt WHERE payment_intent_id=? ORDER BY created_at DESC,id DESC LIMIT 1",
     )
     .bind(request.paymentIntentId)
     .first<{ provider: string; provider_reference: string | null }>();
@@ -939,6 +938,8 @@ export async function getAdminPayment(
     canRecheck:
       access.value.capabilities.includes("payments.manage") &&
       ["INITIATED", "REQUIRES_ACTION", "PROCESSING"].includes(row.status) &&
+      lookup?.status === "EXHAUSTED" &&
+      Boolean(latestAttempt?.provider_reference && deps.payments?.get(latestAttempt.provider)) &&
       (!lookup?.lease_token || lookup.available_at <= Date.now()),
   };
   const refundUnavailableReason = !access.value.capabilities.includes("refunds.manage")
@@ -960,12 +961,31 @@ export async function getAdminPayment(
     value: {
       paymentIntentId: row.paymentIntentId,
       purpose: row.purpose,
+      customerName: row.deletedCustomer ? "Deleted customer" : row.customerName,
+      orderId: row.orderId,
+      orderNumber: row.orderNumber,
       subjectType: intent.subjectType,
       subjectId: intent.subjectId,
-      customerEmail: row.customerEmail ?? "—",
+      customerEmail: row.deletedCustomer ? "Deleted customer" : (row.customerEmail ?? "—"),
       amountMinor: row.amountMinor,
       currency: row.currency,
       status: row.status,
+      canonicalStatus: row.status,
+      displayStatus: cases.results.some((item) => item.status === "OPEN" && !item.eligible)
+        ? "PAYMENT_OUTCOME_UNKNOWN"
+        : row.status === "REQUIRES_ACTION"
+          ? lookup?.status === "COMPLETED"
+            ? "PAYMENT_WINDOW_EXPIRED"
+            : "AWAITING_PAYMENT"
+          : row.status === "INITIATED" || row.status === "PROCESSING"
+            ? "CONFIRMING_PAYMENT"
+            : row.status === "SUCCEEDED"
+              ? "PAID"
+              : row.status === "PARTIALLY_REFUNDED"
+                ? "PARTIALLY_REFUNDED"
+                : row.status === "REFUNDED"
+                  ? "REFUNDED"
+                  : "PAYMENT_FAILED",
       refundedMinor: row.refundedMinor,
       remainingRefundableMinor,
       refundUnavailableReason,
@@ -992,10 +1012,10 @@ export async function getAdminPayment(
           lastErrorCode: refund.last_error_code,
           canRecheck:
             access.value.capabilities.includes("refunds.manage") &&
-            (refund.processing_started_at === null ||
-              (refund.next_retry_at !== null && refund.next_retry_at <= Date.now())) &&
-            (["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED"].includes(refund.status) ||
-              (["SUCCEEDED", "FAILED"].includes(refund.status) && refund.next_retry_at !== null)),
+            refund.processing_started_at === null &&
+            refund.next_retry_at === null &&
+            (refund.status === "ESCALATED" ||
+              (["SUCCEEDED", "FAILED"].includes(refund.status) && refund.last_error_code !== null)),
         },
         paymentIntentId: request.paymentIntentId,
         amountMinor: refund.amountMinor,
@@ -1053,16 +1073,15 @@ export async function getAdminPayment(
   };
 }
 
-/** Bounded reconciliation queue. */
-export async function listAdminReconciliationCases(
+/** One oldest-first row per genuine unresolved payment or unmatched provider event. */
+export async function listAdminPaymentAttention(
   deps: FinanceAdministrationDeps,
-  request: AdminReconciliationListRequest,
-): Promise<RpcResult<AdminReconciliationPage>> {
+  request: AdminPaymentAttentionListRequest,
+): Promise<RpcResult<AdminPaymentAttentionPage>> {
   const access = await resolveFinanceAdministrationAccess(deps, request, "payments.read");
   if (!access.ok) return access;
-
   const limit = boundListLimit(request.limit);
-  if (limit === "invalid") {
+  if (limit === "invalid")
     return {
       ok: false,
       error: {
@@ -1071,11 +1090,10 @@ export async function listAdminReconciliationCases(
         requestId: request.requestId,
       },
     };
-  }
   let cursor: { createdAt: number; id: string } | null = null;
   if (request.cursor !== undefined) {
     cursor = decodeStaffCursor(request.cursor);
-    if (!cursor) {
+    if (!cursor)
       return {
         ok: false,
         error: {
@@ -1084,74 +1102,219 @@ export async function listAdminReconciliationCases(
           requestId: request.requestId,
         },
       };
-    }
   }
-
-  const clauses: string[] = [];
-  const binds: unknown[] = [];
-  if (request.status !== undefined) {
-    clauses.push("status = ?");
-    binds.push(request.status);
-  }
-  if (cursor) {
-    clauses.push("(created_at < ? OR (created_at = ? AND id < ?))");
-    binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
-  }
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
-    .prepare(
-      `SELECT id, payment_intent_id AS paymentIntentId, category, status,
-              created_at AS createdAt, resolved_at AS resolvedAt,version,(${reconciliationResolutionEvidence}) eligible,(${refundedCommitmentResolutionEvidence}) refundedCommitment
-       FROM payment_reconciliation_case ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,
+    .prepare(`${PAYMENT_ATTENTION_CTE}
+      SELECT groups.group_key groupKey,groups.payment_intent_id paymentIntentId,groups.opened_at openedAt,
+        groups.case_ids caseIds,groups.categories,
+        user.name customerName,user.email customerEmail,customer.status customerStatus,
+        payment.amount_minor amountMinor,payment.currency
+      FROM attention_groups groups
+      LEFT JOIN payment_intent payment ON payment.id=groups.payment_intent_id
+      LEFT JOIN customer ON customer.id=payment.customer_id
+      LEFT JOIN user ON user.id=customer.auth_user_id
+      WHERE (? IS NULL OR groups.opened_at>? OR (groups.opened_at=? AND groups.group_key>?))
+      ORDER BY groups.opened_at,groups.group_key LIMIT ?`)
+    .bind(
+      cursor?.createdAt ?? null,
+      cursor?.createdAt ?? 0,
+      cursor?.createdAt ?? 0,
+      cursor?.id ?? "",
+      limit + 1,
     )
-    .bind(...binds, limit + 1)
     .all<{
-      id: string;
-      version: number;
-      eligible: number;
-      refundedCommitment: number;
+      groupKey: string;
       paymentIntentId: string | null;
-      category: AdminReconciliationCaseView["category"];
-      status: "OPEN" | "RESOLVED";
-      createdAt: number;
-      resolvedAt: number | null;
+      openedAt: number;
+      caseIds: string;
+      categories: string;
+      customerName: string | null;
+      customerEmail: string | null;
+      customerStatus: string | null;
+      amountMinor: number | null;
+      currency: string | null;
     }>();
-  const hasMore = rows.results.length > limit;
-  const recoveries = await readProviderEventRecovery(
-    deps.db,
-    rows.results.slice(0, limit).map((row) => row.id),
-    access.value.capabilities.includes("payments.manage"),
-  );
-  const reactionRecoveries = await readPaymentReactionRecovery(
-    deps.db,
-    rows.results.slice(0, limit).map((row) => row.id),
-    access.value.capabilities.includes("payments.manage"),
-  );
-  const items: AdminReconciliationCaseView[] = rows.results.slice(0, limit).map((row) => ({
-    paymentReactionRecovery: reactionRecoveries.get(row.id),
-    providerEventRecovery: recoveries.get(row.id),
-    caseId: row.id,
-    resolutionAction: row.refundedCommitment ? "CONFIRM_REFUNDED_COMMITMENT" : "RESOLVE",
-    version: row.version,
-    resolutionUnavailableReason:
-      row.status !== "OPEN"
-        ? "Case is already resolved."
-        : !access.value.capabilities.includes("refunds.manage")
-          ? "Global refund permission is required."
-          : row.eligible
-            ? null
-            : unresolvedReconciliationReason,
-    paymentIntentId: row.paymentIntentId,
-    category: row.category,
-    status: row.status,
-    createdAt: new Date(row.createdAt).toISOString(),
-    resolvedAt: row.resolvedAt === null ? null : new Date(row.resolvedAt).toISOString(),
-  }));
+  const count = await deps.db
+    .prepare(`${PAYMENT_ATTENTION_CTE} SELECT COUNT(*) count FROM attention_groups`)
+    .first<{ count: number }>();
   const pageRows = rows.results.slice(0, limit);
+  const caseIds = [...new Set(pageRows.flatMap((row) => row.caseIds.split(",")))];
+  const [caseRows, lookupRows, refundRows, providerRecoveries, reactionRecoveries] =
+    await Promise.all([
+      caseIds.length
+        ? deps.db
+            .prepare(
+              `SELECT id,version,payment_intent_id paymentIntentId FROM payment_reconciliation_case WHERE id IN (${caseIds.map(() => "?").join(",")})`,
+            )
+            .bind(...caseIds)
+            .all<{ id: string; version: number; paymentIntentId: string | null }>()
+        : Promise.resolve({
+            results: [] as { id: string; version: number; paymentIntentId: string | null }[],
+          }),
+      pageRows.some((row) => row.paymentIntentId)
+        ? deps.db
+            .prepare(`SELECT recovery.payment_intent_id paymentIntentId,recovery.status,recovery.version,
+            recovery.available_at availableAt,recovery.lease_token leaseToken,payment.version paymentVersion
+            FROM payment_lookup_recovery recovery JOIN payment_intent payment ON payment.id=recovery.payment_intent_id
+            WHERE recovery.payment_intent_id IN (${pageRows
+              .filter((row) => row.paymentIntentId)
+              .map(() => "?")
+              .join(",")})`)
+            .bind(...pageRows.flatMap((row) => (row.paymentIntentId ? [row.paymentIntentId] : [])))
+            .all<{
+              paymentIntentId: string;
+              status: string;
+              version: number;
+              availableAt: number;
+              leaseToken: string | null;
+              paymentVersion: number;
+            }>()
+        : Promise.resolve({
+            results: [] as {
+              paymentIntentId: string;
+              status: string;
+              version: number;
+              availableAt: number;
+              leaseToken: string | null;
+              paymentVersion: number;
+            }[],
+          }),
+      pageRows.some((row) => row.paymentIntentId)
+        ? deps.db
+            .prepare(`SELECT refund.id,refund.payment_intent_id paymentIntentId,refund.version,refund.status,
+            refund.processing_started_at processingStartedAt,refund.next_retry_at nextRetryAt,refund.last_error_code lastErrorCode
+            FROM payment_refund refund WHERE refund.payment_intent_id IN (${pageRows
+              .filter((row) => row.paymentIntentId)
+              .map(() => "?")
+              .join(",")})`)
+            .bind(...pageRows.flatMap((row) => (row.paymentIntentId ? [row.paymentIntentId] : [])))
+            .all<{
+              id: string;
+              paymentIntentId: string;
+              version: number;
+              status: string;
+              processingStartedAt: number | null;
+              nextRetryAt: number | null;
+              lastErrorCode: string | null;
+            }>()
+        : Promise.resolve({
+            results: [] as {
+              id: string;
+              paymentIntentId: string;
+              version: number;
+              status: string;
+              processingStartedAt: number | null;
+              nextRetryAt: number | null;
+              lastErrorCode: string | null;
+            }[],
+          }),
+      readProviderEventRecovery(
+        deps.db,
+        caseIds,
+        access.value.capabilities.includes("payments.manage"),
+      ),
+      readPaymentReactionRecovery(
+        deps.db,
+        caseIds,
+        access.value.capabilities.includes("payments.manage"),
+      ),
+    ]);
+  const versions = new Map(caseRows.results.map((row) => [row.id, row.version]));
+  const now = Date.now();
+  const items: AdminPaymentAttentionItem[] = pageRows.map((row) => {
+    const rowCaseIds = row.caseIds.split(",");
+    const actions: AdminPaymentAttentionItem["actions"][number][] = [];
+    const lookup = lookupRows.results.find((item) => item.paymentIntentId === row.paymentIntentId);
+    if (
+      lookup?.status === "EXHAUSTED" &&
+      (!lookup.leaseToken || lookup.availableAt <= now) &&
+      access.value.capabilities.includes("payments.manage")
+    )
+      actions.push({
+        kind: "RECHECK_PAYMENT",
+        caseId: null,
+        refundId: null,
+        expectedVersion: lookup.paymentVersion,
+        expectedPaymentVersion: lookup.paymentVersion,
+        expectedRecoveryVersion: lookup.version,
+      });
+    for (const caseId of rowCaseIds) {
+      const event = providerRecoveries.get(caseId);
+      if (event?.canRetry)
+        actions.push({
+          kind: "RETRY_PROVIDER_EVENT",
+          caseId,
+          refundId: null,
+          expectedVersion: versions.get(caseId) ?? 0,
+          expectedPaymentVersion: null,
+          expectedRecoveryVersion: null,
+        });
+      const reaction = reactionRecoveries.get(caseId);
+      if (reaction?.canRetry && !actions.some((action) => action.kind === "RETRY_PAYMENT_REACTION"))
+        actions.push({
+          kind: "RETRY_PAYMENT_REACTION",
+          caseId,
+          refundId: null,
+          expectedVersion: versions.get(caseId) ?? 0,
+          expectedPaymentVersion: reaction.paymentVersion,
+          expectedRecoveryVersion: null,
+        });
+    }
+    const refund = refundRows.results.find(
+      (item) =>
+        item.paymentIntentId === row.paymentIntentId &&
+        item.processingStartedAt === null &&
+        item.nextRetryAt === null &&
+        (item.status === "ESCALATED" ||
+          (["SUCCEEDED", "FAILED"].includes(item.status) && item.lastErrorCode !== null)),
+    );
+    if (refund && access.value.capabilities.includes("refunds.manage"))
+      actions.push({
+        kind: "RECHECK_REFUND",
+        caseId: null,
+        refundId: refund.id,
+        expectedVersion: refund.version,
+        expectedPaymentVersion: null,
+        expectedRecoveryVersion: null,
+      });
+    const checking =
+      (lookup !== undefined && lookup.status === "PENDING") ||
+      rowCaseIds.some((caseId) => {
+        const event = providerRecoveries.get(caseId);
+        const reaction = reactionRecoveries.get(caseId);
+        return (
+          (event !== undefined && event.state !== "RECONCILIATION_REQUIRED") ||
+          (reaction !== undefined && reaction.state === "PENDING")
+        );
+      });
+    const deleted = row.customerStatus === "closed";
+    return {
+      groupKey: row.groupKey,
+      paymentIntentId: row.paymentIntentId,
+      customerName: deleted ? "Deleted customer" : row.customerName,
+      customerEmail: deleted ? null : row.customerEmail,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      problem: attentionProblem(row.categories),
+      state: checking ? "CHECKING_AUTOMATICALLY" : "NEEDS_ATTENTION",
+      caseIds: rowCaseIds,
+      actions,
+      openedAt: new Date(row.openedAt).toISOString(),
+    };
+  });
   const last = pageRows[pageRows.length - 1];
-  const nextCursor =
-    hasMore && last ? encodeStaffCursor({ createdAt: last.createdAt, id: last.id }) : null;
-  return { ok: true, value: { items, nextCursor }, requestId: request.requestId };
+  return {
+    ok: true,
+    value: {
+      items,
+      total: count?.count ?? 0,
+      nextCursor:
+        rows.results.length > limit && last
+          ? encodeStaffCursor({ createdAt: last.openedAt, id: last.groupKey })
+          : null,
+    },
+    requestId: request.requestId,
+  };
 }
 
 const MEMBERSHIP_SELECT = `
