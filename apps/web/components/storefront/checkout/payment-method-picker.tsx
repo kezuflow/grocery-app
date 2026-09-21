@@ -1,13 +1,12 @@
 "use client";
 
-import { CreditCard, Landmark, QrCode, WalletCards } from "lucide-react";
 import type { PaymentMethodToken } from "@freshmarkets/contracts";
 
 type Method = Readonly<{
   value: string;
   label: string;
   description: string;
-  category: "qr" | "wallet" | "card" | "bank";
+  logoSrc: string;
   available: boolean;
 }>;
 
@@ -16,78 +15,94 @@ const methods: readonly Method[] = [
     value: "qrph",
     label: "QR Ph",
     description: "Scan with GCash, Maya, or a participating bank app.",
-    category: "qr",
+    logoSrc: "/payment-methods/qr-ph.svg",
     available: true,
   },
-  { value: "gcash", label: "GCash", description: "E-wallet", category: "wallet", available: false },
+  {
+    value: "gcash",
+    label: "GCash",
+    description: "E-wallet",
+    logoSrc: "/payment-methods/gcash.svg",
+    available: false,
+  },
   {
     value: "paymaya",
     label: "Maya",
     description: "E-wallet",
-    category: "wallet",
+    logoSrc: "/payment-methods/maya.svg",
     available: false,
   },
   {
     value: "grab_pay",
     label: "GrabPay",
     description: "E-wallet",
-    category: "wallet",
+    logoSrc: "/payment-methods/grabpay.svg",
     available: false,
   },
   {
     value: "shopeepay",
     label: "ShopeePay",
     description: "E-wallet",
-    category: "wallet",
+    logoSrc: "/payment-methods/shopeepay.svg",
     available: false,
   },
   {
     value: "card",
     label: "Visa & Mastercard",
     description: "Card",
-    category: "card",
+    logoSrc: "/payment-methods/visa-mastercard.svg",
     available: false,
   },
   {
     value: "google_pay",
     label: "Google Pay",
     description: "Digital wallet",
-    category: "wallet",
+    logoSrc: "/payment-methods/google-pay.svg",
     available: false,
   },
-  { value: "bdo", label: "BDO", description: "Direct debit", category: "bank", available: false },
-  { value: "bpi", label: "BPI", description: "Direct debit", category: "bank", available: false },
+  {
+    value: "bdo",
+    label: "BDO",
+    description: "Direct debit",
+    logoSrc: "/payment-methods/bdo.svg",
+    available: false,
+  },
+  {
+    value: "bpi",
+    label: "BPI",
+    description: "Direct debit",
+    logoSrc: "/payment-methods/bpi.svg",
+    available: false,
+  },
   {
     value: "landbank",
     label: "Landbank",
     description: "Direct debit",
-    category: "bank",
+    logoSrc: "/payment-methods/landbank.svg",
     available: false,
   },
   {
     value: "metrobank",
     label: "Metrobank",
     description: "Direct debit",
-    category: "bank",
+    logoSrc: "/payment-methods/metrobank.svg",
     available: false,
   },
-  { value: "rcbc", label: "RCBC", description: "Direct debit", category: "bank", available: false },
+  {
+    value: "rcbc",
+    label: "RCBC",
+    description: "Direct debit",
+    logoSrc: "/payment-methods/rcbc.svg",
+    available: false,
+  },
   {
     value: "ubp",
     label: "UnionBank",
     description: "Direct debit",
-    category: "bank",
+    logoSrc: "/payment-methods/unionbank.svg",
     available: false,
   },
 ] as const;
-
-function MethodIcon({ category }: { category: Method["category"] }) {
-  const className = "size-5";
-  if (category === "qr") return <QrCode className={className} aria-hidden="true" />;
-  if (category === "card") return <CreditCard className={className} aria-hidden="true" />;
-  if (category === "bank") return <Landmark className={className} aria-hidden="true" />;
-  return <WalletCards className={className} aria-hidden="true" />;
-}
 
 export function PaymentMethodPicker({
   selected,
@@ -115,14 +130,15 @@ export function PaymentMethodPicker({
                 : "border-[var(--fm-border)] bg-white"
             } disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
           >
-            <span
-              className={`grid size-10 shrink-0 place-items-center rounded-full ${
-                checked
-                  ? "bg-[var(--fm-primary-dark)] text-white"
-                  : "bg-slate-100 text-[var(--fm-text-muted)]"
-              }`}
-            >
-              <MethodIcon category={method.category} />
+            <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
+              <img
+                src={method.logoSrc}
+                alt=""
+                aria-hidden="true"
+                width={40}
+                height={40}
+                className={`size-10 object-contain ${method.available ? "" : "opacity-65"}`}
+              />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold text-current">{method.label}</span>

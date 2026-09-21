@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PAYMENT-METHOD-BRAND-ASSETS-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment presentation. The owner explicitly authorized inspection of the active
+authenticated PayMongo dashboard tab and requested the payment-method SVGs for the FreshMarkets
+payment picker. Acceptance: copy the exact rendered payment-brand assets without credentials or
+account data, use the approved methods' marks in checkout, preserve accessible method labels and
+selection behavior, and do not infer provider activation from possession of a logo.
+
+Work started from clean synchronized `main`/`origin/main` at `4c249e41`. The browser asset inventory
+identified and exported 14 inline PayMongo dashboard SVGs: QR Ph, GCash, GrabPay, Maya, ShopeePay,
+Google Pay, Visa/Mastercard, BDO, BPI, Landbank, Metrobank, RCBC, UnionBank and BillEase. They now live
+under `apps/web/public/payment-methods`; the 13 already-approved checkout rows render their exact
+brand marks instead of generic category icons. Logos are decorative because the visible row text
+retains the accessible name. BillEase is retained as an asset only and is not added to checkout or
+enabled as a payment channel. QR Ph remains the only selectable method; no business, Core, contract,
+schema or provider behavior changed.
+
+All 14 files parse as well-formed SVG/XML and the asset scan found no account name, email, credential,
+authorization header, token or API-key text. The focused picker test passes and covers the 13 wired
+asset paths plus QR Ph selection/disabled GCash behavior. Web typecheck and lint pass with the two
+previously recorded address-book unused-variable warnings. Formatting, the complete Web suite (141
+files / 597 tests), and the vinext production build pass. A temporary local contact-sheet browser URL
+was rejected by the in-app browser security policy and was not bypassed; exact dashboard extraction,
+XML validation and application tests are the retained evidence. No deployment, shared-data change,
+PayMongo setting, transaction or outbound message occurred. Completed task ID at the source/Web
+verification counting level: `PAYMENT-METHOD-BRAND-ASSETS-1`. The next action, if separately
+authorized, is deploy and visually verify the authenticated checkout picker in the target browser.
+
 ## Latest owner request — CHECKOUT-PAYMENT-METHOD-SELECTION-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

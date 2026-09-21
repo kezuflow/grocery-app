@@ -37,6 +37,23 @@ describe("PaymentMethodPicker", () => {
     );
     expect(qrPh?.disabled).toBe(false);
     expect(gcash?.disabled).toBe(true);
+    expect(
+      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
+    ).toEqual([
+      "/payment-methods/qr-ph.svg",
+      "/payment-methods/gcash.svg",
+      "/payment-methods/maya.svg",
+      "/payment-methods/grabpay.svg",
+      "/payment-methods/shopeepay.svg",
+      "/payment-methods/visa-mastercard.svg",
+      "/payment-methods/google-pay.svg",
+      "/payment-methods/bdo.svg",
+      "/payment-methods/bpi.svg",
+      "/payment-methods/landbank.svg",
+      "/payment-methods/metrobank.svg",
+      "/payment-methods/rcbc.svg",
+      "/payment-methods/unionbank.svg",
+    ]);
 
     await act(async () => qrPh?.click());
     expect(onSelect).toHaveBeenCalledWith({ kind: "TOKEN", value: "qrph" });
