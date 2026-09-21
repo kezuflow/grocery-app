@@ -1,5 +1,49 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PAYMENTS-SIMPLIFY-1 planning (2026-09-21)
+
+Active plan: `docs/product/PAYMENTS_SIMPLIFICATION_PLAN.md`, **Payments simplification — plan and
+handoff**, under `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested a Payments review and concrete simplification decisions,
+then an execution plan suitable for Sol 5.6 Medium. This turn is documentation/planning only; no
+implementation, new task, model/settings change or deployment was requested.
+
+Observed baseline: `main` at `dcd708f78f39a24993aa8316d87cb6670203fd86`, with the 16 unrelated deleted
+`.claude/skills` files preserved. Read-only production browser inspection found six visible
+REQUIRES_ACTION attempts and eight open cases, including multiple cases for individual payments;
+case resolution controls were unavailable. No contacts, provider references or payloads are recorded
+here. Browser observation did not establish definitive nonpayment, provider mode, or safe deletion.
+Source review confirmed expiry updates only provider continuations, customer-waiting is counted as
+staff workload, generic lookup exhaustion generates cases, and unpaid detail computes a nonzero
+refundable balance before checking eligibility. Current source uses a one-hour continuation and
+up-to-30-minute QR codes; the owner did not approve a 24-hour change.
+During plan preparation the owner also questioned PROCESSING. Source review confirms it represents
+pending provider confirmation and an internal canonical transition, not an extra staff action. The
+plan retains that safety distinction while excluding healthy processing from staff work and using
+Confirming payment wherever the existing customer flow already exposes it.
+
+The final approved direction supersedes the first conversational plan's All attempts filter: one
+Payments destination with Payments (captured money/refunds) and Needs attention; ordinary unpaid,
+failed-without-capture and expired attempts stay internal. Preserve genuine unknown/captured-money
+problems, group linked issues, collapse diagnostics, and automatically complete verified resolutions
+with owning cleanup/audit evidence. No retention interval or purge was approved. PRODUCT and DESIGN
+record these as approved intent with implementation pending; the protected discussion is unchanged.
+
+The saved plan contains six ordered implementation sequences: PS-01 waiting/expiry recovery, PS-02
+automatic case completion, PS-03 typed Core reads and command eligibility, PS-04 Payments workspace,
+PS-05 removal/redirects/specification reconciliation, and PS-06 integrated verification. It specifies
+the one-hour boundary, late/duplicate success, historical unknown outcomes, automatic cleanup races,
+refund budgets, grouped pagination/counts, authorization, mobile/desktop and saved-command recovery.
+The current implementation remains unchanged. Tests for changed application behavior have not run
+because this turn has no application changes. Documentation validation passed: `git diff --check`,
+`pnpm naming:check`, `pnpm terminology:check`, and a relative-Markdown-link check across the four
+changed documents. Read-only `git ls-remote origin refs/heads/main` matched baseline `dcd708f7`.
+The plan, PRODUCT/DESIGN supplements and this checkpoint are the only intended commit files.
+
+Completion level: planning artifact prepared; **0 of 6 implementation sequences complete**. Actual
+provider/production acceptance remains separate. One next action: when implementation is requested,
+execute PS-01 from the saved plan with Sol 5.6 Medium, after rechecking HEAD/status and this checkpoint.
+
 ## Latest owner request — PRODUCTION-ADMIN-ACCOUNT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

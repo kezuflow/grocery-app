@@ -1,5 +1,20 @@
 # FreshMarkets Design
 
+## Payments simplification — owner decisions 2026-09-21
+
+Approved design intent; implementation is pending under
+[PAYMENTS_SIMPLIFICATION_PLAN.md](../product/PAYMENTS_SIMPLIFICATION_PLAN.md). Use one Payments
+destination with a paid-payments/refunds list and a Needs attention view. Ordinary unpaid/expired
+attempts have no collection view or All attempts filter. Reuse the full-width Admin master/detail
+pattern, readable customer/Order identity and typed Core action availability. Show only relevant
+financial facts and a specific explanation of actual problems; group multiple cases for one Payment.
+Put technical evidence under a collapsed disclosure and omit empty diagnostic sections, raw status
+enums, workload charts, duplicate overview/reconciliation navigation and routine recovery forms.
+Resolved issues disappear automatically after verified completion; no Close case acknowledgment.
+Keep refund confirmation and identical-command recovery where required, and never display an unpaid
+amount as received or refundable. Existing unpaid deep links may show read-only context without
+restoring an unpaid collection. The owning PRODUCT supplement defines financial and expiry meaning.
+
 ## Notification panels — owner approval 2026-09-13
 
 Storefront places its bell immediately left of Cart; Admin replaces its Overview anchor with a

@@ -1,5 +1,24 @@
 # FreshMarkets Product Rules
 
+Owner-approved Payments simplification, 2026-09-21: Admin Payments will have one workspace with
+Payments (confirmed captured payments and their refunds) and Needs attention (genuine unresolved
+money or paid-commitment problems). Ordinary unpaid, failed-without-capture and expired attempts
+remain internal; the earlier proposed All attempts filter is superseded and must not be built.
+Customer waiting and payment-window expiry do not create staff work. Group linked issues by Payment,
+retain unmatched financial evidence, and automatically remove verified completed issues from the work
+list with required cleanup/audit evidence. Refund decisions and financial/Order safeguards remain.
+Technical diagnostics are collapsed and no separate overview/reconciliation dashboard is needed.
+Retain the existing one-hour payment continuation and up-to-30-minute QR lifetime; no 24-hour change
+was approved. Window expiry never manufactures a terminal financial outcome or blocks a later valid
+provider confirmation. No deletion/retention period or purge is authorized by this simplification.
+These are approved product decisions, with implementation pending under
+[PAYMENTS_SIMPLIFICATION_PLAN.md](PAYMENTS_SIMPLIFICATION_PLAN.md); the current request is to save an
+execution plan for Sol 5.6 Medium, not to implement or deploy it.
+Processing remains an internal pending-confirmation distinction, not staff work or a manual payment
+step. Where already shown to the customer, label it Confirming payment. Only an exhausted or
+unrecoverable confirmation issue calls for staff attention; awaiting confirmation is neither success
+nor definitive failure.
+
 Owner correction, 2026-09-20: customer checkout supports the one active global mode returned by
 Core. Instant obtains an immediate courier quotation; Scheduled presents the current eligible cycle,
 delivery range and cutoff and obtains its authoritative future courier quotation. Web must not discard
