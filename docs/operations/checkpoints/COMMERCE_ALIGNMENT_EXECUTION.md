@@ -21,8 +21,18 @@ across 2 files**; Web typecheck, focused formatting/lint and `git diff --check` 
 Web/Core browser run built the production application and passed **1/1**, proving the timeline appears
 above Items, all steps share one horizontal row at 1440px, and the timeline scrolls locally without
 page-wide overflow at 390px. No remote environment or customer data was touched. Completion level:
-**1 of 1 customer Order-timeline layout slice implemented and locally accepted**. Deployment remains
-unauthorized; no work remains at this slice level.
+**1 of 1 customer Order-timeline layout slice implemented and locally accepted**.
+
+The owner then authorized production deployment and clarified that this Web-only change should not
+redeploy Core. A fresh `CLOUDFLARE_ENV=production` build resolved to
+`freshmarkets-web-production`, the `freshmarkets.ph` custom domain and the existing
+`freshmarkets-core-production#CoreEntrypoint` binding. Web deployed from pushed revision `673df7a4` as
+version `7710a7a0-7340-46b8-84ac-9c87b5ec222f`; Core was not deployed. Post-deploy probes returned
+HTTP 200 for the custom-domain homepage, `/api/core-health` with `status: ok`, the owner-supplied Order
+route shell, and the production Worker diagnostic hostname. No schema migration, remote data mutation,
+provider transaction or outbound message occurred. Completion level: **1 of 1 customer Order-timeline
+layout slice implemented, locally accepted, pushed and Web-deployed**. No work remains at this slice
+level.
 
 ## Latest owner request — CURRENT-MAIN-PRODUCTION-DEPLOY-1 (2026-09-21)
 
