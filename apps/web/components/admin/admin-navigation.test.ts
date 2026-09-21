@@ -43,7 +43,7 @@ describe("admin navigation mapping", () => {
       {
         ...overview,
         code: "promotions",
-        label: "Promotions",
+        label: "Promotion Codes",
         href: "/admin/promotions",
         section: "commerce",
         scopeKinds: globalScope,
@@ -324,7 +324,7 @@ describe("admin navigation mapping", () => {
       },
       {
         code: "promotions",
-        label: "Promotions",
+        label: "Promotion Codes",
         href: "/admin/promotions",
         section: "commerce" as const,
         scopeKinds: globalScope,

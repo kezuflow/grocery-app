@@ -164,7 +164,7 @@ export default function InventorySalesPage() {
             phase: "error",
             message:
               payload.error.code === "FORBIDDEN"
-                ? "Inventory sales require the promotions.read capability with a global scope."
+                ? "Promotion Sale requires the promotions.read capability with a global scope."
                 : payload.error.message,
             requestId: payload.error.requestId,
           });
@@ -290,7 +290,7 @@ export default function InventorySalesPage() {
   return (
     <div className="w-full">
       {state.phase === "loading" ? (
-        <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading inventory sales">
+        <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading Promotion Sale">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-72 w-full" />
         </div>
@@ -298,7 +298,7 @@ export default function InventorySalesPage() {
 
       {state.phase === "error" ? (
         <Alert variant="destructive" className="m-5 w-auto sm:m-7">
-          <AlertTitle>Inventory sales could not be loaded</AlertTitle>
+          <AlertTitle>Promotion Sale could not be loaded</AlertTitle>
           <AlertDescription>
             {state.message}
             {state.requestId ? (
@@ -324,7 +324,7 @@ export default function InventorySalesPage() {
                   id="admin-page-title"
                   className="text-[2rem] font-bold tracking-[-0.04em] text-[var(--fm-text)]"
                 >
-                  Inventory sales
+                  Promotion Sale
                 </h1>
                 <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
                   Automatic sale prices on selected products.
@@ -355,7 +355,7 @@ export default function InventorySalesPage() {
               <div
                 className="flex items-center gap-6"
                 role="tablist"
-                aria-label="Inventory sale status"
+                aria-label="Promotion Sale status"
               >
                 {(
                   [

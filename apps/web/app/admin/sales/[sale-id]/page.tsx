@@ -136,7 +136,7 @@ export default function InventorySaleDetailPage({
             className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Inventory sales
+            Promotion Sale
           </Link>
 
           <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

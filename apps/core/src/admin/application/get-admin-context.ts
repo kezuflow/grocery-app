@@ -229,7 +229,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "promotions",
-    label: "Promotions",
+    label: "Promotion Codes",
     href: "/admin/promotions",
     section: "commerce",
     parentCode: null,
@@ -238,7 +238,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "sales",
-    label: "Inventory sales",
+    label: "Promotion Sale",
     href: "/admin/sales",
     section: "commerce",
     parentCode: null,

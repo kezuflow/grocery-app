@@ -46,7 +46,7 @@ async function installPaginationBootstrap(page: Page, selectedScope: AdminSelect
         },
         {
           code: "promotions",
-          label: "Promotions",
+          label: "Promotion Codes",
           href: "/admin/promotions",
           section: "commerce",
           scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],

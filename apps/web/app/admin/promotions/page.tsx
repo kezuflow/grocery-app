@@ -167,7 +167,7 @@ export default function PromotionsPage() {
             phase: "error",
             message:
               payload.error.code === "FORBIDDEN"
-                ? "Promotion administration requires the promotions.read capability with a global scope."
+                ? "Promotion code administration requires the promotions.read capability with a global scope."
                 : payload.error.message,
             requestId: payload.error.requestId,
           });
@@ -179,7 +179,11 @@ export default function PromotionsPage() {
         });
         setState({ phase: "ready" });
       } catch {
-        setState({ phase: "error", message: "Network error loading promotions.", requestId: null });
+        setState({
+          phase: "error",
+          message: "Network error loading promotion codes.",
+          requestId: null,
+        });
       }
     })();
   }, []);
@@ -279,7 +283,7 @@ export default function PromotionsPage() {
   return (
     <div className="w-full">
       {state.phase === "loading" ? (
-        <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading promotions">
+        <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading promotion codes">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-72 w-full" />
         </div>
@@ -287,7 +291,7 @@ export default function PromotionsPage() {
 
       {state.phase === "error" ? (
         <Alert variant="destructive" className="m-5 w-auto sm:m-7">
-          <AlertTitle>Promotions could not be loaded</AlertTitle>
+          <AlertTitle>Promotion Codes could not be loaded</AlertTitle>
           <AlertDescription>
             {state.message}
             {state.requestId ? (
@@ -313,7 +317,7 @@ export default function PromotionsPage() {
                   id="admin-page-title"
                   className="text-[2rem] font-bold tracking-[-0.04em] text-[var(--fm-text)]"
                 >
-                  Promo codes
+                  Promotion Codes
                 </h1>
                 <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
                   Create and manage promo codes for your store.
@@ -390,7 +394,7 @@ export default function PromotionsPage() {
             <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--fm-border)]">
               {visiblePromotions.length === 0 ? (
                 <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
-                  No promotions match this view.
+                  No promotion codes match this view.
                 </p>
               ) : (
                 <Table>
@@ -850,7 +854,7 @@ export default function PromotionsPage() {
                     </fieldset>
                     <p className="flex gap-2 text-xs text-[var(--fm-text-muted)]">
                       <Info className="mt-0.5 size-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-                      Discounts from Inventory sales are applied automatically and can be combined
+                      Discounts from Promotion Sale are applied automatically and can be combined
                       with this promo code.
                     </p>
                   </div>

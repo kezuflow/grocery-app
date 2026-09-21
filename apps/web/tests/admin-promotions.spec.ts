@@ -1,7 +1,7 @@
 import { expect, test } from "./admin-authenticated-fixture";
 
 /**
- * Promotions workspace flows against a provisioned local stack. Skips when
+ * Promotion Codes workspace flows against a provisioned local stack. Skips when
  * the app is unreachable. Authenticated journeys use the deterministic local
  * Staff fixture configured by Playwright.
  */
@@ -23,12 +23,14 @@ test("an unauthenticated visitor cannot open the promotions workspace", async ({
   await expect(page.getByRole("alert")).toContainText("staff account");
 });
 
-test("a provisioned Staff reader opens the real Promotions workspace", async ({ adminPage }) => {
+test("a provisioned Staff reader opens the real Promotion Codes workspace", async ({
+  adminPage,
+}) => {
   await adminPage.goto("/admin/promotions");
-  await expect(adminPage.getByRole("heading", { level: 1, name: "Promotions" })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Promotion Codes" })).toBeVisible();
 });
 
-test("a Staff principal without capability is denied the Promotions workspace", async ({
+test("a Staff principal without capability is denied the Promotion Codes workspace", async ({
   deniedAdminPage,
 }) => {
   await deniedAdminPage.goto("/admin/promotions");

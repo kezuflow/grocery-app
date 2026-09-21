@@ -29,7 +29,7 @@ const groups = [
   ["ORDERS", "Orders"],
   ["FINANCE", "Money"],
   ["INVENTORY", "Products"],
-  ["PROMOTIONS", "Promotions"],
+  ["PROMOTIONS", "Promotion Codes"],
   ["DELIVERY", "Delivery"],
   ["CUSTOMERS", "Customers"],
 ] as const;

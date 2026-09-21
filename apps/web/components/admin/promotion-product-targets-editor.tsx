@@ -36,7 +36,7 @@ export function PromotionProductTargetsEditor({
   value: readonly SaleTargetSelection[];
   onChange: (value: SaleTargetSelection[]) => void;
   disabled: boolean;
-  /** Inventory sales always target products; skip the enable checkbox. */
+  /** Promotion Sale entries always target products; skip the enable checkbox. */
   alwaysOn?: boolean;
 }) {
   const { state } = useAdminContext();

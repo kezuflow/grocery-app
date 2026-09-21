@@ -1,5 +1,28 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-PROMOTION-LABELS-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin presentation terminology. The owner requested renaming “Inventory sales”
+to “Promotion Sale” and “Promotions” to “Promotion Codes.” Acceptance: the Core-supplied Admin
+navigation, matching page headings, status/loading/error/accessibility copy, analytics label and
+browser fixtures consistently present the new names while routes, capabilities, API identifiers and
+business behavior remain unchanged.
+
+Implemented from clean `main` at `77e10073fd9fa7a1884b658adcf554abd28ad0dc`. Core navigation now
+publishes `Promotion Sale` and `Promotion Codes`; the two Admin collections and the Promotion Sale
+detail return link use the same labels. Supporting copy, the analytics promotion category, focused
+fixtures and the Admin presentation guidance were aligned without renaming internal promotion domain
+symbols or `/admin/promotions` and `/admin/sales` routes. No schema, contract, authorization, write,
+provider or deployment behavior changed.
+
+Verification on the complete working-tree scope: focused `oxfmt` and `oxlint` passed; Core and Web
+typechecks passed; Web navigation/accessibility tests passed **29/29 across 2 files**; Core Admin
+context integration passed **15/15**; terminology and naming checks passed; `git diff --check` passed.
+The managed local browser stack built successfully and the authenticated Promotion Codes heading
+journey passed **1/1**. No remote environment or customer data was touched. Completion level: **1 of 1
+Admin promotion-label slice complete**; no remaining work at this slice level.
+
 ## Latest owner request — CHECKOUT-PAYMENT-SUCCESS-COMPLETION-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
