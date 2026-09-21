@@ -237,6 +237,7 @@ export const coreServiceMethodNames = [
   "getAdminProduct",
   "updateAdminProduct",
   "setAdminProductStatus",
+  "setAdminProductCategories",
   "uploadAdminProductMedia",
   "updateAdminProductMedia",
   "removeAdminProductMedia",

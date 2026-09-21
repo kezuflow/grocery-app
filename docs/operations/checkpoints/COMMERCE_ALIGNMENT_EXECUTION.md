@@ -1,5 +1,43 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Global Product administration. The owner approved controls inside the Global
+Product preview to set Product status, set each selling-option status, and assign multiple categories
+without leaving the Product list. Acceptance: authorized Global operators see and can use those
+controls; location previews remain unchanged; category replacement is versioned, atomic, audited and
+idempotent; one ordered primary category remains compatible with existing projections; assigned active
+categories participate in storefront browsing; uncertain browser writes preserve the original intent
+for retry.
+
+Observed baseline was `main` at `d8410b56e1524e2ef5378ff8a1bc8ea515b79890`, with unrelated Payments
+implementation and deleted legacy `.claude/skills` files already present and preserved. The completed
+slice adds migration `0101_product_category_memberships.sql`, backfills every Product's existing
+category as its primary membership, and adds the guarded `setAdminProductCategories` Core/Web
+contract. Product creation and full editing keep membership invariants; Global detail returns ordered
+categories; category counts/details and storefront category rails/search use every membership while
+ordinary Product projections retain the primary category. The Global preview now renders Product and
+selling-option Active/Inactive selectors plus Shopify-style category selection/chips with explicit
+save/cancel and retained-intent retry. Core integration proves ordered replacement, exact replay,
+primary compatibility, full-edit retention and secondary-category storefront discovery.
+
+Verification on the working-tree scope: contracts and Core typechecks passed; focused Core catalog
+tests passed **52/52**, including Product recovery **13/13**; Web route/component tests passed **15/15**;
+full Web passed **602/602** and full contracts passed **69/69**; migration, naming, terminology and
+architecture checks passed; Core Wrangler dry-run build passed. Full Core reached **1689/1692** with
+three unrelated pre-existing failures in `instant-commitment.integration.test.ts`, all caused by the
+in-progress Payments test proxy attempting to serialize a `LoopbackServiceStub`. Web typecheck remains
+blocked only by three pre-existing `payments-workspace.tsx` errors. Browser acceptance did not run:
+an existing workerd occupied port 3100 with a stale failing fixture, and that process locked
+`apps/web/dist`, preventing an isolated managed build on another port. No deployment or remote data
+mutation was performed.
+
+Completion level: implementation and local Core/Web acceptance complete; **1 of 1 requested Global
+Product preview slice complete**. Actual browser rendering remains unaccepted at the browser counting
+level. One next action: after the unrelated local workerd/build lock is released, run
+`global-product-preview-controls.spec.ts` at its desktop and mobile widths.
+
 ## Latest owner request — PAYMENTS-SIMPLIFY-1 planning (2026-09-21)
 
 Active plan: `docs/product/PAYMENTS_SIMPLIFICATION_PLAN.md`, **Payments simplification — plan and

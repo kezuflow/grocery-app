@@ -50,6 +50,7 @@ import {
   adminProductCreateBodySchema,
   adminProductUpdateBodySchema,
   adminProductStatusBodySchema,
+  adminProductCategoriesBodySchema,
 } from "@freshmarkets/validation";
 import {
   getAdminLocationFulfillment,
@@ -241,6 +242,7 @@ import {
   createAdminProduct as createAdminProductCommand,
   updateAdminProduct as updateAdminProductCommand,
   setAdminProductStatus as setAdminProductStatusCommand,
+  setAdminProductCategories as setAdminProductCategoriesCommand,
   createAdminSku as createAdminSkuCommand,
   updateAdminSku as updateAdminSkuCommand,
   setAdminSkuAvailability as setAdminSkuAvailabilityCommand,
@@ -700,6 +702,12 @@ const catalogProductDetailSchema = validationSchema.discriminatedUnion("scopeKin
 
 const catalogProductStatusSchema = authenticatedRequestSchema
   .extend(adminProductStatusBodySchema.shape)
+  .extend({
+    productId: validationSchema.string().trim().min(1).max(200),
+    idempotencyKey: idempotencyKeySchema,
+  });
+const catalogProductCategoriesSchema = authenticatedRequestSchema
+  .extend(adminProductCategoriesBodySchema.shape)
   .extend({
     productId: validationSchema.string().trim().min(1).max(200),
     idempotencyKey: idempotencyKeySchema,
@@ -2090,6 +2098,17 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return setAdminProductStatusCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async setAdminProductCategories(
+    input: import("@freshmarkets/contracts").AdminProductCategoriesRequest,
+  ) {
+    const validation = catalogProductCategoriesSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return setAdminProductCategoriesCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

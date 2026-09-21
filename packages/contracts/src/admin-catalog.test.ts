@@ -268,6 +268,9 @@ describe("catalog contracts", () => {
       description: null,
       categoryCode: "FRESH_PRODUCE",
       categoryName: "Fresh produce",
+      categories: [
+        { categoryId: "category-produce", code: "FRESH_PRODUCE", name: "Fresh produce" },
+      ],
       status: "active",
       version: 2,
       customerDetails: [],

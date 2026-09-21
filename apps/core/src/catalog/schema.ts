@@ -95,6 +95,24 @@ export const product = sqliteTable(
   }),
 );
 
+export const productCategory = sqliteTable(
+  "product_category",
+  {
+    productId: text("product_id")
+      .notNull()
+      .references(() => product.id, { onDelete: "cascade" }),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => category.id, { onDelete: "restrict" }),
+    isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => ({
+    key: primaryKey({ columns: [table.productId, table.categoryId] }),
+    categoryIndex: index("product_category_category_idx").on(table.categoryId, table.productId),
+  }),
+);
+
 export const sku = sqliteTable(
   "sku",
   {

@@ -346,6 +346,10 @@ export function ProductsPageClient({
           product={previewResult.value}
           fromQuery={searchParams.toString()}
           onClose={() => setPanelOpen(false)}
+          onSaved={async () => {
+            await invalidateAdminProductQueries(queryClient, [previewResult.value.productId]);
+            await previewQuery.refetch();
+          }}
         />
       )
     ) : (

@@ -135,6 +135,11 @@ export type AdminProductDetail = {
   description: string | null;
   categoryCode: string;
   categoryName: string;
+  categories: ReadonlyArray<{
+    categoryId: string;
+    code: string;
+    name: string;
+  }>;
   status: CatalogStatus;
   version: number;
   customerDetails: ReadonlyArray<AdminProductCustomerDetail>;
@@ -332,6 +337,13 @@ export type AdminProductStatusRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type AdminProductCategoriesRequest = AuthenticatedRequest & {
+  productId: string;
+  categoryIds: ReadonlyArray<string>;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
 export type AdminProductMediaUploadRequest = AuthenticatedRequest & {
   productId: string;
   replaceMediaId?: string;
@@ -445,6 +457,9 @@ export type AdminCatalogService = {
   updateAdminProduct(request: AdminProductUpdateRequest): Promise<RpcResult<AdminProductSummary>>;
   setAdminProductStatus(
     request: AdminProductStatusRequest,
+  ): Promise<RpcResult<AdminProductSummary>>;
+  setAdminProductCategories(
+    request: AdminProductCategoriesRequest,
   ): Promise<RpcResult<AdminProductSummary>>;
   uploadAdminProductMedia(
     request: AdminProductMediaUploadRequest,

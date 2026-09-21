@@ -13,6 +13,7 @@ const coreMocks = vi.hoisted(() => ({
   getAdminProduct: vi.fn(),
   updateAdminProduct: vi.fn(),
   setAdminProductStatus: vi.fn(),
+  setAdminProductCategories: vi.fn(),
   uploadAdminProductMedia: vi.fn(),
   updateAdminProductMedia: vi.fn(),
   removeAdminProductMedia: vi.fn(),
@@ -45,6 +46,7 @@ import {
   PATCH as updateProduct,
 } from "@/app/api/admin/catalog/products/[product-id]/route";
 import { POST as productStatus } from "@/app/api/admin/catalog/products/[product-id]/status/route";
+import { PATCH as productCategories } from "@/app/api/admin/catalog/products/[product-id]/categories/route";
 import { POST as uploadProductMedia } from "@/app/api/admin/catalog/products/[product-id]/media/route";
 import {
   DELETE as removeProductMedia,
@@ -253,6 +255,27 @@ describe("catalog and inventory BFF routes", () => {
       marketId: "market-2",
       locationId: "location-2",
     });
+  });
+
+  it("validates and delegates Product category memberships", async () => {
+    coreMocks.setAdminProductCategories.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    const response = await productCategories(
+      jsonRequest(
+        "https://x/products/prod-1/categories",
+        { categoryIds: ["category-2", "category-1"], expectedVersion: 3 },
+        "PATCH",
+      ),
+      productParams,
+    );
+    expect(response.status).toBe(200);
+    expect(coreMocks.setAdminProductCategories).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: "prod-1",
+        categoryIds: ["category-2", "category-1"],
+        expectedVersion: 3,
+        idempotencyKey: "idem-1",
+      }),
+    );
   });
 
   it("requires an explicit Product scope", async () => {

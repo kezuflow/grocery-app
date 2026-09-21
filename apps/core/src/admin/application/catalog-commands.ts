@@ -568,4 +568,9 @@ export {
   updateAdminCategory,
   setAdminCategoryStatus,
 } from "./category-commands";
-export { createAdminProduct, updateAdminProduct, setAdminProductStatus } from "./product-commands";
+export {
+  createAdminProduct,
+  updateAdminProduct,
+  setAdminProductStatus,
+  setAdminProductCategories,
+} from "./product-commands";

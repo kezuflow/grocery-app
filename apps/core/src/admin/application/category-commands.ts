@@ -35,7 +35,7 @@ const failure = (
 const required = (db: D1Database) =>
   db.prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=1");
 const summarySql = `SELECT c.id categoryId,c.code,c.name,c.slug,c.status,c.sort_order sortOrder,c.icon_asset_key iconAssetKey,c.parent_id parentCategoryId,parent.name parentName,
-  (SELECT count(*) FROM product p WHERE p.category_id=c.id) productCount,c.version FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?`;
+  (SELECT count(*) FROM product_category pc WHERE pc.category_id=c.id) productCount,c.version FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?`;
 async function read(deps: CatalogAdministrationDeps, id: string) {
   const row = await deps.db.prepare(summarySql).bind(id).first();
   return row ? adminCategorySummarySchema.parse(row) : null;
@@ -79,7 +79,7 @@ function execute(
     deps.db
       .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
       SELECT json_object('categoryId',c.id,'code',c.code,'name',c.name,'slug',c.slug,'status',c.status,'sortOrder',c.sort_order,'iconAssetKey',c.icon_asset_key,
-        'parentCategoryId',c.parent_id,'parentName',parent.name,'productCount',(SELECT count(*) FROM product p WHERE p.category_id=c.id),'version',c.version)
+        'parentCategoryId',c.parent_id,'parentName',parent.name,'productCount',(SELECT count(*) FROM product_category pc WHERE pc.category_id=c.id),'version',c.version)
       FROM category c LEFT JOIN category parent ON parent.id=c.parent_id WHERE c.id=?),updated_at=?
       WHERE scope=? AND idempotency_key=? AND request_hash=? AND status='PROCESSING'`)
       .bind(id, Date.now(), scope, request.idempotencyKey, hash),

@@ -170,6 +170,10 @@ On 2026-09-09 the owner answered “Include the transfer controls” after revie
 
 On 2026-09-21 the owner moved exact-location price editing into the Product preview for the selected fulfillment location, rather than Global scope. Global and fulfillment-location Product previews are distinct: Global owns catalog identity and selling-option definition, while a location preview shows that location's prices, selling state and stock context. A staff member with `prices.manage` and operational scope over the selected location changes a price by clicking the displayed selling-option price and saving the inline field. Core still owns exact-location authorization, version checks, audit, idempotency and immutable price history; there is no Global/Market price fallback and paid snapshots do not change.
 
+## Explicit owner supplement — Global Product preview controls
+
+On 2026-09-21 the owner placed Product lifecycle, selling-option lifecycle and category membership controls directly in the Global Product preview. An authorized Global operator can set the Product and each selling option active or inactive and can assign multiple ordered categories without leaving the Product list. The first membership is the primary category used by compatibility projections; every membership participates in storefront category browsing. Core retains current Global authorization, optimistic versioning, audit, idempotency and atomic membership replacement. These controls do not appear in fulfillment-location previews.
+
 ## Explicit owner supplement — failed delivery and refunds
 
 On 2026-09-09 the owner approved contacting the customer after a failed pickup/delivery attempt, inspecting groceries physically returned to the facility, and retrying the same Order when the goods remain suitable and the customer agrees. Returned groceries are never automatically credited to available stock; damaged/spoiled goods stay separate from sellable stock. Pre-pickup provider retry and Scheduled-only manual fallback remain approved after definite prior-attempt closure.

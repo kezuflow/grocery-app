@@ -7,6 +7,7 @@ import {
   adminProductCreateBodySchema,
   adminProductUpdateBodySchema,
   adminProductStatusBodySchema,
+  adminProductCategoriesBodySchema,
   adminProductSummarySchema,
 } from "@freshmarkets/validation";
 import { requestHash } from "../../idempotency";
@@ -29,6 +30,9 @@ const updateSchema = meta
   .extend({ productId: identifierSchema });
 const statusSchema = meta
   .extend(adminProductStatusBodySchema.shape)
+  .extend({ productId: identifierSchema });
+const categoriesSchema = meta
+  .extend(adminProductCategoriesBodySchema.shape)
   .extend({ productId: identifierSchema });
 const storedSchema = z.object({
   categoryId: identifierSchema,
@@ -139,6 +143,12 @@ export async function createAdminProduct(
         )
         .bind(id, categoryId, poolId, slug, name, description, now, now, stockTracking),
       required(deps.db),
+      deps.db
+        .prepare(
+          "INSERT INTO product_category(product_id,category_id,is_primary,sort_order) VALUES (?,?,1,0)",
+        )
+        .bind(id, categoryId),
+      required(deps.db),
       ...customerDetails.flatMap((detail) => [
         deps.db
           .prepare(
@@ -204,6 +214,10 @@ export async function updateAdminProduct(
     )
     .bind(productId)
     .all<{ label: string; value: string; sortOrder: number }>();
+  const oldCategories = await deps.db
+    .prepare("SELECT category_id FROM product_category WHERE product_id=?")
+    .bind(productId)
+    .all();
   const now = Date.now();
   return executeCatalogCommand(
     deps.db,
@@ -216,6 +230,20 @@ export async function updateAdminProduct(
           "UPDATE product SET category_id=?,slug=?,name=?,description=?,version=version+1,updated_at=? WHERE id=? AND version=?",
         )
         .bind(categoryId, slug, name, description, now, productId, expectedVersion),
+      required(deps.db),
+      deps.db
+        .prepare("UPDATE product_category SET is_primary=0 WHERE product_id=?")
+        .bind(productId),
+      deps.db
+        .prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=?")
+        .bind(oldCategories.results.length),
+      deps.db
+        .prepare(
+          `INSERT INTO product_category(product_id,category_id,is_primary,sort_order)
+           VALUES (?,?,1,0)
+           ON CONFLICT(product_id,category_id) DO UPDATE SET is_primary=1,sort_order=0`,
+        )
+        .bind(productId, categoryId),
       required(deps.db),
       deps.db.prepare("DELETE FROM product_detail WHERE product_id=?").bind(productId),
       deps.db
@@ -299,6 +327,90 @@ export async function setAdminProductStatus(
         reason,
         before: { status: current.status, version: current.version },
         after: { status, version: expectedVersion + 1 },
+        idempotencyKey: command.key,
+        correlationId: command.requestId,
+        occurredAt: now,
+      }),
+      required(deps.db),
+    ],
+    receipt(deps.db, command, productId, now),
+    adminProductSummarySchema,
+  );
+}
+
+export async function setAdminProductCategories(
+  deps: CatalogAdministrationDeps,
+  input: unknown,
+): Promise<RpcResult<AdminProductSummary>> {
+  const parsed = categoriesSchema.safeParse(input);
+  if (!parsed.success) return invalid(input);
+  const request = parsed.data;
+  const access = await resolveCatalogAdministrationAccess(deps, request, "catalog.manage");
+  if (!access.ok) return access;
+  const { productId, categoryIds, expectedVersion } = request;
+  const command = {
+    scope: "admin.catalog.product.categories",
+    key: request.idempotencyKey,
+    hash: await requestHash({ productId, categoryIds, expectedVersion }),
+    requestId: request.requestId,
+  };
+  const prior = await catalogCommandReceipt(deps.db, command, adminProductSummarySchema);
+  if (prior) return prior;
+  const current = await read(deps, productId);
+  if (!current) return failure("NOT_FOUND", "Product not found", request.requestId);
+  if (current.version !== expectedVersion)
+    return failure("STALE_VERSION", "Product changed; refresh before saving", request.requestId);
+  const placeholders = categoryIds.map(() => "?").join(",");
+  const found = await deps.db
+    .prepare(`SELECT COUNT(*) count FROM category WHERE id IN (${placeholders})`)
+    .bind(...categoryIds)
+    .first<{ count: number }>();
+  if (found?.count !== categoryIds.length)
+    return failure("VALIDATION_FAILED", "One or more categories do not exist", request.requestId);
+  const previous = await deps.db
+    .prepare(
+      "SELECT category_id categoryId FROM product_category WHERE product_id=? ORDER BY is_primary DESC,sort_order,category_id",
+    )
+    .bind(productId)
+    .all<{ categoryId: string }>();
+  const now = Date.now();
+  return executeCatalogCommand(
+    deps.db,
+    command,
+    access.value,
+    "CATALOG.PRODUCT_CATEGORIES_SET",
+    [
+      deps.db
+        .prepare(
+          `INSERT INTO admin_command_abort(id)
+           SELECT -1 WHERE (SELECT COUNT(*) FROM category WHERE id IN (${placeholders}))!=?`,
+        )
+        .bind(...categoryIds, categoryIds.length),
+      deps.db
+        .prepare(
+          "UPDATE product SET category_id=?,version=version+1,updated_at=? WHERE id=? AND version=?",
+        )
+        .bind(categoryIds[0], now, productId, expectedVersion),
+      required(deps.db),
+      deps.db.prepare("DELETE FROM product_category WHERE product_id=?").bind(productId),
+      deps.db
+        .prepare("INSERT INTO admin_command_abort(id) SELECT -1 WHERE changes()!=?")
+        .bind(previous.results.length),
+      ...categoryIds.flatMap((categoryId, index) => [
+        deps.db
+          .prepare(
+            "INSERT INTO product_category(product_id,category_id,is_primary,sort_order) VALUES (?,?,?,?)",
+          )
+          .bind(productId, categoryId, index === 0 ? 1 : 0, index),
+        required(deps.db),
+      ]),
+      auditEventStatement(deps.db, {
+        actorUserId: access.value.authUserId,
+        action: "CATALOG.PRODUCT_CATEGORIES_SET",
+        resourceType: "product",
+        resourceId: productId,
+        before: { categoryIds: previous.results.map((item) => item.categoryId) },
+        after: { categoryIds, version: expectedVersion + 1 },
         idempotencyKey: command.key,
         correlationId: command.requestId,
         occurredAt: now,

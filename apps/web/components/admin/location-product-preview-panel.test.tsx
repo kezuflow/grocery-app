@@ -13,6 +13,7 @@ const product = {
   description: "Fresh zucchini.",
   categoryCode: "VEGETABLES",
   categoryName: "Vegetables",
+  categories: [{ categoryId: "category-1", code: "VEGETABLES", name: "Vegetables" }],
   status: "active",
   version: 3,
   customerDetails: [],

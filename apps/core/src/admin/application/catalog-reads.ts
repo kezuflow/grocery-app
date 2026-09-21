@@ -104,7 +104,7 @@ export async function listAdminCategories(
       `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
               c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
               c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
-              (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+              (SELECT COUNT(*) FROM product_category pc WHERE pc.category_id=c.id) AS productCount
        FROM category c LEFT JOIN category parent ON parent.id=c.parent_id
        ${where} ORDER BY c.sort_order, c.id LIMIT ?`,
     )
@@ -166,7 +166,7 @@ export async function getAdminCategory(
         `SELECT c.id AS categoryId, c.code, c.name, c.slug, c.status,
                 c.sort_order AS sortOrder, c.icon_asset_key AS iconAssetKey,
                 c.parent_id AS parentCategoryId, parent.name AS parentName, c.version,
-                (SELECT COUNT(*) FROM product p WHERE p.category_id=c.id) AS productCount
+                (SELECT COUNT(*) FROM product_category pc WHERE pc.category_id=c.id) AS productCount
          FROM category c LEFT JOIN category parent ON parent.id=c.parent_id
          WHERE c.parent_id=? ORDER BY c.sort_order, c.code`,
       )
@@ -176,7 +176,8 @@ export async function getAdminCategory(
       .prepare(
         `SELECT p.id AS productId, p.slug, p.name, p.status, p.version,
                 (SELECT COUNT(*) FROM sku s WHERE s.product_id=p.id) AS skuCount
-         FROM product p WHERE p.category_id=? ORDER BY p.name, p.id LIMIT 100`,
+         FROM product p JOIN product_category pc ON pc.product_id=p.id
+         WHERE pc.category_id=? ORDER BY p.name, p.id LIMIT 100`,
       )
       .bind(request.categoryId)
       .all<AdminCategoryDetail["products"][number]>(),
@@ -711,7 +712,7 @@ export async function getAdminProduct(
     )
     .all<SkuRow>();
 
-  const [details, media, audits, inventoryPosition] = await Promise.all([
+  const [details, media, audits, inventoryPosition, categories] = await Promise.all([
     deps.db
       .prepare(
         "SELECT id AS detailId, label, value, sort_order AS sortOrder FROM product_detail WHERE product_id=? ORDER BY sort_order, id",
@@ -747,6 +748,14 @@ export async function getAdminProduct(
           .bind(product.inventoryPoolId, locationId)
           .first<{ onHandBase: number; reservedBase: number; version: number }>()
       : Promise.resolve(null),
+    deps.db
+      .prepare(
+        `SELECT c.id AS categoryId,c.code,c.name
+         FROM product_category pc JOIN category c ON c.id=pc.category_id
+         WHERE pc.product_id=? ORDER BY pc.is_primary DESC,pc.sort_order,c.name`,
+      )
+      .bind(request.productId)
+      .all<AdminProductDetail["categories"][number]>(),
   ]);
 
   return {
@@ -759,6 +768,7 @@ export async function getAdminProduct(
       description: product.description,
       categoryCode: product.categoryCode,
       categoryName: product.categoryName,
+      categories: categories.results,
       status: product.status,
       version: product.version,
       customerDetails: details.results,

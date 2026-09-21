@@ -270,10 +270,13 @@ function prepareProductRows(
   // One extra row lets callers detect a following page cheaply.
   parameters.push(fetchedLimit + 1);
 
+  const categoryJoin = options.categorySlug
+    ? "JOIN product_category pc ON pc.product_id=p.id JOIN category c ON c.id=pc.category_id"
+    : "JOIN category c ON c.id=p.category_id";
   const statement = `
     SELECT ${PRODUCT_SELECT_COLUMNS}
     FROM product p
-    JOIN category c ON c.id = p.category_id
+    ${categoryJoin}
     WHERE ${conditions.join(" AND ")}
     ORDER BY c.sort_order ASC, p.name ASC, p.id ASC
     LIMIT ?`;
@@ -697,7 +700,8 @@ export async function getMarketplaceHome(
          PARTITION BY c.id ORDER BY c.sort_order ASC, p.name ASC, p.id ASC
        ) AS rn
        FROM product p
-       JOIN category c ON c.id = p.category_id
+       JOIN product_category pc ON pc.product_id=p.id
+       JOIN category c ON c.id=pc.category_id
        WHERE p.status = 'active' AND c.status = 'active'
          ${context ? `AND ${eligibleSkuSubquery()}` : ""}
      )

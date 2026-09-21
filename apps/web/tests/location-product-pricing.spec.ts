@@ -25,6 +25,7 @@ const product: AdminProductDetail = {
   description: null,
   categoryCode: "VEGETABLES",
   categoryName: "Vegetables",
+  categories: [{ categoryId: "vegetables", code: "VEGETABLES", name: "Vegetables" }],
   status: "active",
   version: 1,
   customerDetails: [],

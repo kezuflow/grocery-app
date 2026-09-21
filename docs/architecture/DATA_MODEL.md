@@ -124,7 +124,8 @@ Membership prices, subscriptions, trials, provider subscription/plan/invoice map
 ## Catalog, Units, and Prices
 
 - `categories(id PK, parent_id FK NULL, slug UNIQUE, name, icon_asset_key NULL, status, sort_order, version)`
-- `products(id PK, slug UNIQUE, name, description, category_id FK, inventory_pool_id FK UNIQUE NOT NULL, status, version)`; the unique Product-to-pool reference is the sole ownership link.
+- `products(id PK, slug UNIQUE, name, description, category_id FK, inventory_pool_id FK UNIQUE NOT NULL, status, version)`; `category_id` is the primary category and the unique Product-to-pool reference is the sole inventory ownership link.
+- `product_categories(product_id FK, category_id FK, is_primary, sort_order, PK(product_id, category_id))`; every Product has one primary membership and may have additional Global catalog category memberships.
 - `unit_definitions(id PK, code UNIQUE, display_name, dimension MASS|VOLUME|COUNT, canonical_base_code GRAM|MILLILITER|PIECE, conversion_numerator, conversion_denominator, status, version)` with positive integer conversion factors and same-dimension conversion only.
 - The current authoring projection returns only active `MASS` and `COUNT` definitions. Historical `VOLUME` rows remain inactive for compatibility and cannot be selected or newly created; packaged liquids use `COUNT`/`PIECE` SKUs.
 - `inventory_pools(id PK, base_unit_id FK)` where the referenced unit is the dimension's canonical base unit. Shared-stock Products have exactly one shared pool; counted-size Products use the dedicated exact-piece identity described under Actual counted sizes. No reciprocal Product pointer exists. Catalog creates the pool and Product atomically.

@@ -11,6 +11,7 @@ const product: AdminProductDetail = {
   description: "Fresh zucchini.",
   categoryCode: "VEGETABLES",
   categoryName: "Vegetables",
+  categories: [{ categoryId: "category-1", code: "VEGETABLES", name: "Vegetables" }],
   status: "active",
   version: 3,
   customerDetails: [],
@@ -72,6 +73,10 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain("Zucchini");
     expect(html).toContain("Vegetables");
     expect(html).toContain("Selling options");
+    expect(html).toContain("Add categories");
+    expect(html).toContain("Primary category");
+    expect(html).toContain('aria-label="Product status"');
+    expect(html).toContain('aria-label="Zucchini · 1 kg status"');
     expect(html).toContain("Zucchini · 1 kg");
     expect(html).not.toContain("₱85.00");
     expect(html).toContain("ZUCCHINI_1KG · 1 kg");

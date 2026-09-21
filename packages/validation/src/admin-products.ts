@@ -44,6 +44,14 @@ export const adminProductStatusBodySchema = z.object({
   reason: z.string().trim().min(1).max(500),
   expectedVersion: z.number().int().safe().positive(),
 });
+export const adminProductCategoriesBodySchema = z.object({
+  categoryIds: z
+    .array(id)
+    .min(1)
+    .max(20)
+    .refine((items) => new Set(items).size === items.length, "Categories must be unique"),
+  expectedVersion: z.number().int().safe().positive(),
+});
 export const adminProductSummarySchema = z.object({
   productId: id,
   slug: z.string(),
@@ -144,6 +152,7 @@ export const adminCatalogSkuSummarySchema = z.object({
 export const adminProductDetailSchema = adminProductSummarySchema.omit({ skuCount: true }).extend({
   categoryId: id,
   categoryName: z.string(),
+  categories: z.array(z.object({ categoryId: id, code: z.string(), name: z.string() })),
   description: z.string().nullable(),
   customerDetails: z.array(adminProductCustomerDetailSchema.extend({ detailId: id })),
   media: z.array(adminProductMediaViewSchema),

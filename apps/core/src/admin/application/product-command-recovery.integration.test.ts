@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { createAuth } from "../../auth/service";
+import { searchCatalog } from "../../catalog/service";
 import { createAdminProduct } from "./catalog-commands";
 
 async function fixture() {
@@ -159,6 +160,85 @@ describe("Product command recovery", () => {
     expect(
       await exports.default.updateAdminProduct({ ...edit, name: "Changed replay payload" }),
     ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+  it("sets ordered category memberships atomically and replays the result", async () => {
+    const { manager, request } = await fixture();
+    const created = await exports.default.createAdminProduct(request);
+    if (!created.ok) throw new Error(created.error.message);
+    const categoryKey = crypto.randomUUID();
+    const secondCategory = await exports.default.createAdminCategory({
+      headers: manager.headers,
+      requestId: categoryKey,
+      idempotencyKey: categoryKey,
+      code: `SECOND_${categoryKey.replaceAll("-", "").toUpperCase()}`,
+      name: "Second product category",
+      slug: `second-product-category-${categoryKey}`,
+    });
+    if (!secondCategory.ok) throw new Error(secondCategory.error.message);
+    const command = {
+      headers: manager.headers,
+      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+      productId: created.value.productId,
+      categoryIds: [secondCategory.value.categoryId, request.categoryId],
+      expectedVersion: 1,
+    };
+    const result = await exports.default.setAdminProductCategories(command);
+    expect(result).toMatchObject({ ok: true, value: { version: 2 } });
+    expect(await exports.default.setAdminProductCategories(command)).toEqual(result);
+    expect(
+      await env.DB.prepare(
+        "SELECT category_id categoryId,is_primary isPrimary,sort_order sortOrder FROM product_category WHERE product_id=? ORDER BY sort_order",
+      )
+        .bind(created.value.productId)
+        .all(),
+    ).toMatchObject({
+      results: [
+        { categoryId: secondCategory.value.categoryId, isPrimary: 1, sortOrder: 0 },
+        { categoryId: request.categoryId, isPrimary: 0, sortOrder: 1 },
+      ],
+    });
+    const detail = await exports.default.getAdminProduct({
+      headers: manager.headers,
+      requestId: crypto.randomUUID(),
+      scopeKind: "GLOBAL",
+      productId: created.value.productId,
+    });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: {
+        categoryId: secondCategory.value.categoryId,
+        categories: [
+          { categoryId: secondCategory.value.categoryId },
+          { categoryId: request.categoryId },
+        ],
+      },
+    });
+    const categoryPage = await searchCatalog(
+      env.DB as unknown as Parameters<typeof searchCatalog>[0],
+      { categorySlug: secondCategory.value.slug },
+    );
+    expect(categoryPage.items.map((item) => item.slug)).toContain(request.slug);
+    const edited = await exports.default.updateAdminProduct({
+      ...request,
+      productId: created.value.productId,
+      expectedVersion: 2,
+      name: "Product with retained categories",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(edited).toMatchObject({ ok: true, value: { version: 3 } });
+    expect(
+      await env.DB.prepare(
+        "SELECT category_id categoryId,is_primary isPrimary FROM product_category WHERE product_id=? ORDER BY is_primary DESC,category_id",
+      )
+        .bind(created.value.productId)
+        .all(),
+    ).toMatchObject({
+      results: [
+        { categoryId: request.categoryId, isPrimary: 1 },
+        { categoryId: secondCategory.value.categoryId, isPrimary: 0 },
+      ],
+    });
   });
   for (const effect of ["details", "status audit"] as const)
     it(`rolls back the Product when its ${effect} effect is suppressed`, async () => {

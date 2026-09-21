@@ -33,6 +33,7 @@ const productDetail = {
   version: 1,
   categoryId: "cat-1",
   categoryName: "Produce",
+  categories: [{ categoryId: "cat-1", code: "produce", name: "Produce" }],
   description: null,
   customerDetails: [],
   media: [],
