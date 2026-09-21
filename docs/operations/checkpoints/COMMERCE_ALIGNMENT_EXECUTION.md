@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-PAYMENT-METHOD-WRAP-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment presentation. The owner requested boxed payment choices styled like the
+saved-address cards, arranged across one row when space permits and automatically wrapping onto
+additional rows when the method count exceeds the available width. Acceptance: payment choices use
+compact bordered surfaces; the layout wraps without horizontal scrolling; labels, provider marks,
+availability, disabled behavior and explicit selection remain intact; no payment authority or
+provider activation changes.
+
+Work started from clean `main` at `5490ed6f`. The picker now uses responsive auto-fill grid tracks
+with compact saved-address-style bordered surfaces. Methods fill the available row at a readable
+minimum width, then continue on subsequent rows without horizontal scrolling. Brand marks, readable
+labels/descriptions, availability badges, disabled methods, radio semantics, focus treatment and the
+selected-method callback are preserved. The selected card reuses the established checkout card
+border/background/shadow language. `docs/design/DESIGN.md` records the approved wrapping rule. No
+Core, contract, schema or payment/provider behavior changed.
+
+Verification: focused picker tests pass (2), including all 13 configured methods, QR Ph selection,
+disabled GCash behavior, the wrapping auto-fill layout and absence of horizontal scrolling. Web
+typecheck, focused oxlint/oxfmt, diff whitespace and the vinext production build pass. The compiled
+CSS contains the exact auto-fill/minmax rule. Local `/checkout` was not visually accepted because
+the existing localhost service did not respond within five seconds; no replacement shared stack was
+started for this presentation-only check. No deployment, remote-data/provider action or outbound
+message occurred. Completed task ID at the source/local-verification counting level:
+`CHECKOUT-PAYMENT-METHOD-WRAP-1`. The next action, if separately authorized, is deploy and visually
+review the authenticated checkout at desktop and mobile widths.
+
 ## Latest owner request — PAYMENT-METHOD-BRAND-ASSETS-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

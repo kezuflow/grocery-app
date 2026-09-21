@@ -112,7 +112,11 @@ export function PaymentMethodPicker({
   onSelect: (method: PaymentMethodToken) => void;
 }) {
   return (
-    <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Payment method">
+    <div
+      className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(min(100%,10.5rem),1fr))] gap-3"
+      role="radiogroup"
+      aria-label="Payment method"
+    >
       {methods.map((method) => {
         const checked = selected?.value === method.value;
         return (
@@ -124,34 +128,38 @@ export function PaymentMethodPicker({
             aria-disabled={!method.available}
             disabled={!method.available}
             onClick={() => onSelect({ kind: "TOKEN", value: method.value })}
-            className={`flex min-h-16 items-center gap-3 rounded-[var(--fm-radius-control)] border px-4 py-3 text-left transition-colors ${
+            className={`flex min-h-24 items-center gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100 ${
               checked
-                ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-lime-soft)]"
+                ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] shadow-[var(--fm-shadow-card)]"
                 : "border-[var(--fm-border)] bg-white"
-            } disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            } disabled:bg-[var(--fm-surface-soft)] disabled:text-slate-400`}
           >
-            <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
+            <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-[var(--fm-border)] bg-white p-1">
               <img
                 src={method.logoSrc}
                 alt=""
                 aria-hidden="true"
                 width={40}
                 height={40}
-                className={`size-10 object-contain ${method.available ? "" : "opacity-65"}`}
+                className={`size-9 object-contain ${method.available ? "" : "opacity-65"}`}
               />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block font-semibold text-current">{method.label}</span>
+              <span className="block text-sm font-semibold leading-5 text-current">
+                {method.label}
+              </span>
               <span className="mt-0.5 block text-xs text-[var(--fm-text-muted)]">
                 {method.description}
               </span>
-            </span>
-            <span
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                method.available ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
-              }`}
-            >
-              {method.available ? (checked ? "Selected" : "Available") : "Not active"}
+              <span
+                className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  method.available
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {method.available ? (checked ? "Selected" : "Available") : "Not active"}
+              </span>
             </span>
           </button>
         );
