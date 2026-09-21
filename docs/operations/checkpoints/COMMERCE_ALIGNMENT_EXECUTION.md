@@ -48,7 +48,16 @@ and `git diff --check` pass. The rebuilt managed local browser acceptance passes
 green successful-payment treatment, one shared description, visible marker bounds at 1440px, and
 contained timeline scrolling without page overflow at 390px. No remote environment or customer data
 was touched. Completion level: **1 of 1 customer Order-timeline compact-visual follow-up implemented
-and locally accepted**. This follow-up has not been deployed; no local implementation work remains.
+and locally accepted**.
+
+The owner then authorized deployment. A fresh `CLOUDFLARE_ENV=production` build retained the expected
+`freshmarkets-web-production`, `freshmarkets.ph`, and
+`freshmarkets-core-production#CoreEntrypoint` configuration. Web deployed from pushed revision
+`9f8e42d8` as version `79c2ae25-75c4-4066-9b1c-67dffa3e1b1a`; Core was not deployed. The custom-domain
+homepage, `/api/core-health` (`status: ok`), the owner-supplied Order route shell, and the production
+Worker diagnostic hostname each returned HTTP 200. No schema migration, remote data mutation, provider
+transaction or outbound message occurred. Completion level: **1 of 1 compact-visual follow-up
+implemented, locally accepted, pushed and Web-deployed**. No work remains at this slice level.
 
 ## Latest owner request — CURRENT-MAIN-PRODUCTION-DEPLOY-1 (2026-09-21)
 
