@@ -86,6 +86,20 @@ describe("Google Places autocomplete boundary", () => {
     expect(result.candidateKey).toBe("place_1");
     expect(result.coordinate).toEqual(details.location);
   });
+  it("ignores an unclassified provider component in otherwise complete details", async () => {
+    const result = await new GooglePlaces("key", async () =>
+      Response.json({
+        ...details,
+        addressComponents: [{ longText: "Auxiliary provider label" }, ...details.addressComponents],
+      }),
+    ).resolve({
+      requestId: "test",
+      candidateKey: "place_1",
+      sessionToken,
+    });
+    expect(result.components.countryCode).toBe("PH");
+    expect(result.components.city).toBe("Cebu City");
+  });
   it("accepts an empty prediction response and rejects invalid provider data", async () => {
     expect(
       await new GooglePlaces("key", async () => Response.json({})).autocomplete(input),

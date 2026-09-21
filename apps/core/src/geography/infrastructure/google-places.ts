@@ -53,7 +53,10 @@ const detailsSchema = z.object({
     z.object({
       longText: z.string(),
       shortText: z.string().optional(),
-      types: z.array(z.string()),
+      // Places occasionally includes an auxiliary component without a type.
+      // It cannot contribute to our typed address mapping, so treat it as an
+      // unclassified component instead of rejecting otherwise complete details.
+      types: z.array(z.string()).default([]),
     }),
   ),
 });
