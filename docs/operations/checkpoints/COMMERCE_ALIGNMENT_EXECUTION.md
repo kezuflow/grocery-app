@@ -1,5 +1,28 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-SHARED-STATUS-LINE-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout presentation. The owner requested removal of the shared status line below the
+checkout sections because it changes copy on routine interactions, including “Wait for the current
+delivery quotation…” and “Delivery fee confirmed with Lalamove.” Acceptance: the shared status row
+does not render; dedicated address, fulfillment and quotation loading/error surfaces remain intact;
+checkout behavior is unchanged.
+
+Work started from clean synchronized `main`/`origin/main` at `9e76888b`. The shared conditional status
+paragraph and icon were removed. Existing inline saved-address loading, delivery-option status/error,
+quotation error/retry and order-summary action states remain visible. Status updates are retained as
+internal workflow signals so this presentation-only change does not alter transaction control flow.
+
+Verification: source and runtime contracts assert the shared status row and representative provider
+success/release messages remain absent while quotation requests, retries and release safeguards still
+execute. The combined checkout source/runtime suites pass 22 tests across two files. Web typecheck,
+focused oxlint/oxfmt, diff whitespace and the vinext production build pass. No Core, contract, schema
+or provider behavior changed. No deployment, remote-data operation, provider transaction or outbound
+message occurred. `CHECKOUT-SHARED-STATUS-LINE-1` is complete at the source/local-verification
+counting level. Next action, if separately authorized, is deploy and visually confirm routine checkout
+interactions no longer add a changing status row below Payment.
+
 ## Latest owner request — CHECKOUT-SECTION-HEADER-RULES-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

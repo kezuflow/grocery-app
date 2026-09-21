@@ -165,7 +165,7 @@ export function CheckoutClient({
   const selectedFulfillmentOptionId = useRef("");
   const selectedDeliveryPartnerIntent = useRef<DeliveryPartnerIntent | null>(null);
   const deliveryPartnerWasExplicitlySelected = useRef(false);
-  const [status, setStatus] = useState("");
+  const [, setStatus] = useState("");
   const promotionCodesRef = useRef<readonly string[]>(checkoutDraft.draft.promotionCodes);
   const [acceptingPayment, setAcceptingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodToken | null>(
@@ -1200,15 +1200,6 @@ export function CheckoutClient({
                 </section>
               </div>
             )}
-            {status ? (
-              <p role="status" className="mt-5 flex items-start gap-2 text-sm">
-                <ShieldCheck
-                  className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]"
-                  aria-hidden="true"
-                />
-                {status}
-              </p>
-            ) : null}
           </main>
 
           <div className="xl:sticky xl:top-6">
