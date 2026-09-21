@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADDRESS-PREDICTION-UNTYPED-COMPONENT-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, customer delivery-address selection. After the canonical Place-alias repair,
+the owner reported that another selected autocomplete result still showed “Address details could not
+be loaded.” Acceptance: valid Philippine Place Details remain selectable when Google includes an
+auxiliary address component with no `types` field; coordinates and the explicit Philippine country
+component remain mandatory; stale/missing provider results remain rejected.
+
+Observed baseline was pushed/deployed `main` at `84c9bf2f`, preserving the 16 owner-deleted legacy
+`.claude/skills` files. The open in-app browser did not expose a controllable tab, so the private
+owner-entered query was not retransmitted. Bounded production probes using public Cebu-area queries
+reproduced result-specific `GEOCODER_INVALID_RESPONSE` failures. A redacted provider-shape comparison
+printed no addresses, Place IDs or credentials and established that the valid HTTP 200 details had
+coordinates, a `PH` country component and all required fields, plus one auxiliary component whose
+`types` property Google omitted. The strict details schema rejected the complete result before mapping.
+
+The adapter now defaults a missing component `types` array to empty, causing that unclassified
+component to be ignored by typed address mapping. The explicit country component and coordinate
+validation are unchanged. A regression covers the provider shape. Focused Google Places and customer
+address tests passed **46/46**; Core typecheck, focused `oxlint`, formatting, naming, terminology,
+`git diff --check`, and the Core Wrangler dry-run build passed. The fix was committed and pushed as
+`0064a82f`, then deployed Core-only as production version
+`1fa7572f-667d-4565-8f55-ca7b062424c8`; Web and D1 were unchanged. Post-deploy Core `/ready` returned
+HTTP 200/`ready`. The same two public road suggestions that returned
+`GEOCODER_INVALID_RESPONSE` before deployment now resolve with HTTP 200, and all five tested Mandaue
+suggestions resolve. One distinct autocomplete result returned provider HTTP 404 and remains correctly
+mapped to `GEOCODER_NO_RESULTS`. Completion level: **1 of 1 untyped Place-component repair complete,
+pushed and deployed**. One next action: the owner retries the desired suggestion in the open Choose map
+search; a stale provider result may require choosing another current suggestion or placing the pin.
+
 ## Latest owner request — ADDRESS-PREDICTION-CANONICAL-ID-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
