@@ -1,5 +1,26 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-ORDER-PREVIEW-PREFETCH-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin Orders presentation. Following CA-5.10, the owner authorized repair of the
+known Admin prefetch-policy regression introduced when Order rows became preview controls. Acceptance:
+the policy test follows the actual dense full-detail link without weakening the requirement that Admin
+links opt out of automatic prefetch.
+
+Implemented from clean pushed `main` at `2982d734c36633752d7f5e52919a42baa891312f`. The Orders page
+now contains preview buttons rather than a dense `Link`; the full-detail link is owned by
+`order-preview-panel.tsx` and already declares `prefetch={false}`. The source-policy fixture now checks
+that real owner instead of requiring link syntax in the obsolete page location. No runtime, Core,
+contract, schema, authorization or presentation behavior changed.
+
+Focused policy acceptance passed **17/17**; the complete Web suite passed **612/612 across 145 files**;
+Web typecheck, focused formatting and focused lint passed. No browser rerun is required for this
+source-policy-only correction because the already-accepted runtime link behavior is unchanged. No remote
+data, deployment, provider transaction or outbound message occurred. Completion level: **1 of 1
+Admin Order-preview prefetch repair complete**. One next action: return to the next owner-selected
+acceptance obligation.
+
 ## Latest owner request — CA-5.10 Scheduled cycle Order summary (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
@@ -4130,6 +4151,7 @@ Detailed commands, tested revisions, failures subsequently resolved and evidence
 
 | IDs                                                | Result / commit                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADMIN-ORDER-PREVIEW-PREFETCH-1                     | Stale Admin prefetch-policy source target corrected to the actual Order Preview full-detail link; Web 612/612 across 145 files and focused 17/17. Commit accompanying this checkpoint. |
 | CA-7.10                                            | Actual Mapbox temporary/permanent API acceptance; Cloudflare sending/DNS and owner-confirmed inbox delivery; remote retained-data copy upgraded 0055–0095 with checked counts preserved, foreign-key and 159 per-table checks passed. Whole-database quick check remains limited by provider memory. Setup evidence `ebd248a6`; receipt evidence accompanies this record. |
 | CA-7.9                                             | Locally complete in the commit accompanying this record; aggregate 1675 Core/199, 418 Web/103, 68 contracts/19, six shared tests and 26 harness tests; 37 browser cases, static/schema/type checks, builds/vinext and preservation checks. Tested base/scope above; exact commands in history.                                                                            |
 | CA-7.8                                             | Account recovery/contact/sign-out accepted at dad5de26; auth 5/1, static/types/build, both browser widths. Customer closure deferred by owner.                                                                                                                                                                                                                            |

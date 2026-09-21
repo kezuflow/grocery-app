@@ -12,7 +12,7 @@ const denseLinkSources = [
   "./product-preview-panel.tsx",
   "./location-product-preview-panel.tsx",
   "../../app/admin/customers/page.tsx",
-  "../../app/admin/orders/page.tsx",
+  "./order-preview-panel.tsx",
   "./payments-workspace.tsx",
   "../../app/admin/promotions/page.tsx",
   "../../app/admin/staff/page.tsx",
