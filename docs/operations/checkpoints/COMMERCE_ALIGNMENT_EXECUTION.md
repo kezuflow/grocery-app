@@ -1,5 +1,29 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QUOTE-REFRESH-COUNTDOWN-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout courier quotation presentation. The owner requested a visible timer for the
+running Lalamove quotation refresh. Acceptance: the selected quoted delivery row shows a second-level
+countdown to the already-authorized refresh boundary; the countdown follows the same 4.5-minute or
+provider-expiry-minus-30-seconds deadline as the existing refresh; it resets on a successful refresh
+and disappears when quotation is cleared or actively refreshing; no second quotation authority or
+provider call is introduced.
+
+Work started from clean synchronized `main`/`origin/main` at `b3481b04`. The existing quotation
+scheduler now publishes its exact next-refresh instant to presentation state. A one-second display
+ticker derives a `MM:SS` countdown from that instant, and the selected row renders it beside the
+authoritative quoted fee. The refresh timeout remains the sole trigger for quote replacement.
+
+Verification: the combined checkout source/runtime suites pass 23 tests across two files. The fake-
+clock regression observes `04:30`, advances to `04:00`, then reaches the existing refresh boundary and
+confirms one abandonment plus one replacement quotation. Web typecheck, focused oxlint/oxfmt, diff
+whitespace and the vinext production build pass. No Core, contract, schema or provider behavior
+changed. No deployment, remote-data operation, provider transaction or outbound message occurred.
+`CHECKOUT-QUOTE-REFRESH-COUNTDOWN-1` is complete at the source/local-verification counting level. Next
+action, if separately authorized, is deploy and visually confirm the selected Lalamove row countdown
+and refresh reset in an authenticated browser checkout.
+
 ## Latest owner request — CHECKOUT-PAYMENT-EMPTY-RESPONSE-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

@@ -593,8 +593,11 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     await flush();
     expect(quoteCalls).toBe(1);
+    expect(container.textContent).toContain("Fee refresh in 04:30");
 
-    await act(async () => vi.advanceTimersByTimeAsync(4.5 * 60_000));
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(container.textContent).toContain("Fee refresh in 04:00");
+    await act(async () => vi.advanceTimersByTimeAsync(4 * 60_000));
     await flush();
 
     expect(abandonCalls).toBe(1);

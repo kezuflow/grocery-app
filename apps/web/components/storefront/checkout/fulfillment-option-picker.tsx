@@ -16,6 +16,11 @@ function formattedMoney(amountMinor: number, currency: string) {
   }).format(amountMinor / 100);
 }
 
+function refreshCountdown(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 function money(option: FulfillmentOptionView, quotedFee?: QuotedFee, loadingOptionId?: string) {
   if (quotedFee?.optionId === option.optionId)
     return formattedMoney(quotedFee.amountMinor, quotedFee.currency);
@@ -52,6 +57,7 @@ export function FulfillmentOptionPicker({
   selectedOptionId,
   quotedFee,
   loadingOptionId,
+  quoteRefreshRemainingSeconds,
 }: {
   options: readonly FulfillmentOptionView[];
   disabled: boolean;
@@ -59,6 +65,7 @@ export function FulfillmentOptionPicker({
   selectedOptionId?: string;
   quotedFee?: QuotedFee;
   loadingOptionId?: string;
+  quoteRefreshRemainingSeconds?: number | null;
 }) {
   return (
     <fieldset
@@ -90,12 +97,24 @@ export function FulfillmentOptionPicker({
                 {option.deliveryPartner?.displayName ??
                   (option.mode === "SCHEDULED" ? "Scheduled delivery" : "Instant delivery")}
               </strong>
-              <span className="flex min-w-[7.5rem] shrink-0 items-center justify-end gap-2 text-sm font-bold tabular-nums">
-                {money(option, quotedFee, loadingOptionId)}
-                {selectedOptionId === option.optionId ? (
-                  <span className="grid size-5 place-items-center rounded-full bg-[var(--fm-primary-dark)] text-white">
-                    <Check className="size-3" aria-hidden="true" />
-                  </span>
+              <span className="flex min-w-[8.5rem] shrink-0 flex-col items-end text-sm font-bold tabular-nums">
+                <span className="flex items-center justify-end gap-2">
+                  {money(option, quotedFee, loadingOptionId)}
+                  {selectedOptionId === option.optionId ? (
+                    <span className="grid size-5 place-items-center rounded-full bg-[var(--fm-primary-dark)] text-white">
+                      <Check className="size-3" aria-hidden="true" />
+                    </span>
+                  ) : null}
+                </span>
+                {quotedFee?.optionId === option.optionId &&
+                selectedOptionId === option.optionId &&
+                quoteRefreshRemainingSeconds != null ? (
+                  <small
+                    role="timer"
+                    className="mt-0.5 text-[0.6875rem] font-medium text-[var(--fm-text-muted)]"
+                  >
+                    Fee refresh in {refreshCountdown(quoteRefreshRemainingSeconds)}
+                  </small>
                 ) : null}
               </span>
             </span>

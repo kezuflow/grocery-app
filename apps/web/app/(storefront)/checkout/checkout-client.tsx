@@ -193,6 +193,10 @@ export function CheckoutClient({
   const unresolvedQuoteRequest = useRef<QuoteRequestSnapshot | null>(null);
   const staleQuoteToRelease = useRef<CheckoutQuoteView | null>(null);
   const quoteRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [quoteRefreshAt, setQuoteRefreshAt] = useState<number | null>(null);
+  const [quoteRefreshRemainingSeconds, setQuoteRefreshRemainingSeconds] = useState<number | null>(
+    null,
+  );
   const attemptKey = useRef(`checkout-${crypto.randomUUID()}`);
   const [quoteLifecycleRevision, setQuoteLifecycleRevision] = useState(0);
   const addressLoadGeneration = useRef(0);
@@ -245,16 +249,28 @@ export function CheckoutClient({
   }, []);
   useEffect(
     () => () => {
-      clearQuoteRefreshTimer();
+      if (quoteRefreshTimer.current !== null) clearTimeout(quoteRefreshTimer.current);
     },
     [],
   );
+  useEffect(() => {
+    if (quoteRefreshAt === null) {
+      setQuoteRefreshRemainingSeconds(null);
+      return;
+    }
+    const updateCountdown = () =>
+      setQuoteRefreshRemainingSeconds(Math.max(0, Math.ceil((quoteRefreshAt - Date.now()) / 1000)));
+    updateCountdown();
+    const ticker = setInterval(updateCountdown, 1000);
+    return () => clearInterval(ticker);
+  }, [quoteRefreshAt]);
 
   function clearQuoteRefreshTimer() {
     if (quoteRefreshTimer.current !== null) {
       clearTimeout(quoteRefreshTimer.current);
       quoteRefreshTimer.current = null;
     }
+    setQuoteRefreshAt(null);
   }
 
   function scheduleQuoteRefresh(quote: NonNullable<typeof pendingQuote>) {
@@ -264,8 +280,10 @@ export function CheckoutClient({
     const delay = Number.isFinite(untilStale)
       ? Math.max(0, Math.min(COURIER_QUOTE_REFRESH_INTERVAL_MS, untilStale))
       : COURIER_QUOTE_REFRESH_INTERVAL_MS;
+    setQuoteRefreshAt(Date.now() + delay);
     quoteRefreshTimer.current = setTimeout(() => {
       quoteRefreshTimer.current = null;
+      setQuoteRefreshAt(null);
       if (pendingQuoteRef.current?.quoteId !== quote.quoteId || !quoteInputIsCurrent(quote.input))
         return;
       const option = fulfillmentOptionsRef.current.find(
@@ -1126,6 +1144,9 @@ export function CheckoutClient({
                               currency: pendingQuote.currency,
                             }
                           : undefined
+                      }
+                      quoteRefreshRemainingSeconds={
+                        quoteLoadState === "idle" ? quoteRefreshRemainingSeconds : undefined
                       }
                       onSelect={selectDeliveryOption}
                     />

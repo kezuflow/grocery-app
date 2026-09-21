@@ -34,6 +34,7 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).not.toContain("{status ? (");
     expect(checkout).not.toContain('className="mt-5 flex items-start gap-2 text-sm"');
     expect(checkout).toContain("loadingOptionId={");
+    expect(checkout).toContain("quoteRefreshRemainingSeconds={");
     expect(checkout).not.toContain("type CheckoutStep");
     expect(checkout).not.toContain('aria-label="Checkout progress"');
     expect(checkout).not.toContain("<PromotionEntry");
