@@ -1,5 +1,24 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-SECTION-HEADER-RULES-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout presentation. The owner requested removal of the dividers immediately below the
+Deliver to header, the delivery availability description and the payment-method description.
+Acceptance: those three header rules are absent while their existing spacing, section content and
+the boundaries below the address and delivery sections remain intact.
+
+Work started from clean synchronized `main`/`origin/main` at `f803fa67`. The three header wrappers no
+longer apply `border-b`; their padding and all address, fulfillment and payment behavior are unchanged.
+
+Verification: the checkout source contract asserts the removed header-divider class combinations stay
+absent. The combined checkout source/runtime suites pass 22 tests across two files. Web typecheck,
+focused oxlint/oxfmt, diff whitespace and the vinext production build pass. No Core, contract, schema
+or provider behavior changed. No deployment, remote-data operation, provider transaction or outbound
+message occurred. `CHECKOUT-SECTION-HEADER-RULES-1` is complete at the source/local-verification
+counting level. Next action, if separately authorized, is deploy and visually confirm the three
+headings transition directly into their content without the removed rules.
+
 ## Latest owner request — CHECKOUT-ADDRESS-EMPTY-PROMPT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

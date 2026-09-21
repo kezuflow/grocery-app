@@ -17,6 +17,12 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).not.toContain("Choose when it arrives");
     expect(checkout).toContain("Available Instant and Scheduled options");
     expect(checkout).not.toContain(
+      'className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-5"',
+    );
+    expect(checkout).not.toContain(
+      'className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5"',
+    );
+    expect(checkout).not.toContain(
       "Checking {deliveryPartnerName(selectedFulfillmentOption)} route",
     );
     expect(checkout).not.toContain("route availability and delivery fee");

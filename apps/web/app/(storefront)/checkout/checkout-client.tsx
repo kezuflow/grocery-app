@@ -981,7 +981,7 @@ export function CheckoutClient({
             ) : (
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0">
                 <section className="min-w-0 border-b border-[var(--fm-border)] pb-7">
-                  <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] pb-5">
+                  <div className="flex items-start justify-between gap-4 pb-5">
                     <div className="flex min-w-0 items-start gap-3">
                       <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                         {selectedAddress?.confirmedAt ? (
@@ -1088,7 +1088,7 @@ export function CheckoutClient({
                 </section>
 
                 <section className="min-w-0 border-b border-[var(--fm-border)] py-7">
-                  <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
+                  <div className="flex items-start gap-3 pb-5">
                     <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                       <Truck className="size-5" aria-hidden="true" />
                     </span>
@@ -1173,7 +1173,7 @@ export function CheckoutClient({
                 </section>
 
                 <section className="min-w-0 py-7">
-                  <div className="flex items-start gap-3 border-b border-[var(--fm-border)] pb-5">
+                  <div className="flex items-start gap-3 pb-5">
                     <span className="grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
                       <ShieldCheck className="size-5" aria-hidden="true" />
                     </span>
