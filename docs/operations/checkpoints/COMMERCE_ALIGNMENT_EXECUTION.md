@@ -25,8 +25,14 @@ temporary candidate key. A regression covers a canonical response alias; malform
 country checks remain. Focused Google Places plus customer-address tests passed **45/45**; Core
 typecheck, focused `oxlint`, formatting, naming, terminology, `git diff --check`, and the Core Wrangler
 dry-run build passed. No customer address, account data, production configuration or deployment changed
-during diagnosis. One next action: commit/push the fix, deploy Core under the owner's continuing
-production authorization, and re-run the previously failing public production suggestion.
+during diagnosis. The fix was committed and pushed as `eaebecf9`, then deployed Core-only as production
+version `75ba6f57-4779-4ee2-a1bf-71aeb6286036`; Web and D1 were unchanged. Post-deploy Core `/ready`
+returned HTTP 200/`ready`, and the same public “Cebu South Road, Pardo” suggestion that previously
+returned 503/`GEOCODER_INVALID_RESPONSE` resolved with HTTP 200. The already-open browser dialog retained
+its pre-deployment error until a fresh selection, as designed; no private user-entered address was
+retransmitted for verification. Completion level: **1 of 1 canonical Place-alias repair complete and
+deployed**. One next action: the owner retries the desired suggestion in the open Choose map search; if a
+different result still fails, retain its safe request reference/error code for result-specific review.
 
 ## Latest owner request — PAYMENTS-SIMPLIFY-1 implementation (2026-09-21)
 
