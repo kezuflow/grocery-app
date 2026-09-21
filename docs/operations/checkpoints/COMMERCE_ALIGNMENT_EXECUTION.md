@@ -1,5 +1,38 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PAYMENT-WEBHOOK-LIVE-INVESTIGATION-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, live PayMongo checkout acceptance. The owner reported that a paid QR Ph
+checkout remained on `/checkout/payment` instead of automatically showing paid confirmation and asked
+whether the production webhook completed. Acceptance for this read-only investigation: correlate the
+owner-supplied live event with protected production evidence, distinguish webhook receipt/application
+from Order commitment and presentation behavior, and make no provider, application or customer-data
+mutation.
+
+Observed baseline was `main` at `84c9bf2f`, preserving the 16 owner-deleted legacy `.claude/skills`
+files and unrelated in-progress Google Places changes. Production D1 proves the signed `payment.paid`
+delivery was received at 2026-09-21 11:37:08 UTC, signature-verified, parsed and applied on its first
+attempt. The matching Payment Intent and provider attempt moved to `SUCCEEDED`; no reconciliation case
+or webhook error exists. Core intentionally created a pending `COMMIT_ORDER` reaction rather than
+committing the grocery Order inline. That reaction is registered only on the `*/15 * * * *` scheduled
+program, so it remained untouched until the 11:45 UTC run. The run succeeded with
+`applied=1 retried=0 reconciled=0 escalated=0`; at 11:45:44 UTC the provider action was consumed, the
+reaction became `SUCCEEDED`, and the Scheduled Order became `COMMITTED`.
+
+Source inspection separately establishes the visible defect: the QR Ph continuation component only
+counts down and regenerates its provider code. It does not poll a FreshMarkets status read, subscribe
+to an event, remove the stored QR action after server-side success, redirect, or render any paid
+animation. The status link is manual, and the Orders page itself fetches only on navigation/filter
+changes. Therefore a successful webhook cannot alter an already-rendered QR page; the quarter-hour
+reaction cadence additionally delays when an Order can appear by up to 15 minutes. No source,
+deployment, provider setting, remote data, payment, refund or outbound message was changed. Completion
+level: **1 of 1 live webhook investigation complete**; the live signed-webhook/provider-application
+acceptance obligation is now evidenced for this event. One next action, if the owner requests a fix,
+is a cohesive Core/Web change that applies eligible checkout reactions immediately (retaining the
+scheduled redrive as recovery) and gives the QR page a bounded authenticated status poll with one
+automatic paid transition/animation.
+
 ## Latest owner request — ADDRESS-PREDICTION-UNTYPED-COMPONENT-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
