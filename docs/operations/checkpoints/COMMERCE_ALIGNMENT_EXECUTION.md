@@ -1,5 +1,35 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — GOOGLE-MAPS-LOCATION-PIN-ANIMATION-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Google Maps location presentation. The owner supplied
+`apps/web/public/animations/location_pin.lottie`, requested it for the Google Maps draggable location
+pin, and then explicitly selected continuous looping. Acceptance: the customer entrance and Admin
+fulfillment-location draggable pins use that self-hosted loop without changing coordinate, drag or map
+behavior; reduced-motion preference and player load/render failure retain a static pin; player
+resources are released with the pin/map; point markers and clustering remain unchanged.
+
+Implemented from clean `main` at `0c1f4e24b82d82eb1499ceea8df5a38949307563`, with only the
+owner-supplied animation initially untracked. The Google Maps adapter now supplies a dedicated 72 px
+DOM/SVG marker to its existing `AdvancedMarkerElement`. A checked-in JSON derivative of the supplied
+dotLottie source runs through the CSP-compatible light Lottie renderer, preserving the existing ban on
+`unsafe-eval` and `wasm-unsafe-eval`. It loops while visible, restarts after a completed drag, falls
+back to a local static SVG for reduced motion or player failure, and destroys the player when the pin
+disappears or the map is torn down. No Core, contract, storage, authorization, coordinate, provider
+configuration or deployment behavior changed.
+
+Verification on the complete working-tree scope: focused map/security tests pass **27/27 across 5
+files**; Web typecheck, focused format/lint, `git diff --check`, and the production Web build pass. A
+deterministic local browser test passes **1/1**, loading the real application bundle and animation
+renderer, observing an active SVG marker and changing animation frame while Google map construction is
+stubbed; the source `.lottie` returns HTTP 200 and CSP remains free of `wasm-unsafe-eval`. The broader
+Web run passes **609/610 across 144 files**; its sole failure is the unrelated pre-existing Admin Orders
+prefetch-policy expectation against the already-landed Order-preview page. No remote provider,
+deployment or customer data was touched. Completion level: **1 of 1 location-pin animation slice
+implemented and locally accepted**. Remaining before handoff: final diff review, commit and push to
+`main`; deployment is not authorized. Next action: publish the verified revision to `origin/main`.
+
 ## Latest owner request — ADMIN-ORDER-PREVIEW-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

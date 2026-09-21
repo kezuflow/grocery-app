@@ -5,6 +5,10 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createLocationPinMarkerContent,
+  type LocationPinMarkerContent,
+} from "./location-pin-marker";
 import type {
   MapAdapter,
   MapAdapterInitialization,
@@ -106,6 +110,7 @@ function createGoogleMapsAdapter(): MapAdapter {
       let scene = options.scene;
       let pointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
       let draggableMarker: google.maps.marker.AdvancedMarkerElement | undefined;
+      let draggableMarkerContent: LocationPinMarkerContent | undefined;
       let polygons: google.maps.Polygon[] = [];
       let polylines: google.maps.Polyline[] = [];
       let clusterer: MarkerClusterer | undefined;
@@ -181,6 +186,8 @@ function createGoogleMapsAdapter(): MapAdapter {
         if (!scene.draggablePin) {
           if (draggableMarker) draggableMarker.map = null;
           draggableMarker = undefined;
+          draggableMarkerContent?.destroy();
+          draggableMarkerContent = undefined;
           lastPinPosition = undefined;
           return;
         }
@@ -190,7 +197,12 @@ function createGoogleMapsAdapter(): MapAdapter {
           lastPinPosition.longitude !== pin.position.longitude ||
           lastPinPosition.latitude !== pin.position.latitude;
         if (!draggableMarker) {
+          draggableMarkerContent = createLocationPinMarkerContent(
+            pin.label ?? "Map pin",
+            options.reducedMotion,
+          );
           draggableMarker = new AdvancedMarkerElement({
+            content: draggableMarkerContent.element,
             map,
             position: latLng(pin.position),
             title: pin.label ?? "Map pin",
@@ -199,6 +211,7 @@ function createGoogleMapsAdapter(): MapAdapter {
           draggableMarker.addEventListener("gmp-dragend", () => {
             const position = draggableMarker?.position;
             if (!position) return;
+            draggableMarkerContent?.replay();
             if (position instanceof google.maps.LatLng) {
               options.onPinMove(coordinate(position));
               return;
@@ -318,6 +331,8 @@ function createGoogleMapsAdapter(): MapAdapter {
           clearSceneOverlays();
           if (draggableMarker) draggableMarker.map = null;
           draggableMarker = undefined;
+          draggableMarkerContent?.destroy();
+          draggableMarkerContent = undefined;
           options.container.replaceChildren();
         },
       };

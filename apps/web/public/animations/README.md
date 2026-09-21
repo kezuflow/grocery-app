@@ -8,3 +8,7 @@ It is distributed under the
 The file is self-hosted so checkout completion does not depend on a third-party
 asset request. `dotlottie-player.wasm` is the matching runtime distributed by
 the installed `@lottiefiles/dotlottie-web` package and is also served locally.
+
+`location_pin.lottie` is the owner-supplied animated location marker. Its checked-in animation JSON
+derivative is rendered by the CSP-compatible Lottie SVG player only for the draggable
+entrance/fulfillment pin, with a static local SVG fallback for reduced motion or player failure.

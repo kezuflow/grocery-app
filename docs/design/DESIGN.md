@@ -238,6 +238,11 @@ Checkout keeps delivery details, delivery options and one quote-backed Order sum
 
 Order detail uses immutable number/date/items/financial/address/promise snapshots and a customer-safe timeline. Preserve separate paid additions, eligible cancellation/refund progress, Report a problem, buy again and support actions. No provider payloads/internal notes/live-driver map; payment initiation or a browser return is not Order success. Customer emails communicate material recorded events, with scoped staff dashboard notices; no extra SMS/push channel or every-packing-step email.
 
+Owner supplement, 2026-09-21: the draggable customer-entrance and fulfillment-location map pin uses
+the owner-supplied looping location-pin animation. Reduced-motion preference or animation-player
+failure keeps a static pin at the same coordinate; animation never changes coordinate or drag
+authority.
+
 ## Storefront visual language
 
 Product quick view opens immediately on selection, showing the already-loaded product name/photo while current detail options load. Loading remains dismissible and announces progress; prices, variants and Add are shown only after the current response arrives. Failed requests show a visible error, and late aborted responses cannot reopen dismissed dialogs.
