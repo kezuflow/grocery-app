@@ -13,6 +13,20 @@ describe("Orders RPC adapter", () => {
     expect(
       await rpc.listCustomerOrders({ requestId: "history", headers: {}, limit: 25 }),
     ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
+    expect(
+      await rpc.getCheckoutPaymentCompletion({
+        requestId: "completion-invalid",
+        headers: {},
+        paymentIntentId: "",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await rpc.getCheckoutPaymentCompletion({
+        requestId: "completion-auth",
+        headers: {},
+        paymentIntentId: "payment-1",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "UNAUTHENTICATED" } });
   });
   it("preserves customer authorization failure", async () => {
     const rpc = createOrdersRpc(createCoreRpcContext(env));

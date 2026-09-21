@@ -4,7 +4,6 @@ import { env, exports } from "cloudflare:workers";
 import type { CheckoutQuoteView, CoreServiceBinding } from "@freshmarkets/contracts";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { ingestProviderEvent } from "./payments/application/ingest-provider-event";
-import { applyCheckoutPaymentReaction } from "./orders/application/apply-checkout-payment-reaction";
 
 const core = exports.default as unknown as CoreServiceBinding;
 const password = "correct-horse-battery-staple";
@@ -347,18 +346,12 @@ describe("customer checkout flow", () => {
       ok: true,
       value: { processingStatus: "APPLIED" },
     });
-    const pendingReaction = await env.DB.prepare(
-      "SELECT id, subject_id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER' AND status='PENDING' LIMIT 1",
+    const appliedReaction = await env.DB.prepare(
+      "SELECT status FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER' LIMIT 1",
     )
       .bind(payment.value.paymentIntentId)
-      .first<{ id: string; subject_id: string }>();
-    expect(pendingReaction).toBeTruthy();
-    await applyCheckoutPaymentReaction(env.DB, {
-      reactionId: pendingReaction!.id,
-      paymentIntentId: payment.value.paymentIntentId,
-      checkoutAttemptId: pendingReaction!.subject_id,
-      canonicalPaymentState: "SUCCEEDED",
-    });
+      .first<{ status: string }>();
+    expect(appliedReaction).toEqual({ status: "SUCCEEDED" });
     const replaySimulation = await ingestProviderEvent(
       env.DB,
       registry,

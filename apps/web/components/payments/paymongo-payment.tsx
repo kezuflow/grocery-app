@@ -2,11 +2,27 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { PaymentMethodToken } from "@freshmarkets/contracts";
+import type { CheckoutPaymentCompletionView, PaymentMethodToken } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import { PaymentSuccessAnimation } from "./payment-success-animation";
 
 const QR_PH_EXPIRY_SECONDS = 30 * 60;
+const COMPLETION_POLL_LIMIT_MS = 20 * 60 * 1000;
+
+const completionResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      paymentIntentId: z.string(),
+      state: z.enum(["WAITING_FOR_PAYMENT", "FINALIZING_ORDER", "COMPLETED", "FAILED", "EXPIRED"]),
+      orderId: z.string().nullable(),
+    }),
+  }),
+  z.object({ ok: z.literal(false), error: z.object({ code: z.string() }) }),
+]);
 
 type StoredAction = {
+  paymentIntentId?: string;
   providerCode?: string;
   providerReference?: string;
   paymentMethod?: PaymentMethodToken | null;
@@ -41,6 +57,7 @@ export function PayMongoPayment({
   returnPath,
   donePath,
   backPath,
+  completionStatusPath,
 }: {
   storageKey: string;
   title: string;
@@ -48,6 +65,7 @@ export function PayMongoPayment({
   returnPath: string;
   donePath: string;
   backPath: string;
+  completionStatusPath?: string;
 }) {
   const [action, setAction] = useState<(StoredAction & { providerReference: string }) | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -56,8 +74,13 @@ export function PayMongoPayment({
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrCodeExpiresAt, setQrCodeExpiresAt] = useState<number | null>(null);
   const [qrRemainingSeconds, setQrRemainingSeconds] = useState<number | null>(null);
+  const [completion, setCompletion] = useState<CheckoutPaymentCompletionView | null>(null);
+  const [completionChecked, setCompletionChecked] = useState(!completionStatusPath);
+  const [pollingStopped, setPollingStopped] = useState(false);
   const qrGenerationInFlight = useRef(false);
   const qrAutoGenerationStarted = useRef(false);
+  const paymentIntentId = action?.paymentIntentId;
+  const hasAction = action !== null;
 
   useEffect(() => {
     const raw = sessionStorage.getItem(storageKey);
@@ -110,6 +133,84 @@ export function PayMongoPayment({
       })
       .catch((error) => setMessage((error as Error).message));
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!completionStatusPath) {
+      setCompletionChecked(true);
+      return;
+    }
+    if (!hasAction) return;
+    if (!paymentIntentId) {
+      setCompletionChecked(true);
+      return;
+    }
+
+    setCompletionChecked(false);
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    let timer: number | null = null;
+    let stopped = false;
+    let inFlight = false;
+
+    const schedule = () => {
+      if (stopped) return;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= COMPLETION_POLL_LIMIT_MS) {
+        setPollingStopped(true);
+        return;
+      }
+      const delay = elapsed < 30_000 ? 2_000 : elapsed < 120_000 ? 5_000 : 15_000;
+      timer = window.setTimeout(() => void poll(), delay);
+    };
+
+    const poll = async () => {
+      if (stopped || inFlight) return;
+      if (document.visibilityState === "hidden") {
+        schedule();
+        return;
+      }
+      inFlight = true;
+      try {
+        const response = await fetch(
+          `${completionStatusPath}?paymentIntentId=${encodeURIComponent(paymentIntentId)}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const parsed = completionResponseSchema.safeParse(await response.json());
+        if (!response.ok || !parsed.success || !parsed.data.ok)
+          throw new Error("status unavailable");
+        const next = parsed.data.value;
+        setCompletion(next);
+        setPollingStopped(false);
+        if (["COMPLETED", "FAILED", "EXPIRED"].includes(next.state)) {
+          sessionStorage.removeItem(storageKey);
+          stopped = true;
+          return;
+        }
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+      } finally {
+        inFlight = false;
+        setCompletionChecked(true);
+      }
+      schedule();
+    };
+
+    const pollWhenVisible = () => {
+      if (document.visibilityState !== "visible" || stopped) return;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      void poll();
+    };
+
+    document.addEventListener("visibilitychange", pollWhenVisible);
+    void poll();
+    return () => {
+      stopped = true;
+      controller.abort();
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", pollWhenVisible);
+    };
+  }, [completionStatusPath, hasAction, paymentIntentId, storageKey]);
 
   const createMethod = useCallback(
     async (attributes: Record<string, unknown>) => {
@@ -212,11 +313,14 @@ export function PayMongoPayment({
   );
 
   const method = action?.paymentMethod?.value ?? "card";
+  const paymentWaiting = !completion || completion.state === "WAITING_FOR_PAYMENT";
 
   useEffect(() => {
     if (
       action &&
       publicKey &&
+      completionChecked &&
+      paymentWaiting &&
       method === "qrph" &&
       !qrCode &&
       !qrCodeExpiresAt &&
@@ -225,10 +329,19 @@ export function PayMongoPayment({
       qrAutoGenerationStarted.current = true;
       void startQrPh();
     }
-  }, [action, method, publicKey, qrCode, qrCodeExpiresAt, startQrPh]);
+  }, [
+    action,
+    completionChecked,
+    method,
+    paymentWaiting,
+    publicKey,
+    qrCode,
+    qrCodeExpiresAt,
+    startQrPh,
+  ]);
 
   useEffect(() => {
-    if (!qrCodeExpiresAt) {
+    if (!qrCodeExpiresAt || !paymentWaiting) {
       setQrRemainingSeconds(null);
       return;
     }
@@ -237,12 +350,12 @@ export function PayMongoPayment({
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [qrCodeExpiresAt]);
+  }, [paymentWaiting, qrCodeExpiresAt]);
 
   useEffect(() => {
-    if (method !== "qrph" || qrRemainingSeconds !== 0 || !qrCode) return;
+    if (!paymentWaiting || method !== "qrph" || qrRemainingSeconds !== 0 || !qrCode) return;
     void startQrPh(true);
-  }, [method, qrCode, qrRemainingSeconds, startQrPh]);
+  }, [method, paymentWaiting, qrCode, qrRemainingSeconds, startQrPh]);
 
   async function submitCard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -283,7 +396,57 @@ export function PayMongoPayment({
         <p className="mt-2 text-sm text-slate-600">{description}</p>
       </div>
 
-      {action && publicKey && method === "qrph" ? (
+      {completion?.state === "COMPLETED" && completion.orderId ? (
+        <section
+          aria-live="polite"
+          className="grid justify-items-center gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-8 text-center"
+          role="status"
+        >
+          <PaymentSuccessAnimation />
+          <div>
+            <h2 className="text-2xl font-semibold text-emerald-950">Payment successful</h2>
+            <p className="mt-2 text-sm leading-6 text-emerald-900">Your order is confirmed.</p>
+          </div>
+          <Link
+            href={`/orders/${encodeURIComponent(completion.orderId)}`}
+            className="inline-flex min-h-11 items-center justify-center rounded bg-emerald-700 px-5 font-medium text-white"
+          >
+            View order
+          </Link>
+        </section>
+      ) : null}
+
+      {completion?.state === "FINALIZING_ORDER" ? (
+        <section
+          aria-live="polite"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 p-6"
+          role="status"
+        >
+          <h2 className="text-xl font-semibold text-emerald-950">Payment received</h2>
+          <p className="mt-2 text-sm leading-6 text-emerald-900">
+            We’re finalizing your order now. Keep this page open and it will update automatically.
+          </p>
+          {pollingStopped ? (
+            <Link href={donePath} className="mt-4 inline-block text-sm font-medium underline">
+              Check your orders
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {completion?.state === "FAILED" || completion?.state === "EXPIRED" ? (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-6" role="alert">
+          <h2 className="text-xl font-semibold">Payment not completed</h2>
+          <p className="mt-2 text-sm leading-6">
+            This payment can no longer be completed. Return to checkout to choose a payment method.
+          </p>
+          <Link href={backPath} className="mt-4 inline-block text-sm font-medium underline">
+            Return to checkout
+          </Link>
+        </section>
+      ) : null}
+
+      {paymentWaiting && completionChecked && action && publicKey && method === "qrph" ? (
         <section className="grid gap-5 rounded-lg border bg-white p-6" aria-labelledby="qrph-title">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
@@ -331,7 +494,7 @@ export function PayMongoPayment({
         </section>
       ) : null}
 
-      {action && publicKey && method === "card" ? (
+      {paymentWaiting && completionChecked && action && publicKey && method === "card" ? (
         <form onSubmit={submitCard} className="grid gap-4 rounded-lg border bg-white p-6">
           <p className="text-sm text-slate-600">
             Continue the card payment you already started before this checkout update.
@@ -410,19 +573,26 @@ export function PayMongoPayment({
         </form>
       ) : null}
 
-      {action && publicKey && method !== "qrph" && method !== "card" ? (
+      {paymentWaiting &&
+      completionChecked &&
+      action &&
+      publicKey &&
+      method !== "qrph" &&
+      method !== "card" ? (
         <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-4 text-sm">
           This payment method is not available in the current FreshMarkets checkout.
         </p>
       ) : null}
-      {message ? (
+      {paymentWaiting && message ? (
         <p role="status" className="text-sm">
           {message}
         </p>
       ) : null}
-      <Link href={backPath} className="text-sm underline">
-        Back to payment status
-      </Link>
+      {completion?.state !== "COMPLETED" ? (
+        <Link href={backPath} className="text-sm underline">
+          Back to payment status
+        </Link>
+      ) : null}
     </main>
   );
 }

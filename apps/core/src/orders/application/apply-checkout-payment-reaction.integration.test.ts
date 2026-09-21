@@ -9,9 +9,11 @@ import { applyCheckoutPaymentReaction } from "./apply-checkout-payment-reaction"
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 import { createCheckoutPaymentIntent } from "../../payments/application/create-checkout-payment-intent";
+import { ingestProviderEvent } from "../../payments/application/ingest-provider-event";
 import { reconcilePayment } from "../../payments/application/reconcile-payment";
 import {
   createMockPaymentProvider,
+  mockSignatureFor,
   setMockObservedState,
 } from "../../payments/infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../../payments/infrastructure/providers/provider-registry";
@@ -223,6 +225,62 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("commits the order during a verified successful webhook without waiting for scheduled redrive", async () => {
+    const fixture = await seededCheckout({ fulfillmentMode: "INSTANT" });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(quote.error.message);
+    const registry = new ProviderRegistry("test", [createMockPaymentProvider()]);
+    const payment = await createCheckoutPaymentIntent(
+      env.DB,
+      registry,
+      "mock",
+      quoteDependencies.routeDistance,
+      paymentCommandForQuote(fixture.customerId, quote.value),
+      quoteDependencies.deliveryProviders,
+    );
+    if (!payment.ok) throw new Error(payment.error.message);
+    const attempt = await env.DB.prepare(
+      "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+    )
+      .bind(payment.value.paymentIntentId)
+      .first<{ provider_reference: string }>();
+    if (!attempt) throw new Error("Missing provider payment attempt");
+
+    const rawBody = JSON.stringify({
+      eventId: `evt-${crypto.randomUUID()}`,
+      reference: attempt.provider_reference,
+      vendorState: "paid",
+      amountMinor: quote.value.totalMinor,
+      currency: quote.value.currency,
+    });
+    const webhook = await ingestProviderEvent(
+      env.DB,
+      registry,
+      "mock",
+      new Headers({
+        "x-mock-signature": await mockSignatureFor(rawBody),
+        "x-mock-timestamp": String(Date.now()),
+      }),
+      rawBody,
+    );
+
+    expect(webhook).toMatchObject({
+      ok: true,
+      value: {
+        processingStatus: "APPLIED",
+        paymentIntentId: payment.value.paymentIntentId,
+        canonicalState: "SUCCEEDED",
+      },
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT committed.order_id,reaction.status FROM order_payment_reaction committed JOIN payment_reaction reaction ON reaction.id=committed.reaction_id WHERE committed.payment_intent_id=?",
+      )
+        .bind(payment.value.paymentIntentId)
+        .first(),
+    ).toMatchObject({ order_id: expect.any(String), status: "SUCCEEDED" });
+  });
+
   it.each(["INSTANT", "SCHEDULED"] as const)(
     "completes an unchanged %s Cart once and preserves its successor on replay",
     async (fulfillmentMode) => {

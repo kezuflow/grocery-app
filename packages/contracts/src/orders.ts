@@ -56,6 +56,16 @@ export type CustomerIncompleteCheckoutsView = {
   items: readonly CustomerIncompleteCheckoutView[];
 };
 
+export type CheckoutPaymentCompletionRequest = AuthenticatedRequest & {
+  paymentIntentId: string;
+};
+
+export type CheckoutPaymentCompletionView = {
+  paymentIntentId: string;
+  state: "WAITING_FOR_PAYMENT" | "FINALIZING_ORDER" | "COMPLETED" | "FAILED" | "EXPIRED";
+  orderId: string | null;
+};
+
 export type CustomerOrderLineSnapshot = {
   orderItemId: string;
   skuId: string;
@@ -346,6 +356,9 @@ export type OrdersService = {
   listCustomerIncompleteCheckouts(
     request: AuthenticatedRequest,
   ): Promise<RpcResult<CustomerIncompleteCheckoutsView>>;
+  getCheckoutPaymentCompletion(
+    request: CheckoutPaymentCompletionRequest,
+  ): Promise<RpcResult<CheckoutPaymentCompletionView>>;
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;

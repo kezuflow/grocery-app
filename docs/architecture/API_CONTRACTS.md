@@ -264,6 +264,7 @@ Fulfillment-option reads require a Maps-confirmed active Customer address inside
 - `checkout.createAttempt({ cartId, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutAttemptView`
 - `checkout.createPayment({ checkoutAttemptId, expectedQuoteVersion, expectedPriceAcceptanceVersion, expectedCurrency, expectedMerchandiseSubtotalMinor, expectedItemDiscountMinor, expectedOrderDiscountMinor, expectedDeliverySubtotalMinor, expectedDeliveryFeeMinor, expectedDeliveryDiscountMinor, expectedTaxMinor, expectedTotalMinor, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 - `checkout.getAttempt({ checkoutAttemptId }) -> CheckoutAttemptView`
+- `checkout.getPaymentCompletion({ paymentIntentId }) -> { paymentIntentId, state, orderId }`
 - `checkout.recoverCommitment({ checkoutAttemptId }) -> OrderCommitmentResult`
 
 `paymentMethod` is a provider-neutral token chosen on the checkout review surface before payment
@@ -273,6 +274,13 @@ PayMongo methods remain visible but disabled until provider activation and expli
 enablement. PayMongo receives only the selected method in `payment_method_allowed`. The QR Ph
 continuation creates and attaches the provider Payment Method in the browser using the public key,
 then renders the returned single-use code. Browser attachment and code display never assert success.
+`getPaymentCompletion` is an authenticated, customer-owned read for a grocery checkout Payment only;
+an inaccessible identity returns `NOT_FOUND`. Its presentation states distinguish waiting for provider
+confirmation, provider success with an unfinished Order reaction, immutable Order completion, and
+failed/expired payment. `orderId` is present only when the exact `order_payment_reaction` receipt exists.
+Web may poll this read while the provider continuation is visible, with visibility-aware bounded
+intervals and no shared caching. It stops on a terminal result and never derives success from the QR,
+browser return, timer, or provider-client response.
 
 Core receives payment provider webhooks through a signed public webhook handler rather than Web RPC:
 
@@ -289,6 +297,9 @@ Core receives payment provider webhooks through a signed public webhook handler 
 - enqueue non-critical follow-up.
 
 Provider webhook payloads never contain an application `expectedVersion`. Vendor captured/success states map to canonical Payments `SUCCEEDED` for the current release; browser return state and payment initiation do not. The payment provider remains an adapter and its vocabulary is not exposed in Order DTOs.
+For a verified checkout success, webhook application attempts the owning Order reaction before the
+inbox is finalized. An unmet prerequisite or interrupted attempt leaves the durable reaction pending;
+the scheduled reaction worker remains bounded recovery and replays the same idempotent command.
 
 Verified provider events may include a provider-neutral settlement observation containing gross,
 processing-cost, withholding, adjustment, net, currency, and observation time. Core accepts the

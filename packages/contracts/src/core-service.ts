@@ -348,6 +348,7 @@ export const coreServiceMethodNames = [
   "createPaymentIntent",
   "listCustomerOrders",
   "listCustomerIncompleteCheckouts",
+  "getCheckoutPaymentCompletion",
   "listCustomerNotifications",
   "getCustomerOrderDetail",
   "getProvisionalTransactionSummary",

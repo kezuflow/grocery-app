@@ -10,6 +10,7 @@ import type {
   AppErrorCode,
   OrderCancellationView,
   OrderAdditionOptionsRequest,
+  CheckoutPaymentCompletionRequest,
 } from "@freshmarkets/contracts";
 import {
   idempotencyKeySchema,
@@ -20,6 +21,7 @@ import {
 import { authenticatedRequestSchema } from "../validation";
 import { listCustomerOrders } from "../orders/application/list-customer-orders";
 import { listCustomerIncompleteCheckouts } from "../orders/application/list-customer-incomplete-checkouts";
+import { getCheckoutPaymentCompletion } from "../orders/application/get-checkout-payment-completion";
 import { listCustomerNotifications } from "../notifications/application/list-customer-notifications";
 import { getCustomerOrderDetail } from "../orders/application/get-customer-order-detail";
 import { reorderOrder } from "../orders/application/reorder-order";
@@ -85,6 +87,19 @@ export function createOrdersRpc(context: CoreRpcContext) {
       if (!customer.ok) return customer;
       return listCustomerIncompleteCheckouts(context.env.DB, {
         customerId: customer.value.customerId,
+        requestId: input.requestId,
+      });
+    },
+    async getCheckoutPaymentCompletion(input: CheckoutPaymentCompletionRequest) {
+      const validation = authenticatedRequestSchema
+        .extend({ paymentIntentId: identifierSchema })
+        .safeParse(input);
+      if (!validation.success) return validationFailure(input.requestId, validation.error);
+      const customer = await context.access.resolveAuthenticatedCustomer(input);
+      if (!customer.ok) return customer;
+      return getCheckoutPaymentCompletion(context.env.DB, {
+        customerId: customer.value.customerId,
+        paymentIntentId: validation.data.paymentIntentId,
         requestId: input.requestId,
       });
     },

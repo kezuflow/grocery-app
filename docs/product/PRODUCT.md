@@ -1,5 +1,13 @@
 # FreshMarkets Product Rules
 
+Owner supplement, 2026-09-21: while the QR Ph provider step is open, checkout automatically checks
+the authenticated customer's owning Payment completion. A signed provider success first displays
+“Payment received” while the same durable Order reaction is unfinished; only the immutable committed
+Order link may display “Payment successful” and the one-shot success animation. The completed state
+keeps an explicit View order action and does not force a redirect. Reduced-motion customers receive a
+static success mark. Core attempts the checkout reaction during verified webhook handling and retains
+bounded scheduled redrive as recovery; browser state never becomes payment or Order authority.
+
 Owner-approved Payments simplification, 2026-09-21: Admin Payments will have one workspace with
 Payments (confirmed captured payments and their refunds) and Needs attention (genuine unresolved
 money or paid-commitment problems). Ordinary unpaid, failed-without-capture and expired attempts

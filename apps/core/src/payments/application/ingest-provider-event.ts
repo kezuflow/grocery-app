@@ -310,6 +310,18 @@ export async function applyVerifiedProviderEvent(
         subscriptionId: reaction.subject_id,
         canonicalPaymentState: event.canonicalState,
       });
+    } else if (reaction?.reaction_type === "COMMIT_ORDER") {
+      // Attempt the customer-visible commitment while the verified observation
+      // is in hand. The durable PENDING reaction remains the scheduled-redrive
+      // owner when current prerequisites or an interrupted request prevent it.
+      const { applyCheckoutPaymentReaction } =
+        await import("../../orders/application/apply-checkout-payment-reaction");
+      await applyCheckoutPaymentReaction(database, {
+        reactionId: reaction.id,
+        paymentIntentId: application.paymentIntentId!,
+        checkoutAttemptId: reaction.subject_id,
+        canonicalPaymentState: event.canonicalState,
+      });
     }
   }
   if (application.processingStatus === "RETRY_REQUIRED") {

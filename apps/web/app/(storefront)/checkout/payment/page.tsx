@@ -10,6 +10,7 @@ export default function CheckoutPaymentPage() {
         returnPath="/orders?payment=return"
         donePath="/orders?payment=submitted"
         backPath="/orders?payment=return"
+        completionStatusPath="/api/checkout/payment/status"
       />
     </>
   );

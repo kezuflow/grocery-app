@@ -106,6 +106,9 @@ importers:
       '@googlemaps/markerclusterer':
         specifier: 2.6.2
         version: 2.6.2
+      '@lottiefiles/dotlottie-react':
+        specifier: 0.19.16
+        version: 0.19.16(react@19.2.8)
       '@radix-ui/react-dialog':
         specifier: ^1.1.23
         version: 1.1.23(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1208,6 +1211,16 @@ packages:
 
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
+
+  '@lottiefiles/dotlottie-react@0.19.16':
+    resolution: {integrity: sha512-kf+v6tGn726XoAw6wAZb9JgVko6j+d6ppbBfe4vHlp3fjqmXoSfJt2bvxRMc6yG75c/atg8/H1uRmsViEESEeQ==}
+    engines: {node: '>=18.17.0', npm: '>=9.5.0'}
+    peerDependencies:
+      react: ^17 || ^18 || ^19
+
+  '@lottiefiles/dotlottie-web@0.80.0':
+    resolution: {integrity: sha512-M00APgOJfP6xPZ3kAzZAUNATxluFiMU0wD3asp6HQSXDX8qLzSDh/Jmqbo0H7+WcqfpQkN8WYBu3aOzm2y/b4g==}
+    engines: {node: '>=18.17.0', npm: '>=9.5.0'}
 
   '@mikkelscheike/email-provider-links@5.2.2':
     resolution: {integrity: sha512-UUJP3sTIedUm9Hy9NyqJcgnlxhvUnnRrEJaivpnzn0+TGh5yruXW8JsGa+WtS7K0XU8rPzioxSAhV8Kcx54eNg==}
@@ -4981,6 +4994,13 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@levischuck/tiny-cbor@0.2.11': {}
+
+  '@lottiefiles/dotlottie-react@0.19.16(react@19.2.8)':
+    dependencies:
+      '@lottiefiles/dotlottie-web': 0.80.0
+      react: 19.2.8
+
+  '@lottiefiles/dotlottie-web@0.80.0': {}
 
   '@mikkelscheike/email-provider-links@5.2.2': {}
 

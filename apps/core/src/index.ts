@@ -3208,6 +3208,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.ordersRpc.listCustomerIncompleteCheckouts(input);
   }
 
+  async getCheckoutPaymentCompletion(
+    input: import("@freshmarkets/contracts").CheckoutPaymentCompletionRequest,
+  ) {
+    return this.ordersRpc.getCheckoutPaymentCompletion(input);
+  }
+
   async listCustomerNotifications(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
     return this.ordersRpc.listCustomerNotifications(input);
   }

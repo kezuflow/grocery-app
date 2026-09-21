@@ -1,5 +1,51 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-PAYMENT-SUCCESS-COMPLETION-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, live PayMongo checkout completion. Following the completed webhook
+investigation, the owner supplied `payment_success.lottie` and authorized the recommended fix.
+Acceptance: a verified checkout success attempts the owning Order reaction immediately while
+retaining scheduled redrive; `/checkout/payment` checks an authenticated customer-owned status;
+provider success without an Order shows an honest finalizing state; only the immutable committed
+Order link shows one-shot success motion and a View order action; reduced motion and animation failure
+retain a static success mark; browser state never authorizes payment or Order success.
+
+Implementation began from pushed `main` at `e68fd3b9c6469141c4dc751e396aa444f5185a32`, preserving
+the 16 owner-deleted legacy `.claude/skills` files. Core now invokes the existing idempotent
+`COMMIT_ORDER` application during a successfully applied verified payment event. If prerequisites do
+not permit commitment, the reaction remains `PENDING` for the existing bounded scheduled owner. A new
+customer-scoped Orders query and Web no-store route project `WAITING_FOR_PAYMENT`,
+`FINALIZING_ORDER`, `COMPLETED`, `FAILED`, or `EXPIRED`; inaccessible Payment identities return
+`NOT_FOUND`, and an Order ID is returned only from `order_payment_reaction` evidence.
+
+The QR continuation performs a visibility-aware bounded poll (2 seconds initially, then 5/15 seconds,
+stopping after 20 minutes). It suppresses QR generation until the first status check, preserves the QR
+for a waiting or temporarily unavailable read, removes stored continuation data on terminal evidence,
+and never auto-redirects. Captured-but-uncommitted payment displays “Payment received”; committed
+payment displays “Payment successful”, “Your order is confirmed”, the View order action, and the
+owner-supplied one-shot animation. The animation, its matching WASM runtime and source/license notice
+are self-hosted under `apps/web/public/animations`; decorative motion is omitted under reduced-motion
+or player failure. Contracts, API/state/design/product guidance and the older commerce-flow expectation
+now reflect immediate application plus idempotent replay.
+
+Focused acceptance passed: Core **40/40 across 3 files** for authenticated completion projection,
+RPC validation and direct webhook-to-Order commitment; Web **6/6 across 2 files** for the no-store
+route, finalizing/completed transition and reduced-motion fallback; contracts **16/16 across 2 files**;
+and the corrected complete commerce flow **1/1**. The final `pnpm check` passed: Core **1696/1696
+across 208 files**, Web **606/606 across 141 files**, contracts **69/69 across 20 files**, config,
+domain-shared and validation **2/2 each**, all workspace typechecks, formatting, naming, terminology,
+migration, architecture/security/readiness gates, Core Wrangler dry-run and Web production build. Lint
+reported only the two pre-existing unused-variable warnings in the unrelated address-book test. The
+first aggregate attempt ended in a Windows runner process failure before totals; an independent full
+Core run exposed one obsolete manual-reaction assertion, which was corrected to require immediate
+`SUCCEEDED`, and the following complete aggregate passed. No schema, credential, provider setting,
+production data, real payment, deployment or outbound message changed. Completion level: **1 of 1
+local checkout-payment success-completion slice implemented and verified**. One next action is an
+explicitly authorized Core/Web production deployment followed by one sandbox or live QR acceptance
+that observes webhook receipt, immediate Order commitment, finalizing only when necessary and the
+automatic success presentation.
+
 ## Latest owner request — PAYMENT-WEBHOOK-LIVE-INVESTIGATION-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
