@@ -111,8 +111,18 @@ Core readiness reported production runtime configuration, D1 and PayMongo ready.
 deployment and dependency readiness; they do not establish an authenticated production rename or an
 actual payment/provider transaction.
 
-Completion level: implementation and focused local Web acceptance complete; **2 of 2 requested Global
-Product preview slices complete and deployed**. Browser rendering is accepted at the desktop/mobile
+The immediate category-save follow-up was committed and pushed as `7105e552`, then deployed Web-only
+as production version `d9ecde60-8f19-4dc8-9db5-d2319d5f0cbb`; Core and D1 were unchanged. The first
+deploy invocation incorrectly retained the build-only `CLOUDFLARE_ENV=production` variable while using
+the already flattened generated config. Wrangler rejected that unintended nested-environment target
+because its required secrets were absent, before replacing the real production Worker. Clearing the
+build-only variable and revalidating the generated Worker name, environment and Core service produced
+the successful deployment. Post-deploy Web `/api/core-health` and the Admin Product-list route both
+returned HTTP 200.
+
+Completion level: implementation and focused local Web acceptance complete; **3 of 3 requested Global
+Product preview control slices are complete and deployed**.
+Browser rendering is accepted at the desktop/mobile
 counting level; the added end-to-end rename write assertion remains blocked at fixture provisioning.
 One next action: repair the shared Admin fixture's fresh-state foreign-key failure, then rerun the
 strengthened `global-product-preview-controls.spec.ts`.
