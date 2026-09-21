@@ -28,13 +28,19 @@ receipt.
 The production auth identity was then created through Better Auth's normal signup endpoint using an
 internally generated one-time password that was immediately discarded; the password pasted earlier
 was not used. Remote D1 read-back shows exactly one matching auth user, one credential and
-`email_verified = false`. A verification resend returned HTTP 200, and Cloudflare telemetry records
+`email_verified = true`. A verification resend returned HTTP 200, and Cloudflare telemetry records
 the FreshMarkets verification message as terminal `delivered` with the private forwarding rule
-matched and no routing error. No address or credential is stored in tracked source or this checkpoint.
-No Staff invitation, role, scope or session has been created. Next action: the owner opens the latest
-verification link from the forwarded inbox and confirms completion; then use the existing Global
-administrator to issue the reviewed Global invitation, accept it through Core, and initiate a password
-reset so the owner chooses a new private password.
+matched and no routing error. The owner completed verification and password recovery and can sign in;
+the private identity still has zero Staff rows or grants. No address or credential is stored in tracked
+source or this checkpoint.
+
+The only active Global Staff identity belongs to a verified synthetic test-domain account retained
+from staging, not the owner's destination inbox or new private production identity. It has a credential
+and one unexpired legacy session. Reading and replaying that bearer session from D1 would impersonate
+the synthetic account and bypass the Core authorization boundary, so no invitation, role, scope or
+Staff row was created. Next action requires either the owner signing in normally with that retained
+test administrator or explicitly authorizing a reviewed one-time Core remediation that grants the
+verified private identity Global administration and retires the synthetic production authority.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
