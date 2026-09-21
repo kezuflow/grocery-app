@@ -1,5 +1,39 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-PAYMENT-EMPTY-RESPONSE-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment continuation. The owner reported an unhandled `Response.json()` rejection
+when `/api/checkout/payment` returned an empty body and requested alignment with PayMongo's documented
+flow. Acceptance: payment-command transport/parse failures never escape as unhandled browser promises;
+the Web route returns controlled JSON if Core invocation throws; the browser retains the same payment
+identity for safe retry; QR Ph still follows create Intent, create/attach Method, display code and
+provider-webhook confirmation without treating browser progress as payment success.
+
+Work started from clean synchronized `main`/`origin/main` at `83a770f7`. PayMongo's current official QR
+Ph and Payment Intent documentation confirms the implemented split: server creates the Intent with
+`payment_method_allowed: ["qrph"]`; the browser creates and attaches the QR Ph Payment Method using
+the public/client keys; the returned `next_action.code.image_url` is displayed; signed provider
+confirmation remains payment authority. The observed crash is a FreshMarkets response-boundary bug,
+not a reason to bypass that flow.
+
+The checkout payment route now converts a thrown Core/service-binding command into a request-ID-bound
+`PAYMENT_OUTCOME_UNRESOLVED` JSON response. The client consumes the body as text, validates the RPC
+envelope before using it, catches empty/malformed/network responses, always releases its busy state,
+and renders a dedicated payment error that instructs an exact-key retry. Known payment failures use
+the same visible error surface. No retry creates a new payment identity.
+
+Verification: four focused Web route/client/QR continuation files pass 30 tests, including a real
+empty-body regression that renders the controlled error and proves two retries carry the same payment
+idempotency key. The focused Core PayMongo provider suite passes 20 tests and confirms Basic-auth
+Intent creation with the selected `qrph` method. Web typecheck, focused oxlint/oxfmt, diff whitespace
+and the vinext production build pass. Local Web reports a configured browser-safe PayMongo public
+key; no secret values were logged. No live provider call, deployment, remote-data operation, provider
+transaction or outbound message occurred. `CHECKOUT-PAYMENT-EMPTY-RESPONSE-1` is complete at the
+source/local-test counting level; actual PayMongo sandbox acceptance remains separate. Next action,
+if separately authorized, is deploy or restart the local Web/Core Workers and execute an authenticated
+QR Ph sandbox journey through code display and signed webhook confirmation.
+
 ## Latest owner request — CHECKOUT-SECTION-TITLE-ALIGNMENT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

@@ -50,30 +50,48 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  // The browser never asserts success: the response is a pending action at
-  // most, and order commitment originates solely from Core's Payments reaction.
-  return jsonWithRequestId(
-    await coreClient(env.CORE).createPaymentIntent({
-      requestId: context.requestId,
-      headers: context.coreHeaders,
-      checkoutAttemptId: parsed.value.checkoutAttemptId,
-      expectedQuoteVersion: parsed.value.expectedQuoteVersion,
-      expectedPriceAcceptanceVersion: parsed.value.expectedPriceAcceptanceVersion,
-      expectedCurrency: parsed.value.expectedCurrency.toUpperCase(),
-      expectedMerchandiseSubtotalMinor: parsed.value.expectedMerchandiseSubtotalMinor,
-      expectedItemDiscountMinor: parsed.value.expectedItemDiscountMinor,
-      expectedOrderDiscountMinor: parsed.value.expectedOrderDiscountMinor,
-      expectedDeliverySubtotalMinor: parsed.value.expectedDeliverySubtotalMinor,
-      expectedDeliveryFeeMinor: parsed.value.expectedDeliveryFeeMinor,
-      expectedDeliveryDiscountMinor: parsed.value.expectedDeliveryDiscountMinor,
-      expectedTaxMinor: parsed.value.expectedTaxMinor,
-      expectedTotalMinor: parsed.value.expectedTotalMinor,
-      paymentMethod: parsed.value.paymentMethod,
-      returnUrl: parsed.value.returnUrl,
-      idempotencyKey,
-    }),
-    context.requestId,
-  );
+  try {
+    // The browser never asserts success: the response is a pending action at
+    // most, and order commitment originates solely from Core's Payments reaction.
+    return jsonWithRequestId(
+      await coreClient(env.CORE).createPaymentIntent({
+        requestId: context.requestId,
+        headers: context.coreHeaders,
+        checkoutAttemptId: parsed.value.checkoutAttemptId,
+        expectedQuoteVersion: parsed.value.expectedQuoteVersion,
+        expectedPriceAcceptanceVersion: parsed.value.expectedPriceAcceptanceVersion,
+        expectedCurrency: parsed.value.expectedCurrency.toUpperCase(),
+        expectedMerchandiseSubtotalMinor: parsed.value.expectedMerchandiseSubtotalMinor,
+        expectedItemDiscountMinor: parsed.value.expectedItemDiscountMinor,
+        expectedOrderDiscountMinor: parsed.value.expectedOrderDiscountMinor,
+        expectedDeliverySubtotalMinor: parsed.value.expectedDeliverySubtotalMinor,
+        expectedDeliveryFeeMinor: parsed.value.expectedDeliveryFeeMinor,
+        expectedDeliveryDiscountMinor: parsed.value.expectedDeliveryDiscountMinor,
+        expectedTaxMinor: parsed.value.expectedTaxMinor,
+        expectedTotalMinor: parsed.value.expectedTotalMinor,
+        paymentMethod: parsed.value.paymentMethod,
+        returnUrl: parsed.value.returnUrl,
+        idempotencyKey,
+      }),
+      context.requestId,
+    );
+  } catch {
+    // A command transport failure cannot prove whether Core/provider adoption
+    // happened. Return a controlled unknown outcome so an exact-key replay can
+    // recover without creating another payment identity.
+    return jsonWithRequestId(
+      {
+        ok: false,
+        error: {
+          code: "PAYMENT_OUTCOME_UNRESOLVED",
+          message: "Payment setup could not be confirmed. Retry the same checkout payment.",
+          requestId: context.requestId,
+        },
+      },
+      context.requestId,
+      { status: 503 },
+    );
+  }
 }
 
 export async function GET(request: Request) {

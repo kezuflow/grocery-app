@@ -8,11 +8,13 @@ import type { CustomerAddressView, FulfillmentOptionView } from "@freshmarkets/c
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createQueryClient, queryKeys } from "@/lib/query/query-client";
 
-const { addressEditorPropsMock, fetchCartMock, refreshCartForLocationMock } = vi.hoisted(() => ({
-  addressEditorPropsMock: vi.fn(),
-  fetchCartMock: vi.fn(),
-  refreshCartForLocationMock: vi.fn(),
-}));
+const { addressEditorPropsMock, fetchCartMock, orderSummaryPropsMock, refreshCartForLocationMock } =
+  vi.hoisted(() => ({
+    addressEditorPropsMock: vi.fn(),
+    fetchCartMock: vi.fn(),
+    orderSummaryPropsMock: vi.fn(),
+    refreshCartForLocationMock: vi.fn(),
+  }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
     createElement("a", { href }, children),
@@ -27,7 +29,10 @@ vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/components/storefront/marketplace/order-summary", () => ({
-  OrderSummary: () => null,
+  OrderSummary: (props: { onAction?: () => Promise<void> }) => {
+    orderSummaryPropsMock(props);
+    return null;
+  },
 }));
 vi.mock("@/components/storefront/address/address-editor", () => ({
   AddressEditor: ({
@@ -341,6 +346,7 @@ describe("CheckoutClient delivery inputs", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     addressEditorPropsMock.mockReset();
+    orderSummaryPropsMock.mockReset();
     fetchCartMock.mockReset();
     refreshCartForLocationMock.mockReset();
     window.sessionStorage.clear();
@@ -373,6 +379,45 @@ describe("CheckoutClient delivery inputs", () => {
       0,
     );
     expect(container.textContent).not.toContain("Try quotation again");
+  });
+
+  it("fails closed on an empty payment response and retries the same payment identity", async () => {
+    const paymentKeys: string[] = [];
+    const base = successfulFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/payment") {
+          paymentKeys.push(String(new Headers(init?.headers).get("idempotency-key")));
+          return Promise.resolve(new Response(null, { status: 500 }));
+        }
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(checkout()));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    await vi.waitFor(() =>
+      expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+        1,
+      ),
+    );
+    click(container, "QR Ph");
+    await flush();
+
+    const submit = () => {
+      const props = orderSummaryPropsMock.mock.lastCall?.[0] as {
+        onAction?: () => Promise<void>;
+      };
+      if (!props.onAction) throw new Error("Missing checkout payment action");
+      return props.onAction();
+    };
+    await act(submit);
+    expect(container.textContent).toContain("same payment request will be safely reused");
+    await act(submit);
+    expect(paymentKeys).toHaveLength(2);
+    expect(paymentKeys[1]).toBe(paymentKeys[0]);
   });
 
   it("keeps an unsaved Deliver to destination visible beside saved alternatives", async () => {

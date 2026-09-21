@@ -171,6 +171,7 @@ export function CheckoutClient({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodToken | null>(
     null,
   );
+  const [paymentError, setPaymentError] = useState("");
   const [quoteNeedsReplacement, setQuoteNeedsReplacement] = useState(false);
   const paymentInProgressRef = useRef(false);
   const paymentContinuationRef = useRef<PaymentActionView | null>(null);
@@ -782,31 +783,51 @@ export function CheckoutClient({
     // provider-confirmed payment reaction — never from this browser.
     clearQuoteRefreshTimer();
     setAcceptingPayment(true);
-    const paymentResponse = await fetch("/api/checkout/payment", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": `${pendingQuote.attemptKey}:payment:${selectedPaymentMethod.value}`,
-      },
-      body: JSON.stringify({
-        checkoutAttemptId: pendingQuote.quoteId,
-        expectedQuoteVersion: pendingQuote.attemptVersion,
-        expectedPriceAcceptanceVersion: pendingQuote.priceAcceptanceVersion,
-        expectedCurrency: pendingQuote.currency,
-        expectedMerchandiseSubtotalMinor: pendingQuote.merchandiseSubtotalMinor,
-        expectedItemDiscountMinor: pendingQuote.itemDiscountMinor,
-        expectedOrderDiscountMinor: pendingQuote.orderDiscountMinor,
-        expectedDeliverySubtotalMinor: pendingQuote.deliverySubtotalMinor,
-        expectedDeliveryFeeMinor: pendingQuote.deliveryFeeMinor,
-        expectedDeliveryDiscountMinor: pendingQuote.deliveryDiscountMinor,
-        expectedTaxMinor: pendingQuote.taxMinor,
-        expectedTotalMinor: pendingQuote.totalMinor,
-        paymentMethod: selectedPaymentMethod,
-        returnUrl: window.location.origin + "/orders",
-      }),
-    });
-    const paymentResult = (await paymentResponse.json()) as RpcResult<PaymentActionView>;
-    setAcceptingPayment(false);
+    setPaymentError("");
+    let paymentResult: RpcResult<PaymentActionView>;
+    try {
+      const paymentResponse = await fetch("/api/checkout/payment", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": `${pendingQuote.attemptKey}:payment:${selectedPaymentMethod.value}`,
+        },
+        body: JSON.stringify({
+          checkoutAttemptId: pendingQuote.quoteId,
+          expectedQuoteVersion: pendingQuote.attemptVersion,
+          expectedPriceAcceptanceVersion: pendingQuote.priceAcceptanceVersion,
+          expectedCurrency: pendingQuote.currency,
+          expectedMerchandiseSubtotalMinor: pendingQuote.merchandiseSubtotalMinor,
+          expectedItemDiscountMinor: pendingQuote.itemDiscountMinor,
+          expectedOrderDiscountMinor: pendingQuote.orderDiscountMinor,
+          expectedDeliverySubtotalMinor: pendingQuote.deliverySubtotalMinor,
+          expectedDeliveryFeeMinor: pendingQuote.deliveryFeeMinor,
+          expectedDeliveryDiscountMinor: pendingQuote.deliveryDiscountMinor,
+          expectedTaxMinor: pendingQuote.taxMinor,
+          expectedTotalMinor: pendingQuote.totalMinor,
+          paymentMethod: selectedPaymentMethod,
+          returnUrl: window.location.origin + "/orders",
+        }),
+      });
+      const responseText = await paymentResponse.text();
+      const candidate: unknown = responseText.trim() ? JSON.parse(responseText) : null;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        !("ok" in candidate) ||
+        typeof candidate.ok !== "boolean" ||
+        (!paymentResponse.ok && candidate.ok)
+      )
+        throw new Error("INVALID_PAYMENT_RESPONSE");
+      paymentResult = candidate as RpcResult<PaymentActionView>;
+    } catch {
+      setPaymentError(
+        "We could not confirm whether payment setup started. Try again; the same payment request will be safely reused.",
+      );
+      return;
+    } finally {
+      setAcceptingPayment(false);
+    }
     if (paymentResult.ok) {
       const continuation =
         (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) ||
@@ -847,7 +868,7 @@ export function CheckoutClient({
         return;
       }
       if (pendingQuoteRef.current) scheduleQuoteRefresh(pendingQuoteRef.current);
-      setStatus(paymentResult.error?.message ?? "Payments are unavailable right now.");
+      setPaymentError(paymentResult.error?.message ?? "Payments are unavailable right now.");
     }
   }
   const guest = cart?.id === "guest-cart";
@@ -1173,11 +1194,17 @@ export function CheckoutClient({
                     selected={selectedPaymentMethod}
                     onSelect={(method) => {
                       setSelectedPaymentMethod(method);
+                      setPaymentError("");
                       setStatus(
                         "QR Ph selected. Review the total, then continue to generate your secure code.",
                       );
                     }}
                   />
+                  {paymentError ? (
+                    <p role="alert" className="mt-4 text-sm text-red-700">
+                      {paymentError}
+                    </p>
+                  ) : null}
                 </section>
               </div>
             )}

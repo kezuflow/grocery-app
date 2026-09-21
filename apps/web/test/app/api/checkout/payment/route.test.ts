@@ -164,4 +164,31 @@ describe("checkout payment route", () => {
     await expect(first.json()).resolves.toEqual(action);
     await expect(replay.json()).resolves.toEqual(action);
   });
+
+  it("returns controlled JSON when the Core payment command transport fails", async () => {
+    requireIdempotencyKey.mockReturnValue("unknown-outcome-key");
+    createPaymentIntent.mockRejectedValue(new Error("service binding disconnected"));
+    const response = await POST(
+      new Request("https://freshmarkets.ph/api/checkout/payment", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "unknown-outcome-key" },
+        body: JSON.stringify({
+          checkoutAttemptId: "q-unknown",
+          ...acceptedPrice,
+          returnUrl: "https://freshmarkets.ph/orders",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as {
+      ok: boolean;
+      error: { code: string; requestId: string };
+    };
+    expect(body).toMatchObject({
+      ok: false,
+      error: { code: "PAYMENT_OUTCOME_UNRESOLVED" },
+    });
+    expect(response.headers.get("x-request-id")).toBe(body.error.requestId);
+  });
 });
