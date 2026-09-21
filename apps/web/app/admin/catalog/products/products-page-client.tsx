@@ -15,9 +15,9 @@ import { useAdminContext } from "../../admin-context-provider";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { ProductPreviewPanel } from "@/components/admin/product-preview-panel";
+import { ProductSearchInput } from "@/components/admin/product-search-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewProductWorkspace } from "./new/page";
 import {
@@ -290,15 +290,7 @@ export function ProductsPageClient({
             activeFilterCount={Number(query.trim().length > 0) + Number(status !== "all")}
             filters={
               <>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Search
-                  <Input
-                    aria-label="Search products"
-                    value={query}
-                    onChange={(event) => setFilter("query", event.target.value)}
-                    placeholder="Search products"
-                  />
-                </label>
+                <ProductSearchInput query={query} onSearch={(value) => setFilter("query", value)} />
                 <label className="grid gap-1.5 text-sm font-medium">
                   Status
                   <select

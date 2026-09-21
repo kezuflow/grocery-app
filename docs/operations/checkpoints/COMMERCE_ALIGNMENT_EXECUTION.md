@@ -1,5 +1,30 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-PRODUCT-SEARCH-SUBMIT-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, Admin catalog usability continuation. The owner reported that the Product list searches
+after every typed letter and requested that text search run only after pressing Enter. Acceptance:
+typing in `/admin/catalog/products` changes only the visible draft; submitting the search with Enter
+applies the URL-backed Product query once; clearing and submitting removes the query; navigation to a
+different applied query refreshes the draft; the existing status filter remains immediate.
+
+Work started from clean synchronized `main`/`origin/main` at `a686a755`. The Product search now owns a
+local draft inside an accessible search form and updates the existing URL-backed filter only on form
+submission. Focused runtime regressions prove that typing does not invoke the search callback, Enter
+applies the complete draft exactly once, and an externally applied query replaces the draft. The
+focused Product-search/Admin-accessibility run passed 17 tests; Web typecheck, focused oxlint/oxfmt
+and diff whitespace checks passed. The full repository aggregate passed: 1688 Core tests/207 files,
+604 Web tests/142 files, 69 contracts tests/20 files, six shared-package tests and 34 harness tests,
+plus all static/schema/type/catalog checks and both builds. It retained two pre-existing Web lint
+warnings and the existing Wrangler environment warnings. Concurrent owner catalog/pricing work
+appeared during verification and remains unstaged/unmodified except for the intentionally integrated
+search hunk in the shared Product page; aggregate evidence therefore covers that combined working-tree
+scope. No deployment, remote-data operation, provider transaction or outbound message occurred.
+`ADMIN-PRODUCT-SEARCH-SUBMIT-1` is complete at the source/local-verification counting level. Next
+action, if separately authorized, is deploy the Web revision and confirm authenticated live Product
+search behavior.
+
 ## Latest owner request — CHECKOUT-QRPH-AUTO-CODE-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
