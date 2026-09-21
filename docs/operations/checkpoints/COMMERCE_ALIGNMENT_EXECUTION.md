@@ -21,8 +21,10 @@ zero table-count mismatches; the local source copy passed SQLite foreign-key val
 objects (19,027,361 bytes) were copied from staging R2 after per-object byte-size and SHA-256 checks.
 
 Production Core secret bindings now contain the retained auth/email/Google values, an `sk_live_`
-PayMongo key, the explicit unconfigured-webhook sentinel, and the owner's refreshed production
-Lalamove key/secret.
+PayMongo key, the owner's live PayMongo webhook signing secret, and the owner's refreshed production
+Lalamove key/secret. The owner confirmed the live webhook secret was installed; Cloudflare records the
+corresponding final production Core secret change as version
+`3d4a6896-e7b2-44d0-981b-3dfd58f33c43`.
 Production Web secret bindings contain the retained Google values and matching `pk_live_` key. No
 secret value entered tracked source or this checkpoint. `.dev.vars` remains local-only and did not
 deploy automatically; its values were explicitly uploaded as Worker secrets. Initial-admin enrollment
@@ -31,27 +33,36 @@ is disabled. The authoritative production delivery registry enables Lalamove for
 booking, cancellation or wallet acceptance was executed, so deployment readiness is not provider
 transaction acceptance.
 
-Core production version `876cd608-ca52-4d5e-8ab2-0280e654430d` is deployed at
-`https://freshmarkets-core-production.ilyreggie.workers.dev`. `/health` and `/ready` return HTTP 200
-with production/database/PayMongo checks ready. The current readiness implementation only checks that
-the webhook value is non-empty, so this does **not** accept the placeholder as provider evidence. The
-live webhook must be created at
+Core production code version `876cd608-ca52-4d5e-8ab2-0280e654430d` is deployed at
+`https://freshmarkets-core-production.ilyreggie.workers.dev`; the later secret-only version is named
+above. `/health` and `/ready` return HTTP 200 with production/database/PayMongo checks ready. The live
+webhook endpoint remains
 `https://freshmarkets-core-production.ilyreggie.workers.dev/webhooks/payments/paymongo` for
-`payment.paid`, `payment.failed`, `payment.refunded` and `payment.refund.updated`; its newly displayed
-live signing secret must replace the production sentinel and receive signed acceptance before traffic
-moves. Web production is not deployed and `freshmarkets.ph` has not moved; staging remains live. The
-tracked Web production block owns the future Custom Domain and staging no longer declares it. Next
-action: owner creates the PayMongo Live Mode webhook and installs its signing secret without pasting it
-into chat; then verify signed delivery, deploy production Web and confirm the Custom Domain cutover.
+`payment.paid`, `payment.failed`, `payment.refunded` and `payment.refund.updated`. An unsigned probe is
+rejected with HTTP 400, confirming the endpoint does not accept an event without signature validation;
+an actual signed PayMongo delivery has not yet been observed in this session.
+
+Web production version `14e04292-cff2-407c-b37b-ace6ac5130b3` is deployed at
+`https://freshmarkets-web-production.ilyreggie.workers.dev` and bound to
+`freshmarkets-core-production#CoreEntrypoint`. Cloudflare transferred the `freshmarkets.ph` Custom
+Domain from `freshmarkets-web-staging` to `freshmarkets-web-production`. Both the Worker URL and Custom
+Domain homepage return HTTP 200. `https://freshmarkets.ph/api/core-health` returns HTTP 200 with
+`environment: production`; the public catalog returns HTTP 200; an unauthenticated session check
+returns HTTP 200/null. The Google sign-in handshake returns an OAuth URL at `accounts.google.com` with
+state and the exact redirect URI `https://freshmarkets.ph/api/auth/callback/google`.
 
 Verification evidence: `pnpm check` completed with 1,689 Core tests/207 files, 604 Web tests/142 files,
 69 contract tests/20 files, package and harness suites, migrations/schema checks, architecture,
 readiness, lint, typechecks and builds passing; only the two existing Web lint warnings and expected
 Wrangler environment warnings remain. After the Lalamove production correction, generated Worker
 types, repository formatting, Core typecheck, the five focused binding tests and the production Core
-dry-run passed again. The deployed Lalamove-enabled Core returned HTTP 200 from `/health` and `/ready`.
-No PayMongo webhook acceptance, live payment, Lalamove provider transaction or Web/domain cutover has
-been executed.
+dry-run passed again. The production-targeted Vinext build and Wrangler dry-run passed; an exact-value
+scan of the generated upload found none of the seven server-side Core secrets. The deployed
+Lalamove-enabled Core returned HTTP 200 from `/health` and `/ready`, and the post-cutover Web/Core,
+catalog, session and Google OAuth checks above passed. `PRODUCTION-CUTOVER-1` is complete at the
+infrastructure/configuration/public-smoke counting level. No live payment, signed PayMongo webhook
+delivery, Lalamove quotation/booking/cancellation or wallet acceptance was executed; those remain
+actual-provider acceptance obligations rather than deployment blockers.
 
 ## Latest owner request — STAGING-PAYMONGO-BINDINGS-1 (2026-09-21)
 
