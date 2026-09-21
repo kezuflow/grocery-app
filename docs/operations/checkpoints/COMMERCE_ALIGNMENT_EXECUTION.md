@@ -27,8 +27,9 @@ test passed **1/1**, proving Committed replaces bare `UNASSIGNED`, Packing and F
 together, Canceled overrides stale packing/courier records, and the list stays within the page at both
 1440 px and 390 px. It used only disposable local state and a local test identity; no signed-in account,
 remote data, provider transaction, outbound message or deployment was touched. Completion level:
-**1 of 1 Admin Order-list progress slice implemented and locally accepted**. One next action: commit and
-push the verified slice to `main`; production release remains separately authorized.
+**1 of 1 Admin Order-list progress slice implemented, locally accepted and published**. The verified
+source was committed and pushed to `main` as `ce715ab4`. No implementation work remains at this slice
+level; production release remains separately authorized.
 
 ## Latest owner request — ADMIN-LOCATION-FULFILLMENT-NAV-1 (2026-09-21)
 
