@@ -194,6 +194,10 @@ describe("finance administration", () => {
       status: "COMMITTED",
       totalMinor: 50000,
       paymentStatus: "SUCCEEDED",
+      fulfillmentStatus: null,
+      deliveryStatus: null,
+      deliveryDispatchStatus: null,
+      deliveryProviderStatus: null,
     });
 
     const detail = await core.getAdminOrder({
@@ -267,6 +271,7 @@ describe("finance administration", () => {
     const addressId = crypto.randomUUID();
     const cartId = crypto.randomUUID();
     const amendmentId = crypto.randomUUID();
+    const deliveryJobId = crypto.randomUUID();
     const reactionId = (await env.DB.prepare(
       "SELECT reaction_id AS id FROM order_payment_reaction WHERE order_id=?",
     )
@@ -315,7 +320,22 @@ describe("finance administration", () => {
       ).bind(crypto.randomUUID(), orderId, now),
       env.DB.prepare(
         "INSERT INTO delivery_job (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, rider_user_id, status, address_snapshot_json, delivered_at, version, created_at, updated_at) VALUES (?, ?, 'cycle-next-cebu', 'SCHEDULED', 'location-cebu-central', 'zone-cebu-city-core', 'rider-1', 'ASSIGNED', '{}', NULL, 3, ?, ?)",
-      ).bind(crypto.randomUUID(), orderId, now, now),
+      ).bind(deliveryJobId, orderId, now, now),
+      env.DB.prepare(
+        `INSERT INTO delivery_provider_dispatch
+          (id,delivery_job_id,provider,merchant_order_id,provider_delivery_id,request_hash,
+           request_snapshot_json,status,provider_status,version,created_at,updated_at,client_idempotency_key)
+         VALUES (?,?,'lalamove',?,?,?,'{}','ACTIVE','ALLOCATING',1,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        deliveryJobId,
+        `merchant-${crypto.randomUUID()}`,
+        `provider-delivery-${crypto.randomUUID()}`,
+        `hash-${crypto.randomUUID()}`,
+        now,
+        now,
+        `dispatch-${crypto.randomUUID()}`,
+      ),
       env.DB.prepare(
         "INSERT INTO paid_order_amendment (id, order_id, status, currency, total_minor, payment_intent_id, idempotency_key, created_at, updated_at) VALUES (?, ?, 'COMMITTED', 'PHP', 5000, ?, ?, ?, ?)",
       ).bind(amendmentId, orderId, paymentIntentId, `amend-${crypto.randomUUID()}`, now, now),
@@ -361,6 +381,10 @@ describe("finance administration", () => {
     expect(detail.value.amendments[0]?.lines).toHaveLength(1);
     expect(detail.value.fulfillment).toMatchObject({ status: "PICKING", version: 2 });
     expect(detail.value.delivery).toMatchObject({ status: "ASSIGNED", version: 3 });
+    expect(detail.value).toMatchObject({
+      deliveryDispatchStatus: "ACTIVE",
+      deliveryProviderStatus: "ALLOCATING",
+    });
     expect(detail.value.exceptions).toEqual([
       expect.objectContaining({ source: "FINANCE", kind: "TRANSIENT_FAILURE" }),
     ]);

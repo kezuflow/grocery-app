@@ -34,6 +34,90 @@ test("a provisioned Staff reader opens the real Orders workspace", async ({ admi
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 });
 
+test("the Order list shows complete operational progress without an Unassigned status", async ({
+  adminPage,
+}) => {
+  const items = [
+    {
+      orderId: "order-committed",
+      orderNumber: "FM-PROGRESS-1",
+      customerName: "Committed Customer",
+      customerEmail: "committed@example.test",
+      fulfillmentMode: "INSTANT",
+      status: "COMMITTED",
+      totalMinor: 10_000,
+      currency: "PHP",
+      paymentStatus: "SUCCEEDED",
+      fulfillmentStatus: "NOT_STARTED",
+      deliveryStatus: "UNASSIGNED",
+      deliveryDispatchStatus: null,
+      deliveryProviderStatus: null,
+      committedAt: "2026-09-21T08:00:00.000Z",
+      version: 1,
+    },
+    {
+      orderId: "order-packing",
+      orderNumber: "FM-PROGRESS-2",
+      customerName: "Packing Customer",
+      customerEmail: "packing@example.test",
+      fulfillmentMode: "INSTANT",
+      status: "FULFILLMENT_PENDING",
+      totalMinor: 12_000,
+      currency: "PHP",
+      paymentStatus: "SUCCEEDED",
+      fulfillmentStatus: "PACKING",
+      deliveryStatus: "UNASSIGNED",
+      deliveryDispatchStatus: "ACTIVE",
+      deliveryProviderStatus: "ALLOCATING",
+      committedAt: "2026-09-21T08:05:00.000Z",
+      version: 2,
+    },
+    {
+      orderId: "order-canceled",
+      orderNumber: "FM-PROGRESS-3",
+      customerName: "Canceled Customer",
+      customerEmail: "canceled@example.test",
+      fulfillmentMode: "SCHEDULED",
+      status: "CANCELED",
+      totalMinor: 9_000,
+      currency: "PHP",
+      paymentStatus: "REFUNDED",
+      fulfillmentStatus: "PACKING",
+      deliveryStatus: "UNASSIGNED",
+      deliveryDispatchStatus: "ACTIVE",
+      deliveryProviderStatus: "ALLOCATING",
+      committedAt: "2026-09-21T08:10:00.000Z",
+      version: 3,
+    },
+  ];
+  await adminPage.route("**/api/admin/orders?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "order-progress-list",
+        value: { items, nextCursor: null },
+      }),
+    }),
+  );
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await adminPage.setViewportSize(viewport);
+    await adminPage.goto("/admin/orders");
+
+    await expect(adminPage.getByLabel("Order progress: Committed")).toBeAttached();
+    await expect(adminPage.getByLabel("Order progress: Packing; Finding rider")).toBeAttached();
+    await expect(adminPage.getByLabel("Order progress: Canceled")).toBeAttached();
+    await expect(adminPage.getByLabel(/Order progress: Unassigned/)).toHaveCount(0);
+    expect(
+      await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
+});
+
 test("clicking an Order row opens the authoritative item preview and status selector", async ({
   adminPage,
 }) => {
@@ -50,6 +134,8 @@ test("clicking an Order row opens the authoritative item preview and status sele
     paymentStatus: "SUCCEEDED",
     fulfillmentStatus: "NOT_STARTED",
     deliveryStatus: null,
+    deliveryDispatchStatus: null,
+    deliveryProviderStatus: null,
     committedAt: "2026-09-21T08:00:00.000Z",
     version: 2,
   };

@@ -15,7 +15,7 @@ import {
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
-import { OrderStatusBadge } from "../../../components/admin/order-status-badge";
+import { OrderProgressStatus } from "../../../components/admin/order-progress-status";
 import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -309,7 +309,7 @@ export default function OrdersPage() {
                     {date(order.committedAt)}
                   </TableCell>
                   <TableCell>
-                    <OrderStatusBadge status={order.status} />
+                    <OrderProgressStatus order={order} />
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

@@ -55,6 +55,8 @@ describe("finance contracts", () => {
       paymentStatus: "SUCCEEDED",
       fulfillmentStatus: "PENDING",
       deliveryStatus: null,
+      deliveryDispatchStatus: null,
+      deliveryProviderStatus: null,
       committedAt: "2026-08-20T00:00:00.000Z",
       version: 1,
     } satisfies AdminOrderSummary);
@@ -123,6 +125,8 @@ describe("finance contracts", () => {
       paymentStatus: "SUCCEEDED",
       fulfillmentStatus: "PICKING",
       deliveryStatus: "ASSIGNED",
+      deliveryDispatchStatus: "ACTIVE",
+      deliveryProviderStatus: "PENDING_PICKUP",
       committedAt: "2026-08-20T00:00:00.000Z",
       version: 2,
       allowedActions: ["CANCEL"],

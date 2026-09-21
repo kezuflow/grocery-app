@@ -17,6 +17,8 @@ const detail: AdminOrderDetail = {
   paymentStatus: "SUCCEEDED",
   fulfillmentStatus: "NOT_STARTED",
   deliveryStatus: null,
+  deliveryDispatchStatus: null,
+  deliveryProviderStatus: null,
   committedAt: "2026-09-21T08:00:00.000Z",
   version: 3,
   allowedActions: ["CANCEL"],

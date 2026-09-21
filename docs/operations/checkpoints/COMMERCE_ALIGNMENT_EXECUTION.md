@@ -1,5 +1,35 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-ORDER-LIST-PROGRESS-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin Orders presentation. The owner rejected a Status cell that exposed only
+delivery `UNASSIGNED` or a terminal cancellation and requested the complete current Order progression,
+including commitment, packing, fulfillment readiness and delivery. Acceptance: the list derives its
+display from authoritative Order, Fulfillment and courier facts; bare `UNASSIGNED` is not treated as an
+Order status; overlapping packing and rider search/assignment remain visible together; controlling
+Order-level results override stale operational records.
+
+Implemented from clean `main` at
+`fa57b5d2caf9f14dc8fc61b2ec1466db5668c503`. The Admin Order projection now includes the latest
+courier-attempt state and normalized provider progress in addition to its existing Order,
+Fulfillment and Delivery Job states. The list composes customer-meaningful progress badges such as
+Committed, Picking, Ready to pack, Packing, Ready for pickup, Finding rider, Rider assigned, Out for
+delivery and Delivered. It deliberately shows preparation and courier progress together when they
+overlap, hides a bare `UNASSIGNED` placeholder, and collapses canceled/delivered/expired/exception
+Orders to their authoritative Order-level result. No lifecycle write, transition, authorization, schema,
+provider transaction, remote data or deployment behavior changed.
+
+Verification on the complete intended working-tree scope: contracts **3/3**, focused Web **6/6 across
+2 files**, and Core Worker/D1 Admin finance **22/22** passed. Core, Web and contracts typechecks,
+focused formatting/lint and `git diff --check` passed. A managed production-build local Core/Web browser
+test passed **1/1**, proving Committed replaces bare `UNASSIGNED`, Packing and Finding rider appear
+together, Canceled overrides stale packing/courier records, and the list stays within the page at both
+1440 px and 390 px. It used only disposable local state and a local test identity; no signed-in account,
+remote data, provider transaction, outbound message or deployment was touched. Completion level:
+**1 of 1 Admin Order-list progress slice implemented and locally accepted**. One next action: commit and
+push the verified slice to `main`; production release remains separately authorized.
+
 ## Latest owner request — ADMIN-LOCATION-FULFILLMENT-NAV-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

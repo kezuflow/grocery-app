@@ -47,6 +47,10 @@ export type AdminOrderSummary = {
   paymentStatus: string | null;
   fulfillmentStatus: string | null;
   deliveryStatus: string | null;
+  /** Latest courier-attempt state; null until delivery execution has been requested. */
+  deliveryDispatchStatus: string | null;
+  /** Latest normalized provider progress, such as ALLOCATING or IN_DELIVERY. */
+  deliveryProviderStatus: string | null;
   committedAt: string | null;
   version: number;
 };

@@ -129,6 +129,12 @@ const ORDER_SELECT = `
           WHERE opr.order_id = o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
          (SELECT f.status FROM fulfillment_record f WHERE f.order_id = o.id LIMIT 1) AS fulfillmentStatus,
          (SELECT d.status FROM delivery_job d WHERE d.order_id = o.id LIMIT 1) AS deliveryStatus,
+         (SELECT dispatch.status FROM delivery_provider_dispatch dispatch
+          JOIN delivery_job d ON d.id=dispatch.delivery_job_id
+          WHERE d.order_id=o.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS deliveryDispatchStatus,
+         (SELECT dispatch.provider_status FROM delivery_provider_dispatch dispatch
+          JOIN delivery_job d ON d.id=dispatch.delivery_job_id
+          WHERE d.order_id=o.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS deliveryProviderStatus,
          EXISTS (SELECT 1 FROM order_payment_reaction opr WHERE opr.order_id = o.id) AS hasPaymentReaction,
          (SELECT ofs.cutoff_at FROM order_fulfillment_snapshot ofs WHERE ofs.order_id = o.id LIMIT 1) AS cutoffAt
   FROM grocery_order o JOIN customer c ON c.id = o.customer_id JOIN user u ON u.id = c.auth_user_id`;
@@ -145,6 +151,8 @@ function toOrderSummary(row: {
   paymentStatus: string | null;
   fulfillmentStatus: string | null;
   deliveryStatus: string | null;
+  deliveryDispatchStatus: string | null;
+  deliveryProviderStatus: string | null;
   committedAt: number;
   version: number;
 }): AdminOrderSummary {
@@ -160,6 +168,8 @@ function toOrderSummary(row: {
     paymentStatus: row.paymentStatus,
     fulfillmentStatus: row.fulfillmentStatus,
     deliveryStatus: row.deliveryStatus,
+    deliveryDispatchStatus: row.deliveryDispatchStatus,
+    deliveryProviderStatus: row.deliveryProviderStatus,
     committedAt: new Date(row.committedAt).toISOString(),
     version: row.version,
   };
@@ -225,6 +235,8 @@ export async function listAdminOrders(
       paymentStatus: string | null;
       fulfillmentStatus: string | null;
       deliveryStatus: string | null;
+      deliveryDispatchStatus: string | null;
+      deliveryProviderStatus: string | null;
       committedAt: number;
       version: number;
     }>();
@@ -258,6 +270,8 @@ export async function getAdminOrder(
     paymentStatus: string | null;
     fulfillmentStatus: string | null;
     deliveryStatus: string | null;
+    deliveryDispatchStatus: string | null;
+    deliveryProviderStatus: string | null;
     committedAt: number;
     version: number;
     hasPaymentReaction: number;
