@@ -73,7 +73,10 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain("Zucchini");
     expect(html).toContain("Vegetables");
     expect(html).toContain("Selling options");
-    expect(html).toContain("Add categories");
+    expect(html).toContain('aria-label="Product name"');
+    expect(html).toContain('aria-label="Product categories"');
+    expect(html).not.toContain("Add categories");
+    expect(html).not.toContain("rounded-full");
     expect(html).toContain("Primary category");
     expect(html).toContain('aria-label="Product status"');
     expect(html).toContain('aria-label="Zucchini · 1 kg status"');

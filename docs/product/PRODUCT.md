@@ -172,7 +172,7 @@ On 2026-09-21 the owner moved exact-location price editing into the Product prev
 
 ## Explicit owner supplement — Global Product preview controls
 
-On 2026-09-21 the owner placed Product lifecycle, selling-option lifecycle and category membership controls directly in the Global Product preview. An authorized Global operator can set the Product and each selling option active or inactive and can assign multiple ordered categories without leaving the Product list. The first membership is the primary category used by compatibility projections; every membership participates in storefront category browsing. Core retains current Global authorization, optimistic versioning, audit, idempotency and atomic membership replacement. These controls do not appear in fulfillment-location previews.
+On 2026-09-21 the owner placed Product name, Product lifecycle, selling-option lifecycle and category membership controls directly in the Global Product preview. An authorized Global operator can rename the Product, set the Product and each selling option active or inactive and assign multiple ordered categories without leaving the Product list. The first membership is the primary category used by compatibility projections; every membership participates in storefront category browsing. Core retains current Global authorization, optimistic versioning, audit, idempotency and atomic membership replacement. These controls do not appear in fulfillment-location previews.
 
 ## Explicit owner supplement — failed delivery and refunds
 

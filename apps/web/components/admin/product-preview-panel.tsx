@@ -6,13 +6,15 @@ import {
   adminProductCategoriesBodySchema,
   adminProductSummarySchema,
   adminProductStatusBodySchema,
+  adminProductUpdateBodySchema,
   adminSkuUpdateBodySchema,
 } from "@freshmarkets/validation";
-import { ExternalLink, ImageIcon, Pencil, Plus, X } from "lucide-react";
+import { ChevronsUpDown, ExternalLink, ImageIcon, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
+import { Input } from "../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { AdminStatusPill } from "./admin-status-pill";
@@ -56,9 +58,11 @@ export function GlobalProductPreviewPanel({
   const [categoryIds, setCategoryIds] = useState(() =>
     product.categories.map((item) => item.categoryId),
   );
+  const [name, setName] = useState(product.name);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     setCategoryIds(product.categories.map((item) => item.categoryId));
+    setName(product.name);
   }, [product.categories, product.version]);
   const image = mediaUrl(product);
   const detailHref = `/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`;
@@ -70,6 +74,7 @@ export function GlobalProductPreviewPanel({
   const canManage = product.allowedActions.includes("UPDATE");
   const categoryChanged =
     categoryIds.join("\u0000") !== product.categories.map((item) => item.categoryId).join("\u0000");
+  const nameChanged = name.trim() !== product.name;
   const frozen =
     productCommand.pending ||
     productCommand.uncertain ||
@@ -77,9 +82,51 @@ export function GlobalProductPreviewPanel({
     skuCommand.uncertain ||
     categoryCommand.pending ||
     categoryCommand.uncertain;
+  const hasDraft = nameChanged || categoryChanged;
+  const commandLocked = frozen || hasDraft;
+  const selectedCategoryNames = categoryIds.map((categoryId) => {
+    const category =
+      categoryOptions.items.find((item) => item.categoryId === categoryId) ??
+      product.categories.find((item) => item.categoryId === categoryId);
+    return category?.name ?? categoryId;
+  });
+  const categorySummary =
+    selectedCategoryNames.length > 1
+      ? `${selectedCategoryNames[0]} +${selectedCategoryNames.length - 1} more`
+      : (selectedCategoryNames[0] ?? "Choose categories");
+
+  async function saveName() {
+    if (!nameChanged || frozen || categoryChanged) return;
+    const body = adminProductUpdateBodySchema.safeParse({
+      categoryId: product.categoryId,
+      slug: product.slug,
+      name,
+      description: product.description,
+      customerDetails: product.customerDetails.map((detail) => ({
+        label: detail.label,
+        value: detail.value,
+        sortOrder: detail.sortOrder,
+      })),
+      expectedVersion: product.version,
+    });
+    if (!body.success) return setNotice("Enter a Product name between 1 and 160 characters.");
+    try {
+      const result = await productCommand.submit(
+        `/api/admin/catalog/products/${encodeURIComponent(product.productId)}`,
+        body.data,
+        "PATCH",
+      );
+      if (!result) return;
+      if (!result.ok) return setNotice(result.error.message);
+      setNotice(null);
+      await onSaved?.();
+    } catch {
+      setNotice("The Product name change could not be confirmed. Retry the same save.");
+    }
+  }
 
   async function setProductStatus(status: "active" | "inactive") {
-    if (status === product.status || frozen) return;
+    if (status === product.status || commandLocked) return;
     const body = adminProductStatusBodySchema.parse({
       status,
       reason: "Changed from Global product preview",
@@ -100,7 +147,7 @@ export function GlobalProductPreviewPanel({
   }
 
   async function setVariantStatus(skuId: string, version: number, status: "active" | "inactive") {
-    if (frozen) return;
+    if (commandLocked) return;
     const body = adminSkuUpdateBodySchema.parse({ status, expectedVersion: version });
     try {
       const result = await skuCommand.submit(
@@ -174,7 +221,7 @@ export function GlobalProductPreviewPanel({
           variant="ghost"
           size="icon-sm"
           aria-label="Close product preview"
-          disabled={frozen}
+          disabled={frozen || hasDraft}
           onClick={onClose}
         >
           <X aria-hidden="true" />
@@ -194,8 +241,52 @@ export function GlobalProductPreviewPanel({
               <ImageIcon className="size-6" aria-hidden="true" />
             </span>
           )}
-          <div className="min-w-0">
-            <h3 className="truncate text-lg font-bold">{product.name}</h3>
+          <div className="min-w-0 flex-1">
+            {canManage ? (
+              <div>
+                <label
+                  htmlFor="product-preview-name"
+                  className="text-xs font-medium text-[var(--fm-text-muted)]"
+                >
+                  Product name
+                </label>
+                <Input
+                  id="product-preview-name"
+                  aria-label="Product name"
+                  className="mt-1 font-semibold"
+                  value={name}
+                  maxLength={160}
+                  disabled={frozen || categoryChanged}
+                  onChange={(event) => setName(event.target.value)}
+                />
+                {nameChanged ? (
+                  <div className="mt-2 flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={frozen}
+                      onClick={() => {
+                        setName(product.name);
+                        setNotice(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={frozen}
+                      onClick={() => void saveName()}
+                    >
+                      Save name
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <h3 className="truncate text-lg font-bold">{product.name}</h3>
+            )}
             <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
               {product.categoryName}
             </p>
@@ -213,12 +304,12 @@ export function GlobalProductPreviewPanel({
           {canManage ? (
             <Select
               value={product.status}
-              disabled={frozen}
+              disabled={commandLocked}
               onValueChange={(status) => {
                 if (status === "active" || status === "inactive") void setProductStatus(status);
               }}
             >
-              <SelectTrigger className="w-32" aria-label="Product status">
+              <SelectTrigger className="w-32" indicator="up-down" aria-label="Product status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -300,13 +391,17 @@ export function GlobalProductPreviewPanel({
                   {canManage ? (
                     <Select
                       value={sku.status}
-                      disabled={frozen}
+                      disabled={commandLocked}
                       onValueChange={(status) => {
                         if (status === "active" || status === "inactive")
                           void setVariantStatus(sku.skuId, sku.version, status);
                       }}
                     >
-                      <SelectTrigger className="w-28" aria-label={`${sku.name} status`}>
+                      <SelectTrigger
+                        className="w-28"
+                        indicator="up-down"
+                        aria-label={`${sku.name} status`}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -343,102 +438,80 @@ export function GlobalProductPreviewPanel({
           className="mt-6 border-t border-[var(--fm-border)] pt-5"
           aria-labelledby="product-preview-categories"
         >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 id="product-preview-categories" className="text-sm font-semibold">
-                Categories
-              </h3>
-              <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                The first category is primary.
-              </p>
-            </div>
-            {canManage ? (
-              <Popover>
-                <PopoverTrigger asChild>
+          <div>
+            <h3 id="product-preview-categories" className="text-sm font-semibold">
+              Categories
+            </h3>
+            <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+              Choose one or more. The first category is primary.
+            </p>
+          </div>
+          {canManage ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label="Product categories"
+                  className="mt-3 w-full justify-between px-3 font-normal"
+                  disabled={frozen || nameChanged || categoryOptions.loading}
+                >
+                  <span className="truncate">{categorySummary}</span>
+                  <ChevronsUpDown className="opacity-50" aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] min-w-72 p-2"
+              >
+                <div className="max-h-64 space-y-1 overflow-y-auto">
+                  {categoryOptions.items.map((category) => {
+                    const checked = categoryIds.includes(category.categoryId);
+                    return (
+                      <label
+                        key={category.categoryId}
+                        className="flex min-h-10 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={checked && categoryIds.length === 1}
+                          onCheckedChange={(next) =>
+                            setCategoryIds((current) =>
+                              next === true
+                                ? current.includes(category.categoryId)
+                                  ? current
+                                  : [...current, category.categoryId]
+                                : current.filter((id) => id !== category.categoryId),
+                            )
+                          }
+                        />
+                        <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                        {checked && categoryIds[0] === category.categoryId ? (
+                          <span className="text-xs text-[var(--fm-text-muted)]">Primary</span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                  {categoryOptions.error ? (
+                    <p className="p-2 text-xs text-[var(--fm-danger)]">{categoryOptions.error}</p>
+                  ) : null}
+                </div>
+                {categoryOptions.hasMore ? (
                   <Button
                     type="button"
+                    variant="ghost"
                     size="sm"
-                    variant="outline"
-                    disabled={frozen || categoryOptions.loading}
+                    className="mt-2 w-full"
+                    onClick={categoryOptions.loadMore}
                   >
-                    <Plus aria-hidden="true" /> Add categories
+                    Load more
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 p-2">
-                  <div className="max-h-64 space-y-1 overflow-y-auto">
-                    {categoryOptions.items.map((category) => {
-                      const checked = categoryIds.includes(category.categoryId);
-                      return (
-                        <label
-                          key={category.categoryId}
-                          className="flex min-h-10 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={checked && categoryIds.length === 1}
-                            onCheckedChange={(next) =>
-                              setCategoryIds((current) =>
-                                next === true
-                                  ? current.includes(category.categoryId)
-                                    ? current
-                                    : [...current, category.categoryId]
-                                  : current.filter((id) => id !== category.categoryId),
-                              )
-                            }
-                          />
-                          <span className="min-w-0 flex-1 truncate">{category.name}</span>
-                        </label>
-                      );
-                    })}
-                    {categoryOptions.error ? (
-                      <p className="p-2 text-xs text-[var(--fm-danger)]">{categoryOptions.error}</p>
-                    ) : null}
-                  </div>
-                  {categoryOptions.hasMore ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 w-full"
-                      onClick={categoryOptions.loadMore}
-                    >
-                      Load more
-                    </Button>
-                  ) : null}
-                </PopoverContent>
-              </Popover>
-            ) : null}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {categoryIds.map((categoryId, index) => {
-              const category =
-                categoryOptions.items.find((item) => item.categoryId === categoryId) ??
-                product.categories.find((item) => item.categoryId === categoryId);
-              return (
-                <span
-                  key={categoryId}
-                  className="inline-flex min-h-8 items-center gap-1 rounded-full border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] px-3 text-sm"
-                >
-                  {category?.name ?? categoryId}
-                  {index === 0 ? (
-                    <span className="text-xs text-[var(--fm-text-muted)]">Primary</span>
-                  ) : null}
-                  {canManage && categoryIds.length > 1 ? (
-                    <button
-                      type="button"
-                      className="rounded-full p-0.5"
-                      aria-label={`Remove ${category?.name ?? "category"}`}
-                      onClick={() =>
-                        setCategoryIds((current) => current.filter((id) => id !== categoryId))
-                      }
-                    >
-                      <X className="size-3" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </span>
-              );
-            })}
-          </div>
+                ) : null}
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <p className="mt-3 text-sm font-medium">{categorySummary}</p>
+          )}
           {canManage && categoryChanged ? (
             <div className="mt-3 flex justify-end gap-2">
               <Button
@@ -480,7 +553,7 @@ export function GlobalProductPreviewPanel({
       </div>
 
       <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-[var(--fm-border)] px-5 py-4">
-        {frozen ? (
+        {frozen || hasDraft ? (
           <Button type="button" variant="outline" disabled>
             <ExternalLink aria-hidden="true" /> View product
           </Button>
@@ -492,7 +565,7 @@ export function GlobalProductPreviewPanel({
             </Link>
           </Button>
         )}
-        {product.allowedActions.includes("UPDATE") && !frozen ? (
+        {product.allowedActions.includes("UPDATE") && !frozen && !hasDraft ? (
           <Button asChild>
             <Link href={editHref} prefetch={false}>
               <Pencil aria-hidden="true" />
@@ -500,7 +573,7 @@ export function GlobalProductPreviewPanel({
             </Link>
           </Button>
         ) : (
-          <Button type="button" variant="outline" disabled={frozen} onClick={onClose}>
+          <Button type="button" variant="outline" disabled={frozen || hasDraft} onClick={onClose}>
             Close
           </Button>
         )}

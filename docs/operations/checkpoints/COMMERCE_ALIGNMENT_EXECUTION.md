@@ -57,44 +57,50 @@ and actual-provider verification under separate authorization. One next action: 
 owner separately authorizes it, then execute non-destructive retained/provider acceptance without
 manufacturing outcomes.
 
-## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-1 (2026-09-21)
+## Latest owner request — GLOBAL-PRODUCT-PREVIEW-CONTROLS-2 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
 activation evidence**, Global Product administration. The owner approved controls inside the Global
-Product preview to set Product status, set each selling-option status, and assign multiple categories
-without leaving the Product list. Acceptance: authorized Global operators see and can use those
-controls; location previews remain unchanged; category replacement is versioned, atomic, audited and
-idempotent; one ordered primary category remains compatible with existing projections; assigned active
-categories participate in storefront browsing; uncertain browser writes preserve the original intent
-for retry.
+Product preview to edit the Product name, set Product status, set each selling-option status, and
+assign multiple categories without leaving the Product list. The owner clarified the reference
+presentation: the name is editable in place, Product and selling-option statuses are dropdowns with a
+visible up/down affordance, and categories use one field-like multi-select dropdown rather than pills.
+Acceptance: authorized Global operators see and can use those controls; unsaved name/category drafts
+cannot overwrite each other; location previews remain unchanged; writes keep their existing Core
+authorization, optimistic versioning, audit and idempotency behavior; uncertain browser writes preserve
+the original intent for retry.
 
-Observed baseline was `main` at `d8410b56e1524e2ef5378ff8a1bc8ea515b79890`, with unrelated Payments
-implementation and deleted legacy `.claude/skills` files already present and preserved. The completed
-slice adds migration `0101_product_category_memberships.sql`, backfills every Product's existing
+Observed baseline for this refinement was `main` at `8ceb7dda00fbd2747c63f0152cfe14fdc3e2fb06`,
+with unrelated Payments implementation and deleted legacy `.claude/skills` files already present and
+preserved. The underlying completed slice adds migration `0101_product_category_memberships.sql`, backfills every Product's existing
 category as its primary membership, and adds the guarded `setAdminProductCategories` Core/Web
 contract. Product creation and full editing keep membership invariants; Global detail returns ordered
 categories; category counts/details and storefront category rails/search use every membership while
-ordinary Product projections retain the primary category. The Global preview now renders Product and
-selling-option Active/Inactive selectors plus Shopify-style category selection/chips with explicit
-save/cancel and retained-intent retry. Core integration proves ordered replacement, exact replay,
-primary compatibility, full-edit retention and secondary-category storefront discovery.
+ordinary Product projections retain the primary category. The Global preview now renders an editable
+Product-name field, Product and selling-option Active/Inactive selectors with explicit up/down
+affordances, and one Shopify-style multi-category dropdown with explicit save/cancel and retained-intent
+retry. It removes the category pills. Name and category drafts lock other immediate commands until saved
+or cancelled so a version-changing refresh cannot silently discard another draft. Core integration
+proves ordered replacement, exact replay, primary compatibility, full-edit retention and
+secondary-category storefront discovery.
 
-Verification on the working-tree scope: contracts and Core typechecks passed; focused Core catalog
-tests passed **52/52**, including Product recovery **13/13**; Web route/component tests passed **15/15**;
-full Web passed **602/602** and full contracts passed **69/69**; migration, naming, terminology and
-architecture checks passed; Core Wrangler dry-run build passed. Full Core reached **1689/1692** with
-three unrelated pre-existing failures in `instant-commitment.integration.test.ts`, all caused by the
-in-progress Payments test proxy attempting to serialize a `LoopbackServiceStub`. Web typecheck remains
-blocked only by three pre-existing `payments-workspace.tsx` errors. Browser acceptance did not run:
-an existing workerd occupied port 3100 with a stale failing fixture, and that process locked
-`apps/web/dist`, preventing an isolated managed build on another port. No deployment or remote data
-mutation was performed. The intended slice was committed as `90543845` and pushed directly to
-`origin/main`; the pre-push remote was the observed baseline `d8410b56`.
+Verification for this refinement on the working-tree scope: the focused preview render test passed
+**1/1**, full Web passed **602/602**, Web typecheck and build passed, focused `oxlint`, formatting,
+naming, terminology and `git diff --check` passed. Managed browser acceptance passed **2/2** at 1440 px
+and 390 px for the editable name and dropdown presentation. A subsequent strengthened browser revision
+that also saves and restores the name did not reach the page because a fresh shared Admin fixture failed
+provisioning on an unrelated foreign-key constraint; a later rerun was stopped rather than extending the
+turn. The underlying slice previously passed focused Core catalog tests **52/52**, including Product
+recovery **13/13**, Web route/component tests **15/15**, full contracts **69/69**, migration and
+architecture checks, and the Core Wrangler dry-run build. No deployment or remote data mutation was
+performed. The underlying slice was committed as `90543845` and its checkpoint as `8ceb7dda`, both
+pushed directly to `origin/main`.
 
-Completion level: implementation and local Core/Web acceptance complete; **1 of 1 requested Global
-Product preview slice complete**. Actual browser rendering remains unaccepted at the browser counting
-level. One next action: after the unrelated local workerd/build lock is released, run
-`global-product-preview-controls.spec.ts` at its desktop and mobile widths.
+Completion level: implementation and focused local Web acceptance complete; **2 of 2 requested Global
+Product preview slices complete**. Browser rendering is accepted at the desktop/mobile counting level;
+the added end-to-end rename write assertion remains blocked at fixture provisioning. One next action:
+repair the shared Admin fixture's fresh-state foreign-key failure, then rerun the strengthened
+`global-product-preview-controls.spec.ts`.
 
 ## Latest owner request — PAYMENTS-SIMPLIFY-1 planning (2026-09-21)
 
