@@ -1,5 +1,26 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CORE-PRODUCTION-AVAILABILITY-CHECK-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, production availability investigation. The owner reported that Core appeared
+down and requested a check. Acceptance: probe production Core directly and through Web, distinguish
+liveness from dependency readiness and an application route, inspect the current deployment state, and
+make no production mutation while diagnosing.
+
+The read-only investigation found Core available. Direct `/health` returned HTTP 200 with `status: ok`;
+direct `/ready` returned HTTP 200 with runtime configuration, D1 and PayMongo all `ready`; and Web
+`/api/core-health` returned HTTP 200 with `status: ok`. Five repeated rounds passed **15/15** across
+those three probes, with observed response times from 540 ms to 1,769 ms. An anonymous request through
+Web to the owner-supplied Order-detail API reached Core and returned the expected controlled
+`UNAUTHENTICATED` result, establishing that the service binding and application execution path were
+also live. Cloudflare deployment history still assigns 100% of Core production traffic to version
+`7cc81601-8e35-463a-87be-a36f308bb54d`, deployed earlier at 2026-09-21 14:01 UTC; the recent timeline
+releases changed Web only. No code, deployment, configuration, remote data, provider transaction or
+outbound message was changed. Completion level: **1 of 1 current Core availability check complete**.
+The current evidence does not reproduce an outage or establish whether an earlier transient failure
+occurred; a recurrence should be correlated using its exact time, failing URL and visible error.
+
 ## Latest owner request — CUSTOMER-ORDER-TIMELINE-LAYOUT-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
