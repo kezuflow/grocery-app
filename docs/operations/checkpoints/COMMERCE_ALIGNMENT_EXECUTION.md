@@ -96,11 +96,21 @@ architecture checks, and the Core Wrangler dry-run build. No deployment or remot
 performed. The underlying slice was committed as `90543845` and its checkpoint as `8ceb7dda`, both
 pushed directly to `origin/main`.
 
+Owner-authorized production deployment completed from pushed revision `79e09f58` on 2026-09-21.
+Wrangler captured its migration backup and applied `0101_product_category_memberships.sql` to
+`freshmarkets-core-production`. Core deployed first as version
+`1434c092-7f4b-4f48-b74e-1789deb8793b`; the production Vinext bundle then deployed as Web version
+`5daaba90-2f8b-4f5c-bc7d-dfc985b4edfa` to `freshmarkets.ph`. Post-deploy probes returned HTTP 200 for
+Core `/health`, Core `/ready`, Web `/api/core-health`, and the production Admin Product-list route.
+Core readiness reported production runtime configuration, D1 and PayMongo ready. These probes establish
+deployment and dependency readiness; they do not establish an authenticated production rename or an
+actual payment/provider transaction.
+
 Completion level: implementation and focused local Web acceptance complete; **2 of 2 requested Global
-Product preview slices complete**. Browser rendering is accepted at the desktop/mobile counting level;
-the added end-to-end rename write assertion remains blocked at fixture provisioning. One next action:
-repair the shared Admin fixture's fresh-state foreign-key failure, then rerun the strengthened
-`global-product-preview-controls.spec.ts`.
+Product preview slices complete and deployed**. Browser rendering is accepted at the desktop/mobile
+counting level; the added end-to-end rename write assertion remains blocked at fixture provisioning.
+One next action: repair the shared Admin fixture's fresh-state foreign-key failure, then rerun the
+strengthened `global-product-preview-controls.spec.ts`.
 
 ## Latest owner request — PAYMENTS-SIMPLIFY-1 planning (2026-09-21)
 
