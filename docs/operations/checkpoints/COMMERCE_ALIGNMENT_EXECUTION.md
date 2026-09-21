@@ -1,5 +1,28 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-ADDRESS-EMPTY-PROMPT-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout address presentation. The owner requested removal of the “Choose a saved
+address or add a destination to continue.” row and the borders above and below it. Acceptance: when
+there is no carried unsaved destination, the Deliver to section flows directly into Saved addresses
+without the prompt or its rules; retain the current-destination card for a carried unsaved address,
+the saved-address list, Add address action and all address workflow behavior.
+
+Work started from clean synchronized `main`/`origin/main` at `21ea1571`. The empty prompt branch and
+its `border-y` presentation were removed. The carried unsaved current-destination branch is retained,
+so destinations that still need completion remain visible. No address selection, persistence,
+validation, delivery quotation or transaction behavior changed.
+
+Verification: the checkout source contract asserts the removed sentence stays absent, while the
+existing runtime coverage continues to exercise the carried unsaved destination path. The combined
+checkout source/runtime suites pass 22 tests across two files. Web typecheck, focused oxlint/oxfmt,
+diff whitespace and the vinext production build pass. No Core, contract, schema or provider behavior
+changed. No deployment, remote-data operation, provider transaction or outbound message occurred.
+`CHECKOUT-ADDRESS-EMPTY-PROMPT-1` is complete at the source/local-verification counting level. Next
+action, if separately authorized, is deploy and visually confirm Saved addresses now follows the
+Deliver to header without the removed prompt and rules.
+
 ## Latest owner request — CHECKOUT-QUOTE-STATUS-STABILITY-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

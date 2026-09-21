@@ -8,6 +8,7 @@ describe("checkout address guide layout contract", () => {
     expect(checkout).toContain("<AddressEditor");
     expect(checkout).toContain("multiStep");
     expect(checkout).toContain("Review your current destination or choose another saved address.");
+    expect(checkout).not.toContain("Choose a saved address or add a destination to continue.");
     expect(checkout).toContain("Complete delivery details");
     expect(checkout).toContain('aria-label="Address setup workspace"');
     expect(checkout).toContain("Your cart and order total remain available beside this guide.");

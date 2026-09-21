@@ -1046,11 +1046,7 @@ export function CheckoutClient({
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <p className="mt-5 border-y border-[var(--fm-border)] py-4 text-sm text-[var(--fm-text-muted)]">
-                      Choose a saved address or add a destination to continue.
-                    </p>
-                  )}
+                  ) : null}
 
                   <div className="pt-5 sm:pt-6">
                     <p className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fm-text-muted)]">
