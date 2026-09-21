@@ -1,5 +1,25 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CHECKOUT-QRPH-STAGING-SCHEMA-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, checkout payment continuation. The owner reported “Payment setup could not be confirmed”
+after choosing Continue with QR Ph. Acceptance: the current checkout can create or exactly replay its
+QR Ph Payment Intent without a Web-to-Core transport exception, while provider-confirmed payment
+remains the only Order-commit authority.
+
+Work started from clean synchronized `main`/`origin/main` at `b3cdc80f`. Read-only inspection of the
+shared staging D1 schema proved that `payment_intent.payment_method_token` is absent while current Core
+inserts and reads that column. Wrangler reports exactly one pending migration,
+`0099_checkout_payment_method.sql`, which adds that nullable column without rewriting historical
+intents. The latest reported click created no new `payment_intent`, provider attempt or provider
+reference, so the failure occurred before PayMongo submission and does not require payment-outcome
+reconciliation. No source defect or additional migration is required. Applying the existing migration
+to the remote staging database is pending explicit owner authorization because it is a remote schema
+write. No deployment, remote write, provider transaction or outbound message occurred. Next action:
+apply staging migration `0099`, verify the column and migration ledger read-only, then have the owner
+retry the same checkout payment identity.
+
 ## Latest owner request — CHECKOUT-QUOTE-REFRESH-COPY-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
