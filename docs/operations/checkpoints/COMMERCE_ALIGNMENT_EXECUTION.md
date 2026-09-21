@@ -1,5 +1,27 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CURRENT-MAIN-PRODUCTION-DEPLOY-1 (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, production release. The owner explicitly authorized committing, pushing and
+deploying the current verified work. Acceptance: the pushed source revision is deployed to the isolated
+production Core and Web Workers with the generated production Web bindings intact; Core health and
+readiness, the Web-to-Core bridge, the public homepage and the affected Admin route respond successfully.
+
+The complete source and checkpoint scope was committed and pushed to `origin/main` as
+`89d5bec88b0492e0e6516ac7a70790d3df1d7df8` before release. Core production dry-run passed. The Web
+production build passed, and the generated flattened configuration was inspected and dry-run: Worker
+`freshmarkets-web-production`, custom domain `freshmarkets.ph`, environment `production`, and service
+binding `freshmarkets-core-production#CoreEntrypoint`.
+
+Core deployed first as version `7cc81601-8e35-463a-87be-a36f308bb54d`; Web deployed second as version
+`aa2cc2eb-1c42-4150-94fb-af5c29eed479`. Post-deploy probes returned HTTP 200 for Core `/health`
+(`status: ok`, production), Core `/ready` (`status: ready`, database and PayMongo ready),
+`https://freshmarkets.ph/api/core-health`, the public homepage and `/admin/procurement`. No schema
+migration, remote data mutation, provider transaction, courier booking, refund or outbound message was
+part of this release. Completion level: **1 of 1 current-main production deployment complete**. One
+next action: continue the next separately authorized Phase 7 acceptance obligation.
+
 ## Latest owner request — ADMIN-ORDER-PREVIEW-PREFETCH-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
@@ -4151,6 +4173,7 @@ Detailed commands, tested revisions, failures subsequently resolved and evidence
 
 | IDs                                                | Result / commit                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CURRENT-MAIN-PRODUCTION-DEPLOY-1                   | Pushed revision `89d5bec8` deployed to production Core version `7cc81601-8e35-463a-87be-a36f308bb54d` and Web version `aa2cc2eb-1c42-4150-94fb-af5c29eed479`; Core health/readiness, Web bridge, homepage and Admin procurement route returned HTTP 200. |
 | ADMIN-ORDER-PREVIEW-PREFETCH-1                     | Stale Admin prefetch-policy source target corrected to the actual Order Preview full-detail link; Web 612/612 across 145 files and focused 17/17. Commit accompanying this checkpoint. |
 | CA-7.10                                            | Actual Mapbox temporary/permanent API acceptance; Cloudflare sending/DNS and owner-confirmed inbox delivery; remote retained-data copy upgraded 0055–0095 with checked counts preserved, foreign-key and 159 per-table checks passed. Whole-database quick check remains limited by provider memory. Setup evidence `ebd248a6`; receipt evidence accompanies this record. |
 | CA-7.9                                             | Locally complete in the commit accompanying this record; aggregate 1675 Core/199, 418 Web/103, 68 contracts/19, six shared tests and 26 harness tests; 37 browser cases, static/schema/type checks, builds/vinext and preservation checks. Tested base/scope above; exact commands in history.                                                                            |
