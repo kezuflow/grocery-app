@@ -11,8 +11,10 @@ provider success without an Order shows an honest finalizing state; only the imm
 Order link shows one-shot success motion and a View order action; reduced motion and animation failure
 retain a static success mark; browser state never authorizes payment or Order success.
 
-Implementation began from pushed `main` at `e68fd3b9c6469141c4dc751e396aa444f5185a32`, preserving
-the 16 owner-deleted legacy `.claude/skills` files. Core now invokes the existing idempotent
+Implementation began from pushed `main` at `e68fd3b9c6469141c4dc751e396aa444f5185a32`. The
+behavioral slice was committed and pushed as `1df14938`; the owner then explicitly authorized deletion
+of the 16 already-removed legacy `.claude/skills` files, committed and pushed as `c79ea10f`. Core now
+invokes the existing idempotent
 `COMMIT_ORDER` application during a successfully applied verified payment event. If prerequisites do
 not permit commitment, the reaction remains `PENDING` for the existing bounded scheduled owner. A new
 customer-scoped Orders query and Web no-store route project `WAITING_FOR_PAYMENT`,
@@ -39,12 +41,21 @@ migration, architecture/security/readiness gates, Core Wrangler dry-run and Web 
 reported only the two pre-existing unused-variable warnings in the unrelated address-book test. The
 first aggregate attempt ended in a Windows runner process failure before totals; an independent full
 Core run exposed one obsolete manual-reaction assertion, which was corrected to require immediate
-`SUCCEEDED`, and the following complete aggregate passed. No schema, credential, provider setting,
-production data, real payment, deployment or outbound message changed. Completion level: **1 of 1
-local checkout-payment success-completion slice implemented and verified**. One next action is an
-explicitly authorized Core/Web production deployment followed by one sandbox or live QR acceptance
-that observes webhook receipt, immediate Order commitment, finalizing only when necessary and the
-automatic success presentation.
+`SUCCEEDED`, and the following complete aggregate passed.
+
+The owner subsequently authorized production deployment. A fresh `CLOUDFLARE_ENV=production` Web
+build resolved to `freshmarkets-web-production`, the `freshmarkets.ph` custom domain and the
+`freshmarkets-core-production#CoreEntrypoint` binding. Core deployed as version
+`562a532a-d3fa-442c-8dec-21af72dca828`; Web deployed as version
+`20f4b826-9264-45e8-bcaa-23cbb4f135f7`. Production Core `/health` returned HTTP 200/`ok` and `/ready`
+returned HTTP 200/`ready`; Web `/api/core-health` returned HTTP 200/`ok`; `/checkout/payment` returned
+HTTP 200 with its payment heading. The new status route returned controlled `UNAUTHENTICATED` to an
+anonymous probe, while `payment-success.lottie` and its WASM runtime both returned HTTP 200 with the
+expected content types. No schema migration, credential change, provider setting change, production
+data mutation, real payment or outbound message was performed. Completion level: **1 of 1 checkout-
+payment success-completion slice implemented, verified, pushed and deployed**. Remaining acceptance is
+one owner-controlled sandbox or live QR payment observing the signed webhook, immediate Order
+commitment and automatic success presentation; it is not inferred from health probes.
 
 ## Latest owner request — PAYMENT-WEBHOOK-LIVE-INVESTIGATION-1 (2026-09-21)
 
