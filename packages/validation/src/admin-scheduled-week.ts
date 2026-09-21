@@ -7,7 +7,7 @@ export const scheduledWeekQuerySchema = z.object({
   cycleId: identifierSchema.optional(),
   cycleCursor: identifierSchema.optional(),
   requirementId: identifierSchema.optional(),
-  section: z.enum(["DEMAND", "ORDERS", "OFFERS"]).default("DEMAND"),
+  section: z.enum(["ORDER_SUMMARY", "DEMAND", "ORDERS", "OFFERS"]).default("DEMAND"),
   cursor: cursorSchema.optional(),
 });
 export const scheduledWeekViewSchema = z.object({
@@ -29,6 +29,30 @@ export const scheduledWeekViewSchema = z.object({
     })
     .nullable(),
   page: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("ORDER_SUMMARY"),
+      nextCursor: cursorSchema.nullable(),
+      totals: z.object({
+        paidOrderCount: integer,
+        productCount: integer,
+        sellingOptionCount: integer,
+        destinationCount: integer,
+      }),
+      items: z.array(
+        z.object({
+          skuId: identifierSchema,
+          inventoryPoolId: identifierSchema,
+          productName: z.string(),
+          variantName: z.string(),
+          unitName: z.string(),
+          baseUnit: z.enum(["GRAM", "MILLILITER", "PIECE"]),
+          paidOrderCount: integer,
+          soldUnitCount: integer,
+          totalQuantityBase: integer,
+          destinationCount: integer,
+        }),
+      ),
+    }),
     z.object({
       kind: z.literal("DEMAND"),
       nextCursor: cursorSchema.nullable(),

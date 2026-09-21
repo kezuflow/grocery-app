@@ -4,6 +4,73 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 // Pending/failure history below is a fixture seam; signed provider closure is tested in Core.
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
 for (const width of [1440, 390])
+  test(`Scheduled cycle paid Order summary at ${width}px`, async ({
+    adminPage: page,
+  }, testInfo) => {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    executeAdminE2eSql(`
+      INSERT INTO delivery_cycle(id,market_id,name,order_opens_at,delivery_date,cutoff_at,status,capacity,allocated,version)
+        VALUES ('${id}','market-metro-cebu','Summary cycle ${width}',${now - 86400000},${now + 86400000},${now - 60000},'CUTOFF_REACHED',0,0,1);
+      INSERT INTO delivery_cycle_schedule(cycle_id,timezone,procurement_at,preparation_at,pickup_at,created_at,updated_at)
+        VALUES ('${id}','Asia/Manila',${now},${now + 3600000},${now + 7200000},${now},${now});
+      INSERT INTO user(id,name,email,email_verified,created_at,updated_at)
+        VALUES ('summary-user-${id}','Summary buyer','summary-${id}@example.com',1,${now},${now});
+      INSERT INTO customer(id,auth_user_id,status,created_at,updated_at)
+        VALUES ('summary-customer-${id}','summary-user-${id}','active',${now},${now});
+      INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
+        VALUES ('summary-payment-${id}','summary-customer-${id}',100,'PHP','SUCCEEDED','mock','summary-payment-${id}',${now},${now});
+      INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at)
+        VALUES ('summary-order-${id}','summary-customer-${id}','summary-payment-${id}','${id}','SCHEDULED','COMMITTED',100,'PHP','{}',${now});
+      INSERT INTO order_item(id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot)
+        VALUES
+        ('summary-abiu-${id}','summary-order-${id}','sku-abiu-1pc','Abiu','1 piece','PIECE',6,1,6,6,'PIECE'),
+        ('summary-carrot-${id}','summary-order-${id}','sku-carrot-1kg','Carrots','1 kg','GRAM',12,1,12,12000,'GRAM'),
+        ('summary-cucumber-${id}','summary-order-${id}','sku-cucumber-1kg','Cucumber','1 kg','GRAM',30,1,30,30000,'GRAM');
+      INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,idempotency_key,created_at,updated_at)
+        VALUES ('summary-amendment-${id}','summary-order-${id}','COMMITTED','PHP',4,'summary-amendment-${id}',${now},${now});
+      INSERT INTO paid_order_amendment_line(id,amendment_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,base_quantity,unit_price_minor,line_total_minor,created_at,base_unit_code_snapshot)
+        VALUES ('summary-abiu-add-${id}','summary-amendment-${id}','sku-abiu-1pc','Abiu','1 piece','PIECE',4,4,1,4,${now},'PIECE');
+      INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,amendment_line_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,committed_at)
+        VALUES
+        ('summary-demand-abiu-${id}','summary-order-${id}','${id}','location-cebu-central','pool-abiu',6,'OPEN','EXACT_PAID_LINE','summary-abiu-${id}',NULL,'sku-abiu-1pc',6,6,'PIECE',${now}),
+        ('summary-demand-abiu-add-${id}','summary-order-${id}','${id}','location-cebu-central','pool-abiu',4,'OPEN','EXACT_PAID_LINE',NULL,'summary-abiu-add-${id}','sku-abiu-1pc',4,4,'PIECE',${now}),
+        ('summary-demand-carrot-${id}','summary-order-${id}','${id}','location-cebu-central','pool-carrot',12000,'OPEN','EXACT_PAID_LINE','summary-carrot-${id}',NULL,'sku-carrot-1kg',12,12000,'GRAM',${now}),
+        ('summary-demand-cucumber-${id}','summary-order-${id}','${id}','location-cebu-central','pool-cucumber',30000,'OPEN','EXACT_PAID_LINE','summary-cucumber-${id}',NULL,'sku-cucumber-1kg',30,30000,'GRAM',${now});
+    `);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1200 });
+    await page.goto("/admin/procurement");
+    await page.getByRole("combobox", { name: "Active admin scope" }).click();
+    await page.getByRole("option", { name: "Global", exact: true }).click();
+    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await expect(page.getByRole("heading", { name: "Order summary", exact: true })).toBeVisible();
+    await expect(page.getByText("Paid orders", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Selling options", { exact: true }).first()).toBeVisible();
+    if (width >= 768) {
+      const summary = page.getByRole("table", { name: "Paid ordered products" });
+      await expect(summary).toBeVisible();
+      await expect(summary).toContainText("Abiu");
+      await expect(summary).toContainText("10 pcs");
+      await expect(summary).toContainText("12 kg");
+      await expect(summary).toContainText("30 kg");
+    } else {
+      await expect(page.getByRole("article")).toHaveCount(3);
+      await expect(page.getByRole("article").filter({ hasText: "Abiu" })).toContainText("10 pcs");
+      await expect(page.getByRole("article").filter({ hasText: "Carrots" })).toContainText("12 kg");
+      await expect(page.getByRole("article").filter({ hasText: "Cucumber" })).toContainText(
+        "30 kg",
+      );
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-order-summary-${width}.png`),
+      fullPage: true,
+    });
+  });
+
+for (const width of [1440, 390])
   test(`Delivery week purchase to receiving at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
@@ -48,11 +115,22 @@ for (const width of [1440, 390])
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await expect(page.getByRole("heading", { name: "Order summary", exact: true })).toBeVisible();
+    if (width >= 768)
+      await expect(page.getByRole("table", { name: "Paid ordered products" })).toContainText(
+        "2.5 kg",
+      );
+    else
+      await expect(page.getByRole("article").filter({ hasText: "Red onion" })).toContainText(
+        "2.5 kg",
+      );
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(page.getByRole("article")).toHaveCount(2);
     await expect(page.getByText("All destinations: 5 sold units · 2,500 g")).toHaveCount(2);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
     const demand = page.getByRole("article").filter({ hasText: "Red onion" });
     await expect(demand).toContainText("2 sold units · 1,000 g");
@@ -77,6 +155,7 @@ for (const width of [1440, 390])
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     const secondDestination = page.getByRole("article").filter({ hasText: "Second destination" });
     await secondDestination.getByRole("button", { name: "Confirm purchase", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Second destination");
@@ -96,6 +175,7 @@ for (const width of [1440, 390])
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toHaveCount(1);
     const attempts: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/procurement/purchase", async (route) => {
@@ -213,6 +293,7 @@ for (const width of [1440, 390])
     expect(replacements[1]).toEqual(replacements[0]);
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toContainText("Accepted 1,000 g");
     await page.screenshot({
       path: testInfo.outputPath(`scheduled-week-received-${width}.png`),
@@ -282,7 +363,10 @@ for (const width of [1440, 390])
       INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at)
         VALUES ('paid2-${id}','intent2-${id}','reaction2-${id}','o2-${id}',${now});`);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
-    await page.getByRole("option", { name: `Second destination ${width}`, exact: true }).click();
+    await page
+      .getByRole("option", { name: `Second destination ${width}`, exact: true })
+      .last()
+      .click();
     await row.getByRole("button", { name: "Start receiving", exact: true }).click();
     const secondReceipts = z
       .object({

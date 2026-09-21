@@ -18,12 +18,14 @@ import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminContext } from "../admin-context-provider";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
+import { ScheduledOrderSummary } from "../../../components/admin/scheduled-order-summary";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: scheduledWeekViewSchema }),
   z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) }),
 ]);
 const sectionNames = {
+  ORDER_SUMMARY: "Order summary",
   DEMAND: "Quantities to buy",
   ORDERS: "Paid orders",
   OFFERS: "Offered products",
@@ -43,7 +45,9 @@ export default function ProcurementPage() {
   const [cycleId, setCycleId] = useState("");
   const [cycleCursor, setCycleCursor] = useState("");
   const [cycles, setCycles] = useState<ScheduledWeekView["cycles"]>([]);
-  const [section, setSection] = useState<"DEMAND" | "ORDERS" | "OFFERS">("DEMAND");
+  const [section, setSection] = useState<"ORDER_SUMMARY" | "DEMAND" | "ORDERS" | "OFFERS">(
+    "ORDER_SUMMARY",
+  );
   const [cursor, setCursor] = useState("");
   const [previous, setPrevious] = useState<string[]>([]);
   const [reload, setReload] = useState(0);
@@ -64,14 +68,14 @@ export default function ProcurementPage() {
     setCycles([]);
     setCursor("");
     setPrevious([]);
-    setSection(linked ? "ORDERS" : "DEMAND");
+    setSection(linked ? "ORDERS" : "ORDER_SUMMARY");
   }, [locationId, global, linkedCycleId, linkedRequirementId, linkedLocationId]);
   useEffect(() => {
     setView(null);
     setError(null);
     if (!locationId && !global) return;
     const controller = new AbortController();
-    const params = new URLSearchParams({ section: global ? "DEMAND" : section });
+    const params = new URLSearchParams({ section });
     if (locationId) params.set("locationId", locationId);
     if (cycleId) params.set("cycleId", cycleId);
     if (cycleCursor) params.set("cycleCursor", cycleCursor);
@@ -127,7 +131,7 @@ export default function ProcurementPage() {
         title="Delivery week"
         description={
           global
-            ? "Purchase quantities across destinations"
+            ? "Paid demand and purchase quantities across destinations"
             : `Dates, paid orders, purchases and receiving · ${label}`
         }
       />
@@ -168,6 +172,7 @@ export default function ProcurementPage() {
               onChange={(event) => {
                 setCycleId(event.target.value);
                 setRequirementId("");
+                setSection("ORDER_SUMMARY");
                 resetPage();
               }}
             >
@@ -228,7 +233,7 @@ export default function ProcurementPage() {
               ) : null}
               <nav aria-label="Delivery week sections" className="flex flex-wrap gap-2">
                 {(Object.keys(sectionNames) as Array<keyof typeof sectionNames>)
-                  .filter((kind) => !global || kind === "DEMAND")
+                  .filter((kind) => !global || ["ORDER_SUMMARY", "DEMAND"].includes(kind))
                   .map((kind) => (
                     <Button
                       key={kind}
@@ -266,7 +271,13 @@ export default function ProcurementPage() {
                     </Button>
                   </div>
                 ) : null}
-                {view.page.kind === "DEMAND" ? (
+                {view.page.kind === "ORDER_SUMMARY" ? (
+                  <ScheduledOrderSummary
+                    items={view.page.items}
+                    totals={view.page.totals}
+                    global={global}
+                  />
+                ) : view.page.kind === "DEMAND" ? (
                   <>
                     <p className="text-sm text-muted-foreground">
                       Paid quantities include paid additions and exclude accepted cancellations.

@@ -3,6 +3,8 @@ import type {
   ScheduledWeekRequest,
   ScheduledWeekView,
   ScheduledDemandItem,
+  ScheduledOrderSummaryItem,
+  ScheduledOrderSummaryTotals,
 } from "@freshmarkets/contracts";
 import {
   hasUnresolvedScheduledCommitment,
@@ -37,7 +39,7 @@ export async function getAdminScheduledWeek(
       )
     : await resolveGlobalOperationsAdministrationAccess(deps, input, "procurement.read");
   if (!permitted.ok) return permitted;
-  if (!query.locationId && query.section !== "DEMAND")
+  if (!query.locationId && !["ORDER_SUMMARY", "DEMAND"].includes(query.section))
     return fail("VALIDATION_FAILED", "Choose a location to review its Orders or offered products");
   if (query.requirementId && (!query.cycleId || query.section !== "ORDERS"))
     return fail("VALIDATION_FAILED", "Select the receiving requirement's week and Orders");
@@ -59,7 +61,20 @@ export async function getAdminScheduledWeek(
     cycles: cycles.results.slice(0, 20),
     nextCycleCursor: cycles.results.length > 20 ? (cycles.results[19]?.cycleId ?? null) : null,
     week: null,
-    page: { kind: "DEMAND", items: [], nextCursor: null },
+    page:
+      query.section === "ORDER_SUMMARY"
+        ? {
+            kind: "ORDER_SUMMARY",
+            items: [],
+            totals: {
+              paidOrderCount: 0,
+              productCount: 0,
+              sellingOptionCount: 0,
+              destinationCount: 0,
+            },
+            nextCursor: null,
+          }
+        : { kind: "DEMAND", items: [], nextCursor: null },
   };
   if (!query.cycleId) return { ok: true, value: result, requestId: input.requestId };
   const selected = await deps.db
@@ -102,7 +117,51 @@ export async function getAdminScheduledWeek(
     purchaseBlockedReason: purchasePending ? scheduledPurchasePendingMessage : null,
   };
   const now = Date.now();
-  if (query.section === "DEMAND") {
+  if (query.section === "ORDER_SUMMARY") {
+    const paidLines = `SELECT d.order_id,d.location_id,d.inventory_pool_id,d.sku_id,d.quantity_sellable,d.quantity_base_total,d.base_unit_code,
+      s.product_id,
+      COALESCE(oi.product_name_snapshot,al.product_name_snapshot) productName,
+      COALESCE(oi.variant_name_snapshot,al.variant_name_snapshot) variantName,
+      COALESCE(oi.unit_snapshot,al.unit_snapshot) unitName
+      FROM committed_demand d JOIN sku s ON s.id=d.sku_id
+      LEFT JOIN order_item oi ON oi.id=d.order_item_id
+      LEFT JOIN paid_order_amendment_line al ON al.id=d.amendment_line_id
+      WHERE d.delivery_cycle_id=? AND (? IS NULL OR d.location_id=?)
+        AND d.status='OPEN' AND d.demand_basis='EXACT_PAID_LINE'`;
+    const [rows, totals] = await Promise.all([
+      deps.db
+        .prepare(`WITH paid_lines AS (${paidLines}), grouped AS (
+          SELECT sku_id skuId,inventory_pool_id inventoryPoolId,productName,variantName,unitName,base_unit_code baseUnit,
+            COUNT(DISTINCT order_id) paidOrderCount,SUM(quantity_sellable) soldUnitCount,
+            SUM(quantity_base_total) totalQuantityBase,COUNT(DISTINCT location_id) destinationCount,
+            json_array(sku_id,inventory_pool_id,base_unit_code,productName,variantName,unitName) rowCursor
+          FROM paid_lines
+          GROUP BY sku_id,inventory_pool_id,base_unit_code,productName,variantName,unitName
+        ) SELECT * FROM grouped WHERE rowCursor>? ORDER BY rowCursor LIMIT 51`)
+        .bind(query.cycleId, query.locationId ?? null, query.locationId ?? null, query.cursor ?? "")
+        .all<ScheduledOrderSummaryItem & { rowCursor: string }>(),
+      deps.db
+        .prepare(`WITH paid_lines AS (${paidLines}) SELECT
+          COUNT(DISTINCT order_id) paidOrderCount,
+          COUNT(DISTINCT product_id) productCount,
+          COUNT(DISTINCT sku_id) sellingOptionCount,
+          COUNT(DISTINCT location_id) destinationCount
+          FROM paid_lines`)
+        .bind(query.cycleId, query.locationId ?? null, query.locationId ?? null)
+        .first<ScheduledOrderSummaryTotals>(),
+    ]);
+    result.page = {
+      kind: "ORDER_SUMMARY",
+      items: rows.results.slice(0, 50).map(({ rowCursor: _rowCursor, ...row }) => row),
+      totals: totals ?? {
+        paidOrderCount: 0,
+        productCount: 0,
+        sellingOptionCount: 0,
+        destinationCount: 0,
+      },
+      nextCursor: rows.results.length > 50 ? (rows.results[49]?.rowCursor ?? null) : null,
+    };
+  } else if (query.section === "DEMAND") {
     const manage = query.locationId
       ? await resolveOperationsAdministrationAccess(
           deps,

@@ -1,5 +1,62 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CA-5.10 Scheduled cycle Order summary (2026-09-21)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
+section **G. Scheduled cycles, purchasing and receiving**. The owner authorized a cohesive paid Order
+summary in the Delivery week workspace. Acceptance: the selected cycle opens on a location- or
+Global-scoped product summary; only exact committed paid original and paid-addition demand is counted;
+accepted cancellations reduce or remove quantities; pending/unpaid lines, physical stock and forecasts
+are excluded; immutable product/selling-option labels and incompatible historical pool/base-unit evidence
+remain distinct; exact quantities, paid Orders, products, selling options and destinations are visible on
+desktop and mobile; pagination is stable and totals describe the full filtered set.
+
+Work began from clean `main` at `77e10073fd9fa7a1884b658adcf554abd28ad0dc`, then rebased without
+source overlap onto the concurrently advanced `origin/main` at `c1659e005494fb672bed7118f273d2f200f85120`.
+The typed `ORDER_SUMMARY` request/view contract now carries grouped rows, full-set totals and an opaque
+stable cursor. Core derives the view exclusively from open `EXACT_PAID_LINE` `committed_demand`, joins
+immutable original/amendment line snapshots for labels, scopes through the existing procurement-read
+boundary, and groups by SKU, inventory pool, base unit and all displayed snapshot labels. A separate
+aggregate query keeps full counts independent of page size. Existing omitted-section callers retain
+`DEMAND`; the Admin UI explicitly opens `ORDER_SUMMARY`, returns to it on cycle selection and keeps
+requirement deep links on Paid Orders.
+
+The Delivery week page now presents the summary first for both location and Global contexts. It explains
+the paid-demand boundary, displays four aggregate counts, renders a semantic desktop table and compact
+mobile cards, formats exact gram quantities as kilograms at 1,000 g or above, and has an honest empty
+state. Quantities to buy, Paid orders and Offered products remain separate operational views; Global
+continues to expose only the two aggregate-safe views. PRODUCT, API contracts and DESIGN record the
+approved meaning and presentation without introducing another write authority or schema migration.
+
+Focused acceptance passed: validation **4/4**, Web summary component **2/2**, Core Worker/D1 **40/40
+across 2 files**, and the rebuilt local browser matrix **4/4** for the new summary plus the complete
+purchase-to-receiving journey at 1440 px and 390 px. The Worker/D1 coverage includes paid originals,
+committed paid additions, a pending-payment addition that remains absent, canceled demand, location and
+Global scope, incompatible historical evidence, permission denial, and 51-row stable pagination with
+unchanged full totals. Browser acceptance used only the explicitly disposable
+`apps/core/.wrangler/e2e-commerce-alignment-20260907` state, freshly prepared and migrated through
+`0101`; the local stack was stopped afterward.
+
+The final pre-rebase `pnpm check` passed: Core **1698/1698 across 209 files**, Web **608/608 across 142
+files**, contracts **69/69 across 20 files**, validation **4/4**, config and domain-shared **2/2 each**,
+all workspace typechecks, formatting, naming, terminology, 37 harness checks, migrations, architecture,
+readiness/security, lint, Core Wrangler dry-run and Web production build. Lint retained only the two
+pre-existing unused-variable warnings in the unrelated address-book test. Earlier browser setup attempts
+failed before application assertions because one probe used the untrusted `127.0.0.1` origin and another
+omitted the selected E2E state name; the corrected clean run above is the acceptance result. No remote
+data, deployment, provider transaction, outbound message or production setting changed.
+
+After the rebase, all workspace typechecks, the Core **40/40**, validation **4/4**, summary-component
+**2/2**, formatting, naming, terminology, 37 harness checks, migrations, architecture,
+readiness/security, lint and both builds passed again. A fresh post-rebase browser run of the Order
+summary passed **2/2** at 1440 px and 390 px. The explicitly rerun upstream Admin prefetch-policy test
+retains its already-recorded one failure: the new Orders page no longer contains a dense `Link`, but the
+older source-text assertion still requires `prefetch={false}` in that file. This unrelated baseline failure
+is owned by the Admin Order-preview slice and was preserved rather than hidden or weakened.
+Completion level: **1 of 1 CA-5.10 slice implemented and locally accepted**. One next action: return to
+the next owner-selected unresolved acceptance obligation; CA-5.10 has no remaining local implementation
+work.
+
 ## Latest owner request — GOOGLE-MAPS-LOCATION-PIN-ANIMATION-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
@@ -82,7 +139,6 @@ context integration passed **15/15**; terminology and naming checks passed; `git
 The managed local browser stack built successfully and the authenticated Promotion Codes heading
 journey passed **1/1**. No remote environment or customer data was touched. Completion level: **1 of 1
 Admin promotion-label slice complete**; no remaining work at this slice level.
-
 ## Latest owner request — CHECKOUT-PAYMENT-SUCCESS-COMPLETION-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
@@ -4098,6 +4154,7 @@ Detailed commands, tested revisions, failures subsequently resolved and evidence
 | CA-5.6                                             | Consolidated destination purchase totals: `49d75d3a`.                                                                                                                                                                                                                                                                                                                     |
 | CA-5.7                                             | Shortage-linked Order review/cancellation: `75e2105b`.                                                                                                                                                                                                                                                                                                                    |
 | CA-5.8                                             | Audited supplier-exception resolution after cancellation: `19f409a1`. Aggregate **1577 Core/194 files, 403 Web/101, 68 contracts/19**, shared/harness/migrations/static checks/both builds; 2 browser journeys; vinext 15 supported/0 issues. Original browser financial state was synthetic, so it does not close CA-5.9.                                                |
+| CA-5.10                                            | Paid Order summary for a selected Scheduled cycle; typed Core/Web projection, exact paid-demand aggregation, stable pagination and desktop/mobile acceptance. Pre-rebase aggregate **1698 Core/209 files, 608 Web/142, 69 contracts/20**; post-rebase affected tests/types/static gates/builds passed, with the separately recorded upstream Admin prefetch-policy failure retained; focused Worker/D1 40/2 and browser 4/4. Commit accompanying this checkpoint. |
 
 Older implementation anchors `b8e32b2`, `f7f17dc`, `d14de2c`, `762a18e`, `f6f8c88`, `e50ef9a`, `012b5db` and their evidence remain in history. Their absence from active instructions is not permission to rebuild them.
 

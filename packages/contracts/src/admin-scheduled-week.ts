@@ -6,7 +6,7 @@ export type ScheduledWeekRequest = AuthenticatedRequest & {
   cycleId?: string;
   cycleCursor?: string;
   requirementId?: string;
-  section?: "DEMAND" | "ORDERS" | "OFFERS";
+  section?: "ORDER_SUMMARY" | "DEMAND" | "ORDERS" | "OFFERS";
   cursor?: string;
 };
 export type ScheduledDemandItem = {
@@ -32,6 +32,24 @@ export type ScheduledDemandItem = {
   receivingStatus: string | null;
   canConfirmPurchase: boolean;
 };
+export type ScheduledOrderSummaryItem = {
+  skuId: string;
+  inventoryPoolId: string;
+  productName: string;
+  variantName: string;
+  unitName: string;
+  baseUnit: "GRAM" | "MILLILITER" | "PIECE";
+  paidOrderCount: number;
+  soldUnitCount: number;
+  totalQuantityBase: number;
+  destinationCount: number;
+};
+export type ScheduledOrderSummaryTotals = {
+  paidOrderCount: number;
+  productCount: number;
+  sellingOptionCount: number;
+  destinationCount: number;
+};
 export type ScheduledWeekView = {
   cycles: readonly { cycleId: string; name: string; status: string }[];
   nextCycleCursor: string | null;
@@ -49,6 +67,12 @@ export type ScheduledWeekView = {
     windows: readonly { name: string; startsAt: number; endsAt: number }[];
   } | null;
   page:
+    | {
+        kind: "ORDER_SUMMARY";
+        items: readonly ScheduledOrderSummaryItem[];
+        totals: ScheduledOrderSummaryTotals;
+        nextCursor: string | null;
+      }
     | { kind: "DEMAND"; items: readonly ScheduledDemandItem[]; nextCursor: string | null }
     | {
         kind: "ORDERS";
