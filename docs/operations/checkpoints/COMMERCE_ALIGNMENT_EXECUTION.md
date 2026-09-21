@@ -3,44 +3,42 @@
 ## Latest owner request — PRODUCTION-ADMIN-ACCOUNT-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
-evidence**, production operator access. The owner requested a new production administrator with an
-email/password supplied out of band from tracked source. Acceptance requires Better Auth to own the
-credential, verified-email identity, an invitation issued by a currently authorized Global staff
-principal, explicit reviewed role and Global scope, invitation acceptance through Core, and retained
-audit/idempotency evidence. No credential or complete contact address is recorded here.
+evidence**, production operator access. The owner explicitly authorized deleting the retained
+synthetic test-domain administrator account and making the already verified private production-domain
+identity the administrator. Acceptance: the private Better Auth credential remains usable; exactly one
+active Global Staff principal belongs to it with the reviewed initial-administrator capability role;
+the synthetic address, credentials, sessions and authorization disappear; required historical rows
+remain only where immutable audit references prohibit deletion; audit/idempotency and immutable
+transfer evidence are retained. No credential or complete contact address is recorded here.
 
-Read-only production D1 inspection found three auth users, one active Staff identity with Global scope,
-one immutable completed initial-administrator receipt and no pending staff invitations. Production
-requires email verification before staff invitation acceptance; the one-time initial-administrator
-path is correctly unavailable after the existing receipt/Global staff access. Creating an unverified
-account, seeding a password or directly inserting Staff grants would bypass the documented Core
-authorization boundary.
+The private identity had already been created through Better Auth's normal signup, email-forwarding
+delivery was owner-confirmed, email verification was complete and the owner had established the final
+password through the normal recovery path. Read-only production review immediately before mutation
+confirmed one verified target user with one Better Auth account and no Staff identity, and one active
+Global Staff identity tied to the immutable initial-administrator setup receipt.
 
-The owner selected a private non-role-revealing address on the production domain forwarded to an
-existing verified destination. Cloudflare Email Routing is now enabled and ready for the production
-domain; its three managed MX records resolve, one generated exact-match forwarding rule is enabled,
-and the catch-all remains disabled. The first delivery test ran seconds after onboarding and failed
-before routing with Cloudflare's `routing_unknown_address`/SMTP 550 response; no routing event was
-created. After propagation, one retry reached terminal `delivered` state on the sending side and
-matched the exact forwarding rule with no routing error; the owner confirmed destination-inbox
-receipt.
+Migration `0100_administrator_ownership_transfer.sql` added an empty immutable transfer receipt. A
+temporary production-only Core route, protected by a randomly generated 384-bit Worker secret, then
+performed the owner-authorized correction as one guarded D1 batch. It required the exact setup-linked
+source, one active Global principal, one source role/scope, an active role containing `staff.manage`,
+and the distinct verified target with an existing Better Auth account and no Staff identity. The batch
+created target Staff, moved the exact initial role and Global scope, suspended and stripped the source,
+disabled any source customer principal, revoked six reviewed sessions, removed the source's one Better
+Auth account, tombstoned its email/name, and committed audit, idempotency and immutable receipt
+evidence. The immutable initial-setup foreign keys prohibit physical deletion of the source auth/Staff
+rows; they remain non-login, suspended, grant-free historical anchors rather than an account.
 
-The production auth identity was then created through Better Auth's normal signup endpoint using an
-internally generated one-time password that was immediately discarded; the password pasted earlier
-was not used. Remote D1 read-back shows exactly one matching auth user, one credential and
-`email_verified = true`. A verification resend returned HTTP 200, and Cloudflare telemetry records
-the FreshMarkets verification message as terminal `delivered` with the private forwarding rule
-matched and no routing error. The owner completed verification and password recovery and can sign in;
-the private identity still has zero Staff rows or grants. No address or credential is stored in tracked
-source or this checkpoint.
-
-The only active Global Staff identity belongs to a verified synthetic test-domain account retained
-from staging, not the owner's destination inbox or new private production identity. It has a credential
-and one unexpired legacy session. Reading and replaying that bearer session from D1 would impersonate
-the synthetic account and bypass the Core authorization boundary, so no invitation, role, scope or
-Staff row was created. Next action requires either the owner signing in normally with that retained
-test administrator or explicitly authorizing a reviewed one-time Core remediation that grants the
-verified private identity Global administration and retires the synthetic production authority.
+Production read-back after the command found zero users at the synthetic address, zero source accounts,
+zero source sessions, one suspended grant-free source Staff anchor, one active Global target Staff,
+one retained target Better Auth account, one transfer receipt, one matching audit event and exactly one
+active Global Staff principal overall. The temporary route/application code, generated binding and
+secret declaration were removed from the final runtime; the Worker secret was deleted after the clean
+deployment. Focused verification before execution passed the one-case Worker/D1 integration suite,
+Core typecheck, production Wrangler dry-run, formatting and the migration aggregate. The initial
+migration-apply request received Cloudflare API code 7403 without changing schema; identity and pending
+migration checks passed, and the immediate retry applied 0100 successfully. `PRODUCTION-ADMIN-ACCOUNT-1`
+is complete at the production identity/access and durable-evidence counting level. Next action: the
+owner should refresh or sign in again and confirm `/admin` access through the normal browser session.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
