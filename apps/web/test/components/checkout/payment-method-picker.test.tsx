@@ -76,5 +76,11 @@ describe("PaymentMethodPicker", () => {
     expect(methods).toHaveLength(13);
     expect(methods[0]?.className).toContain("rounded-[var(--fm-radius-surface)]");
     expect(methods[0]?.getAttribute("aria-checked")).toBe("true");
+    expect(container.querySelectorAll('[data-state="checked"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-state="unchecked"]')).toHaveLength(12);
+    expect(container.textContent).not.toContain("E-wallet");
+    expect(container.textContent).not.toContain("Direct debit");
+    expect(container.textContent).not.toContain("Not active");
+    expect(container.textContent).not.toContain("Available");
   });
 });
