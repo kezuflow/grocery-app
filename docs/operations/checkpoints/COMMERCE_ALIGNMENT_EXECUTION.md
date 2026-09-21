@@ -26,9 +26,10 @@ renderer, observing an active SVG marker and changing animation frame while Goog
 stubbed; the source `.lottie` returns HTTP 200 and CSP remains free of `wasm-unsafe-eval`. The broader
 Web run passes **609/610 across 144 files**; its sole failure is the unrelated pre-existing Admin Orders
 prefetch-policy expectation against the already-landed Order-preview page. No remote provider,
-deployment or customer data was touched. Completion level: **1 of 1 location-pin animation slice
-implemented and locally accepted**. Remaining before handoff: final diff review, commit and push to
-`main`; deployment is not authorized. Next action: publish the verified revision to `origin/main`.
+deployment or customer data was touched. The verified slice was committed and pushed to `main` as
+`cd1206ac`. Completion level: **1 of 1 location-pin animation slice implemented, locally accepted and
+published**. No work remains at this slice level; deployment is not authorized. The separate Admin
+Orders prefetch-policy regression remains with its owning slice and was not changed here.
 
 ## Latest owner request — ADMIN-ORDER-PREVIEW-1 (2026-09-21)
 
