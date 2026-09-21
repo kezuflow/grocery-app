@@ -19,12 +19,16 @@ authorization boundary.
 The owner selected a private non-role-revealing address on the production domain forwarded to an
 existing verified destination. Cloudflare Email Routing is now enabled and ready for the production
 domain; its three managed MX records resolve, one generated exact-match forwarding rule is enabled,
-and the catch-all remains disabled. A harmless delivery test was accepted into Cloudflare's sending
-queue for the private address, but destination-inbox receipt has not yet been observed. No address or
-credential is stored in tracked source or this checkpoint, and no auth account, Staff invitation,
-role, scope, session or D1 row was created or changed. Next action: the owner confirms receipt of the
-forwarding test and signs in as the existing Global administrator; then issue the reviewed Global
-staff invitation and complete normal registration, email verification and invitation acceptance.
+and the catch-all remains disabled. The first delivery test ran seconds after onboarding and failed
+before routing with Cloudflare's `routing_unknown_address`/SMTP 550 response; no routing event was
+created. After propagation, one retry reached terminal `delivered` state on the sending side and
+matched the exact forwarding rule with no routing error. Destination-inbox visibility remains a human
+check because no mailbox connector is authorized in this task. No address or credential is stored in
+tracked source or this checkpoint, and no auth account, Staff invitation, role, scope, session or D1
+row was created or changed. Next action: the owner confirms receipt of the second forwarding test
+(including Gmail All Mail/Spam) and signs in as the existing Global administrator; then issue the
+reviewed Global staff invitation and complete normal registration, email verification and invitation
+acceptance.
 
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
