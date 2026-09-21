@@ -1,5 +1,26 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PRODUCTION-ADMIN-ACCOUNT-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, production operator access. The owner requested a new production administrator with an
+email/password supplied out of band from tracked source. Acceptance requires Better Auth to own the
+credential, verified-email identity, an invitation issued by a currently authorized Global staff
+principal, explicit reviewed role and Global scope, invitation acceptance through Core, and retained
+audit/idempotency evidence. No credential or complete contact address is recorded here.
+
+Read-only production D1 inspection found three auth users, one active Staff identity with Global scope,
+one immutable completed initial-administrator receipt and no pending staff invitations. The requested
+address's domain has no MX or address records, and no existing auth user uses that domain. Production
+requires email verification before staff invitation acceptance; the one-time initial-administrator
+path is correctly unavailable after the existing receipt/Global staff access. Creating an unverified
+account, seeding a password or directly inserting Staff grants would bypass the documented Core
+authorization boundary, so no account, invitation, credential, role, scope, session or database row
+was created or changed. Next action: the owner supplies a deliverable administrator inbox (or makes
+the requested domain able to receive verification mail) and signs in as the existing Global
+administrator; then issue and accept a reviewed Global staff invitation through the normal Web/Core
+workflow.
+
 ## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
