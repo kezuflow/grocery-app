@@ -45,12 +45,6 @@
     "staging": {
       "images": { "binding": "IMAGES" },
       "workers_dev": true,
-      "routes": [
-        {
-          "pattern": "freshmarkets.ph",
-          "custom_domain": true,
-        },
-      ],
       "services": [
         {
           "binding": "CORE",
@@ -72,8 +66,12 @@
     "production": {
       "images": { "binding": "IMAGES" },
       "workers_dev": true,
-      // freshmarkets.ph remains on staging until the separately controlled
-      // production traffic cutover; do not claim the Custom Domain on deploy.
+      "routes": [
+        {
+          "pattern": "freshmarkets.ph",
+          "custom_domain": true,
+        },
+      ],
       "services": [
         {
           "binding": "CORE",

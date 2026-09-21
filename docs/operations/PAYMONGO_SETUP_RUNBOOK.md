@@ -93,6 +93,17 @@ for test keys or `li` for live keys, enforces a five-minute timestamp tolerance,
 raw request body, retains every verified delivery, and deduplicates business processing by provider
 event ID. Invalid signatures create neither receipt nor inbox evidence.
 
+For Live Mode, create a separate endpoint with the same four event subscriptions after production
+Core is deployed:
+
+```text
+https://freshmarkets-core-production.ilyreggie.workers.dev/webhooks/payments/paymongo
+```
+
+Upload that endpoint's newly displayed signing secret to `freshmarkets-core-production`. Never reuse
+the test webhook secret: live notifications use the `li` signature and the production Core uses the
+`sk_live_` key.
+
 ## Acceptance
 
 Complete all cases in test mode, then repeat a controlled live smoke test:

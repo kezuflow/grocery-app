@@ -159,28 +159,33 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "production",
+        // Existing retained staff data is promoted with the database; first-
+        // installation enrollment stays disabled for this cutover.
+        "INITIAL_GLOBAL_ADMIN_EMAIL": "",
         "BETTER_AUTH_URL": "https://freshmarkets.ph",
         "TRUSTED_ORIGINS": "https://freshmarkets.ph,https://freshmarkets-web-production.ilyreggie.workers.dev",
         "PAYMENT_PROVIDER": "paymongo",
-        // Production delivery stays fail-closed until its separate provider
-        // credentials, wallet and acceptance journey are approved.
+        // The plural registry is authoritative; the legacy selector stays
+        // disabled while production Instant delivery uses Lalamove only.
         "DELIVERY_PROVIDER": "disabled",
-        "DELIVERY_PROVIDERS": "disabled",
-        "LALAMOVE_MARKET": "",
-        "LALAMOVE_LANGUAGE": "",
-        "LALAMOVE_SERVICE_TYPE": "",
+        "DELIVERY_PROVIDERS": "lalamove",
+        "LALAMOVE_MARKET": "PH",
+        "LALAMOVE_LANGUAGE": "en_PH",
+        "LALAMOVE_SERVICE_TYPE": "MOTORCYCLE",
         "ROUTE_DISTANCE_PROVIDER": "google_maps",
       },
       "secrets": {
         "required": [
           "BETTER_AUTH_SECRET",
-          "INITIAL_GLOBAL_ADMIN_EMAIL",
           "AUTH_EMAIL_FROM",
           "GOOGLE_CLIENT_ID",
           "GOOGLE_CLIENT_SECRET",
           "GOOGLE_MAPS_SERVER_KEY",
           "PAYMONGO_SECRET_KEY",
           "PAYMONGO_WEBHOOK_SECRET",
+          // Production credentials are uploaded outside source control.
+          "LALAMOVE_API_KEY",
+          "LALAMOVE_API_SECRET",
         ],
       },
       "send_email": [{ "name": "EMAIL" }],
@@ -209,8 +214,7 @@
         {
           "binding": "DB",
           "database_name": "freshmarkets-core-production",
-          // Wrangler resolves or provisions this isolated database at deploy;
-          // do not copy staging's database UUID into production.
+          "database_id": "66f3668a-35ed-42fa-bd03-bab73cbb05ee",
           "migrations_dir": "migrations",
         },
       ],

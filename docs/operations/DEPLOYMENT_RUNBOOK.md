@@ -72,22 +72,24 @@ because Wrangler 4.125.0's checked schema does not expose that option.
 
 ## Deployment and rollback
 
-The current staging Web Worker uses `https://freshmarkets.ph` as its canonical
+The production Web Worker uses `https://freshmarkets.ph` as its canonical
 public origin and keeps its `workers.dev` hostname enabled as a diagnostic
-fallback. The checked-in staging Custom Domain route is the DNS and certificate
-source of truth. Core remains behind Web's Service Binding; only Core's
-signature-verified PayMongo webhook stays public on its staging `workers.dev`
-hostname.
+fallback. The checked-in production Custom Domain route is the DNS and
+certificate source of truth. Core remains behind Web's Service Binding; only
+Core's signature-verified PayMongo webhook stays public on its production
+`workers.dev` hostname. Staging no longer claims the production hostname.
 
-The checked-in `production` environments prepare isolated
-`freshmarkets-*-production` Workers, D1, R2 and Queue resources. The production
-Web environment deliberately does not claim the `freshmarkets.ph` Custom Domain;
-traffic remains on staging until an explicit cutover. Its live PayMongo public
-key is a required Web Worker secret binding so the value is supplied outside
-Git, while Core requires the matching live secret key and the live webhook
-endpoint secret. Creating the configuration does not provision queues, migrate
-the production D1 database, register the webhook, upload secrets, deploy either
-Worker or move traffic.
+The checked-in `production` environments use isolated
+`freshmarkets-*-production` Workers, D1, R2 and Queue resources. The live
+PayMongo public key is a required Web Worker secret binding so the value is
+supplied outside Git, while Core requires the matching live secret key and live
+webhook endpoint secret. Production Lalamove uses separately uploaded live
+credentials with the `PH` market, `en_PH` language and `MOTORCYCLE` service type;
+production mode targets Lalamove's production API host. A successful deployment
+proves configuration only: complete a controlled quotation/booking/cancellation
+acceptance journey before treating provider operations as accepted. Provision,
+migrate and verify the isolated resources before deploying Web and moving the
+Custom Domain.
 
 Before changing the staging public origin, update the same release's
 `PUBLIC_APP_ORIGIN`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` values together.
@@ -96,12 +98,12 @@ Google OAuth redirect URI and allow the exact production Web origins in the
 `GOOGLE_MAPS_BROWSER_KEY` HTTP-referrer restrictions before accepting traffic. Keep the separate
 `GOOGLE_MAPS_SERVER_KEY` restricted to Core's Geocoding API and Routes API calls.
 
-1. Build Web with `CLOUDFLARE_ENV=staging`, then review the generated Worker
+1. Build Web with `CLOUDFLARE_ENV=production`, then review the generated Worker
    configuration under `apps/web/dist/server`; do not edit generated output.
    The vinext-generated file is already resolved to
-   `freshmarkets-web-staging` and intentionally has no nested environment
+   `freshmarkets-web-production` and intentionally has no nested environment
    section.
-2. Deploy Core with `pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env staging`.
+2. Deploy Core with `pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production`.
 3. Deploy Web using the generated configuration with
    `pnpm --filter @freshmarkets/web exec wrangler deploy --config dist/server/wrangler.json`.
 4. Verify Core `/health`, Core `/ready`, and Web `/api/core-health`; promote
@@ -111,3 +113,7 @@ Google OAuth redirect URI and allow the exact production Web origins in the
    good Worker version from the Cloudflare dashboard or deployment history.
    Do not roll back a schema independently of the code that reads it; use the
    migration recovery runbook first.
+
+For staging-only verification, substitute `staging` at build/deploy time; the
+resulting Web Worker is available through its `workers.dev` hostname and does
+not own `freshmarkets.ph`.

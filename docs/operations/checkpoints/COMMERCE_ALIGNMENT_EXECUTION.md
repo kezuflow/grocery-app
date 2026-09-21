@@ -1,5 +1,58 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — PRODUCTION-CUTOVER-1 (2026-09-21)
+
+Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation
+evidence**, production Cloudflare/PayMongo activation. The owner authorized deploying production with
+the current operating data/configuration and moving `freshmarkets.ph` from staging Web to production
+Web. PayMongo is live; Google Maps is ready; the owner subsequently replaced Lalamove's sandbox values
+with production credentials and authorized treating Lalamove as production. Acceptance: isolated
+production Core/Web/D1/R2/Queues are provisioned; retained staging business/media data is transferred and checked; live secrets
+are uploaded without entering Git/logs; production readiness passes; the live PayMongo endpoint and
+signing secret are configured before the Custom Domain moves; staging no longer claims the domain.
+
+Work started from synchronized `main`/`origin/main` at `4da178e5` with unrelated owner deletions under
+`.claude/skills` preserved. Wrangler 4.127.1 provisioned isolated production D1, R2 and notification/
+dead-letter queues. Two first-pass isolated D1 imports were discarded before any Worker referenced
+them: the first exposed Cloudflare's partial-batch behavior and the second conflicted with migration
+seed rows. The final database was created from the retained staging database's exact final schema and
+then loaded in foreign-key dependency order. It matches all 162 retained tables and 140,609 rows with
+zero table-count mismatches; the local source copy passed SQLite foreign-key validation. All 230 media
+objects (19,027,361 bytes) were copied from staging R2 after per-object byte-size and SHA-256 checks.
+
+Production Core secret bindings now contain the retained auth/email/Google values, an `sk_live_`
+PayMongo key, the explicit unconfigured-webhook sentinel, and the owner's refreshed production
+Lalamove key/secret.
+Production Web secret bindings contain the retained Google values and matching `pk_live_` key. No
+secret value entered tracked source or this checkpoint. `.dev.vars` remains local-only and did not
+deploy automatically; its values were explicitly uploaded as Worker secrets. Initial-admin enrollment
+is disabled. The authoritative production delivery registry enables Lalamove for `PH`, `en_PH` and
+`MOTORCYCLE`; production runtime targets Lalamove's production API host. No live provider quotation,
+booking, cancellation or wallet acceptance was executed, so deployment readiness is not provider
+transaction acceptance.
+
+Core production version `876cd608-ca52-4d5e-8ab2-0280e654430d` is deployed at
+`https://freshmarkets-core-production.ilyreggie.workers.dev`. `/health` and `/ready` return HTTP 200
+with production/database/PayMongo checks ready. The current readiness implementation only checks that
+the webhook value is non-empty, so this does **not** accept the placeholder as provider evidence. The
+live webhook must be created at
+`https://freshmarkets-core-production.ilyreggie.workers.dev/webhooks/payments/paymongo` for
+`payment.paid`, `payment.failed`, `payment.refunded` and `payment.refund.updated`; its newly displayed
+live signing secret must replace the production sentinel and receive signed acceptance before traffic
+moves. Web production is not deployed and `freshmarkets.ph` has not moved; staging remains live. The
+tracked Web production block owns the future Custom Domain and staging no longer declares it. Next
+action: owner creates the PayMongo Live Mode webhook and installs its signing secret without pasting it
+into chat; then verify signed delivery, deploy production Web and confirm the Custom Domain cutover.
+
+Verification evidence: `pnpm check` completed with 1,689 Core tests/207 files, 604 Web tests/142 files,
+69 contract tests/20 files, package and harness suites, migrations/schema checks, architecture,
+readiness, lint, typechecks and builds passing; only the two existing Web lint warnings and expected
+Wrangler environment warnings remain. After the Lalamove production correction, generated Worker
+types, repository formatting, Core typecheck, the five focused binding tests and the production Core
+dry-run passed again. The deployed Lalamove-enabled Core returned HTTP 200 from `/health` and `/ready`.
+No PayMongo webhook acceptance, live payment, Lalamove provider transaction or Web/domain cutover has
+been executed.
+
 ## Latest owner request — STAGING-PAYMONGO-BINDINGS-1 (2026-09-21)
 
 Plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation

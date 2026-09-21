@@ -23,6 +23,7 @@ test("production uses isolated resources and requires live payment bindings", ()
     {
       binding: "DB",
       database_name: "freshmarkets-core-production",
+      database_id: "66f3668a-35ed-42fa-bd03-bab73cbb05ee",
       migrations_dir: "migrations",
     },
   ]);
@@ -40,7 +41,13 @@ test("production uses isolated resources and requires live payment bindings", ()
   assert.equal(web.services[0]?.service, "freshmarkets-core-production");
   assert.equal(web.vars.ENVIRONMENT, "production");
   assert.ok(web.secrets.required.includes("PAYMONGO_PUBLIC_KEY"));
-  assert.deepEqual(web.routes ?? [], []);
+  assert.deepEqual(web.routes, [{ pattern: "freshmarkets.ph", custom_domain: true }]);
+
+  const stagingWeb = unstable_readConfig({
+    config: resolve("apps/web/wrangler.jsonc"),
+    env: "staging",
+  });
+  assert.deepEqual(stagingWeb.routes ?? [], []);
 });
 
 test("local and staging admit PayMongo bindings only through declared secrets", () => {
@@ -58,8 +65,9 @@ test("local and staging admit PayMongo bindings only through declared secrets", 
 for (const env of [undefined, "staging", "production"]) {
   test(`Core ${env ?? "local"} uses the approved delivery defaults and secret boundary`, () => {
     const config = unstable_readConfig({ config: resolve("apps/core/wrangler.jsonc"), env });
-    assert.equal(config.vars.DELIVERY_PROVIDERS, env === "staging" ? "lalamove" : "disabled");
-    assert.equal(config.vars.LALAMOVE_SERVICE_TYPE, env === "staging" ? "MOTORCYCLE" : "");
+    const lalamoveEnabled = env === "staging" || env === "production";
+    assert.equal(config.vars.DELIVERY_PROVIDERS, lalamoveEnabled ? "lalamove" : "disabled");
+    assert.equal(config.vars.LALAMOVE_SERVICE_TYPE, lalamoveEnabled ? "MOTORCYCLE" : "");
     const directory = mkdtempSync(join(tmpdir(), "freshmarkets-delivery-bindings-"));
     const file = join(directory, ".dev.vars");
     const values = {
@@ -85,17 +93,8 @@ for (const env of [undefined, "staging", "production"]) {
         true,
         config.secrets,
       );
-      for (const [key, value] of Object.entries(values)) {
-        const productionProviderSecret =
-          env === "production" && (key === "LALAMOVE_API_KEY" || key === "LALAMOVE_API_SECRET");
-        assert.equal(
-          bindings[key]?.value,
-          productionProviderSecret ? undefined : value,
-          productionProviderSecret
-            ? `${key} must remain excluded while production delivery is disabled`
-            : `${key} must reach Core`,
-        );
-      }
+      for (const [key, value] of Object.entries(values))
+        assert.equal(bindings[key]?.value, value, `${key} must reach Core`);
     } finally {
       unlinkSync(file);
       rmdirSync(directory);
