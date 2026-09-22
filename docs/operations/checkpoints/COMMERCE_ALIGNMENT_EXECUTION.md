@@ -82,6 +82,13 @@ shared-package and **633/633 Web** tests passed while Core was still running; no
 aggregate result is claimed for this follow-up. The next action is to deploy this exact two-byte-probe
 correction and retry the Production Partner Portal registration.
 
+The two-byte-probe correction was committed and pushed as `59bc71c5`, then deployed to Core
+production as version `a065e201-11b6-4564-818a-589b6e5a2ff9`. The exact observed Lalamove request
+shape—`POST`, `Content-Type: application/json`, body `{}`—now returns HTTP 200 with
+`connectionCheck: true` on the public callback. No migration or provider transaction occurred. The
+next action is the owner's immediate Production Partner Portal registration retry; a resulting signed
+provider event remains separate acceptance evidence.
+
 ## Latest owner request — ADMIN-ACTION-FEEDBACK-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
