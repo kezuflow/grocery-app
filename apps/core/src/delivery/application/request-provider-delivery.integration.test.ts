@@ -63,25 +63,32 @@ function request(merchantOrderId: string): CreateDeliveryRequest {
   };
 }
 
-async function deliveryJob(id: string): Promise<void> {
+async function deliveryJob(id: string, packed = true): Promise<void> {
   await seedTestInstantOrder(env.DB, `order-${id}`);
+  const promisedAt = Date.now() + 3_600_000;
   // Operational fixture; the Admin integration suite reaches packing through commands.
   await env.DB.batch([
-    env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_PENDING' WHERE id=?").bind(
+    env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?").bind(
+      packed ? "FULFILLMENT_READY" : "FULFILLMENT_PENDING",
       `order-${id}`,
     ),
     env.DB.prepare(
-      "INSERT INTO fulfillment_record(id,order_id,location_id,status,updated_at) VALUES (?,?,'location-cebu-central','PACKING',1)",
-    ).bind(`fulfillment-${id}`, `order-${id}`),
+      "INSERT INTO fulfillment_record(id,order_id,location_id,status,updated_at) VALUES (?,?,'location-cebu-central',?,1)",
+    ).bind(`fulfillment-${id}`, `order-${id}`, packed ? "PACKED" : "PACKING"),
+    env.DB.prepare(
+      `INSERT INTO order_fulfillment_snapshot
+        (order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,promised_at,fulfillment_mode,sourcing_modes_json,created_at)
+        VALUES (?,'location-cebu-central',NULL,'zone-cebu-city-core',NULL,NULL,?,'INSTANT','["STOCKED"]',1)`,
+    ).bind(`order-${id}`, promisedAt),
   ]);
   await env.DB.prepare(
     `INSERT INTO delivery_job
      (id, order_id, cycle_id, fulfillment_mode, location_id, zone_id, status,
-      context_resolution_status, address_snapshot_json, version, created_at, updated_at)
+      context_resolution_status, address_snapshot_json, promised_at, version, created_at, updated_at)
      VALUES (?, ?, NULL, 'INSTANT', 'location-cebu-central',
-             'zone-cebu-city-core', 'UNASSIGNED', 'RESOLVED', '{}', 1, 1, 1)`,
+             'zone-cebu-city-core', 'UNASSIGNED', 'RESOLVED', '{}', ?, 1, 1, 1)`,
   )
-    .bind(id, `order-${id}`)
+    .bind(id, `order-${id}`, promisedAt)
     .run();
 }
 
@@ -146,9 +153,9 @@ describe("requestProviderDelivery", () => {
     },
   );
 
-  it("retains premature pickup evidence without fabricating packed goods or delivery", async () => {
+  it("rejects first dispatch before packing without calling the provider", async () => {
     const id = `job-create-pickup-${crypto.randomUUID()}`;
-    await deliveryJob(id);
+    await deliveryJob(id, false);
     const input = request(`merchant-${id}`);
     const courier = provider({
       ok: true,
@@ -168,20 +175,18 @@ describe("requestProviderDelivery", () => {
         expectedDeliveryJobVersion: 1,
         request: input,
       }),
-    ).toMatchObject({ ok: false, error: { code: "DELIVERY_RECONCILIATION_REQUIRED" } });
+    ).toMatchObject({ ok: false, error: { code: "DELIVERY_DISPATCH_UNAVAILABLE" } });
+    expect(courier.create).not.toHaveBeenCalled();
     expect(
       await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?").bind(id).first(),
     ).toEqual({ status: "UNASSIGNED" });
     expect(
       await env.DB.prepare(
-        "SELECT processing_status,last_error_code FROM delivery_provider_event_inbox WHERE provider_delivery_id=?",
+        "SELECT COUNT(*) AS count FROM delivery_provider_dispatch WHERE delivery_job_id=?",
       )
-        .bind(`provider-${id}`)
+        .bind(id)
         .first(),
-    ).toEqual({
-      processing_status: "RECONCILIATION_REQUIRED",
-      last_error_code: "DELIVERY_PACKING_NOT_COMPLETE",
-    });
+    ).toEqual({ count: 0 });
   });
 
   it("rolls back provider identity when its create evidence is omitted and never resubmits the uncertain create", async () => {
@@ -241,6 +246,7 @@ describe("requestProviderDelivery", () => {
     await requestProviderDelivery(env.DB, grab, {
       requestId: "first",
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: firstRequest,
     });
     const old = await env.DB.prepare(
@@ -257,6 +263,7 @@ describe("requestProviderDelivery", () => {
     await requestProviderDelivery(env.DB, grab, {
       requestId: "second",
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: second,
     });
     const rows = await env.DB.prepare(
@@ -271,6 +278,7 @@ describe("requestProviderDelivery", () => {
     await requestProviderDelivery(env.DB, grab, {
       requestId: "third",
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: request(`merchant-third-${id}`),
     });
     expect(grab.create).toHaveBeenCalledTimes(2);
@@ -317,6 +325,7 @@ describe("requestProviderDelivery", () => {
     const command = {
       requestId: crypto.randomUUID(),
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: input,
     };
     const created = await requestProviderDelivery(env.DB, grab, command);
@@ -350,11 +359,13 @@ describe("requestProviderDelivery", () => {
     const first = await requestProviderDelivery(env.DB, grab, {
       requestId: crypto.randomUUID(),
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: input,
     });
     const second = await requestProviderDelivery(env.DB, grab, {
       requestId: crypto.randomUUID(),
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: input,
     });
 
@@ -387,6 +398,7 @@ describe("requestProviderDelivery", () => {
     await requestProviderDelivery(env.DB, grab, {
       requestId: crypto.randomUUID(),
       deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
       request: input,
     });
 

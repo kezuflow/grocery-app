@@ -1,6 +1,5 @@
 import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
 import { reviseDeliveryPromise } from "../../delivery/application/revise-delivery-promise";
-import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
 import { expireUnsubmittedBookings } from "../../delivery/application/expire-unsubmitted-bookings";
 import { manageManualDelivery } from "../../delivery/application/manage-manual-delivery";
 import { listAdminDeliveryOperations } from "./operations-reads";
@@ -220,9 +219,9 @@ async function seedScheduledDelivery(now: number, mode: "INSTANT" | "SCHEDULED" 
     ),
     env.DB.prepare(
       `INSERT INTO delivery_job
-       (id,order_id,cycle_id,fulfillment_mode,location_id,zone_id,rider_id,status,
+       (id,order_id,cycle_id,fulfillment_mode,location_id,zone_id,promised_at,rider_id,status,
         context_resolution_status,address_snapshot_json,version,created_at,updated_at)
-       VALUES (?,?,?,?,?,'zone-cebu-city-core',NULL,'UNASSIGNED',
+       VALUES (?,?,?,?,?,'zone-cebu-city-core',?,NULL,'UNASSIGNED',
                'RESOLVED',?,1,?,?)`,
     ).bind(
       jobId,
@@ -230,6 +229,7 @@ async function seedScheduledDelivery(now: number, mode: "INSTANT" | "SCHEDULED" 
       mode === "SCHEDULED" ? "cycle-next-cebu" : null,
       mode,
       LOCATION,
+      mode === "INSTANT" ? now + 3_600_000 : null,
       addressSnapshot,
       now,
       now,
@@ -322,13 +322,58 @@ async function receiveScheduledTestGoods(delivery: { orderId: string }, now: num
   ).toMatchObject({ ok: true });
 }
 
+async function preparePackedDelivery(
+  delivery: { orderId: string; jobId: string },
+  mode: "INSTANT" | "SCHEDULED",
+  now = Date.now(),
+) {
+  if (mode === "INSTANT") {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKED',version=version+1,updated_at=? WHERE order_id=?",
+      ).bind(now, delivery.orderId),
+      env.DB.prepare(
+        "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=?",
+      ).bind(delivery.orderId),
+      env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?").bind(
+        now + 3_600_000,
+        delivery.jobId,
+      ),
+    ]);
+    return;
+  }
+  const current = await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
+    .bind(delivery.orderId)
+    .first<{ status: string }>();
+  if (current?.status === "NOT_STARTED") await receiveScheduledTestGoods(delivery, now);
+  for (const action of ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const) {
+    const record = await env.DB.prepare("SELECT version FROM fulfillment_record WHERE order_id=?")
+      .bind(delivery.orderId)
+      .first<{ version: number }>();
+    if (!record) throw new Error("Missing fulfillment fixture");
+    const result = await advanceFulfillment(
+      env.DB,
+      {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        orderId: delivery.orderId,
+        action,
+        expectedVersion: record.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+      { authorize: async () => true },
+    );
+    if (!result.ok) throw new Error(result.error.message);
+  }
+}
+
 describe("external delivery request", () => {
   it("recovers an interrupted unsubmitted booking without losing audit or calling the provider twice", async () => {
     const admittedAt = Date.now() - 300001;
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(admittedAt);
-    await receiveScheduledTestGoods(delivery, admittedAt);
+    await preparePackedDelivery(delivery, "SCHEDULED", admittedAt);
     const provider = createMockDeliveryProvider();
     const create = vi.spyOn(provider, "create");
     const request = {
@@ -401,7 +446,7 @@ describe("external delivery request", () => {
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
         .bind(delivery.orderId)
         .first(),
-    ).toEqual({ status: "FULFILLMENT_PENDING" });
+    ).toEqual({ status: "FULFILLMENT_READY" });
     const job = await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
       .bind(delivery.jobId)
       .first<{ status: string; version: number }>();
@@ -445,27 +490,7 @@ describe("external delivery request", () => {
       await env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?")
         .bind(now + 3600000, delivery.jobId)
         .run();
-      if (mode === "SCHEDULED") await receiveScheduledTestGoods(delivery, now);
-      else {
-        for (const [index, action] of (
-          ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-        ).entries()) {
-          expect(
-            await advanceFulfillment(
-              env.DB,
-              {
-                headers: {},
-                requestId: crypto.randomUUID(),
-                orderId: delivery.orderId,
-                action,
-                expectedVersion: index + 1,
-                idempotencyKey: crypto.randomUUID(),
-              },
-              { authorize: async () => true },
-            ),
-          ).toMatchObject({ ok: true });
-        }
-      }
+      await preparePackedDelivery(delivery, mode, now);
       const provider = createMockDeliveryProvider(() => now);
       const create = vi.spyOn(provider, "create");
       const bookingDeps = {
@@ -628,71 +653,6 @@ describe("external delivery request", () => {
     },
   );
 
-  it("keeps automatic booking uncertain when its required audit is omitted", async () => {
-    const now = Date.now();
-    const deps = dependencies(["delivery.read", "delivery.manage"]);
-    await upsertLocationDeliveryProfile(deps, profileRequest(0));
-    const instant = await seedScheduledDelivery(now, "INSTANT");
-    for (const [index, action] of (
-      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-    ).entries()) {
-      expect(
-        (
-          await advanceFulfillment(
-            env.DB,
-            {
-              headers: {},
-              requestId: crypto.randomUUID(),
-              orderId: instant.orderId,
-              action,
-              expectedVersion: index + 1,
-              idempotencyKey: crypto.randomUUID(),
-            },
-            { authorize: async () => true },
-          )
-        ).ok,
-      ).toBe(true);
-    }
-    const provider = createMockDeliveryProvider();
-    const create = vi.spyOn(provider, "create");
-    const providers = () => new Map([["lalamove", provider]]);
-    await env.DB.exec(
-      "CREATE TRIGGER omit_booking_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.EXTERNAL_PROVIDER_REQUESTED' BEGIN SELECT RAISE(IGNORE); END",
-    );
-    try {
-      expect(
-        await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-      ).toMatchObject({ submitted: 0, deferred: 1 });
-    } finally {
-      await env.DB.exec("DROP TRIGGER omit_booking_audit");
-    }
-    expect(
-      await env.DB.prepare(
-        "SELECT status,provider_delivery_id FROM delivery_provider_dispatch WHERE delivery_job_id=?",
-      )
-        .bind(instant.jobId)
-        .first(),
-    ).toEqual({ status: "CREATING", provider_delivery_id: null });
-    expect(
-      await env.DB.prepare(
-        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
-      )
-        .bind(`auto-book:${instant.jobId}`)
-        .first(),
-    ).toEqual({ status: "PROCESSING" });
-    expect(
-      await env.DB.prepare(
-        "SELECT COUNT(*) count FROM delivery_provider_event_inbox WHERE merchant_order_id=?",
-      )
-        .bind(`fm-auto-${instant.jobId}`)
-        .first(),
-    ).toEqual({ count: 0 });
-    expect(
-      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-    ).toMatchObject({ attempted: 0 });
-    expect(create).toHaveBeenCalledOnce();
-  });
-
   it("rechecks revoked delivery permission before persisting a provider attempt", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
@@ -738,104 +698,123 @@ describe("external delivery request", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("automatically books Instant only after checked items enter packing and never books Scheduled or a replacement", async () => {
-    const now = Date.now();
-    const deps = dependencies(["delivery.read", "delivery.manage"]);
-    await upsertLocationDeliveryProfile(deps, profileRequest(0));
-    const instant = await seedScheduledDelivery(now, "INSTANT");
-    const scheduled = await seedScheduledDelivery(now);
-    const provider = createMockDeliveryProvider();
-    const create = vi.spyOn(provider, "create");
-    const providers = () => new Map([["lalamove", provider]]);
-    expect(
-      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-    ).toMatchObject({ attempted: 0 });
-    for (const delivery of [instant, scheduled]) {
-      for (const [index, action] of (
-        ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-      ).entries()) {
-        expect(
-          (
-            await advanceFulfillment(
-              env.DB,
-              {
-                headers: {},
-                requestId: crypto.randomUUID(),
-                orderId: delivery.orderId,
-                action,
-                expectedVersion: index + 1,
-                idempotencyKey: crypto.randomUUID(),
-              },
-              { authorize: async () => true },
-            )
-          ).ok,
-        ).toBe(true);
-        if (delivery === instant && action !== "START_PACKING")
-          expect(
-            await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-          ).toMatchObject({ attempted: 0 });
-      }
-    }
-    // Interrupt after the durable request exists, before the external submission claim.
-    await env.DB.exec(
-      "CREATE TRIGGER interrupt_auto_submit BEFORE UPDATE ON delivery_provider_dispatch WHEN NEW.status='CREATING' BEGIN SELECT RAISE(IGNORE); END",
-    );
-    try {
-      expect(
-        await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-      ).toMatchObject({ submitted: 0, deferred: 1 });
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "offers explicit Lalamove and ordinary Manual dispatch for a packed %s order",
+    async (mode) => {
+      const now = Date.now();
+      const deps = dependencies(["delivery.read", "delivery.manage"]);
+      await upsertLocationDeliveryProfile(deps, profileRequest(0));
+      const lalamoveDelivery = await seedScheduledDelivery(now, mode);
+      const manualDelivery = await seedScheduledDelivery(now, mode);
+      await preparePackedDelivery(lalamoveDelivery, mode, now);
+      await preparePackedDelivery(manualDelivery, mode, now);
+      const provider = createMockDeliveryProvider(() => now);
+      const create = vi.spyOn(provider, "create");
+
+      const queue = await listAdminDeliveryOperations(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+      });
+      if (!queue.ok) throw new Error(queue.error.message);
+      for (const delivery of [lalamoveDelivery, manualDelivery])
+        expect(queue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
+          courierPickup: {
+            allowedKinds: mode === "INSTANT" ? ["IMMEDIATE"] : ["IMMEDIATE", "SCHEDULED"],
+          },
+          manualActions: ["ASSIGN"],
+        });
       expect(create).not.toHaveBeenCalled();
       expect(
         await env.DB.prepare(
-          "SELECT status FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+          "SELECT COUNT(*) count FROM delivery_provider_dispatch WHERE delivery_job_id IN (?,?)",
         )
-          .bind(instant.jobId)
+          .bind(lalamoveDelivery.jobId, manualDelivery.jobId)
           .first(),
-      ).toEqual({ status: "PENDING" });
-    } finally {
-      await env.DB.exec("DROP TRIGGER interrupt_auto_submit");
-    }
-    const results = await Promise.all([
-      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+      ).toEqual({ count: 0 });
+
+      expect(
+        await requestExternalDelivery(
+          { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+          {
+            headers: {},
+            requestId: crypto.randomUUID(),
+            locationId: LOCATION,
+            jobId: lalamoveDelivery.jobId,
+            expectedVersion: 1,
+            providerCode: "lalamove",
+            pickup: { kind: "IMMEDIATE" },
+            idempotencyKey: crypto.randomUUID(),
+          },
+        ),
+      ).toMatchObject({ ok: true });
+      expect(create).toHaveBeenCalledOnce();
+
+      const manual = await manageManualDelivery(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: manualDelivery.jobId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+        action: "ASSIGN",
+        personName: "Delivery helper",
+        phoneE164: "+639171110000",
+      });
+      expect(manual).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+      expect(
+        await env.DB.prepare(
+          "SELECT method,manual_reason,json_extract(request_snapshot_json,'$.note') note FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+        )
+          .bind(manualDelivery.jobId)
+          .first(),
+      ).toEqual({ method: "MANUAL", manual_reason: "STAFF_SELECTED_MANUAL", note: null });
+    },
+  );
+
+  it("admits exactly one execution when Manual and Lalamove are selected concurrently", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now, "INSTANT");
+    await preparePackedDelivery(delivery, "INSTANT", now);
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
+    const [manual, external] = await Promise.all([
+      manageManualDelivery(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+        action: "ASSIGN",
+        personName: "Delivery helper",
+        phoneE164: "+639171110000",
+      }),
+      requestExternalDelivery(
+        { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+        {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          jobId: delivery.jobId,
+          expectedVersion: 1,
+          providerCode: "lalamove",
+          pickup: { kind: "IMMEDIATE" },
+          idempotencyKey: crypto.randomUUID(),
+        },
+      ),
     ]);
-    expect(results.some((result) => result.submitted === 1)).toBe(true);
+    expect([manual, external].filter((result) => result.ok)).toHaveLength(1);
     expect(
       await env.DB.prepare(
-        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+        "SELECT COUNT(*) count FROM delivery_provider_dispatch WHERE delivery_job_id=?",
       )
-        .bind(`auto-book:${instant.jobId}`)
-        .first(),
-    ).toEqual({ status: "SUCCEEDED" });
-    expect(
-      await env.DB.prepare(
-        "SELECT COUNT(*) count FROM audit_event WHERE action='DELIVERY.EXTERNAL_PROVIDER_REQUESTED' AND idempotency_key=?",
-      )
-        .bind(`auto-book:${instant.jobId}`)
+        .bind(delivery.jobId)
         .first(),
     ).toEqual({ count: 1 });
-    expect(create).toHaveBeenCalledOnce();
-    expect(
-      await bookAutomaticInstantDeliveries(env.DB, providers, now, scheduled.orderId),
-    ).toMatchObject({ attempted: 0 });
-    expect(
-      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
-    ).toMatchObject({ attempted: 0 });
-    expect(
-      await env.DB.prepare("SELECT status FROM delivery_job WHERE id=?")
-        .bind(instant.jobId)
-        .first(),
-    ).toEqual({ status: "UNASSIGNED" });
-    expect(
-      await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
-        .bind(instant.orderId)
-        .first(),
-    ).toEqual({ status: "PACKING" });
-    expect(create.mock.calls[0]?.[0]).toMatchObject({
-      merchantOrderId: `fm-auto-${instant.jobId}`,
-      serviceType: "MOTORCYCLE",
-      schedule: null,
-    });
+    expect(create).toHaveBeenCalledTimes(external.ok ? 1 : 0);
   });
 
   it("recovers an uncertain booking only from matching provider metadata and replays the original command", async () => {
@@ -843,7 +822,7 @@ describe("external delivery request", () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(now);
-    await receiveScheduledTestGoods(delivery, now);
+    await preparePackedDelivery(delivery, "SCHEDULED", now);
     const provider = createMockDeliveryProvider();
     provider.create = vi.fn(async () => ({
       ok: false as const,
@@ -1124,7 +1103,7 @@ describe("external delivery request", () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(now);
-    await receiveScheduledTestGoods(delivery, now);
+    await preparePackedDelivery(delivery, "SCHEDULED", now);
     const create = vi.fn<DeliveryProvider["create"]>(async (request) => ({
       ok: true,
       value: {
@@ -1210,48 +1189,6 @@ describe("external delivery request", () => {
       schedule: { pickupFrom: new Date(now + 60_000).toISOString() },
     });
     if (!result.ok) return;
-    const early = await refreshExternalDelivery(
-      { ...deps, provider, now: () => now },
-      {
-        requestId: crypto.randomUUID(),
-        headers: {},
-        locationId: LOCATION,
-        dispatchId: result.value.dispatchId,
-        expectedVersion: result.value.version,
-        idempotencyKey: crypto.randomUUID(),
-      },
-    );
-    expect(early).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
-    expect(
-      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
-        .bind(delivery.orderId)
-        .first(),
-    ).toEqual({ status: "FULFILLMENT_PENDING" });
-    expect(
-      await env.DB.prepare(
-        "SELECT last_error_code FROM delivery_provider_event_inbox WHERE dispatch_id=? AND processing_status='RECONCILIATION_REQUIRED'",
-      )
-        .bind(result.value.dispatchId)
-        .first(),
-    ).toEqual({ last_error_code: "DELIVERY_PACKING_NOT_COMPLETE" });
-    for (const [index, action] of (
-      ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
-    ).entries()) {
-      expect(
-        await advanceFulfillment(
-          env.DB,
-          {
-            requestId: crypto.randomUUID(),
-            headers: {},
-            orderId: delivery.orderId,
-            action,
-            expectedVersion: index + 2,
-            idempotencyKey: crypto.randomUUID(),
-          },
-          { authorize: async () => true },
-        ),
-      ).toMatchObject({ ok: true });
-    }
     const refreshRequest = {
       requestId: crypto.randomUUID(),
       headers: {},
@@ -1300,7 +1237,7 @@ describe("external delivery request", () => {
     ).toEqual({ count: 1 });
     expect(refreshed).toMatchObject({
       ok: true,
-      value: { providerStatus: "IN_DELIVERY", version: result.value.version + 2 },
+      value: { providerStatus: "IN_DELIVERY", version: result.value.version + 1 },
     });
     expect(
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
@@ -1440,7 +1377,7 @@ describe("Scheduled booking readiness", () => {
       const deps = dependencies(["delivery.read", "delivery.manage"]);
       await upsertLocationDeliveryProfile(deps, profileRequest(0));
       const delivery = await seedScheduledDelivery(now);
-      await receiveScheduledTestGoods(delivery, now);
+      await preparePackedDelivery(delivery, "SCHEDULED", now);
       const provider = createMockDeliveryProvider();
       const create = vi.spyOn(provider, "create");
       const key = crypto.randomUUID();
@@ -1520,7 +1457,7 @@ describe("Scheduled booking readiness", () => {
   );
 });
 
-describe("Scheduled manual delivery", () => {
+describe("staff-selected manual delivery", () => {
   function assign(jobId: string) {
     return {
       headers: {},
@@ -1530,16 +1467,17 @@ describe("Scheduled manual delivery", () => {
       expectedVersion: 1,
       idempotencyKey: crypto.randomUUID(),
       action: "ASSIGN" as const,
-      reason: "Courier unavailable",
+      note: "Staff selected a known local rider",
       personName: "Delivery helper",
       phoneE164: "+639171110000",
     };
   }
 
-  it("allows one manual fallback after confirmed courier cancellation before handover", async () => {
+  it("allows one manual replacement after confirmed courier cancellation before handover", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedActiveDispatch(now);
+    await preparePackedDelivery(delivery, "SCHEDULED", now);
     const provider = createMockDeliveryProvider(() => now);
     expect(await manageManualDelivery(deps, assign(delivery.jobId))).toMatchObject({ ok: false });
     const canceled = await cancelExternalDelivery(
@@ -1594,26 +1532,16 @@ describe("Scheduled manual delivery", () => {
       await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
         .bind(delivery.orderId)
         .first(),
-    ).toEqual({ status: "COMMITTED" });
+    ).toEqual({ status: "FULFILLMENT_READY" });
   });
 
-  it("rejects Instant, unresolved courier work, invalid contact, and missing capability without a receipt", async () => {
+  it("rejects unpacked work, unresolved courier work, invalid contact, and missing capability without a receipt", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const instant = await seedScheduledDelivery(Date.now(), "INSTANT");
     expect(await manageManualDelivery(deps, assign(instant.jobId))).toMatchObject({
       ok: false,
       error: { code: "ILLEGAL_TRANSITION" },
     });
-    for (const action of ["HAND_OVER", "COMPLETE", "FAIL"] as const) {
-      expect(
-        await manageManualDelivery(deps, {
-          ...assign(instant.jobId),
-          action,
-          dispatchId: "unused",
-          actualCostMinor: null,
-        }),
-      ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
-    }
     const external = await seedActiveDispatch(Date.now());
     expect(await manageManualDelivery(deps, assign(external.jobId))).toMatchObject({
       ok: false,
@@ -1629,6 +1557,7 @@ describe("Scheduled manual delivery", () => {
       error: { code: "ILLEGAL_TRANSITION" },
     });
     const delivery = await seedScheduledDelivery(Date.now());
+    await preparePackedDelivery(delivery, "SCHEDULED");
     const request = assign(delivery.jobId);
     expect(await manageManualDelivery(deps, { ...request, phoneE164: "123" })).toMatchObject({
       ok: false,
@@ -1650,6 +1579,7 @@ describe("Scheduled manual delivery", () => {
   it("saves one assignment under concurrent replay, enforces custody, and returns frozen receipts after completion", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedScheduledDelivery(Date.now());
+    await preparePackedDelivery(delivery, "SCHEDULED");
     await env.DB.prepare(
       "INSERT INTO user(id,name,email,email_verified,created_at,updated_at) SELECT c.auth_user_id,'Synthetic customer',c.id || '@example.com',1,1,1 FROM customer c JOIN grocery_order o ON o.customer_id=c.id WHERE o.id=?",
     )
@@ -1672,18 +1602,6 @@ describe("Scheduled manual delivery", () => {
     expect(
       await manageManualDelivery(deps, { ...base, action: "COMPLETE", actualCostMinor: null }),
     ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
-    expect(await manageManualDelivery(deps, { ...base, action: "HAND_OVER" })).toMatchObject({
-      ok: false,
-      error: { code: "ILLEGAL_TRANSITION" },
-    });
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE fulfillment_record SET status='PACKED',version=version+1 WHERE order_id=?",
-      ).bind(delivery.orderId),
-      env.DB.prepare(
-        "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=?",
-      ).bind(delivery.orderId),
-    ]);
     const queue = await listAdminDeliveryOperations(deps, {
       headers: {},
       requestId: crypto.randomUUID(),
@@ -1696,20 +1614,6 @@ describe("Scheduled manual delivery", () => {
       manualDelivery: { personName: "Delivery helper" },
       externalDispatch: null,
     });
-    expect(
-      await advanceFulfillment(
-        env.DB,
-        {
-          headers: {},
-          requestId: crypto.randomUUID(),
-          orderId: delivery.orderId,
-          action: "HAND_OFF",
-          expectedVersion: 2,
-          idempotencyKey: crypto.randomUUID(),
-        },
-        { authorize: async () => true },
-      ),
-    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
     await env.DB.exec(
       "CREATE TRIGGER omit_manual_notice BEFORE INSERT ON notification_outbox WHEN NEW.event_type='OUT_FOR_DELIVERY' BEGIN SELECT RAISE(IGNORE); END",
     );
@@ -1781,6 +1685,7 @@ describe("Scheduled manual delivery", () => {
   it("rolls back every assignment effect when its audit is omitted, and revalidates current permission", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedScheduledDelivery(Date.now());
+    await preparePackedDelivery(delivery, "SCHEDULED");
     const request = assign(delivery.jobId);
     await env.DB.exec(
       "CREATE TRIGGER omit_manual_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.MANUAL_ASSIGN' BEGIN SELECT RAISE(IGNORE); END",
@@ -1826,19 +1731,11 @@ describe("Scheduled manual delivery", () => {
     async (afterHandover) => {
       const deps = dependencies(["delivery.read", "delivery.manage"]);
       const delivery = await seedScheduledDelivery(Date.now());
+      await preparePackedDelivery(delivery, "SCHEDULED");
       const request = assign(delivery.jobId);
       const assigned = await manageManualDelivery(deps, request);
       if (!assigned.ok) throw new Error("Assignment failed");
       if (afterHandover) {
-        // Seed the existing packing boundary; exercise actual handover and failure commands.
-        await env.DB.batch([
-          env.DB.prepare(
-            "UPDATE fulfillment_record SET status='PACKED',version=version+1 WHERE order_id=?",
-          ).bind(delivery.orderId),
-          env.DB.prepare(
-            "UPDATE grocery_order SET status='FULFILLMENT_READY',version=version+1 WHERE id=?",
-          ).bind(delivery.orderId),
-        ]);
         expect(
           await manageManualDelivery(deps, {
             ...request,
@@ -1904,7 +1801,7 @@ describe("Scheduled manual delivery", () => {
         await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
           .bind(delivery.orderId)
           .first(),
-      ).toEqual({ status: afterHandover ? "OUT_FOR_DELIVERY" : "COMMITTED" });
+      ).toEqual({ status: afterHandover ? "OUT_FOR_DELIVERY" : "FULFILLMENT_READY" });
       expect(
         await env.DB.prepare(
           "SELECT customer_delivery_charge_minor,courier_variance_minor,delivery_currency FROM delivery_provider_dispatch WHERE id=?",
@@ -1922,6 +1819,7 @@ describe("Scheduled manual delivery", () => {
   it("admits only one of two different assignments", async () => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedScheduledDelivery(Date.now());
+    await preparePackedDelivery(delivery, "SCHEDULED");
     const results = await Promise.all([
       manageManualDelivery(deps, assign(delivery.jobId)),
       manageManualDelivery(deps, assign(delivery.jobId)),
@@ -1944,6 +1842,7 @@ describe("Scheduled manual delivery", () => {
   ] as const)("rolls back when the required %s assignment effect is omitted", async (table) => {
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     const delivery = await seedScheduledDelivery(Date.now());
+    await preparePackedDelivery(delivery, "SCHEDULED");
     const request = assign(delivery.jobId);
     const operation = table === "delivery_provider_dispatch" ? "INSERT" : "UPDATE";
     await env.DB.exec(
@@ -1987,26 +1886,7 @@ describe("customer-agreed delivery times", () => {
       await env.DB.prepare("UPDATE delivery_job SET promised_at=? WHERE id=?")
         .bind(now + 3600000, delivery.jobId)
         .run();
-      if (mode === "SCHEDULED") await receiveScheduledTestGoods(delivery, now);
-      else
-        for (const [index, action] of (
-          ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-        ).entries()) {
-          expect(
-            await advanceFulfillment(
-              env.DB,
-              {
-                headers: {},
-                requestId: crypto.randomUUID(),
-                orderId: delivery.orderId,
-                action,
-                expectedVersion: index + 1,
-                idempotencyKey: crypto.randomUUID(),
-              },
-              { authorize: async () => true },
-            ),
-          ).toMatchObject({ ok: true });
-        }
+      await preparePackedDelivery(delivery, mode, now);
       const provider = createMockDeliveryProvider(() => now);
       const bookingDeps = { ...deps, provider, configuredServiceType: "MOTORCYCLE" };
       const booking = {
@@ -2328,7 +2208,7 @@ describe("inspected physical-return recovery", () => {
             action: "ASSIGN",
             personName: "Delivery helper",
             phoneE164: "+639171110000",
-            reason: "Customer agreed to manual delivery",
+            note: "Customer agreed to manual delivery",
           });
           if (!assigned.ok) throw new Error(assigned.error.message);
           const handover = await manageManualDelivery(deps, {
@@ -2484,7 +2364,7 @@ describe("inspected physical-return recovery", () => {
       expect(afterQueue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
         canInspectReturnedGoods: false,
         canRevisePromise: true,
-        manualActions: mode === "SCHEDULED" ? ["ASSIGN"] : [],
+        manualActions: ["ASSIGN"],
       });
       expect(
         await env.DB.prepare(

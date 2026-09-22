@@ -20,7 +20,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({
     ...common,
     action: z.literal("ASSIGN"),
-    reason,
+    note: z.string().trim().min(1).max(1000).optional(),
     personName: z.string().trim().min(1).max(120),
     phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
   }),

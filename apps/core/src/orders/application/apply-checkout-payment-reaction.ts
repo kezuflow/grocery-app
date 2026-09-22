@@ -36,8 +36,9 @@ export type OrderCommittedOutcome = {
 export async function applyCheckoutPaymentReaction(
   database: D1Database,
   input: ApplyCheckoutPaymentReactionInput,
+  dependencies: { now?: () => number } = {},
 ): Promise<OrderCommittedOutcome> {
-  const now = Date.now();
+  const now = dependencies.now?.() ?? Date.now();
 
   const existing = await database
     .prepare(
@@ -60,12 +61,12 @@ export async function applyCheckoutPaymentReaction(
   const repository = createCheckoutRepository(database);
   const quote = await repository.findQuoteById(input.checkoutAttemptId);
   if (!quote || (quote.status !== "ACTIVE" && quote.status !== "EXPIRED"))
-    return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
+    return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE", now);
   // Expiry prevents starting payment, not applying a payment already accepted
   // against this Quote. Physical entitlement and cutoff still guard commitment.
   const payment = await database
     .prepare(
-      `SELECT version FROM payment_intent
+      `SELECT version,created_at FROM payment_intent
        WHERE id=? AND subject_type='checkout_quote' AND subject_id=? AND customer_id=?
          AND status='SUCCEEDED' AND amount_minor=? AND currency=? AND created_at<?`,
     )
@@ -77,8 +78,8 @@ export async function applyCheckoutPaymentReaction(
       quote.currency,
       quote.expiresAt,
     )
-    .first<{ version: number }>();
-  if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE");
+    .first<{ version: number; created_at: number }>();
+  if (!payment) return recordException(database, input, "QUOTE_EXPIRED", "QUOTE_UNUSABLE", now);
   const instant = quote.fulfillmentMode === "INSTANT";
 
   const promotionClaims = await database
@@ -116,7 +117,7 @@ export async function applyCheckoutPaymentReaction(
     ) ||
     promotionClaims.results.length !== quote.promotionApplications.length
   )
-    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
+    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE", now);
   for (const claim of promotionClaims.results) {
     const application = quote.promotionApplications.find(
       (item) => item.component === claim.price_component && item.promotionId === claim.promotion_id,
@@ -142,7 +143,7 @@ export async function applyCheckoutPaymentReaction(
           })
         : application.kind !== undefined)
     )
-      return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
+      return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE", now);
   }
 
   interface CycleSnapshot {
@@ -156,13 +157,13 @@ export async function applyCheckoutPaymentReaction(
   }
   const routingSnapshot = quote.cycleSnapshot as CycleSnapshot | null;
   if (!instant) {
-    if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= now)
-      return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+    if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= payment.created_at)
+      return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
   } else if (!routingSnapshot)
-    return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+    return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
   const cycleSnapshot = routingSnapshot;
   if ([...saleClaims.values()].some((sale) => sale && sale.locationId !== cycleSnapshot.locationId))
-    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE");
+    return recordException(database, input, "PROMOTION_CHANGED", "QUOTE_UNUSABLE", now);
 
   // Per-pool requested base units. Supply behavior comes only from the
   // snapshotted global fulfillment mode.
@@ -184,7 +185,7 @@ export async function applyCheckoutPaymentReaction(
       .bind(line.skuId)
       .first<{ pool_id: string }>();
     if (!skuPool)
-      return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE");
+      return recordException(database, input, "SOURCING_MODE_UNAVAILABLE", "QUOTE_UNUSABLE", now);
     committedLines.push({ orderItemId: crypto.randomUUID(), poolId: skuPool.pool_id, line });
     const plan =
       pools.get(skuPool.pool_id) ??
@@ -236,6 +237,7 @@ export async function applyCheckoutPaymentReaction(
       SELECT 1 FROM payment_intent p JOIN payment_reaction r ON r.payment_intent_id=p.id
       WHERE p.id=? AND p.version=? AND p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=?
       AND p.customer_id=? AND p.amount_minor=? AND p.currency=? AND p.status='SUCCEEDED' AND p.created_at<?
+      AND (?=1 OR p.created_at<?)
       AND r.id=? AND r.status='PENDING' AND r.reaction_type='COMMIT_ORDER' AND r.subject_type=p.subject_type AND r.subject_id=p.subject_id
       AND NOT EXISTS (SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=p.id AND (refund.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED') OR refund.next_retry_at IS NOT NULL)))`)
       .bind(
@@ -246,6 +248,8 @@ export async function applyCheckoutPaymentReaction(
         quote.totalMinor,
         quote.currency,
         quote.expiresAt,
+        instant ? 1 : 0,
+        Date.parse(cycleSnapshot.cutoffAt),
         input.reactionId,
       ),
     database
@@ -665,7 +669,8 @@ export async function applyCheckoutPaymentReaction(
   );
   if (!instant && cycleSnapshot.deliveryWindow !== undefined) {
     const window = scheduledWindowSnapshotSchema.safeParse(cycleSnapshot.deliveryWindow);
-    if (!window.success) return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE");
+    if (!window.success)
+      return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
     statements.push(
       database
         .prepare(
@@ -810,7 +815,8 @@ async function recordException(
     | "SOURCING_MODE_UNAVAILABLE"
     | "PROMOTION_CHANGED",
   reason: OrderCommittedOutcome["reason"],
+  now: number,
 ): Promise<OrderCommittedOutcome> {
-  await recordFinanceExceptionRow(database, input, kind, reason, Date.now());
+  await recordFinanceExceptionRow(database, input, kind, reason, now);
   return { applied: false, reason };
 }

@@ -27,7 +27,7 @@ export function ManualDeliveryControls({
   const [action, setAction] = useState<ManualDeliveryAction | null>(null);
   const [personName, setName] = useState("");
   const [phoneE164, setPhone] = useState("");
-  const [reason, setReason] = useState("");
+  const [noteOrReason, setNoteOrReason] = useState("");
   const [cost, setCost] = useState("");
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
@@ -55,10 +55,14 @@ export function ManualDeliveryControls({
         action,
         expectedVersion: action === "ASSIGN" ? item.version : manual?.version,
         ...(action === "ASSIGN"
-          ? { personName, phoneE164, reason }
+          ? {
+              personName,
+              phoneE164,
+              ...(noteOrReason.trim() ? { note: noteOrReason.trim() } : {}),
+            }
           : { dispatchId: manual?.dispatchId }),
         ...(action === "COMPLETE" || action === "FAIL" ? { actualCostMinor } : {}),
-        ...(action === "FAIL" ? { reason } : {}),
+        ...(action === "FAIL" ? { reason: noteOrReason } : {}),
       }),
     };
     setSaved(request);
@@ -94,7 +98,7 @@ export function ManualDeliveryControls({
           <p>
             Manual · {manual.personName} · {manual.phoneE164}
           </p>
-          <p>{manual.reason}</p>
+          {manual.note ? <p>{manual.note}</p> : null}
           <p>
             {manual.status}
             {manual.returnInspectedAt !== null
@@ -123,7 +127,7 @@ export function ManualDeliveryControls({
               onClick={() => {
                 setAction(next);
                 setMessage(null);
-                setReason("");
+                setNoteOrReason("");
                 setCost("");
               }}
             >
@@ -167,12 +171,12 @@ export function ManualDeliveryControls({
             ) : null}
             {action === "ASSIGN" || action === "FAIL" ? (
               <label className="block">
-                {action === "ASSIGN" ? "Reason for manual delivery" : "What went wrong"}
+                {action === "ASSIGN" ? "Operational note (optional)" : "What went wrong"}
                 <Input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  value={noteOrReason}
+                  onChange={(e) => setNoteOrReason(e.target.value)}
                   maxLength={1000}
-                  required
+                  required={action === "FAIL"}
                 />
               </label>
             ) : null}

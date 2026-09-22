@@ -12,6 +12,7 @@ import { auditEventStatement } from "../../audit/application/append-audit-event"
 import { deliveryNotificationStatements } from "../../notifications/application/delivery-notifications";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { manualDeliveryActions } from "../domain/manual-delivery";
+import { deliveryRetryReadySql } from "./delivery-retry-readiness";
 
 const identity = z.string().trim().min(1).max(200);
 const reason = z.string().trim().min(1).max(1000);
@@ -26,7 +27,7 @@ const commandSchema = z.discriminatedUnion("action", [
   z.object({
     ...common,
     action: z.literal("ASSIGN"),
-    reason,
+    note: z.string().trim().min(1).max(1000).optional(),
     personName: z.string().trim().min(1).max(120),
     phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
   }),
@@ -86,10 +87,16 @@ export async function manageManualDelivery(
     attempt.id AS dispatch_id,attempt.method,attempt.status AS attempt_status,attempt.version AS attempt_version,
     EXISTS (SELECT 1 FROM delivery_promise_revision revision WHERE revision.dispatch_id=attempt.id AND revision.return_inspected_at IS NOT NULL) AS returned_goods_inspected,
     attempt.handed_over_at,COALESCE(attempt.attempt_sequence,0) AS attempt_sequence,
+    EXISTS (SELECT 1 FROM delivery_job eligible_job WHERE eligible_job.id=job.id AND ${deliveryRetryReadySql.replaceAll("job.", "eligible_job.")}) AS retry_ready,
+    CASE WHEN job.fulfillment_mode='INSTANT' THEN job.promised_at ELSE
+      COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
+    END AS delivery_deadline,
     EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch d ON d.id=c.dispatch_id
       WHERE d.delivery_job_id=job.id AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel
     FROM delivery_job job JOIN grocery_order grocery ON grocery.id=job.order_id
     JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
+    JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=job.order_id
+    LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=job.order_id
     LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
     WHERE job.id=? AND job.location_id=? AND job.batch_id IS NULL AND job.rider_id IS NULL`)
     .bind(command.jobId, command.locationId)
@@ -110,6 +117,8 @@ export async function manageManualDelivery(
       attempt_version: number | null;
       handed_over_at: number | null;
       attempt_sequence: number;
+      retry_ready: number;
+      delivery_deadline: number | null;
       pending_cancel: number;
       returned_goods_inspected: number;
     }>();
@@ -142,6 +151,7 @@ export async function manageManualDelivery(
   }
   const prior = await replay();
   if (prior) return prior;
+  const now = Date.now();
   const actions = manualDeliveryActions({
     mode: row.fulfillment_mode,
     returnedGoodsInspected: Boolean(row.returned_goods_inspected),
@@ -149,6 +159,9 @@ export async function manageManualDelivery(
     orderStatus: row.order_status,
     fulfillmentStatus: row.fulfillment_status,
     pendingCancellation: row.pending_cancel !== 0,
+    retryReady: Boolean(row.retry_ready),
+    deliveryDeadline: row.delivery_deadline,
+    now,
     attempt:
       row.dispatch_id && row.method && row.attempt_status
         ? { method: row.method, status: row.attempt_status, handedOverAt: row.handed_over_at }
@@ -164,7 +177,6 @@ export async function manageManualDelivery(
     (command.action !== "ASSIGN" && command.dispatchId !== row.dispatch_id)
   )
     return fail("STALE_VERSION", "Delivery changed; refresh before retrying");
-  const now = Date.now();
   const dispatchId =
     command.action === "ASSIGN" ? `manual:${crypto.randomUUID()}` : command.dispatchId;
   const result: ManualDeliveryResult = {
@@ -215,25 +227,32 @@ export async function manageManualDelivery(
     guard(),
     db
       .prepare(`INSERT INTO commitment_abort(id) SELECT -38 WHERE
-      NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=? AND fulfillment_mode='SCHEDULED')
-      OR NOT EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=? AND location_id=? AND status=? AND version=?)
+      (?='ASSIGN' AND NOT (
+        EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status='FULFILLMENT_READY' AND version=? AND fulfillment_mode IN ('INSTANT','SCHEDULED'))
+        AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=? AND location_id=? AND status='PACKED' AND version=?)
+        AND EXISTS (SELECT 1 FROM delivery_job current_job JOIN order_fulfillment_snapshot current_snapshot ON current_snapshot.order_id=current_job.order_id
+        LEFT JOIN order_delivery_window_snapshot current_window ON current_window.order_id=current_job.order_id
+        WHERE current_job.id=? AND (CASE WHEN current_job.fulfillment_mode='INSTANT' THEN current_job.promised_at ELSE
+          COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=current_job.id ORDER BY revision.job_version DESC LIMIT 1),current_window.ends_at,current_snapshot.delivery_date) END)>?)
+      ))
       OR COALESCE((SELECT MAX(attempt_sequence) FROM delivery_provider_dispatch WHERE delivery_job_id=?),0)<>?
       OR EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch d ON d.id=c.dispatch_id WHERE d.delivery_job_id=? AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`)
       .bind(
+        command.action,
         row.order_id,
-        row.order_status,
         row.order_version,
         row.order_id,
         command.locationId,
-        row.fulfillment_status,
         row.fulfillment_version,
+        command.jobId,
+        now,
         command.jobId,
         row.attempt_sequence,
         command.jobId,
       ),
     db
       .prepare(
-        `UPDATE delivery_job SET status=?,delivered_at=?,version=version+1,updated_at=? WHERE id=? AND location_id=? AND version=? AND status=? AND fulfillment_mode='SCHEDULED' AND batch_id IS NULL AND rider_id IS NULL`,
+        `UPDATE delivery_job SET status=?,delivered_at=?,version=version+1,updated_at=? WHERE id=? AND location_id=? AND version=? AND status=? AND fulfillment_mode IN ('INSTANT','SCHEDULED') AND batch_id IS NULL AND rider_id IS NULL`,
       )
       .bind(
         jobStatus,
@@ -263,7 +282,7 @@ export async function manageManualDelivery(
           dispatchId,
           command.jobId,
           row.attempt_sequence + 1,
-          command.reason,
+          "STAFF_SELECTED_MANUAL",
           command.personName,
           command.phoneE164,
           dispatchId,
@@ -347,7 +366,12 @@ export async function manageManualDelivery(
       resourceType: "delivery_provider_dispatch",
       resourceId: dispatchId,
       locationId: command.locationId,
-      reason: "reason" in command ? command.reason : null,
+      reason:
+        command.action === "ASSIGN"
+          ? "STAFF_SELECTED_MANUAL"
+          : "reason" in command
+            ? command.reason
+            : null,
       correlationId: request.requestId,
       idempotencyKey: command.idempotencyKey,
       occurredAt: now,

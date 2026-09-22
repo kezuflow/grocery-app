@@ -1296,13 +1296,6 @@ describe("instant order commitment", () => {
         requestId: crypto.randomUUID(),
       }),
     ).toMatchObject({ ok: false });
-    expect(
-      await advanceFulfillment(
-        env.DB,
-        { ...request, action: "HAND_OFF", expectedVersion: 2, idempotencyKey: crypto.randomUUID() },
-        { authorize: async () => true },
-      ),
-    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
     for (const [index, action] of (
       ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
     ).entries()) {

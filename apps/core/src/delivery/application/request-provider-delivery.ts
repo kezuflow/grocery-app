@@ -148,22 +148,22 @@ export async function requestProviderDelivery(
          JOIN delivery_provider_dispatch previous ON previous.id=pending.dispatch_id
          WHERE previous.delivery_job_id=job.id AND pending.operation='CANCEL'
            AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
-       ) AND (
-         ? IS NULL OR (
+       ) AND ? IS NOT NULL AND (
            job.version=? AND (job.status IN ('UNASSIGNED','RETRY_SCHEDULED') OR (?=1 AND ${deliveryRetryReadySql}))
-           AND (?=0 OR (job.promised_at IS NOT NULL AND job.promised_at>=? OR job.fulfillment_mode='SCHEDULED'))
            AND job.batch_id IS NULL AND job.rider_id IS NULL
-           AND (job.fulfillment_mode!='INSTANT' OR EXISTS (
+           AND EXISTS (
              SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
              WHERE grocery.id=job.order_id AND fulfillment.location_id=job.location_id
-               AND grocery.status IN ('FULFILLMENT_PENDING','FULFILLMENT_READY')
-               AND fulfillment.status IN ('PACKING','PACKED')
-           ))
-           AND (job.fulfillment_mode!='SCHEDULED' OR (${scheduledDeliveryGoodsReadySql}
-             AND ((? IS NOT NULL AND ?>?) OR (? IS NULL AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=job.order_id AND status='PACKED')))
-             AND COALESCE(?,?) <= (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
-               FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
-         )
+               AND grocery.status='FULFILLMENT_READY' AND fulfillment.status='PACKED'
+           )
+           AND (SELECT CASE WHEN job.fulfillment_mode='INSTANT'
+             THEN COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),job.promised_at)
+             ELSE COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) END
+             FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)>?
+           AND (job.fulfillment_mode!='INSTANT' OR ? IS NULL)
+           AND (job.fulfillment_mode!='SCHEDULED' OR ${scheduledDeliveryGoodsReadySql})
+           AND (? IS NULL OR (?>? AND ?<=(SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
+             FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
        ) AND (? IS NULL OR EXISTS (
          SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
          JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission permission ON permission.id=rp.permission_id
@@ -187,14 +187,12 @@ export async function requestProviderDelivery(
       command.expectedDeliveryJobVersion ?? null,
       command.expectedDeliveryJobVersion ?? null,
       command.retry ? 1 : 0,
-      command.retry ? 1 : 0,
       now,
       scheduledPickupAt,
       scheduledPickupAt,
-      now,
-      scheduledPickupAt,
       scheduledPickupAt,
       now,
+      scheduledPickupAt,
       command.actorAuthUserId ?? null,
       command.actorAuthUserId ?? null,
     );

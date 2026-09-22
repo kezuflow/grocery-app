@@ -480,12 +480,14 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: "Accept order & start picking", exact: true })
       .click();
     await admin.goto("/admin/delivery");
-    await expect(
-      courierRow.getByRole("radio", { name: "Request a driver now", exact: true }),
-    ).toBeDisabled();
-    await expect(
-      courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }),
-    ).toBeChecked();
+    await expect(courierRow).toContainText(
+      "Finish packing the paid order before choosing a delivery method.",
+    );
+    await admin.goto("/admin/fulfillment");
+    for (const name of ["Finish picking", "Start packing", "Finish packing"])
+      await courierFulfillment.getByRole("button", { name, exact: true }).click();
+    await expect(courierFulfillment).toContainText("PACKED");
+    await admin.goto("/admin/delivery");
     const pickupInput = await admin.evaluate(
       (time) =>
         new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 16),
@@ -499,11 +501,6 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`scheduled-future-booking-${width}.png`),
       fullPage: true,
     });
-    await admin.goto("/admin/fulfillment");
-    for (const name of ["Finish picking", "Start packing", "Finish packing"])
-      await courierFulfillment.getByRole("button", { name, exact: true }).click();
-    await expect(courierFulfillment).toContainText("PACKED");
-    await admin.goto("/admin/delivery");
     // Real booking/cancellation commands with the explicit local fake provider.
     // Definite pre-handover closure must expose the same ordinary manual action.
     admin.once("dialog", (dialog) => dialog.accept());
@@ -520,20 +517,20 @@ for (const width of [1440, 390]) {
     await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await courierRow
       .getByLabel("Person delivering", { exact: true })
-      .fill("Synthetic fallback helper");
+      .fill("Synthetic delivery helper");
     await courierRow
       .getByLabel("Phone including country code", { exact: true })
       .fill("+639171110002");
     await courierRow
-      .getByLabel("Reason for manual delivery", { exact: true })
+      .getByLabel("Operational note (optional)", { exact: true })
       .fill("Courier canceled before pickup");
     await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await expect(courierRow).toContainText("Manual · Synthetic fallback helper");
+    await expect(courierRow).toContainText("Manual · Synthetic delivery helper");
     await expect(
       courierRow.getByRole("button", { name: "Hand over packed order", exact: true }),
     ).toBeVisible();
     await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-canceled-courier-fallback-${width}.png`),
+      path: testInfo.outputPath(`scheduled-manual-replacement-${width}.png`),
       fullPage: true,
     });
     // The helper becomes unavailable before handover; the packed order can use a courier again.
@@ -561,7 +558,7 @@ for (const width of [1440, 390]) {
       .getByLabel("Phone including country code", { exact: true })
       .fill("+639171110000");
     await manualRow
-      .getByLabel("Reason for manual delivery", { exact: true })
+      .getByLabel("Operational note (optional)", { exact: true })
       .fill("Synthetic courier unavailability");
     await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await expect(manualRow).toContainText("Manual · Synthetic delivery helper");
@@ -681,7 +678,7 @@ for (const width of [1440, 390]) {
       .getByLabel("Phone including country code", { exact: true })
       .fill("+639171110004");
     await manualRow
-      .getByLabel("Reason for manual delivery", { exact: true })
+      .getByLabel("Operational note (optional)", { exact: true })
       .fill("Customer agreed after return inspection");
     await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();

@@ -72,12 +72,9 @@ export const fulfillmentActions = [
   "MARK_READY_TO_PACK",
   "START_PACKING",
   "MARK_PACKED",
-  "HAND_OFF",
-  "COMPLETE",
   "RECORD_SHORTAGE",
   "RESUME_PICKING",
   "RESUME_READY_TO_PACK",
-  "CANCEL",
   "ESCALATE",
 ] as const;
 export type FulfillmentAction = (typeof fulfillmentActions)[number];

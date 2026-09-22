@@ -62,7 +62,7 @@ describe("Core Service Binding conformance", () => {
         idempotencyKey: "manual-request",
         personName: "Delivery helper",
         phoneE164: "+639171110000",
-        reason: "Courier unavailable",
+        note: "Staff selected a known local rider",
       }),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });

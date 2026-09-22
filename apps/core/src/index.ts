@@ -15,7 +15,6 @@ import {
   listPublishedBanners,
 } from "./admin/application/banner-media-reads";
 import { listAdminBanners, saveAdminBanner } from "./admin/application/storefront-banners";
-import { bookAutomaticInstantDeliveries } from "./delivery/application/book-automatic-instant-deliveries";
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
 import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
 import { releaseScheduledSurplus } from "./procurement/application/scheduled-surplus";
@@ -895,12 +894,9 @@ const adminFulfillmentAdvanceSchema = adminOperationsLocationSchema.extend({
     "MARK_READY_TO_PACK",
     "START_PACKING",
     "MARK_PACKED",
-    "HAND_OFF",
-    "COMPLETE",
     "RECORD_SHORTAGE",
     "RESUME_PICKING",
     "RESUME_READY_TO_PACK",
-    "CANCEL",
     "ESCALATE",
   ]),
   expectedVersion: validationSchema.number().int().min(0),
@@ -2481,13 +2477,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
-    if (result.ok && (input.action === "START_PACKING" || input.action === "MARK_PACKED"))
-      await bookAutomaticInstantDeliveries(
-        this.env.DB,
-        () => this.rpcContext.deliveryProviders(),
-        this.context.now(),
-        input.orderId,
-      );
     return result;
   }
   async resolveAdminOperationalException(

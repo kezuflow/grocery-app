@@ -9,8 +9,7 @@ export const deliveryRetryReadySql = `job.status IN ('UNASSIGNED','RETRY_SCHEDUL
         SELECT 1 FROM delivery_promise_revision revision WHERE revision.dispatch_id=previous.id AND revision.return_inspected_at IS NOT NULL)))
   AND EXISTS (SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
     WHERE grocery.id=job.order_id AND fulfillment.location_id=job.location_id
-      AND grocery.status IN ('COMMITTED','FULFILLMENT_PENDING','FULFILLMENT_READY')
-      AND fulfillment.status IN ('NOT_STARTED','PICKING','READY_TO_PACK','PACKING','PACKED'))
+      AND grocery.status='FULFILLMENT_READY' AND fulfillment.status='PACKED')
   AND NOT EXISTS (SELECT 1 FROM delivery_provider_command command JOIN delivery_provider_dispatch previous ON previous.id=command.dispatch_id
     WHERE previous.delivery_job_id=job.id AND command.operation='CANCEL' AND command.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`;
 

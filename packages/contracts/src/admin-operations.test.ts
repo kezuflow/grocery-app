@@ -43,12 +43,9 @@ describe("admin operations contracts", () => {
       "MARK_READY_TO_PACK",
       "START_PACKING",
       "MARK_PACKED",
-      "HAND_OFF",
-      "COMPLETE",
       "RECORD_SHORTAGE",
       "RESUME_PICKING",
       "RESUME_READY_TO_PACK",
-      "CANCEL",
       "ESCALATE",
     ]);
     expect(deliveryStatuses).toEqual([

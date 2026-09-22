@@ -1,7 +1,10 @@
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
-import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { deliveryRetryReadySql, returnedDeliveryInspectionSql } from "./delivery-retry-readiness";
+import {
+  dispatchUnavailableMessage,
+  firstDispatchEligibility,
+} from "../domain/dispatch-eligibility";
 
 type DispatchRow = {
   manualActions: AdminDeliveryOperationView["manualActions"];
@@ -32,55 +35,27 @@ function courierPickupDecision(row: {
   can_manage: number;
   pending_cancel: number;
   external_status: string | null;
-  scheduled_goods_ready: number;
   pickup_deadline: number | null;
   fulfillment_status: string;
   order_status: string;
   retry_ready: number;
   promised_at: number | null;
 }): AdminDeliveryOperationView["courierPickup"] {
-  if (!row.can_manage)
-    return { allowedKinds: [], unavailableReason: "Delivery management access is required." };
-  if (row.fulfillment_mode === "INSTANT")
-    return {
-      allowedKinds:
-        row.retry_ready &&
-        row.promised_at !== null &&
-        row.promised_at > Date.now() &&
-        ["PACKING", "PACKED"].includes(row.fulfillment_status) &&
-        ["FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(row.order_status)
-          ? ["IMMEDIATE"]
-          : [],
-      unavailableReason: null,
-    };
-  if (
-    row.pending_cancel ||
-    (!["UNASSIGNED", "RETRY_SCHEDULED"].includes(row.status) && !row.retry_ready) ||
-    (row.external_status !== null &&
-      !["CANCELED", "RETURNED", "FAILED"].includes(row.external_status))
-  )
-    return {
-      allowedKinds: [],
-      unavailableReason: "Resolve the current delivery attempt before booking another.",
-    };
-  if (!["COMMITTED", "FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(row.order_status))
-    return {
-      allowedKinds: [],
-      unavailableReason: "This order is no longer awaiting preparation or delivery.",
-    };
-  if (!row.scheduled_goods_ready)
-    return {
-      allowedKinds: [],
-      unavailableReason:
-        "Start preparation and check that the purchased goods have been received before booking pickup.",
-    };
-  if (row.pickup_deadline === null || row.pickup_deadline <= Date.now())
-    return {
-      allowedKinds: [],
-      unavailableReason: "The committed delivery window is unavailable or has passed.",
-    };
+  const eligibility = firstDispatchEligibility({
+    canManage: Boolean(row.can_manage),
+    jobStatus: row.status,
+    orderStatus: row.order_status,
+    fulfillmentStatus: row.fulfillment_status,
+    pendingCancellation: Boolean(row.pending_cancel),
+    latestAttempt: row.external_status === null ? null : { status: row.external_status },
+    retryReady: Boolean(row.retry_ready),
+    deliveryDeadline: row.fulfillment_mode === "INSTANT" ? row.promised_at : row.pickup_deadline,
+    now: Date.now(),
+  });
+  if (!eligibility.eligible)
+    return { allowedKinds: [], unavailableReason: dispatchUnavailableMessage(eligibility) };
   return {
-    allowedKinds: row.fulfillment_status === "PACKED" ? ["IMMEDIATE", "SCHEDULED"] : ["SCHEDULED"],
+    allowedKinds: row.fulfillment_mode === "INSTANT" ? ["IMMEDIATE"] : ["IMMEDIATE", "SCHEDULED"],
     unavailableReason: null,
   };
 }
@@ -123,12 +98,12 @@ export async function listDeliveryDispatch(
               dispatch.provider_delivery_id AS external_provider_delivery_id,
               dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
               dispatch.version AS external_version,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
-              dispatch.manual_reason,dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
+              dispatch.manual_reason,json_extract(dispatch.request_snapshot_json,'$.note') AS manual_note,
+              dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
               o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${deliveryRetryReadySql}) AS retry_ready,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${returnedDeliveryInspectionSql}) AS return_eligible,
               (SELECT MAX(revision.return_inspected_at) FROM delivery_promise_revision revision WHERE revision.dispatch_id=dispatch.id) AS returned_goods_inspected,
-              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${scheduledDeliveryGoodsReadySql}) AS scheduled_goods_ready,
               (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=d.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
                 LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
               EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch p ON p.id=c.dispatch_id
@@ -149,6 +124,7 @@ export async function listDeliveryDispatch(
       manual_person_name: string | null;
       manual_phone_e164: string | null;
       manual_reason: string | null;
+      manual_note: string | null;
       handed_over_at: number | null;
       final_payable_minor: number | null;
       delivery_currency: string | null;
@@ -160,7 +136,6 @@ export async function listDeliveryDispatch(
       fulfillment_status: string;
       pending_cancel: number;
       can_manage: number;
-      scheduled_goods_ready: number;
       pickup_deadline: number | null;
       job_id: string;
       order_id: string;
@@ -190,6 +165,9 @@ export async function listDeliveryDispatch(
           orderStatus: r.order_status,
           fulfillmentStatus: r.fulfillment_status,
           pendingCancellation: r.pending_cancel !== 0,
+          retryReady: Boolean(r.retry_ready),
+          deliveryDeadline: r.fulfillment_mode === "INSTANT" ? r.promised_at : r.pickup_deadline,
+          now: Date.now(),
           attempt:
             r.method && r.external_status
               ? { method: r.method, status: r.external_status, handedOverAt: r.handed_over_at }
@@ -208,7 +186,8 @@ export async function listDeliveryDispatch(
             dispatchId: r.external_dispatch_id,
             personName: r.manual_person_name,
             phoneE164: r.manual_phone_e164,
-            reason: r.manual_reason,
+            selectionReason: r.manual_reason,
+            note: r.manual_note,
             status: r.external_status,
             handedOverAt: r.handed_over_at,
             returnInspectedAt: r.returned_goods_inspected,

@@ -231,9 +231,7 @@ export async function listAdminFulfillmentQueue(
         locationId: row.locationId,
         status: row.status,
         version: row.version,
-        allowedActions: allowedFulfillmentActions(row.status).filter(
-          (action) => !row.manualCustody || (action !== "HAND_OFF" && action !== "COMPLETE"),
-        ),
+        allowedActions: allowedFulfillmentActions(row.status),
       })),
       nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.orderId),
     },

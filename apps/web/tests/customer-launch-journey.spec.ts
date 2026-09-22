@@ -2,7 +2,7 @@ import { expect, test } from "./admin-authenticated-fixture";
 
 test.describe.configure({ timeout: 180000 });
 // Actual paid Orders, Problems, additions, refunds and current-price Buy again
-// are covered by instant-auto-booking and scheduled-customer-journey, not mocks.
+// are covered by the Instant explicit-dispatch and Scheduled customer journeys, not mocks.
 test("the customer account has no enrollment and retired enrollment cannot write", async ({
   signedInPage: page,
 }) => {

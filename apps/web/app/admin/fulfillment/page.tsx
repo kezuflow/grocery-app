@@ -29,12 +29,9 @@ const actionLabels: Record<string, string> = {
   MARK_READY_TO_PACK: "Finish picking",
   START_PACKING: "Start packing",
   MARK_PACKED: "Finish packing",
-  HAND_OFF: "Hand over order",
-  COMPLETE: "Complete fulfillment",
   RECORD_SHORTAGE: "Report shortage",
   RESUME_PICKING: "Resume picking",
   RESUME_READY_TO_PACK: "Resume packing preparation",
-  CANCEL: "Cancel fulfillment",
   ESCALATE: "Escalate shortage",
 };
 

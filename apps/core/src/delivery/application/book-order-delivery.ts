@@ -8,10 +8,13 @@ import type {
 } from "@freshmarkets/contracts";
 import { claimCommandIdempotency, requestHash } from "../../idempotency";
 import { resolveOrderDeliveryPackage } from "../../fulfillment/application/resolve-order-delivery-package";
-import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { requestProviderDelivery, type ProviderDispatchView } from "./request-provider-delivery";
 import type { DeliveryProvider } from "../ports/delivery-provider";
 import { deliveryRetryReadySql } from "./delivery-retry-readiness";
+import {
+  dispatchUnavailableMessage,
+  firstDispatchEligibility,
+} from "../domain/dispatch-eligibility";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -50,6 +53,11 @@ type DispatchSourceRow = {
   address_snapshot_json: string;
   contact_snapshot_json: string;
   instructions_snapshot: string | null;
+  order_status: string;
+  fulfillment_status: string;
+  latest_attempt_status: string | null;
+  retry_ready: number;
+  pending_cancel: number;
   sender_name: string | null;
   phone_e164: string | null;
   email: string | null;
@@ -161,11 +169,11 @@ function publicDispatch(value: ProviderDispatchView): ExternalDeliveryDispatchVi
   };
 }
 
-/** Internal command shared by authorized staff booking and readiness-driven Instant booking. */
+/** Authorized staff command for an explicit external delivery selection. */
 export async function bookOrderDelivery(
   deps: OrderDeliveryBookingDependencies,
   request: RequestExternalDeliveryRequest,
-  actorUserId: string | null,
+  actorUserId: string,
 ): Promise<RpcResult<ExternalDeliveryDispatchView>> {
   if (deps.provider.code !== request.providerCode)
     return failure(
@@ -213,18 +221,13 @@ export async function bookOrderDelivery(
       .first<ExternalDeliveryDispatchView>();
     if (prior.status === "SUCCEEDED" && existing)
       return { ok: true, value: existing, requestId: request.requestId };
-    if (
-      actorUserId !== null ||
-      prior.status !== "PROCESSING" ||
-      (existing && existing.status !== "PENDING")
-    )
-      return failure(
-        "CONFLICT",
-        prior.status === "FAILED"
-          ? "The previous courier booking failed; use a new request key after review"
-          : "The courier booking is still processing",
-        request.requestId,
-      );
+    return failure(
+      "CONFLICT",
+      prior.status === "FAILED"
+        ? "The previous courier booking failed; use a new request key after review"
+        : "The courier booking is still processing",
+      request.requestId,
+    );
   }
 
   const row = await deps.db
@@ -233,7 +236,12 @@ export async function bookOrderDelivery(
               job.status AS job_status, job.fulfillment_mode, job.location_id,
               job.cycle_id, job.batch_id, job.rider_id, job.promised_at,
               COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) AS delivery_date, snapshot.delivery_execution_snapshot_json,
-              orders.currency, orders.total_minor,
+              orders.currency, orders.total_minor, orders.status AS order_status,
+              fulfillment.status AS fulfillment_status,
+              latest.status AS latest_attempt_status,
+              EXISTS (SELECT 1 FROM delivery_job eligible_job WHERE eligible_job.id=job.id AND ${deliveryRetryReadySql.replaceAll("job.", "eligible_job.")}) AS retry_ready,
+              EXISTS (SELECT 1 FROM delivery_provider_command command JOIN delivery_provider_dispatch attempt ON attempt.id=command.dispatch_id
+                WHERE attempt.delivery_job_id=job.id AND command.operation='CANCEL' AND command.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel,
               stop.latitude, stop.longitude, stop.address_snapshot_json,
               stop.contact_snapshot_json, stop.instructions_snapshot,
               profile.sender_name, profile.phone_e164, profile.email,
@@ -243,56 +251,44 @@ export async function bookOrderDelivery(
               profile.country_code, profile.pickup_instructions
        FROM delivery_job job
        JOIN grocery_order orders ON orders.id=job.order_id
+       JOIN fulfillment_record fulfillment ON fulfillment.order_id=orders.id AND fulfillment.location_id=job.location_id
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=orders.id
        LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=orders.id
        JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        JOIN fulfillment_location location ON location.id=job.location_id
        LEFT JOIN fulfillment_location_delivery_profile profile ON profile.location_id=location.id
+       LEFT JOIN delivery_provider_dispatch latest ON latest.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
        WHERE job.id=? AND job.location_id=?`,
     )
     .bind(request.jobId, request.locationId)
     .first<DispatchSourceRow>();
   if (!row) return failure("NOT_FOUND", "Delivery job is unavailable", request.requestId);
-  if (actorUserId === null && row.fulfillment_mode !== "INSTANT")
+  const now = deps.now();
+  const eligibility = firstDispatchEligibility({
+    canManage: true,
+    jobStatus: row.job_status,
+    orderStatus: row.order_status,
+    fulfillmentStatus: row.fulfillment_status,
+    pendingCancellation: Boolean(row.pending_cancel),
+    latestAttempt:
+      row.latest_attempt_status === null ? null : { status: row.latest_attempt_status },
+    retryReady: Boolean(row.retry_ready),
+    deliveryDeadline: row.fulfillment_mode === "INSTANT" ? row.promised_at : row.delivery_date,
+    now,
+  });
+  if (!eligibility.eligible)
     return failure(
       "ILLEGAL_TRANSITION",
-      "Automatic booking is only available for Instant",
+      dispatchUnavailableMessage(eligibility),
       request.requestId,
     );
-  if (row.fulfillment_mode === "INSTANT") {
-    const ready = await deps.db
-      .prepare(`SELECT 1 FROM fulfillment_record f JOIN grocery_order o ON o.id=f.order_id
-      WHERE o.id=? AND f.location_id=? AND f.status IN ('PACKING','PACKED')
-        AND o.status IN ('FULFILLMENT_PENDING','FULFILLMENT_READY')`)
-      .bind(row.order_id, row.location_id)
-      .first();
-    if (!ready)
-      return failure(
-        "ILLEGAL_TRANSITION",
-        "Check all items and start final packing before booking",
-        request.requestId,
-      );
-  }
-  if (row.fulfillment_mode === "SCHEDULED") {
-    const ready = await deps.db
-      .prepare(`SELECT 1 FROM delivery_job job WHERE job.id=? AND ${scheduledDeliveryGoodsReadySql}
-      AND (?='SCHEDULED' OR EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=job.order_id AND status='PACKED'))`)
-      .bind(row.job_id, request.pickup.kind)
-      .first();
-    if (!ready)
-      return failure(
-        "ILLEGAL_TRANSITION",
-        "Start preparation and check received goods before scheduling pickup; an immediate pickup requires packing to be complete",
-        request.requestId,
-      );
-  }
   if (row.job_version !== request.expectedVersion)
     return failure(
       "STALE_VERSION",
       "Delivery job changed; refresh before booking",
       request.requestId,
     );
-  const retry = row.job_status === "FAILED" && actorUserId !== null;
+  const retry = row.job_status === "FAILED";
   if (
     retry &&
     !(await deps.db
@@ -353,7 +349,12 @@ export async function bookOrderDelivery(
       request.requestId,
     );
 
-  const now = deps.now();
+  if (row.fulfillment_mode === "INSTANT" && request.pickup.kind !== "IMMEDIATE")
+    return failure(
+      "VALIDATION_FAILED",
+      "Instant courier pickup must be requested immediately after packing",
+      request.requestId,
+    );
   const pickupAt = request.pickup.kind === "SCHEDULED" ? Date.parse(request.pickup.pickupAt) : null;
   const deliveryBoundary = row.fulfillment_mode === "INSTANT" ? row.promised_at : row.delivery_date;
   if (
@@ -397,7 +398,7 @@ export async function bookOrderDelivery(
       "Order shipping weight is unavailable",
       request.requestId,
     );
-  if (!(actorUserId === null && prior?.status === "PROCESSING")) {
+  {
     const claim = await claimCommandIdempotency(
       deps.db,
       deps.now,
@@ -438,7 +439,7 @@ export async function bookOrderDelivery(
     retry,
     clientIdempotencyKey: request.idempotencyKey,
     now: deps.now,
-    actorAuthUserId: actorUserId ?? undefined,
+    actorAuthUserId: actorUserId,
     completionStatements: [
       deps.db
         .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
@@ -467,8 +468,7 @@ export async function bookOrderDelivery(
       deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1"),
     ],
     request: {
-      merchantOrderId:
-        actorUserId === null ? `fm-auto-${request.jobId}` : `fm-${crypto.randomUUID()}`,
+      merchantOrderId: `fm-${crypto.randomUUID()}`,
       serviceType,
       currencyCode: row.currency,
       currencyExponent: 2,
@@ -524,9 +524,7 @@ export async function bookOrderDelivery(
     },
   });
   if (!providerResult.ok) {
-    // A competing automatic pass may observe the first pass submitting. Do not
-    // turn that pass's durable command into a failed receipt.
-    if (actorUserId !== null) await failIdempotency(deps.db, commandScope, request.idempotencyKey);
+    await failIdempotency(deps.db, commandScope, request.idempotencyKey);
     return failure("CONFLICT", providerResult.error.message, request.requestId);
   }
   return {

@@ -168,12 +168,17 @@ async function requireProviderRefresh(quoteId: string): Promise<void> {
     .run();
 }
 
-async function intentWithReaction(quoteId: string, customerId: string, amountMinor = 65000) {
+async function intentWithReaction(
+  quoteId: string,
+  customerId: string,
+  amountMinor = 65000,
+  createdAt = Date.now(),
+) {
   const intentId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO payment_intent (id, purpose, subject_type, subject_id, customer_id, amount_minor, currency, status, idempotency_key, version, created_at, updated_at) VALUES (?, 'GROCERY_CHECKOUT', 'checkout_quote', ?, ?, ?, 'PHP', 'SUCCEEDED', ?, 1, ?, ?)",
   )
-    .bind(intentId, quoteId, customerId, amountMinor, `pi-${intentId}`, Date.now(), Date.now())
+    .bind(intentId, quoteId, customerId, amountMinor, `pi-${intentId}`, createdAt, createdAt)
     .run();
   await env.DB.prepare(
     "INSERT INTO payment_attempt (id, customer_id, payment_intent_id, amount_minor, currency, status, provider, provider_reference, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, ?, 'PHP', 'SUCCEEDED', 'mock', ?, ?, ?, ?)",
@@ -185,15 +190,15 @@ async function intentWithReaction(quoteId: string, customerId: string, amountMin
       amountMinor,
       `mock_pay_${intentId}`,
       `intent:${intentId}`,
-      Date.now(),
-      Date.now(),
+      createdAt,
+      createdAt,
     )
     .run();
   const reactionId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO payment_reaction (id, payment_intent_id, reaction_type, subject_type, subject_id, status, idempotency_key, attempts, created_at, updated_at) VALUES (?, ?, 'COMMIT_ORDER', 'checkout_quote', ?, 'PENDING', ?, 0, ?, ?)",
   )
-    .bind(reactionId, intentId, quoteId, `reaction:${intentId}`, Date.now(), Date.now())
+    .bind(reactionId, intentId, quoteId, `reaction:${intentId}`, createdAt, createdAt)
     .run();
   return { intentId, reactionId };
 }
@@ -1272,6 +1277,57 @@ describe("order commitment from canonical payment reactions", () => {
         .first(),
     ).toEqual({ count: 1, quantity: 2000 });
   });
+
+  it.each([
+    { label: "before", offset: -1, applied: true },
+    { label: "exactly at", offset: 0, applied: false },
+    { label: "after", offset: 1, applied: false },
+  ])(
+    "uses trusted payment admission $label the Scheduled cutoff when confirmation is delayed",
+    async ({ offset, applied }) => {
+      const fixture = await seededCheckout({ onHand: 0 });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const cutoff = Date.now() + 10_000;
+      await env.DB.prepare(
+        "UPDATE checkout_quote SET cycle_snapshot_json=json_set(cycle_snapshot_json,'$.cutoffAt',?) WHERE id=?",
+      )
+        .bind(new Date(cutoff).toISOString(), quote.value.quoteId)
+        .run();
+      const intent = await intentWithReaction(
+        quote.value.quoteId,
+        fixture.customerId,
+        quote.value.totalMinor,
+        cutoff + offset,
+      );
+      const command = {
+        reactionId: intent.reactionId,
+        paymentIntentId: intent.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED" as const,
+      };
+      const result = await applyCheckoutPaymentReaction(env.DB, command, {
+        now: () => cutoff + 60_000,
+      });
+      expect(result.applied).toBe(applied);
+      expect(result.reason).toBe(applied ? "APPLIED" : "QUOTE_UNUSABLE");
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM order_payment_reaction WHERE payment_intent_id=?",
+        )
+          .bind(intent.intentId)
+          .first(),
+      ).toEqual({ count: applied ? 1 : 0 });
+      if (applied)
+        expect(
+          await applyCheckoutPaymentReaction(env.DB, command, { now: () => cutoff + 120_000 }),
+        ).toEqual({
+          applied: true,
+          reason: "ALREADY_APPLIED",
+          orderId: result.orderId,
+        });
+    },
+  );
 
   it("ignores insufficient canonical states", async () => {
     const fixture = await seededCheckout();

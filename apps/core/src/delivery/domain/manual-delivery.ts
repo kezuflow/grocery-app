@@ -1,4 +1,5 @@
 import type { ManualDeliveryAction } from "@freshmarkets/contracts";
+import { firstDispatchEligibility } from "./dispatch-eligibility";
 
 /** Committed mode and recorded custody, never the current global selling mode. */
 export function manualDeliveryActions(facts: {
@@ -8,22 +9,24 @@ export function manualDeliveryActions(facts: {
   fulfillmentStatus: string;
   attempt: { method: string; status: string; handedOverAt: number | null } | null;
   pendingCancellation: boolean;
+  retryReady: boolean;
+  deliveryDeadline: number | null;
+  now: number;
   returnedGoodsInspected?: boolean;
 }): ManualDeliveryAction[] {
-  if (facts.mode !== "SCHEDULED" || facts.pendingCancellation) return [];
   const attempt = facts.attempt;
   if (!attempt || ["CANCELED", "RETURNED", "FAILED"].includes(attempt.status)) {
-    const closedWithAvailableGoods =
-      attempt !== null &&
-      ((["CANCELED", "FAILED"].includes(attempt.status) && attempt.handedOverAt === null) ||
-        facts.returnedGoodsInspected === true);
-    return (!attempt || closedWithAvailableGoods) &&
-      (["UNASSIGNED", "RETRY_SCHEDULED"].includes(facts.jobStatus) ||
-        (facts.jobStatus === "FAILED" && closedWithAvailableGoods)) &&
-      ["COMMITTED", "FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(facts.orderStatus) &&
-      ["NOT_STARTED", "PICKING", "READY_TO_PACK", "PACKING", "PACKED"].includes(
-        facts.fulfillmentStatus,
-      )
+    return firstDispatchEligibility({
+      canManage: true,
+      jobStatus: facts.jobStatus,
+      orderStatus: facts.orderStatus,
+      fulfillmentStatus: facts.fulfillmentStatus,
+      pendingCancellation: facts.pendingCancellation,
+      latestAttempt: attempt,
+      retryReady: facts.retryReady,
+      deliveryDeadline: facts.deliveryDeadline,
+      now: facts.now,
+    }).eligible
       ? ["ASSIGN"]
       : [];
   }

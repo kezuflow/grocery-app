@@ -128,7 +128,8 @@ export type AdminDeliveryOperationView = {
     dispatchId: string;
     personName: string;
     phoneE164: string;
-    reason: string;
+    selectionReason: string;
+    note: string | null;
     status: string;
     handedOverAt: number | null;
     returnInspectedAt: number | null;
@@ -219,7 +220,7 @@ export type ManualDeliveryRequest = AdminOperationsLocationRequest & {
   expectedVersion: number;
   idempotencyKey: string;
 } & (
-    | { action: "ASSIGN"; reason: string; personName: string; phoneE164: string }
+    | { action: "ASSIGN"; note?: string; personName: string; phoneE164: string }
     | { action: "HAND_OVER"; dispatchId: string }
     | { action: "COMPLETE"; dispatchId: string; actualCostMinor: number | null }
     | { action: "FAIL"; dispatchId: string; reason: string; actualCostMinor: number | null }

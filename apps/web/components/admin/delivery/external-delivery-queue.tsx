@@ -194,12 +194,7 @@ export function ExternalDeliveryQueue() {
                               </Button>
                             ) : null}
                           </div>
-                        ) : item.manualDelivery ? null : item.fulfillmentMode === "INSTANT" ? (
-                          <p className="text-sm">
-                            The selected courier is requested automatically when all items are
-                            checked and final packing starts.
-                          </p>
-                        ) : (
+                        ) : item.manualDelivery ? null : (
                           <ExternalDeliveryBooking
                             locationId={item.locationId}
                             fulfillmentMode={item.fulfillmentMode}
