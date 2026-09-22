@@ -64,8 +64,9 @@ git diff --check
 
 No deployment, production or remote-data mutation, provider transaction, courier booking, outbound
 message or browser run occurred. Completion level: **1 of 1 action-feedback rollout implemented and
-locally verified**. The one concrete next action is commit/push of this verified Web and checkpoint
-scope; deployed visual acceptance remains separate and was not requested.
+locally verified**. The verified runtime, tests and checkpoint were committed directly to `main` and
+pushed to `origin/main` as `93fdf7b0`. The one concrete next action, only if separately requested, is
+deployed visual acceptance; it remains unexecuted and was not requested.
 
 ## Latest owner request — INSTANT-AUTO-BOOKING-START-PACKING-1 (2026-09-22)
 
