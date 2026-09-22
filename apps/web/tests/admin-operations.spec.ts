@@ -164,3 +164,156 @@ test("exception workspace renders typed source fields and unavailable actions", 
   await expect(page.getByText("Source-owned; unavailable here")).toBeVisible();
   await expect(page.getByText("Age unavailable")).toBeVisible();
 });
+
+test("location staff inspect paid snapshots and reach either dispatch choice from both modes", async ({
+  page,
+}) => {
+  await installAdminBootstrapFixture(page, {
+    context: {
+      staffId: "staff-fulfillment",
+      displayName: "Fulfillment Staff",
+      email: "staff@example.com",
+      capabilities: ["fulfillment.read", "fulfillment.manage", "delivery.read", "delivery.manage"],
+      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      navigation: [],
+      environment: "test",
+    },
+    scopes: [
+      {
+        kind: "location",
+        marketId: "market-e2e",
+        marketCode: "CEBU",
+        locationId: "location-cebu-central",
+        locationCode: "CENTRAL",
+        locationName: "Central Cebu",
+        currency: "PHP",
+        timezone: "Asia/Manila",
+      },
+    ],
+    selectedScope: {
+      kind: "LOCATION",
+      marketId: "market-e2e",
+      locationId: "location-cebu-central",
+    },
+    timezone: "Asia/Manila",
+  });
+  await page.route("**/api/admin/operations-activity**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "activity",
+        value: { notifications: [], latest: null },
+      }),
+    }),
+  );
+  const timing = {
+    cycleName: null,
+    windowName: null,
+    startsAt: null,
+    endsAt: null,
+    pickupAt: null,
+    timezone: "Asia/Manila",
+  };
+  await page.route("**/api/admin/fulfillment**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "fulfillment",
+        value: {
+          nextCursor: null,
+          items: [
+            {
+              orderId: "instant-order",
+              cycleId: null,
+              locationId: "location-cebu-central",
+              status: "PACKED",
+              version: 4,
+              allowedActions: [],
+              operational: {
+                orderNumber: "FM-INSTANT",
+                committedAt: "2026-09-22T01:00:00.000Z",
+                fulfillmentMode: "INSTANT",
+                progress: "READY_FOR_DISPATCH",
+                recipient: { name: "Ana", phone: "+639171110000" },
+                timing,
+                deliveryStatus: "UNASSIGNED",
+                blockers: [],
+                lines: [
+                  {
+                    lineId: "original",
+                    source: "ORIGINAL",
+                    productName: "Tomato",
+                    variantName: "Roma",
+                    unit: "kg",
+                    quantity: 1,
+                    baseQuantity: 1000,
+                    baseUnit: "GRAM",
+                    goods: {
+                      kind: "INSTANT_RESERVATION",
+                      status: "RESERVED",
+                      allocatedBase: 1000,
+                      receivedBase: null,
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              orderId: "scheduled-order",
+              cycleId: "cycle-1",
+              locationId: "location-cebu-central",
+              status: "PACKED",
+              version: 5,
+              allowedActions: [],
+              operational: {
+                orderNumber: "FM-SCHEDULED",
+                committedAt: "2026-09-22T02:00:00.000Z",
+                fulfillmentMode: "SCHEDULED",
+                progress: "READY_FOR_DISPATCH",
+                recipient: { name: "Bea", phone: "+639181110000" },
+                timing: { ...timing, cycleName: "Weekly delivery" },
+                deliveryStatus: "UNASSIGNED",
+                blockers: [],
+                lines: [
+                  {
+                    lineId: "addition",
+                    source: "COMMITTED_ADDITION",
+                    productName: "Onion",
+                    variantName: "Red",
+                    unit: "kg",
+                    quantity: 2,
+                    baseQuantity: 2000,
+                    baseUnit: "GRAM",
+                    goods: {
+                      kind: "SCHEDULED_ALLOCATION",
+                      status: "OPEN",
+                      allocatedBase: 2000,
+                      receivedBase: 2000,
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    }),
+  );
+
+  await page.goto("/admin/fulfillment");
+  await expect(page.getByRole("heading", { name: "Order FM-INSTANT" })).toBeVisible();
+  await expect(page.getByText("Reserved: 1000 GRAM")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Choose Manual or Lalamove dispatch" }),
+  ).toBeVisible();
+  await page.getByRole("row", { name: /FM-SCHEDULED/ }).click();
+  await expect(page.getByRole("heading", { name: "Order FM-SCHEDULED" })).toBeVisible();
+  await expect(page.getByText("Paid addition")).toBeVisible();
+  await expect(page.getByText(/Cycle allocated: 2000 GRAM · received 2000/)).toBeVisible();
+  await expect(page.getByText(/payment|refund|total/i)).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Choose Manual or Lalamove dispatch" }),
+  ).toHaveAttribute("href", "/admin/delivery?orderId=scheduled-order");
+});

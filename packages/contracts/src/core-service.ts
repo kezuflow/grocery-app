@@ -283,6 +283,7 @@ export const coreServiceMethodNames = [
   "listProcurementRequirements",
   "listReceivingSessions",
   "listFulfillmentQueue",
+  "listOperationalActivity",
   "listDeliveryOperations",
   "getLocationDeliveryProfile",
   "upsertLocationDeliveryProfile",

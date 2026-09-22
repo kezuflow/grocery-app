@@ -128,16 +128,17 @@ const ORDER_SELECT = `
           JOIN payment_intent pi ON pi.id = opr.payment_intent_id
           WHERE opr.order_id = o.id ORDER BY pi.created_at DESC LIMIT 1) AS paymentStatus,
          (SELECT f.status FROM fulfillment_record f WHERE f.order_id = o.id LIMIT 1) AS fulfillmentStatus,
-         (SELECT d.status FROM delivery_job d WHERE d.order_id = o.id LIMIT 1) AS deliveryStatus,
-         (SELECT dispatch.status FROM delivery_provider_dispatch dispatch
-          JOIN delivery_job d ON d.id=dispatch.delivery_job_id
-          WHERE d.order_id=o.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS deliveryDispatchStatus,
-         (SELECT dispatch.provider_status FROM delivery_provider_dispatch dispatch
-          JOIN delivery_job d ON d.id=dispatch.delivery_job_id
-          WHERE d.order_id=o.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS deliveryProviderStatus,
+         delivery.status AS deliveryStatus,
+         latest_dispatch.status AS deliveryDispatchStatus,
+         latest_dispatch.provider_status AS deliveryProviderStatus,
          EXISTS (SELECT 1 FROM order_payment_reaction opr WHERE opr.order_id = o.id) AS hasPaymentReaction,
          (SELECT ofs.cutoff_at FROM order_fulfillment_snapshot ofs WHERE ofs.order_id = o.id LIMIT 1) AS cutoffAt
-  FROM grocery_order o JOIN customer c ON c.id = o.customer_id JOIN user u ON u.id = c.auth_user_id`;
+  FROM grocery_order o JOIN customer c ON c.id = o.customer_id JOIN user u ON u.id = c.auth_user_id
+  LEFT JOIN delivery_job delivery ON delivery.order_id=o.id
+  LEFT JOIN delivery_provider_dispatch latest_dispatch ON latest_dispatch.id=(
+    SELECT candidate.id FROM delivery_provider_dispatch candidate
+    WHERE candidate.delivery_job_id=delivery.id ORDER BY candidate.attempt_sequence DESC LIMIT 1
+  )`;
 
 function toOrderSummary(row: {
   orderId: string;
@@ -216,12 +217,16 @@ export async function listAdminOrders(
     binds.push(request.status);
   }
   if (cursor) {
-    clauses.push("(o.created_at < ? OR (o.created_at = ? AND o.id < ?))");
+    clauses.push(
+      "(COALESCE(o.committed_at,o.created_at) < ? OR (COALESCE(o.committed_at,o.created_at) = ? AND o.id < ?))",
+    );
     binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await deps.db
-    .prepare(`${ORDER_SELECT} ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT ?`)
+    .prepare(
+      `${ORDER_SELECT} ${where} ORDER BY COALESCE(o.committed_at,o.created_at) DESC, o.id DESC LIMIT ?`,
+    )
     .bind(...binds, limit + 1)
     .all<{
       orderId: string;

@@ -27,6 +27,7 @@ type DispatchRow = {
   externalProviderStatus: string | null;
   externalTrackingUrl: string | null;
   externalVersion: number | null;
+  sortAt: number;
 };
 
 function courierPickupDecision(row: {
@@ -70,7 +71,7 @@ export async function listDeliveryDispatch(
     locationId: string;
     orderId?: string;
     cycleId?: string;
-    cursorId?: string;
+    cursor?: { createdAt: number; id: string };
     limit?: number;
     actorAuthUserId?: string;
   },
@@ -86,13 +87,13 @@ export async function listDeliveryDispatch(
     clauses.push("o.cycle_id=?");
     binds.push(query.cycleId);
   }
-  if (query.cursorId) {
-    clauses.push("d.id<?");
-    binds.push(query.cursorId);
+  if (query.cursor) {
+    clauses.push("(d.created_at<? OR (d.created_at=? AND d.id<?))");
+    binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id);
   }
   const rows = await database
     .prepare(
-      `SELECT d.id AS job_id,d.order_id,d.status,d.address_snapshot_json,
+      `SELECT d.id AS job_id,d.order_id,d.status,d.address_snapshot_json,d.created_at AS sort_at,
               d.delivered_at,d.version,o.cycle_id,d.fulfillment_mode,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.provider_delivery_id AS external_provider_delivery_id,
@@ -116,7 +117,7 @@ export async function listDeliveryDispatch(
          SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=d.id
          ORDER BY latest.attempt_sequence DESC LIMIT 1
        )
-       WHERE ${clauses.join(" AND ")} ORDER BY d.id DESC LIMIT ?`,
+       WHERE ${clauses.join(" AND ")} ORDER BY d.created_at DESC,d.id DESC LIMIT ?`,
     )
     .bind(query.actorAuthUserId ?? null, ...binds, limit)
     .all<{
@@ -152,6 +153,7 @@ export async function listDeliveryDispatch(
       external_provider_status: string | null;
       external_tracking_url: string | null;
       external_version: number | null;
+      sort_at: number;
     }>();
   return rows.results.map((r) => ({
     courierPickup: courierPickupDecision(r),
@@ -211,5 +213,6 @@ export async function listDeliveryDispatch(
     externalProviderStatus: r.external_provider_status,
     externalTrackingUrl: r.external_tracking_url,
     externalVersion: r.external_version,
+    sortAt: r.sort_at,
   }));
 }

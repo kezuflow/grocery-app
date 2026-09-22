@@ -228,6 +228,36 @@ describe("finance administration", () => {
     if (terminalDetail.ok) expect(terminalDetail.value.allowedActions).toEqual([]);
   });
 
+  it("paginates by the same committed timestamp exposed in the order DTO", async () => {
+    const manager = await seedManager();
+    const older = await seedOrderWithPayment();
+    const newer = await seedOrderWithPayment();
+    const base = Date.now() + 100_000;
+    await env.DB.batch([
+      env.DB.prepare("UPDATE grocery_order SET created_at=?,committed_at=? WHERE id=?").bind(
+        base + 20_000,
+        base,
+        older.orderId,
+      ),
+      env.DB.prepare("UPDATE grocery_order SET created_at=?,committed_at=? WHERE id=?").bind(
+        base,
+        base + 10_000,
+        newer.orderId,
+      ),
+    ]);
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      limit: 1,
+    };
+    const first = await core.listAdminOrders(request);
+    if (!first.ok || !first.value.nextCursor) throw new Error("Expected the second page");
+    expect(first.value.items[0]?.orderId).toBe(newer.orderId);
+    const second = await core.listAdminOrders({ ...request, cursor: first.value.nextCursor });
+    if (!second.ok) throw new Error(JSON.stringify(second.error));
+    expect(second.value.items[0]?.orderId).toBe(older.orderId);
+  });
+
   it("derives order actions from both lifecycle state and the caller's capabilities", async () => {
     const reader = await seedManager(["orders.read"]);
     const { orderId } = await seedOrderWithPayment();

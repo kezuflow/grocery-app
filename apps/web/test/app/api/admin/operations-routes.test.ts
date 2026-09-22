@@ -8,6 +8,7 @@ const coreMocks = vi.hoisted(() => ({
   recordAdminReceivedLine: vi.fn(),
   completeAdminReceiving: vi.fn(),
   listFulfillmentQueue: vi.fn(),
+  listOperationalActivity: vi.fn(),
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
   refreshExternalDelivery: vi.fn(),
@@ -34,6 +35,7 @@ import {
 } from "@/app/api/admin/fulfillment/route";
 import { POST as refreshDelivery } from "@/app/api/admin/external-deliveries/[dispatch-id]/refresh/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
+import { GET as activityGet } from "@/app/api/admin/operations-activity/route";
 import {
   GET as commerceConfigurationGet,
   POST as updateCommerceConfiguration,
@@ -93,6 +95,7 @@ describe("admin operations BFF routes", () => {
     coreMocks.listReceivingSessions.mockResolvedValue(ok);
     coreMocks.listFulfillmentQueue.mockResolvedValue(ok);
     coreMocks.listDeliveryOperations.mockResolvedValue(ok);
+    coreMocks.listOperationalActivity.mockResolvedValue(ok);
     coreMocks.getGlobalCommerceConfiguration.mockResolvedValue(ok);
     coreMocks.listOperationalExceptions.mockResolvedValue(ok);
 
@@ -106,6 +109,7 @@ describe("admin operations BFF routes", () => {
       new Request("https://app/fulfillment?locationId=l1&cycleId=c1", { headers: cookie }),
     );
     await deliveryGet(new Request("https://app/delivery?locationId=l1", { headers: cookie }));
+    await activityGet(new Request("https://app/activity?locationId=l1", { headers: cookie }));
     await commerceConfigurationGet(new Request("https://app/commerce", { headers: cookie }));
     await exceptionsGet(new Request("https://app/exceptions?locationId=l1", { headers: cookie }));
 
@@ -125,6 +129,10 @@ describe("admin operations BFF routes", () => {
       cycleId: "c1",
     });
     expect(coreMocks.listDeliveryOperations.mock.calls[0][0]).toMatchObject({ locationId: "l1" });
+    expect(coreMocks.listOperationalActivity.mock.calls[0][0]).toMatchObject({
+      locationId: "l1",
+      headers: cookie,
+    });
     expect(coreMocks.getGlobalCommerceConfiguration.mock.calls[0][0]).toMatchObject({
       headers: cookie,
     });

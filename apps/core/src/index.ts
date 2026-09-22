@@ -147,6 +147,7 @@ import {
   getAdminGlobalCommerceConfiguration,
   listAdminDeliveryOperations,
   listAdminFulfillmentQueue,
+  listAdminOperationalActivity,
   listAdminOperationalExceptions,
   listAdminProcurementRequirements,
   listAdminReceivingSessions,
@@ -2521,6 +2522,17 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
     return listAdminFulfillmentQueue(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+    );
+  }
+  async listOperationalActivity(
+    input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
+  ) {
+    const validation = adminOperationsLocationSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return listAdminOperationalActivity(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );

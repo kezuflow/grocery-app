@@ -63,17 +63,6 @@ export function AdminOverviewProvider({ children }: { children: ReactNode }) {
       });
     return () => controller.abort();
   }, [scope, timezone, bootstrapMatches, attempt, readKey]);
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") setAttempt((value) => value + 1);
-    };
-    const timer = window.setInterval(refresh, 60_000);
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, []);
   const result = !scope
     ? null
     : loaded?.key === readKey

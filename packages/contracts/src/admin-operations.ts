@@ -92,6 +92,50 @@ export type FulfillmentQueueView = {
   status: string;
   version: number;
   allowedActions: ReadonlyArray<FulfillmentAction>;
+  /** Present on queue reads; command receipts intentionally remain compact. */
+  operational?: OperationalOrderDetailView;
+};
+
+export type OperationalOrderLineView = {
+  lineId: string;
+  source: "ORIGINAL" | "COMMITTED_ADDITION";
+  productName: string;
+  variantName: string;
+  unit: string;
+  quantity: number;
+  baseQuantity: number;
+  baseUnit: string | null;
+  goods: {
+    kind: "INSTANT_RESERVATION" | "SCHEDULED_ALLOCATION";
+    status: string;
+    allocatedBase: number;
+    receivedBase: number | null;
+  };
+};
+
+/** Location-safe paid-order projection. Financial and payment fields are deliberately absent. */
+export type OperationalOrderDetailView = {
+  orderNumber: string;
+  committedAt: string;
+  fulfillmentMode: "INSTANT" | "SCHEDULED";
+  progress: "NEW" | "PREPARING" | "READY_FOR_DISPATCH" | "HISTORY" | "UPCOMING";
+  recipient: { name: string; phone: string };
+  timing: {
+    cycleName: string | null;
+    windowName: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+    pickupAt: string | null;
+    timezone: string | null;
+  };
+  deliveryStatus: string | null;
+  blockers: readonly string[];
+  lines: readonly OperationalOrderLineView[];
+};
+
+export type OperationalActivityView = {
+  notifications: readonly import("./admin-overview").AdminDashboardNotification[];
+  latest: { occurredAt: string; id: string } | null;
 };
 
 export type FulfillmentQueuePage = {
@@ -417,6 +461,9 @@ export type AdminOperationsService = {
   listFulfillmentQueue(
     request: AdminFulfillmentQueueRequest,
   ): Promise<RpcResult<FulfillmentQueuePage>>;
+  listOperationalActivity(
+    request: AdminOperationsLocationRequest,
+  ): Promise<RpcResult<OperationalActivityView>>;
   listDeliveryOperations(
     request: AdminDeliveryOperationsRequest,
   ): Promise<RpcResult<DeliveryOperationsSummary>>;

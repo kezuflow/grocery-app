@@ -267,7 +267,54 @@ describe("Admin operational overview", () => {
       }),
     ).toMatchObject({
       ok: true,
-      value: { items: [{ orderId: localOrder, status: "COMPLETED", allowedActions: [] }] },
+      value: {
+        items: [
+          {
+            orderId: localOrder,
+            status: "COMPLETED",
+            allowedActions: [],
+            operational: {
+              orderNumber: `FM-${localOrder}`,
+              fulfillmentMode: "INSTANT",
+              progress: "HISTORY",
+              recipient: { name: "Recipient unavailable", phone: "Phone unavailable" },
+              lines: [],
+            },
+          },
+        ],
+      },
+    });
+    expect(
+      await core.listOperationalActivity({
+        ...request,
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        notifications: [{ id: `order:${localOrder}`, orderId: localOrder }],
+        latest: { id: `order:${localOrder}` },
+      },
+    });
+    expect(
+      await core.listOperationalActivity({
+        ...request,
+        locationId: otherLocation,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    const deliveryOnlyCookie = await seedStaff({
+      capabilities: ["delivery.read"],
+      scope: "location",
+    });
+    expect(
+      await core.listOperationalActivity({
+        ...request,
+        headers: { cookie: deliveryOnlyCookie },
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { notifications: [{ id: expect.stringMatching(/^delivery:/), orderId: localOrder }] },
     });
     expect(
       await core.listDeliveryOperations({

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { AdminDashboardNotification, AdminSelectedScope } from "@freshmarkets/contracts";
 import { useAdminContext } from "../../app/admin/admin-context-provider";
 import { useAdminOverview } from "../../app/admin/admin-overview-provider";
+import { useAdminOperationalRefresh } from "../../app/admin/admin-operational-refresh-provider";
 import {
   NotificationPanel,
   NotificationTimestamp,
@@ -58,6 +59,7 @@ export function AdminNotificationList({
 export function AdminNotifications() {
   const { state, selectScope, retry } = useAdminContext();
   const { result, refresh } = useAdminOverview();
+  const operational = useAdminOperationalRefresh();
   return (
     <NotificationPanel>
       {(close) => {
@@ -88,13 +90,21 @@ export function AdminNotifications() {
               Select an Admin scope to see notifications.
             </p>
           );
-        if (!result)
+        const useOperationalFeed = state.selectedScope.kind === "LOCATION" && operational.enabled;
+        const locationActivity = useOperationalFeed ? operational.activity : null;
+        if (useOperationalFeed && !locationActivity)
           return (
             <p role="status" className="p-4 text-sm">
               Loading notifications…
             </p>
           );
-        if (!result.ok)
+        if (!useOperationalFeed && !result)
+          return (
+            <p role="status" className="p-4 text-sm">
+              Loading notifications…
+            </p>
+          );
+        if (!useOperationalFeed && result && !result.ok)
           return (
             <div role="alert" className="p-4 text-sm">
               <p>We couldn’t load your notifications.</p>
@@ -106,11 +116,19 @@ export function AdminNotifications() {
         return (
           <>
             <AdminNotificationList
-              notifications={result.value.notifications}
-              timezone={result.value.timezone}
+              notifications={
+                locationActivity?.notifications ??
+                (result && result.ok ? result.value.notifications : [])
+              }
+              timezone={result && result.ok ? result.value.timezone : undefined}
               onSelectScope={selectScope}
               onNavigate={close}
             />
+            {operational.stale && state.selectedScope.kind === "LOCATION" ? (
+              <p role="status" className="border-t px-4 py-2 text-xs text-[var(--fm-text-muted)]">
+                Updates are delayed; showing the last successful result.
+              </p>
+            ) : null}
             <div className="border-t border-[var(--fm-border)] px-4 py-2">
               <Link
                 className="inline-flex min-h-11 items-center text-sm font-semibold underline"

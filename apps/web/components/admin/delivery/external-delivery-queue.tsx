@@ -14,6 +14,7 @@ import { useAdminLocation } from "../use-admin-location";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
 import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
+import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
 
 export function ExternalDeliveryQueue() {
   const { locationId, label } = useAdminLocation();
@@ -22,30 +23,39 @@ export function ExternalDeliveryQueue() {
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const operationalRefresh = useAdminOperationalRefresh();
 
-  const load = useCallback(async () => {
-    if (!locationId) return;
-    setLoading(true);
-    try {
-      const result = (await (
-        await fetch(
-          `/api/admin/delivery?locationId=${encodeURIComponent(locationId)}&limit=100${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}`,
-        )
-      ).json()) as RpcResult<DeliveryOperationsSummary>;
-      if (result.ok) setSummary(result.value);
-      else setMessage(result.error.message);
-    } catch {
-      setMessage("External delivery work could not be loaded.");
-    } finally {
-      setLoading(false);
-    }
-  }, [locationId, orderId]);
+  const load = useCallback(
+    async (background = false) => {
+      if (!locationId) return;
+      if (!background) setLoading(true);
+      try {
+        const result = (await (
+          await fetch(
+            `/api/admin/delivery?locationId=${encodeURIComponent(locationId)}&limit=100${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}`,
+          )
+        ).json()) as RpcResult<DeliveryOperationsSummary>;
+        if (result.ok) setSummary(result.value);
+        else setMessage(result.error.message);
+      } catch {
+        setMessage("External delivery work could not be loaded.");
+      } finally {
+        if (!background) setLoading(false);
+      }
+    },
+    [locationId, orderId],
+  );
 
   useEffect(() => {
     setSummary(null);
     setMessage(null);
     void load();
   }, [load]);
+  useEffect(() => {
+    if (locationId && operationalRefresh.revision > 0) void load(true);
+    // The location refresh provider is the sole polling owner.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operationalRefresh.revision]);
 
   async function mutate(
     dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,

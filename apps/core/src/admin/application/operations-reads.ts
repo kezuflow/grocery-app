@@ -4,6 +4,7 @@ import { listScheduledSurplus } from "../../procurement/application/scheduled-su
 import type {
   AdminDeliveryOperationsRequest,
   AdminFulfillmentQueueRequest,
+  AdminOperationsLocationRequest,
   AuthenticatedRequest,
   AdminOperationalExceptionsRequest,
   AdminProcurementRequirementsRequest,
@@ -11,11 +12,13 @@ import type {
   DeliveryOperationsSummary,
   GlobalCommerceConfigurationView,
   FulfillmentQueuePage,
+  OperationalActivityView,
   OperationalExceptionPage,
   ProcurementRequirementPage,
   ReceivingSessionPage,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { readAdminNotifications } from "./admin-notifications";
 import { listOperationalExceptions as listExceptionRows } from "../../audit/application/list-operational-exceptions";
 import { listDeliveryDispatch } from "../../delivery/application/list-delivery-dispatch";
 import {
@@ -39,7 +42,9 @@ function pageRequest(request: {
   cursor?: string;
   limit?: number;
   requestId: string;
-}): { limit: number; cursorId?: string } | RpcResult<never> {
+}):
+  | { limit: number; cursor?: { createdAt: number; id: string }; cursorId?: string }
+  | RpcResult<never> {
   const limit = boundListLimit(request.limit);
   if (limit === "invalid")
     return {
@@ -61,7 +66,7 @@ function pageRequest(request: {
         requestId: request.requestId,
       },
     };
-  return { limit, cursorId: cursor.id };
+  return { limit, cursor, cursorId: cursor.id };
 }
 
 function isPageError(
@@ -218,7 +223,7 @@ export async function listAdminFulfillmentQueue(
     orderId: request.orderId,
     locationId: request.locationId,
     cycleId: request.cycleId,
-    cursorId: page.cursorId,
+    cursor: page.cursor,
     limit: page.limit + 1,
   });
   const pageRows = rows.slice(0, page.limit);
@@ -232,8 +237,53 @@ export async function listAdminFulfillmentQueue(
         status: row.status,
         version: row.version,
         allowedActions: allowedFulfillmentActions(row.status),
+        operational: row.operational,
       })),
-      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.orderId),
+      nextCursor:
+        pageRows.at(-1) && rows.length > page.limit
+          ? encodeStaffCursor({ createdAt: pageRows.at(-1)!.sortAt, id: pageRows.at(-1)!.orderId })
+          : null,
+    },
+    requestId: request.requestId,
+  };
+}
+
+/** Lightweight location feed used by the shared operational refresh owner. */
+export async function listAdminOperationalActivity(
+  deps: OperationsAdministrationDeps,
+  request: AdminOperationsLocationRequest,
+): Promise<RpcResult<OperationalActivityView>> {
+  const fulfillmentAccess = await resolveOperationsAdministrationAccess(
+    deps,
+    request,
+    "fulfillment.read",
+    request.locationId,
+    { concealOutOfScopeLocation: true },
+  );
+  const access = fulfillmentAccess.ok
+    ? fulfillmentAccess
+    : fulfillmentAccess.error.code === "FORBIDDEN"
+      ? await resolveOperationsAdministrationAccess(
+          deps,
+          request,
+          "delivery.read",
+          request.locationId,
+          { concealOutOfScopeLocation: true },
+        )
+      : fulfillmentAccess;
+  if (!access.ok) return access;
+  const notifications = await readAdminNotifications(deps.db, {
+    locationIds: [request.locationId],
+    globalView: false,
+    globalStaff: false,
+    capabilities: fulfillmentAccess.ok ? ["fulfillment.read"] : ["delivery.read"],
+  });
+  const first = notifications[0];
+  return {
+    ok: true,
+    value: {
+      notifications,
+      latest: first ? { occurredAt: first.occurredAt, id: first.id } : null,
     },
     requestId: request.requestId,
   };
@@ -257,7 +307,7 @@ export async function listAdminDeliveryOperations(
     actorAuthUserId: access.value.authUserId,
     locationId: request.locationId,
     cycleId: request.cycleId,
-    cursorId: page.cursorId,
+    cursor: page.cursor,
     limit: page.limit + 1,
   });
   const pageRows = rows.slice(0, page.limit);
@@ -297,7 +347,7 @@ export async function listAdminDeliveryOperations(
   const totals = await deps.db
     .prepare(
       `SELECT COUNT(*) AS totalOpenJobs,
-              SUM(CASE WHEN dispatch.id IS NOT NULL THEN 1 ELSE 0 END) AS bookedJobs
+              COUNT(DISTINCT CASE WHEN dispatch.id IS NOT NULL THEN d.id END) AS bookedJobs
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
        LEFT JOIN grocery_order o ON o.id=d.order_id
        LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.delivery_job_id=d.id
@@ -314,7 +364,10 @@ export async function listAdminDeliveryOperations(
       totalOpenJobs: totals?.totalOpenJobs ?? 0,
       bookedJobs: totals?.bookedJobs ?? 0,
       items,
-      nextCursor: nextCursor(rows.length > page.limit, pageRows.at(-1)?.jobId),
+      nextCursor:
+        pageRows.at(-1) && rows.length > page.limit
+          ? encodeStaffCursor({ createdAt: pageRows.at(-1)!.sortAt, id: pageRows.at(-1)!.jobId })
+          : null,
     },
     requestId: request.requestId,
   };

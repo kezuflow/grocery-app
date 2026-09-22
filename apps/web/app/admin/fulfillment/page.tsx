@@ -1,11 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { FulfillmentQueuePage, RpcResult } from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
@@ -23,6 +22,8 @@ import {
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
+import { OperationalOrderDetail } from "../../../components/admin/operational-order-detail";
+import { useAdminOperationalRefresh } from "../admin-operational-refresh-provider";
 
 const actionLabels: Record<string, string> = {
   START_PICKING: "Accept order & start picking",
@@ -42,11 +43,14 @@ export default function FulfillmentPage() {
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
+  const [view, setView] = useState<string>("ALL");
+  const operationalRefresh = useAdminOperationalRefresh();
   const actionIntent = useAdminCommandIntent();
   const pagination = useAdminPagination(`${locationId}:${orderId}`);
   const load = useCallback(
-    async (cursor: string | null) => {
-      setState("loading");
+    async (cursor: string | null, background = false) => {
+      if (!background) setState("loading");
       try {
         const payload = (await (
           await fetch(
@@ -63,6 +67,7 @@ export default function FulfillmentPage() {
           return;
         }
         setPage(payload.value);
+        setSelectedOrderId((current) => current ?? payload.value.items[0]?.orderId ?? null);
         setState("ready");
       } catch {
         setNotice("Network error loading fulfillment.");
@@ -74,6 +79,16 @@ export default function FulfillmentPage() {
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
   }, [load, locationId, pagination.cursor]);
+  useEffect(() => {
+    if (locationId && operationalRefresh.revision > 0) void load(pagination.cursor, true);
+    // The shared owner drives narrow revalidation without clearing the current list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operationalRefresh.revision]);
+  const filteredItems = useMemo(
+    () => page?.items.filter((item) => view === "ALL" || item.operational?.progress === view) ?? [],
+    [page, view],
+  );
+  const selected = page?.items.find((item) => item.orderId === selectedOrderId) ?? null;
   async function act(orderId: string, action: string, expectedVersion: number) {
     if (!locationId || actionIntent.pending) return;
     let payload: RpcResult<unknown>;
@@ -143,73 +158,104 @@ export default function FulfillmentPage() {
         </Alert>
       ) : null}
       {state === "ready" && page ? (
-        <ListPageSection title="Work queue" description={`Current location: ${label}.`}>
-          {page.items.length > 0 ? (
-            <div className="p-4">
-              <Input
-                aria-label="Fulfillment action reason"
-                placeholder="Describe a shortage when reporting one"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+          <ListPageSection
+            title="Orders"
+            description={`Current location: ${label}. Paid operational snapshots only; finance remains in Orders.`}
+          >
+            <div className="flex flex-wrap gap-2 border-b p-3" aria-label="Fulfillment views">
+              {["ALL", "NEW", "PREPARING", "READY_FOR_DISPATCH", "UPCOMING", "HISTORY"].map(
+                (candidate) => (
+                  <Button
+                    key={candidate}
+                    size="sm"
+                    variant={view === candidate ? "default" : "outline"}
+                    onClick={() => setView(candidate)}
+                  >
+                    {candidate.replaceAll("_", " ")}
+                  </Button>
+                ),
+              )}
+              {operationalRefresh.refreshing ? (
+                <span className="self-center text-xs text-[var(--fm-text-muted)]">Updating…</span>
+              ) : null}
+              {operationalRefresh.stale ? (
+                <span role="status" className="self-center text-xs text-amber-700">
+                  Updates delayed
+                </span>
+              ) : null}
             </div>
-          ) : null}
-          {notice ? (
-            <p role="status" className="border-b p-3 text-sm">
-              {notice}
-            </p>
-          ) : null}
-          {page.items.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
-              No fulfillment tasks match this location.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Cycle</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Next action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {page.items.map((item) => (
-                    <TableRow key={item.orderId}>
-                      <TableCell className="font-mono text-xs">{item.orderId}</TableCell>
-                      <TableCell>{item.cycleId ?? "Instant"}</TableCell>
-                      <TableCell>{item.locationId}</TableCell>
-                      <TableCell>
-                        <StatusBadge>{item.status}</StatusBadge>
-                      </TableCell>
-                      <TableCell className="flex flex-wrap gap-1">
-                        {item.allowedActions.map((action) => (
-                          <Button
-                            key={action}
-                            size="sm"
-                            variant={action === "MARK_PACKED" ? "default" : "outline"}
-                            disabled={actionIntent.pending}
-                            onClick={() => void act(item.orderId, action, item.version)}
-                          >
-                            {actionLabels[action] ?? action}
-                          </Button>
-                        ))}
-                      </TableCell>
+            {notice ? (
+              <p role="status" className="border-b p-3 text-sm">
+                {notice}
+              </p>
+            ) : null}
+            {filteredItems.length === 0 ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+                No fulfillment tasks match this location.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order</TableHead>
+                      <TableHead>Cycle</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Next action</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          <AdminCursorPagination
-            pageNumber={pagination.pageNumber}
-            nextCursor={page.nextCursor}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-          />
-        </ListPageSection>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => (
+                      <TableRow
+                        key={item.orderId}
+                        className="cursor-pointer"
+                        aria-selected={selectedOrderId === item.orderId}
+                        onClick={() => setSelectedOrderId(item.orderId)}
+                      >
+                        <TableCell className="font-medium">
+                          {item.operational?.orderNumber ?? item.orderId}
+                        </TableCell>
+                        <TableCell>
+                          {item.operational?.timing.windowName ??
+                            item.operational?.timing.cycleName ??
+                            "Instant"}
+                        </TableCell>
+                        <TableCell>{item.locationId}</TableCell>
+                        <TableCell>
+                          <StatusBadge>{item.status}</StatusBadge>
+                        </TableCell>
+                        <TableCell>
+                          {item.allowedActions[0]
+                            ? actionLabels[item.allowedActions[0]]
+                            : item.status === "PACKED"
+                              ? "Choose dispatch"
+                              : "No action"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={page.nextCursor}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
+          </ListPageSection>
+          {selected ? (
+            <OperationalOrderDetail
+              item={selected}
+              reason={reason}
+              setReason={setReason}
+              pending={actionIntent.pending}
+              onAction={(action) => void act(selected.orderId, action, selected.version)}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

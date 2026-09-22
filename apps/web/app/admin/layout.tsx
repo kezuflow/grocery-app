@@ -4,6 +4,7 @@ import { AdminOverviewProvider } from "./admin-overview-provider";
 import { AdminShellBoundary } from "../../components/admin/admin-shell";
 import { AdminThemeProvider } from "../../components/admin/admin-theme-provider";
 import { AdminToaster } from "../../components/admin/admin-toaster";
+import { AdminOperationalRefreshProvider } from "./admin-operational-refresh-provider";
 
 /**
  * The admin layout owns the capability-aware shell. Navigation and scope
@@ -16,7 +17,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <div className="fm-admin min-h-screen">
         <AdminContextProvider>
           <AdminOverviewProvider>
-            <AdminShellBoundary>{children}</AdminShellBoundary>
+            <AdminOperationalRefreshProvider>
+              <AdminShellBoundary>{children}</AdminShellBoundary>
+            </AdminOperationalRefreshProvider>
           </AdminOverviewProvider>
         </AdminContextProvider>
         <AdminToaster />
