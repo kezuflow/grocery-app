@@ -1,4 +1,5 @@
 import { tracing } from "cloudflare:workers";
+import { appErrorCodes } from "@freshmarkets/contracts";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -25,6 +26,7 @@ const SENSITIVE_LOG_KEYS: ReadonlySet<string> = new Set([
 ]);
 const SAFE_REQUEST_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const SAFE_RPC_ERROR_CODES: ReadonlySet<string> = new Set(appErrorCodes);
 
 function safeLogContext(
   context: LogContext,
@@ -93,20 +95,32 @@ export async function observeCoreRpc<T>(
 ): Promise<T> {
   const startedAt = performance.now();
   try {
+    let businessOutcome: "accepted" | "rejected" = "accepted";
+    let errorCode: string | undefined;
     const result = await traceOperation(
       `rpc.${operationName}`,
       { requestId: correlationId, operation: operationName },
-      operation,
+      async (span) => {
+        const value = await operation(span);
+        const outcome = value as RpcOutcome;
+        businessOutcome = outcome?.ok === false ? "rejected" : "accepted";
+        errorCode =
+          businessOutcome === "rejected" &&
+          typeof outcome.error?.code === "string" &&
+          SAFE_RPC_ERROR_CODES.has(outcome.error.code)
+            ? outcome.error.code
+            : undefined;
+        span.setAttribute("rpc.business_outcome", businessOutcome);
+        if (errorCode) span.setAttribute("rpc.error_code", errorCode);
+        return value;
+      },
     );
-    const outcome = result as RpcOutcome;
-    const succeeded = outcome?.ok !== false;
-    const errorCode =
-      !succeeded && typeof outcome.error?.code === "string" ? outcome.error.code : undefined;
-    log(succeeded ? "info" : "warn", "core.rpc.completed", {
+    log(businessOutcome === "accepted" ? "info" : "warn", "core.rpc.completed", {
       requestId: correlationId,
       operation: operationName,
       durationMs: elapsedMs(startedAt),
-      result: succeeded ? "success" : "error",
+      transportOutcome: "completed",
+      businessOutcome,
       errorCode,
     });
     return result;
@@ -115,7 +129,8 @@ export async function observeCoreRpc<T>(
       requestId: correlationId,
       operation: operationName,
       durationMs: elapsedMs(startedAt),
-      result: "exception",
+      transportOutcome: "exception",
+      businessOutcome: "not_returned",
     });
     throw error;
   }

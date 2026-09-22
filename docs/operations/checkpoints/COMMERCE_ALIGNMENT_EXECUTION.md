@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CORE-RPC-OUTCOME-TELEMETRY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, operational telemetry assurance. Stable ID: `CORE-RPC-OUTCOME-TELEMETRY-1`.
+Acceptance: Core RPC spans and structured completion logs distinguish accepted typed results,
+rejected typed results and unexpected exceptions; response values, error details and unrecognized
+codes are absent from telemetry.
+
+Observed clean `main`/`origin/main` at `efb1690b4ef74eca055e339471227b98cef99f5f` before
+editing. The separate Cart-latency task committed its release checkpoint and Web placement trial
+during this slice; current synchronized `main`/`origin/main` is
+`aba063bfcef13ee393e3b00f32c43fdb2ecb97ee`. This slice changed only Core observability,
+its focused tests, and architecture guidance. It did not alter the other agent's Web configuration,
+polling, query paths, deployment or provider operations. The Core source under test did not change
+during those concurrent commits.
+
+The generic span still reports whether its operation completed or threw. The RPC wrapper now also
+marks `rpc.business_outcome` as `accepted` or `rejected`, and records only an allowlisted application
+error code on the span. Structured RPC logs use separate `transportOutcome` and `businessOutcome`
+fields; exceptions carry `not_returned` rather than being mislabeled as a typed rejection. Tests
+cover success, typed denial, an unrecognized code, unexpected exception and absence of sensitive
+result/error fields.
+
+Verification on this working-tree scope: focused Worker observability **5/5**, complete Core
+Worker/D1 suite **1713/1713 across 210 files**, Core typecheck, Core Wrangler dry-run build,
+architecture/readiness guards, focused lint/format and `git diff --check` passed. The suite took
+458 seconds; unrelated concurrent commits changed Web configuration/docs, not the Core source.
+No deployed trace/log capture, provider transaction, deployment or complete commerce-phase
+aggregate/browser acceptance is claimed. The next independent item is to assess actual abuse
+controls with deployed configuration evidence; do not infer production limits from local code.
+
 ## Latest owner request — BROWSER-STORAGE-RECOVERY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

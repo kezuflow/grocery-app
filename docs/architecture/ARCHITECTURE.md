@@ -267,6 +267,10 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - All general Core telemetry crosses the redacting observability helper. Cookie, authorization,
   token, secret, password/reset, action URL, webhook/provider payload, and precise-address fields
   are forbidden by runtime redaction plus `pnpm readiness:check` static analysis.
+- Core RPC telemetry distinguishes a completed transport from the typed business outcome:
+  `accepted` or `rejected` is recorded on both the RPC span and structured completion log;
+  an unexpected exception is recorded separately. Only declared application error codes are
+  emitted, never response values or error details.
 - Enable Cloudflare Worker observability with an intentional sampling policy.
 - Trace checkout attempts, provider payment references, webhook event IDs, order commitment, refunds, queue jobs, and reconciliation outcomes.
 - Geocoding logs may include operation, duration, result category, and stable error code, but never address text, contact data, coordinates, provider payloads, or temporary candidate contents.
