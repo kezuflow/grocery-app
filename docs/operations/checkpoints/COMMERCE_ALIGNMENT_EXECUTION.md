@@ -80,21 +80,37 @@ versioned Cart command, then reads the full Cart and evaluates promotions. A rea
 D1 count found two automatic promotion definitions; the production primary served that query from
 SIN. No remote write or provider action occurred.
 
-Implemented, pending aggregate/release verification: Web POST cart timing logs and `Server-Timing`
+Implemented: Web POST cart timing logs and `Server-Timing`
 for total adapter/RPC durations; Core RPC customer-resolution versus Cart-command timing; and
 PII-free Cart write/read stage durations in the redacting telemetry boundary. Promotion rules,
 order count, customer segments and sale targets now start together after promotion IDs are known,
 eliminating one sequential D1 query round trip without changing evaluation inputs or result. No
 schema, contract, payment, checkout, provider or placement configuration changed.
 
-Focused verification on this working-tree scope: cart Web route and client **22/22 across 2 files**;
-Core Cart/RPC/promotion **23/23 across 4 files**; Core and Web typechecks, architecture/readiness,
-format and vinext checks passed. An aggregate `pnpm check` passed its static gates and Web suite but
-was stopped during the full Core suite after the concurrent Admin commit changed the source
-revision. No aggregate result or browser acceptance is claimed. No deployment has occurred. The
-one next action is to finish the aggregate gate against a stable checkout, review/stage only this
-slice, commit/push on `main`, and deploy from a clean checkout under the owner's explicit production
-authorization. After release, collect correlated live timing evidence before any placement decision.
+The intended slice was committed and pushed on `main` as `c3bc5347`. In a clean, detached release
+worktree pinned to that revision, static gates, Core/Web typechecks and vinext compatibility passed;
+the complete Web suite passed **637/637 across 154 files** and complete Core suite **1711/1711 across
+210 files**. The focused Cart checks passed **22/22 Web** and **23/23 Core**. Core production Wrangler
+binding generation and deployment dry run passed; the production Web build, generated binding
+inspection and deployment dry run passed. An uninterrupted single `pnpm check` result is not claimed:
+earlier runs were interrupted by concurrent source change and lost shell sessions. All named
+constituent suites/gates completed against the pinned source. No schema migration or provider
+transaction was part of the release.
+
+The owner explicitly approved including the already-committed Admin read-model change `f2122d2b`
+in this deployment. On 2026-09-23, the pinned `c3bc5347` source was deployed to production Core
+version `19971473-1b95-4f47-9e11-b484b52f13eb` and Web version
+`b754a447-96db-4465-8d7e-e4eeef07bcd6`; later `main` commits and other tasks' uncommitted files
+were excluded. Wrangler reported that Dashboard-only Smart Placement had been enabled for both
+Workers before release. The repository configuration has no placement setting, so these deployments
+removed that remote setting; it was not an intentional latency optimization. Core `/health`, `/ready`,
+Web `/api/core-health` and the homepage returned HTTP 200. Web production secrets were present and
+the payment public-key configuration endpoint reported configured; no key value was logged. A fresh
+guest add-to-cart in the Codex in-app browser updated the cart in **619 ms** click-to-visible-state.
+This is browser guest acceptance only; no new authenticated add-to-cart or correlated production
+timing breakdown has yet been collected. The one next action is to capture several signed-in clicks
+with the new Web/Core stage telemetry, then compare placement options for the Web fetch handler;
+do not infer signed-in improvement from the guest result.
 
 ## Latest owner request — ADMIN-OPERATIONAL-READ-CORRECTNESS-1 (2026-09-23)
 
