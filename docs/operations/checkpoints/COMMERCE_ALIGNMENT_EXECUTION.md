@@ -1,5 +1,63 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-RAPID-QUANTITY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `CART-RAPID-QUANTITY-1`. Acceptance: rapid repeated quantity
+taps preview every requested change immediately in the drawer, Cart page and Checkout; versioned
+Core writes remain serialized and coalesce to the latest requested count; a compact spinner beside
+the controls replaces visible `Updating quantity…` text; failure rolls back the unconfirmed preview;
+authoritative prices/totals and checkout gates remain intact. The owner approved a Web-only
+production deployment after checks and requested the Codex in-app browser for live verification.
+
+Observed clean synchronized `main`/`origin/main` at `d205e51a` before editing. Current Web
+production version is `28fe1d8c-6a14-4251-ae36-712fbc4858b1`; Core/D1 are unchanged by this
+slice. The existing detached Web release checkout at `d1f86b92` preserves its deployed placement
+and application baseline. No unrelated working-tree changes were present.
+
+Implemented a shared client-side per-SKU target queue for the three quantity surfaces. Each tap
+immediately updates the requested count; one versioned Core command runs at a time, with later
+taps coalesced to the latest target. Confirmed Cart views update the authoritative subtotal and
+price; pending targets cannot enter checkout or payment. A rejected or uncertain command clears
+remaining unconfirmed targets and reports the failure. A small `role=status` spinner with
+reduced-motion handling sits beside each pending stepper instead of visible status text. No
+Core, D1, provider, placement or schema changes are included.
+
+Focused Web tests passed **41/41 across 4 files**, including rapid same-SKU taps, multi-SKU
+serialization, reversal after removal, queued rejection, Checkout and spinner/preview assertions.
+The first `pnpm check` caught an outdated source-shape test for the removed single-request
+Checkout function; it was updated to assert quote invalidation before the shared queue's write,
+and focused rerun passed **3/3**. The second complete `pnpm check` passed on the source
+working-tree scope: formatting, naming, terminology, harness, migration, commit, architecture,
+readiness and lint gates; all workspace typechecks; Web **658/658 across 156 files**, Core
+Worker/D1 **1714/1714 across 210 files**, shared-package tests, Core dry-run and Web build.
+Focused lint/format, Web typecheck and `git diff --check` passed. The 11 Web source/test files
+were committed and pushed to `main` as `f9441b96`; this checkpoint is separate.
+
+The clean detached production Web release checkout at `d1f86b92` cherry-picked only that Web
+source commit to `ff0b41fb`. Its diff contains the 11 Web source/test files only. Release
+verification passed Web typecheck, **647/647 tests across 155 files**, Vinext compatibility
+**16 supported/0 issues**, a production Web build, generated-config inspection and Wrangler
+dry-run. The generated configuration retained `freshmarkets-web-production`,
+`freshmarkets.ph`, the production Core RPC binding and the `aws:ap-southeast-1` placement hint.
+The local build warned about absent local secret values; no values were read, and the existing
+production secret bindings were not modified. The Web-only deploy created production version
+`a40b64cb-8402-41bc-abc6-65402aa96ee6`; Core and D1 were not deployed. Web homepage,
+Web `/api/core-health`, Core `/health` and Core `/ready` returned HTTP 200.
+
+In the owner's existing signed-in Codex in-app browser, the cart drawer initially showed Abiu
+quantity 4, **20 items / ₱1,074**. Three rapid increase taps visibly previewed quantity 7 with
+an accessible `Updating quantity` spinner beside the stepper while promotions were disabled;
+the confirmed cart then showed quantity 7 and **23 items / ₱1,077**. Three rapid decrease taps
+previewed quantity 4 and the spinner while Core's partial confirmed price remained authoritative;
+after drain the cart returned to quantity 4 and **20 items / ₱1,074**, with the spinner gone and
+promotion entry enabled. No checkout/payment/provider action was taken. This is signed-in drawer
+acceptance, not a guest run, sustained p95 or proof of a faster Core path. Completion level:
+**1 of 1 rapid quantity UI slice implemented, verified, pushed, deployed and live drawer-tested**.
+The next action is owner observation of this production UI; if a specific path still feels slow,
+capture correlated click-to-confirm and Web/Core timings for that path before changing placement
+or database behavior.
+
 ## Latest owner request — CART-QUANTITY-FEEDBACK-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
