@@ -1,5 +1,45 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CUSTOMER-ORDER-TIMELINE-ICONS-1 (2026-09-22)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, customer Order detail presentation. The owner supplied the deployed Order page
+and a DoorDash progress reference, requested a recognizable icon on every timeline point, reported the
+visible horizontal scrollbar at smaller browser widths, and asked whether the four displayed statuses
+were correct and ordered. Acceptance: inspect the authenticated production Order without mutation,
+identify the four underlying customer-safe facts, present the primary milestones in customer-journey
+order with category-specific icons, fit the rail at desktop and 390px without local or page-wide
+horizontal overflow, preserve the latest safe description and timestamps, and retain the historical
+empty state.
+
+Observed clean `main` at `3e928cea43f7e7ce505177a61036b7d56e4fc7bb` before editing. The live
+page showed Payment update at 7:37:08 PM, Delivery update and Order confirmed at 7:45:44 PM, and
+Order preparation update at 10:45:59 PM, with the latest safe description reporting Packing. The
+Delivery detail was Unassigned. The prior presentation was not a useful progress order: Core's
+chronological sort used a stable alphabetical type tie-break for the simultaneous Delivery/Order facts,
+so Delivery appeared before confirmation. No production mutation was made.
+
+Implemented a Web-only presentation correction. The rail now renders the primary milestones as
+Payment -> Order confirmed -> Preparation -> Delivery while retaining each Core timestamp and selecting
+the latest description by occurrence time. Every supported timeline category has a semantic Lucide
+icon; successful Payment retains its green treatment. Equal-width grid columns replace the readable
+minimum-width scroller, removing the visible scrollbar without clipping the page. Auxiliary addition,
+refund and issue entries retain deterministic positions after the primary fulfillment journey. Core,
+contracts, storage, authorization and stored timeline facts are unchanged.
+
+Verification on the complete intended working-tree scope: focused Web component/page tests pass **5/5
+across 2 files**; Web typecheck, focused lint/format and `git diff --check` pass. The first managed
+Playwright invocation timed out during its 180-second stack bootstrap before any assertion ran. After
+explicitly preparing the guidance-approved disposable
+`apps/core/.wrangler/e2e-commerce-alignment-20260907` state and starting the already-built Web/Core
+stack, the focused browser test passed **1/1**. It proves four icon-bearing markers, the canonical
+four-stage order, one shared latest description, equal-row desktop layout, no timeline overflow at
+390px and no page-wide horizontal overflow. The local server was stopped afterward. No remote data,
+provider transaction, outbound message or deployment occurred. Completion level: **1 of 1 customer
+Order-timeline icon/order/overflow slice implemented and locally accepted**. The verified Web, test and
+design scope was committed directly to `main` as `1ec7a6d7` and pushed to `origin/main`. Production
+deployment remains separately unauthorized; no work remains at this local implementation slice level.
+
 ## Latest owner request — ADMIN-ORDER-LIST-PROGRESS-1 (2026-09-21)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
