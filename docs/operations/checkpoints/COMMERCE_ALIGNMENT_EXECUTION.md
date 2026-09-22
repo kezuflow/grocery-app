@@ -1,5 +1,39 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — UI-MOTION-DEPLOY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `UI-MOTION-DEPLOY-1`. Acceptance: deploy the approved Web-only
+motion slice to production without taking unrelated `main` changes, Core, D1, provider commands or
+customer data into the release; confirm production health and a read-only live storefront journey.
+
+Observed clean synchronized `main`/`origin/main` at `1959b756` and clean detached Web production
+release checkout at `ff0b41fb` before release preparation. Cloudflare reported the prior Web
+production version `a40b64cb-8402-41bc-abc6-65402aa96ee6` at 100%. Cherry-picked source commit
+`5877a7fb` into the isolated release checkout as `d6eb0546`, resolving a checkpoint-document
+conflict by retaining release-local documentation; the resulting commit contains exactly 14 Web
+source/test files. No other `main` Web changes, Core changes or schema files entered the release.
+
+Release verification on `d6eb0546`: Web typecheck passed; Web **649/649 tests across 156 files**
+passed; Vinext compatibility reported **16 supported, 0 issues**; `CLOUDFLARE_ENV=production`
+Web build and Wrangler dry run passed; Web binding types were current. The generated Worker config
+targeted `freshmarkets-web-production`, `freshmarkets.ph`, the production Core RPC service and
+`aws:ap-southeast-1` placement. Cloudflare listed the three required Web secret bindings by name;
+values were neither read nor changed. The build's missing *local* secret warnings do not indicate
+missing deployed bindings. Before deployment, Web homepage/bridge and Core health/ready each returned
+HTTP 200.
+
+Deployed only the Web Worker with Wrangler 4.127.1, creating production version
+`2d4e412f-5875-4da5-af02-984504aa1b2e` at 100%. Post-deploy Web homepage,
+`/api/core-health`, Core `/health` and Core `/ready` returned HTTP 200. One read-only Playwright
+journey against `https://freshmarkets.ph` passed: a product card opened quick view with its fixed
+variants. This confirms that storefront path, not every Admin animation, reduced-motion setting,
+signed-in commerce journey or actual provider operation. No Core/D1 deployment, migration,
+payment, refund, courier booking, cart mutation or outbound message occurred. Completion level:
+**1 of 1 Web-only motion deployment published and live-smoke-tested**. Next action: owner visual
+review of the deployed Storefront/Admin motion; investigate any specific issue without inferring
+provider or full Phase 7 acceptance from this release.
+
 ## Latest owner request — UI-MOTION-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
