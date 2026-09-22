@@ -161,7 +161,7 @@ for (const width of [1440, 390]) {
       .parse(await read(admin, `/api/admin/delivery-cycles?marketId=${marketId}`));
     const destination = destinations.items.find((item) => item.locationId === locationId);
     if (!destination) throw new Error("Missing cycle destination");
-    const cutoff = Date.now() + 120000,
+    const cutoff = Date.now() + 60000,
       at = (offset: number) => new Date(cutoff + offset).toISOString();
     const cycle = z.object({ cycleId: z.string(), version: z.number() }).parse(
       await post(admin, "/api/admin/delivery-cycles", {
@@ -322,6 +322,7 @@ for (const width of [1440, 390]) {
             expectedDeliveryDiscountMinor: quote.deliveryDiscountMinor,
             expectedTaxMinor: quote.taxMinor,
             expectedTotalMinor: quote.totalMinor,
+            paymentMethod: { kind: "TOKEN", value: "qrph" },
             returnUrl: new URL(
               "/orders",
               testInfo.project.use.baseURL ?? "http://localhost:3100",
@@ -446,9 +447,7 @@ for (const width of [1440, 390]) {
     expect(paidSnapshot.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
       beforeChangeover,
     );
-    await expect
-      .poll(() => Date.now() >= cutoff, { timeout: 125000, intervals: [1000] })
-      .toBe(true);
+    await expect.poll(() => Date.now() >= cutoff, { timeout: 65000, intervals: [1000] }).toBe(true);
     expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
     await admin.goto("/admin/procurement");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
@@ -456,8 +455,9 @@ for (const width of [1440, 390]) {
     await admin
       .getByRole("combobox", { name: "Delivery week", exact: true })
       .selectOption(cycle.cycleId);
+    await admin.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     const demand = admin.getByRole("article").filter({ hasText: "Red onion · 500 g" });
-    await expect(demand).toContainText("2,000");
+    await expect(demand).toContainText("22,500 g");
     await demand.getByRole("button", { name: "Confirm purchase", exact: true }).click();
     await admin
       .getByRole("dialog")
@@ -467,25 +467,49 @@ for (const width of [1440, 390]) {
     await admin.getByRole("link", { name: "Receiving", exact: true }).click();
     const row = admin.getByRole("row").filter({ hasText: "Red onion" });
     await row.getByRole("button", { name: "Start receiving", exact: true }).click();
-    await row.getByLabel(/^Accepted quantity /).fill("2000");
+    await row.getByLabel(/^Accepted quantity /).fill("22500");
     await row.getByLabel(/^Receiving reason /).fill("Inspected all purchased goods");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
-    await expect(row).toContainText("2000 / 0");
+    await expect(row).toContainText("22500 / 0");
+    async function operationalOrderNumber(targetOrderId: string) {
+      const result = z
+        .object({
+          items: z.array(
+            z.object({
+              orderId: z.string(),
+              operational: z.object({ orderNumber: z.string() }).nullable(),
+            }),
+          ),
+        })
+        .parse(
+          await read(
+            admin,
+            `/api/admin/fulfillment?locationId=${locationId}&orderId=${targetOrderId}&limit=1`,
+          ),
+        )
+        .items.find((item) => item.orderId === targetOrderId);
+      if (!result?.operational) throw new Error("Missing operational Order");
+      return result.operational.orderNumber;
+    }
+    const courierOrderNumber = await operationalOrderNumber(courierOrderId);
+    const manualOrderNumber = await operationalOrderNumber(orderId);
     await admin.goto("/admin/delivery");
     const courierRow = admin.getByRole("row").filter({ hasText: courierOrderId });
-    await expect(courierRow).toContainText("Start preparation");
+    await expect(courierRow).toContainText(
+      "Finish packing the paid order before choosing a delivery method.",
+    );
     await admin.goto("/admin/fulfillment");
-    const courierFulfillment = admin.getByRole("row").filter({ hasText: courierOrderId });
-    await courierFulfillment
-      .getByRole("button", { name: "Accept order & start picking", exact: true })
-      .click();
+    const courierFulfillment = admin.getByRole("row", { name: new RegExp(courierOrderNumber) });
+    await courierFulfillment.click();
+    await admin.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
     await admin.goto("/admin/delivery");
     await expect(courierRow).toContainText(
       "Finish packing the paid order before choosing a delivery method.",
     );
     await admin.goto("/admin/fulfillment");
+    await courierFulfillment.click();
     for (const name of ["Finish picking", "Start packing", "Finish packing"])
-      await courierFulfillment.getByRole("button", { name, exact: true }).click();
+      await admin.getByRole("button", { name, exact: true }).click();
     await expect(courierFulfillment).toContainText("PACKED");
     await admin.goto("/admin/delivery");
     const pickupInput = await admin.evaluate(
@@ -493,6 +517,7 @@ for (const width of [1440, 390]) {
         new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 16),
       cutoff + 5_400_000,
     );
+    await courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }).check();
     await courierRow.getByLabel("Pickup time", { exact: true }).fill(pickupInput);
     await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
     await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
@@ -549,31 +574,16 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`scheduled-courier-delivered-${width}.png`),
       fullPage: true,
     });
-    const manualRow = admin.getByRole("row").filter({ hasText: orderId });
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await manualRow
-      .getByLabel("Person delivering", { exact: true })
-      .fill("Synthetic delivery helper");
-    await manualRow
-      .getByLabel("Phone including country code", { exact: true })
-      .fill("+639171110000");
-    await manualRow
-      .getByLabel("Operational note (optional)", { exact: true })
-      .fill("Synthetic courier unavailability");
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await expect(manualRow).toContainText("Manual · Synthetic delivery helper");
-    await expect(
-      manualRow.getByRole("button", { name: "Hand over packed order", exact: true }),
-    ).toHaveCount(0);
     await admin.goto("/admin/fulfillment");
-    const fulfillment = admin.getByRole("row").filter({ hasText: orderId });
+    const fulfillment = admin.getByRole("row", { name: new RegExp(manualOrderNumber) });
+    await fulfillment.click();
     for (const name of [
       "Accept order & start picking",
       "Finish picking",
       "Start packing",
       "Finish packing",
     ]) {
-      await fulfillment.getByRole("button", { name, exact: true }).click();
+      await admin.getByRole("button", { name, exact: true }).click();
     }
     await expect(fulfillment).toContainText("PACKED");
     const finalStock = z
@@ -600,6 +610,19 @@ for (const width of [1440, 390]) {
     });
     await expect(fulfillment.getByRole("button", { name: "Hand off", exact: true })).toHaveCount(0);
     await admin.goto("/admin/delivery");
+    const manualRow = admin.getByRole("row").filter({ hasText: orderId });
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await manualRow
+      .getByLabel("Person delivering", { exact: true })
+      .fill("Synthetic delivery helper");
+    await manualRow
+      .getByLabel("Phone including country code", { exact: true })
+      .fill("+639171110000");
+    await manualRow
+      .getByLabel("Operational note (optional)", { exact: true })
+      .fill("Synthetic staff-selected delivery");
+    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
+    await expect(manualRow).toContainText("Manual · Synthetic delivery helper");
     await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
     await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
     await expect(manualRow).toContainText("Handed over");

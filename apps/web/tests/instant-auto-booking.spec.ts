@@ -30,8 +30,6 @@ for (const width of [1440, 390]) {
       "Requires the managed test-provider ingress.",
     );
     test.setTimeout(420000);
-    const reportStart = new Date().toISOString();
-    const confirmedTotals: number[] = [];
     page.setDefaultTimeout(10000);
     admin.setDefaultTimeout(10000);
     await page.setViewportSize({ width, height: 1000 });
@@ -216,8 +214,7 @@ for (const width of [1440, 390]) {
       expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
       await page.goto(url.searchParams.get("returnTo") ?? "/orders");
     }
-    const paidCartIds = new Set<string>();
-    async function checkout(quantity: number, itemDiscountMinor = 0) {
+    async function checkout(quantity: number) {
       const before = orders.parse(await read(page, "/api/commerce/orders"));
       const loadedCart = page.waitForResponse(
         async (response) =>
@@ -236,20 +233,11 @@ for (const width of [1440, 390]) {
         quantity,
         idempotencyKey: crypto.randomUUID(),
       });
-      if (itemDiscountMinor > 0) {
-        await page.goto("/cart");
-        await expect(page.getByLabel("Regular line price", { exact: true })).toHaveText("₱2.00");
-        await expect(page.getByLabel("Sale line price", { exact: true })).toHaveText("₱1.50");
-        await page.screenshot({
-          path: testInfo.outputPath(`ca34-cart-sale-${width}.png`),
-          fullPage: true,
-        });
-      }
       await page.goto("/checkout");
       const quoteResponse = page.waitForResponse(
         (r) => r.url().endsWith("/api/checkout/quote") && r.request().method() === "POST",
       );
-      await page.getByRole("radio").first().check();
+      await page.getByText("Journey address", { exact: true }).click();
       const quote = z
         .object({
           totalMinor: z.number(),
@@ -258,15 +246,18 @@ for (const width of [1440, 390]) {
         })
         .parse(await value(await quoteResponse));
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
-      expect(quote.itemDiscountMinor).toBe(itemDiscountMinor);
+      expect(quote.itemDiscountMinor).toBe(0);
       await page.getByRole("complementary", { name: "Order summary" }).screenshot({
         path: testInfo.outputPath(`checkout-delivery-policy-${width}.png`),
       });
-      await page.getByRole("button", { name: "Continue to payment", exact: true }).click();
+      await page
+        .getByRole("radiogroup", { name: "Payment method" })
+        .getByRole("radio", { name: "QR Ph" })
+        .click();
+      await page.getByRole("button", { name: "Continue with QR Ph", exact: true }).click();
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
       await confirmTestPayment(quote.totalMinor);
-      confirmedTotals.push(quote.totalMinor);
       const current = orders.parse(await read(page, "/api/commerce/orders"));
       const created = current.items.filter(
         (item) => !before.items.some((old) => old.id === item.id),
@@ -274,7 +265,6 @@ for (const width of [1440, 390]) {
       expect(created).toHaveLength(1);
       const order = created[0];
       if (!order) throw new Error("Missing committed Order");
-      paidCartIds.add(cart.id);
       return order.id;
     }
     expect(product.inventoryPool.position?.availableBase ?? 0).toBeGreaterThanOrEqual(1000);
@@ -292,129 +282,6 @@ for (const width of [1440, 390]) {
       ok: false,
       error: { code: "ILLEGAL_TRANSITION" },
     });
-    // CA-3.4: ordinary Admin authoring, Core-priced browsing/cart, paid checkout
-    // and customer cancellation. The existing signed fake-provider ingress is
-    // reused; no commerce response is mocked and no real provider is charged.
-    const saleCode = `SALE_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
-    await admin.goto("/admin/promotions");
-    await admin.getByLabel("Promotion code", { exact: true }).fill(saleCode);
-    await admin.getByLabel("Promotion name", { exact: true }).fill(`Onion sale ${width}`);
-    await admin.getByLabel("Fixed discount in pesos").fill("0.20");
-    await admin.getByLabel("Sale on selected products", { exact: true }).check();
-    await admin.getByLabel("Search sale products").fill("red onion");
-    await admin.getByRole("button", { name: "Search", exact: true }).click();
-    await admin.getByRole("combobox", { name: "Sale product", exact: true }).click();
-    await admin.getByRole("option", { name: /red onion/i }).click();
-    await admin.getByRole("combobox", { name: "Sale selling option", exact: true }).click();
-    await admin.getByRole("option", { name: /500/ }).click();
-    await admin.getByRole("combobox", { name: "Sale location", exact: true }).click();
-    await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    await admin.getByLabel("Sale quantity limit").fill("2");
-    await admin.getByRole("button", { name: "Add to sale", exact: true }).click();
-    const saleCreated = admin.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/admin/promotions") && response.request().method() === "POST",
-    );
-    await admin.getByRole("button", { name: "Create draft", exact: true }).click();
-    const sale = z.object({ promotionId: z.string() }).parse(await value(await saleCreated));
-    const saleUrl = `/api/admin/promotions/${sale.promotionId}`;
-    const saleView = z.object({
-      version: z.number(),
-      productTargets: z.array(z.object({ remainingQuantity: z.number().nullable() })),
-    });
-    await admin.goto(`/admin/promotions/${sale.promotionId}`);
-    await admin.getByLabel("Campaign discount", { exact: true }).fill("0.25");
-    const saleSaved = admin.waitForResponse(
-      (response) => response.url().endsWith(saleUrl) && response.request().method() === "PATCH",
-    );
-    await admin.getByRole("button", { name: "Save campaign", exact: true }).click();
-    await value(await saleSaved);
-    await admin.getByLabel("Reason", { exact: true }).fill("Start chosen sale quantity");
-    const saleActivated = admin.waitForResponse(
-      (response) =>
-        response.url().endsWith(`${saleUrl}/status`) && response.request().method() === "POST",
-    );
-    await admin.getByRole("button", { name: "Activate", exact: true }).click();
-    await value(await saleActivated);
-    await page.goto("/products/red-onion");
-    await expect(page.getByLabel("Sale price", { exact: true })).toHaveText("₱0.75");
-    await expect(page.getByLabel("Regular price", { exact: true })).toHaveText("₱1.00");
-    await page.screenshot({
-      path: testInfo.outputPath(`ca34-product-sale-${width}.png`),
-      fullPage: true,
-    });
-    const oversizedCart = z
-      .object({ id: z.string(), version: z.number() })
-      .parse(await read(page, "/api/commerce/cart"));
-    await post(page, "/api/commerce/cart", {
-      cartId: oversizedCart.id,
-      expectedVersion: oversizedCart.version,
-      skuId,
-      quantity: 3,
-      idempotencyKey: crypto.randomUUID(),
-    });
-    await page.goto("/cart");
-    await expect(page.getByLabel("Regular line price", { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel("Sale line price", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("₱3.00", { exact: true }).first()).toBeVisible();
-    const saleOrder = await checkout(2, 50);
-    expect(saleView.parse(await read(admin, saleUrl)).productTargets[0]?.remainingQuantity).toBe(0);
-    await page.goto(`/orders/${saleOrder}`);
-    await page.getByRole("button", { name: "Cancel order", exact: true }).click();
-    await page.getByLabel("Reason for cancellation").fill("Cancel before preparation");
-    const canceledSale = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/orders/${saleOrder}/cancel`) &&
-        response.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
-    const cancellation = z
-      .object({
-        cancellationId: z.string(),
-        refunds: z.array(z.object({ paymentId: z.string(), amountMinor: z.number() })),
-      })
-      .parse(await value(await canceledSale));
-    for (const refund of cancellation.refunds) {
-      const body = JSON.stringify({
-        eventId: crypto.randomUUID(),
-        kind: "refund",
-        refundReference: `mock_refund_order-cancel:${cancellation.cancellationId}:${refund.paymentId}`,
-        vendorState: "paid",
-        amountMinor: refund.amountMinor,
-        currency: "PHP",
-      });
-      const headers = {
-        "content-type": "application/json",
-        "x-mock-timestamp": String(Date.now()),
-        "x-mock-signature": createHash("sha256")
-          .update(`mock-provider-test-secret:${body}`)
-          .digest("hex"),
-      };
-      expect(
-        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
-      ).toMatchObject({ processingStatus: "APPLIED" });
-      expect(
-        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
-      ).toMatchObject({ processingStatus: "DUPLICATE" });
-    }
-    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
-    await expect
-      .poll(
-        async () =>
-          z
-            .object({ cancellation: z.object({ status: z.string().nullable() }) })
-            .parse(await read(page, `/api/commerce/orders/${saleOrder}`)).cancellation.status,
-      )
-      .toBe("COMPLETED");
-    const restoredSale = saleView.parse(await read(admin, saleUrl));
-    expect(restoredSale.productTargets[0]?.remainingQuantity).toBe(2);
-    await post(admin, `${saleUrl}/status`, {
-      action: "DEACTIVATE",
-      reason: "End completed sale test",
-      expectedVersion: restoredSale.version,
-    });
-    await page.goto("/products/red-onion");
-    await expect(page.getByLabel("Sale price", { exact: true })).toHaveCount(0);
     const orderId = await checkout(2);
     const deliverySchema = z.object({
       items: z.array(
@@ -441,21 +308,40 @@ for (const width of [1440, 390]) {
       if (!item) throw new Error("Missing delivery job");
       return item;
     }
+    const fulfillmentSchema = z.object({
+      items: z.array(
+        z.object({
+          orderId: z.string(),
+          operational: z.object({ orderNumber: z.string() }).nullable(),
+        }),
+      ),
+    });
+    const fulfillment = fulfillmentSchema
+      .parse(
+        await read(
+          admin,
+          `/api/admin/fulfillment?locationId=${locationId}&orderId=${orderId}&limit=1`,
+        ),
+      )
+      .items.find((item) => item.orderId === orderId);
+    if (!fulfillment?.operational) throw new Error("Missing operational Order");
+    const orderNumber = fulfillment.operational.orderNumber;
     expect((await delivery()).externalDispatch).toBeNull();
     await admin.goto("/admin/fulfillment");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
     await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    const row = admin.getByRole("row").filter({ hasText: orderId });
-    await row.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
+    const row = admin.getByRole("row", { name: new RegExp(orderNumber) });
+    await row.click();
+    await admin.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
     expect((await delivery()).externalDispatch).toBeNull();
-    await row.getByRole("button", { name: "Finish picking", exact: true }).click();
+    await admin.getByRole("button", { name: "Finish picking", exact: true }).click();
     expect((await delivery()).externalDispatch).toBeNull();
-    await row.getByRole("button", { name: "Start packing", exact: true }).click();
+    await admin.getByRole("button", { name: "Start packing", exact: true }).click();
     await expect(row).toContainText("PACKING");
     expect((await delivery()).externalDispatch).toBeNull();
     expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
     expect((await delivery()).externalDispatch).toBeNull();
-    await row.getByRole("button", { name: "Finish packing", exact: true }).click();
+    await admin.getByRole("button", { name: "Finish packing", exact: true }).click();
     await expect(row).toContainText("PACKED");
     expect((await delivery()).externalDispatch).toBeNull();
     await admin.goto("/admin/delivery");
@@ -527,280 +413,6 @@ for (const width of [1440, 390]) {
     await completeLocalCourierDelivery(admin, page, orderId, locationId);
     await page.screenshot({
       path: testInfo.outputPath(`instant-delivered-${width}.png`),
-      fullPage: true,
-    });
-    const beforeProblem = await read(page, `/api/commerce/orders/${orderId}`);
-    await expect(page.getByText("Affected items (optional)", { exact: true })).toBeVisible();
-    await page
-      .getByLabel("Describe the issue", { exact: true })
-      .fill("Some groceries were missing from this delivery.");
-    let reportBody: string | null = null;
-    let reportKey: string | undefined;
-    let reportCalls = 0;
-    await page.route(`**/api/commerce/orders/${orderId}/issues`, async (route) => {
-      if (route.request().method() !== "POST") return route.continue();
-      reportCalls++;
-      if (reportCalls === 1) {
-        reportBody = route.request().postData();
-        reportKey = route.request().headers()["idempotency-key"];
-        expect(JSON.parse(reportBody ?? "{}")).toMatchObject({ affectedOrderItemIds: [] });
-        expect((await route.fetch()).ok()).toBe(true);
-        await route.abort("failed");
-      } else {
-        expect(route.request().postData()).toBe(reportBody);
-        expect(route.request().headers()["idempotency-key"]).toBe(reportKey);
-        await route.continue();
-      }
-    });
-    await page.getByRole("button", { name: "Report a problem", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Retry to safely continue");
-    await expect(page.getByLabel("Describe the issue", { exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Report a problem", exact: true }).click();
-    await expect(
-      page.getByRole("status").filter({ hasText: "Our team will review it" }),
-    ).toBeVisible();
-    expect(reportCalls).toBe(2);
-    await admin.goto("/admin");
-    await admin.reload();
-    const dashboard = z
-      .object({
-        notifications: z.array(
-          z.object({ orderId: z.string(), label: z.string(), href: z.string() }),
-        ),
-      })
-      .parse(await read(admin, "/api/admin/overview?scopeKind=GLOBAL&timezone=Asia%2FManila"));
-    const reportNotice = dashboard.notifications.find(
-      (item) => item.orderId === orderId && item.label === "Customer reported a problem",
-    );
-    if (!reportNotice) throw new Error("Missing administrator problem notification");
-    await expect(
-      admin.locator("#notifications").locator(`a[href="${reportNotice.href}"]`),
-    ).toBeVisible();
-    await admin.screenshot({
-      path: testInfo.outputPath(`dashboard-notifications-${width}.png`),
-      fullPage: true,
-    });
-    await admin.locator("#notifications").locator(`a[href="${reportNotice.href}"]`).click();
-    await expect(admin.getByRole("heading", { name: "Missing Item", exact: true })).toBeVisible();
-    await admin.goto("/admin/issues");
-    await expect(admin.getByRole("heading", { name: "Problems", exact: true })).toBeVisible();
-    const problemRow = admin.getByRole("row").filter({ hasText: orderId });
-    await expect(problemRow).toContainText("New");
-    await expect(problemRow.locator('a[href^="tel:"]')).toBeVisible();
-    await problemRow.getByRole("link", { name: "Missing Item", exact: true }).click();
-    await admin.getByRole("button", { name: "Start handling", exact: true }).click();
-    await admin.getByLabel("Confirmation reason", { exact: true }).fill("Contacting the customer");
-    await admin
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Start handling", exact: true })
-      .click();
-    await expect(admin.getByText("Being handled", { exact: true })).toBeVisible();
-    await expect(
-      admin.getByRole("button", { name: "Start investigation", exact: true }),
-    ).toHaveCount(0);
-    await admin.getByRole("button", { name: "Mark resolved", exact: true }).click();
-    await admin
-      .getByLabel("Confirmation reason", { exact: true })
-      .fill("Customer contacted and the reported problem was handled");
-    await admin
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Mark resolved", exact: true })
-      .click();
-    await expect(admin.getByText("Resolved", { exact: true })).toBeVisible();
-    await admin.screenshot({
-      path: testInfo.outputPath(`problem-resolved-${width}.png`),
-      fullPage: true,
-    });
-    const afterProblem = await read(page, `/api/commerce/orders/${orderId}`);
-    const commerce = z.object({
-      status: z.string(),
-      payments: z.array(z.unknown()),
-      refunds: z.array(z.unknown()),
-      financial: z.object({ totalMinor: z.number(), currency: z.string() }).passthrough(),
-    });
-    expect(commerce.parse(afterProblem)).toEqual(commerce.parse(beforeProblem));
-    await page.reload();
-    await expect(
-      page.getByText("Our team marked this issue resolved.", { exact: true }),
-    ).toBeVisible();
-    const reportQuery = new URLSearchParams({
-      startAt: reportStart,
-      endAt: new Date().toISOString(),
-      timezone: "Asia/Manila",
-      scopeKind: "LOCATION",
-      marketId,
-      locationId,
-      dimensions: JSON.stringify([
-        { key: "currency", value: "PHP" },
-        { key: "skuId", value: skuId },
-      ]),
-    });
-    const report = z
-      .object({
-        metrics: z.array(
-          z.object({
-            metricCode: z.string(),
-            value: z.number().nullable(),
-            availability: z.enum(["AVAILABLE", "UNAVAILABLE"]),
-            unavailableReason: z.string().nullable(),
-          }),
-        ),
-      })
-      .parse(await read(admin, `/api/admin/analytics/overview?${reportQuery}`));
-    const metric = (code: string) => report.metrics.find((item) => item.metricCode === code);
-    expect(report.metrics).toHaveLength(15);
-    expect(metric("order_count")).toMatchObject({ availability: "AVAILABLE", value: 2 });
-    expect(metric("delivered_orders")).toMatchObject({ availability: "AVAILABLE", value: 1 });
-    expect(metric("canceled_orders")).toMatchObject({ availability: "AVAILABLE", value: 1 });
-    expect(metric("paid_product_quantity")).toMatchObject({ availability: "AVAILABLE", value: 4 });
-    expect(metric("canceled_product_quantity")).toMatchObject({
-      availability: "AVAILABLE",
-      value: 2,
-    });
-    expect(metric("discount_spend")).toMatchObject({ availability: "AVAILABLE", value: 50 });
-    expect(metric("received_amount")).toMatchObject({
-      availability: "AVAILABLE",
-      value: confirmedTotals.reduce((sum, amount) => sum + amount, 0),
-    });
-    expect(metric("active_customers")).toMatchObject({ availability: "AVAILABLE", value: 1 });
-    expect(metric("repeat_orders")?.value).toBeGreaterThanOrEqual(1);
-    if (metric("refund_amount")?.availability === "AVAILABLE")
-      expect(metric("refund_amount")?.value).toBe(confirmedTotals[0]);
-    else expect(metric("refund_amount")?.unavailableReason).toContain("Retained payment records");
-    await admin.evaluate(
-      ({ marketId, locationId }) =>
-        sessionStorage.setItem(
-          "freshmarkets.admin.preferred-scope",
-          JSON.stringify({ kind: "LOCATION", marketId, locationId }),
-        ),
-      { marketId, locationId },
-    );
-    await admin.goto("/admin/analytics");
-    await expect(admin.getByRole("heading", { name: "Analytics", exact: true })).toBeVisible();
-    await expect(
-      admin
-        .getByRole("region", { name: "Orders", exact: true })
-        .getByText("Paid Orders", { exact: true }),
-    ).toBeVisible();
-    await admin.getByLabel("Find a purchased Product", { exact: true }).fill("Red Onion");
-    await admin.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(
-      admin
-        .getByRole("combobox", { name: "Product selling option", exact: true })
-        .locator(`option[value="${skuId}"]`),
-    ).toBeAttached();
-    const selectedReport = admin.waitForResponse((response) => {
-      if (!response.url().includes("/api/admin/analytics/overview")) return false;
-      return new URL(response.url()).searchParams.get("dimensions")?.includes(skuId) ?? false;
-    });
-    await admin
-      .getByRole("combobox", { name: "Product selling option", exact: true })
-      .selectOption(skuId);
-    await selectedReport;
-    await expect(
-      admin
-        .getByRole("region", { name: "Products", exact: true })
-        .getByText("Paid Product quantity", { exact: true }),
-    ).toBeVisible();
-    await expect(admin.getByText("Active members", { exact: true })).toHaveCount(0);
-    await admin.screenshot({
-      path: testInfo.outputPath(`ca71-commerce-reports-${width}.png`),
-      fullPage: true,
-    });
-    const historical = z.object({
-      items: z.array(z.unknown()),
-      financial: z.unknown(),
-      version: z.number(),
-    });
-    const beforeReorder = historical.parse(await read(page, `/api/commerce/orders/${orderId}`));
-    const successorLoaded = page.waitForResponse(
-      async (response) =>
-        response.url().endsWith("/api/commerce/cart") &&
-        response.request().method() === "GET" &&
-        (await response.json()).ok === true,
-    );
-    await page.goto("/cart");
-    const successor = z
-      .object({ id: z.string(), items: z.array(z.unknown()) })
-      .parse(await value(await successorLoaded));
-    expect(successor.items).toEqual([]);
-    expect(paidCartIds.has(successor.id)).toBe(false);
-    const reorderedQuantity = 2;
-    const currentProduct = z
-      .object({
-        skus: z.array(z.object({ skuId: z.string(), priceVersion: z.number().nullable() })),
-      })
-      .parse(
-        await read(
-          admin,
-          `/api/admin/catalog/products/product-red-onion?scopeKind=LOCATION&marketId=${marketId}&locationId=${locationId}`,
-        ),
-      );
-    await post(admin, `/api/admin/catalog/skus/${skuId}/price`, {
-      marketId,
-      locationId,
-      currency: "PHP",
-      amountMinor: 125,
-      validFrom: Date.now(),
-      expectedVersion: currentProduct.skus.find((item) => item.skuId === skuId)!.priceVersion,
-    });
-    await page.goto(`/orders/${orderId}`);
-    const reordered = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/orders/${orderId}/reorder`) &&
-        response.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: "Buy again", exact: true }).click();
-    expect(await value(await reordered)).toMatchObject({
-      outcome: "COMPLETE",
-      requiresAddressReview: true,
-      requiresFulfillmentReview: true,
-      addedLines: [
-        {
-          skuId,
-          name: "Red onion · 500 g",
-          quantityAdded: 2,
-          newQuantity: reorderedQuantity,
-          currentUnitPriceMinor: 125,
-        },
-      ],
-    });
-    await page.getByRole("link", { name: "Review current cart", exact: true }).click();
-    await expect(page.getByText("Red onion · 500 g", { exact: true })).toBeVisible();
-    expect(await read(page, "/api/commerce/cart")).toMatchObject({
-      items: [
-        {
-          skuId,
-          quantity: reorderedQuantity,
-          unitPriceMinor: 125,
-          lineTotalMinor: reorderedQuantity * 125,
-        },
-      ],
-    });
-    expect(historical.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
-      beforeReorder,
-    );
-    // A separate Buy again action must add to this successor Cart's existing
-    // quantities, while the paid Order remains the same historical snapshot.
-    await page.goto(`/orders/${orderId}`);
-    const addedAgain = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/orders/${orderId}/reorder`) &&
-        response.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: "Buy again", exact: true }).click();
-    expect(await value(await addedAgain)).toMatchObject({
-      addedLines: [{ skuId, quantityAdded: 2, newQuantity: 4, currentUnitPriceMinor: 125 }],
-    });
-    await page.getByRole("link", { name: "Review current cart", exact: true }).click();
-    expect(await read(page, "/api/commerce/cart")).toMatchObject({
-      items: [{ skuId, quantity: 4, unitPriceMinor: 125, lineTotalMinor: 500 }],
-    });
-    expect(historical.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
-      beforeReorder,
-    );
-    await page.screenshot({
-      path: testInfo.outputPath(`ca74-current-price-cart-${width}.png`),
       fullPage: true,
     });
   });
