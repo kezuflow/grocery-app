@@ -15,6 +15,7 @@ import {
   listPublishedBanners,
 } from "./admin/application/banner-media-reads";
 import { listAdminBanners, saveAdminBanner } from "./admin/application/storefront-banners";
+import { bookAutomaticInstantDeliveries } from "./delivery/application/book-automatic-instant-deliveries";
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
 import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
 import { releaseScheduledSurplus } from "./procurement/application/scheduled-surplus";
@@ -2478,6 +2479,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+    if (result.ok && validation.data.action === "START_PACKING")
+      try {
+        await bookAutomaticInstantDeliveries(
+          this.env.DB,
+          () => this.rpcContext.deliveryProviders(),
+          this.context.now(),
+          validation.data.orderId,
+        );
+      } catch {
+        log("error", "delivery.instant_booking.trigger_failed", {
+          requestId: validation.data.requestId,
+        });
+      }
     return result;
   }
   async resolveAdminOperationalException(

@@ -97,7 +97,7 @@ async function readDispatch(database: D1Database, id: string): Promise<DispatchR
 
 /**
  * Starts one provider booking from a prebuilt immutable dispatch snapshot.
- * The caller must derive that snapshot from the committed Order, packed parcel,
+ * The caller derives it from the committed Order, current parcel facts,
  * fulfillment-location sender profile, and DeliveryStop destination.
  */
 export async function requestProviderDelivery(
@@ -110,6 +110,8 @@ export async function requestProviderDelivery(
     expectedDeliveryJobVersion?: number;
     /** Explicit operator replacement after definite closure; never an automatic retry. */
     retry?: boolean;
+    /** System-owned first booking when an Instant order enters packing. */
+    automaticInstant?: boolean;
     clientIdempotencyKey?: string;
     actorAuthUserId?: string;
     now?: () => number;
@@ -133,22 +135,75 @@ export async function requestProviderDelivery(
     : null;
   if (scheduledPickupAt !== null && !Number.isFinite(scheduledPickupAt))
     return failure("VALIDATION_FAILED", "A valid pickup time is required", command.requestId);
+  if (
+    command.automaticInstant &&
+    (command.retry ||
+      command.actorAuthUserId !== undefined ||
+      scheduledPickupAt !== null ||
+      command.clientIdempotencyKey !== `auto-book:${command.deliveryJobId}` ||
+      command.request.merchantOrderId !== `fm-auto-${command.deliveryJobId}`)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Automatic Instant booking requires its stable system identity",
+      command.requestId,
+    );
 
-  const admission = database
-    .prepare(
-      `INSERT OR IGNORE INTO delivery_provider_dispatch
+  const commonInsert = `INSERT OR IGNORE INTO delivery_provider_dispatch
+       (id, delivery_job_id, provider, merchant_order_id, request_hash,
+        request_snapshot_json, status, attempt_count, version, created_at, updated_at,
+        client_idempotency_key,attempt_sequence)`;
+  const pendingCancellationSql = `NOT EXISTS (
+         SELECT 1 FROM delivery_provider_command pending
+         JOIN delivery_provider_dispatch previous ON previous.id=pending.dispatch_id
+         WHERE previous.delivery_job_id=job.id AND pending.operation='CANCEL'
+           AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
+       )`;
+  const admission = command.automaticInstant
+    ? database
+        .prepare(
+          `${commonInsert}
+       SELECT ?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?, ?,
+         (SELECT COALESCE(MAX(previous.attempt_sequence),0)+1 FROM delivery_provider_dispatch previous WHERE previous.delivery_job_id=job.id)
+       FROM delivery_job job
+       JOIN grocery_order grocery ON grocery.id=job.order_id
+       JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
+       WHERE job.id=? AND job.fulfillment_mode='INSTANT' AND job.version=? AND job.status='UNASSIGNED'
+         AND job.batch_id IS NULL AND job.rider_id IS NULL
+         AND grocery.status IN ('FULFILLMENT_PENDING','FULFILLMENT_READY')
+         AND fulfillment.status IN ('PACKING','PACKED')
+         AND COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision
+           WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),job.promised_at)>?
+         AND ? IS NULL AND ${pendingCancellationSql}
+         AND NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch other
+           WHERE other.delivery_job_id=job.id AND other.id!=?)`,
+        )
+        .bind(
+          dispatchId,
+          command.deliveryJobId,
+          provider.code,
+          command.request.merchantOrderId,
+          requestHash,
+          requestSnapshot,
+          now,
+          now,
+          command.clientIdempotencyKey ?? null,
+          command.deliveryJobId,
+          command.expectedDeliveryJobVersion ?? null,
+          now,
+          scheduledPickupAt,
+          dispatchId,
+        )
+    : database
+        .prepare(
+          `INSERT OR IGNORE INTO delivery_provider_dispatch
        (id, delivery_job_id, provider, merchant_order_id, request_hash,
         request_snapshot_json, status, attempt_count, version, created_at, updated_at,
         client_idempotency_key,attempt_sequence)
        SELECT ?, ?, ?, ?, ?, ?, 'PENDING', 0, 1, ?, ?, ?,
          (SELECT COALESCE(MAX(previous.attempt_sequence),0)+1 FROM delivery_provider_dispatch previous WHERE previous.delivery_job_id=job.id)
        FROM delivery_job job
-       WHERE job.id=? AND NOT EXISTS (
-         SELECT 1 FROM delivery_provider_command pending
-         JOIN delivery_provider_dispatch previous ON previous.id=pending.dispatch_id
-         WHERE previous.delivery_job_id=job.id AND pending.operation='CANCEL'
-           AND pending.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')
-       ) AND ? IS NOT NULL AND (
+       WHERE job.id=? AND ${pendingCancellationSql} AND ? IS NOT NULL AND (
            job.version=? AND (job.status IN ('UNASSIGNED','RETRY_SCHEDULED') OR (?=1 AND ${deliveryRetryReadySql}))
            AND job.batch_id IS NULL AND job.rider_id IS NULL
            AND EXISTS (
@@ -172,30 +227,30 @@ export async function requestProviderDelivery(
            AND (scope.scope_kind='global' OR (scope.scope_kind='market' AND scope.market_id=location.market_id)
              OR (scope.scope_kind='location' AND scope.location_id=location.id))
        ))`,
-    )
-    .bind(
-      dispatchId,
-      command.deliveryJobId,
-      provider.code,
-      command.request.merchantOrderId,
-      requestHash,
-      requestSnapshot,
-      now,
-      now,
-      command.clientIdempotencyKey ?? null,
-      command.deliveryJobId,
-      command.expectedDeliveryJobVersion ?? null,
-      command.expectedDeliveryJobVersion ?? null,
-      command.retry ? 1 : 0,
-      now,
-      scheduledPickupAt,
-      scheduledPickupAt,
-      scheduledPickupAt,
-      now,
-      scheduledPickupAt,
-      command.actorAuthUserId ?? null,
-      command.actorAuthUserId ?? null,
-    );
+        )
+        .bind(
+          dispatchId,
+          command.deliveryJobId,
+          provider.code,
+          command.request.merchantOrderId,
+          requestHash,
+          requestSnapshot,
+          now,
+          now,
+          command.clientIdempotencyKey ?? null,
+          command.deliveryJobId,
+          command.expectedDeliveryJobVersion ?? null,
+          command.expectedDeliveryJobVersion ?? null,
+          command.retry ? 1 : 0,
+          now,
+          scheduledPickupAt,
+          scheduledPickupAt,
+          scheduledPickupAt,
+          now,
+          scheduledPickupAt,
+          command.actorAuthUserId ?? null,
+          command.actorAuthUserId ?? null,
+        );
   if (command.retry) {
     // The new durable attempt and retry state are admitted together before any provider call.
     const guard = () =>
@@ -277,7 +332,24 @@ export async function requestProviderDelivery(
       command.requestId,
     );
 
-  const created = await provider.create(command.request);
+  let created: Awaited<ReturnType<DeliveryProvider["create"]>>;
+  try {
+    created = await provider.create(command.request);
+  } catch {
+    await database
+      .prepare(
+        `UPDATE delivery_provider_dispatch
+         SET status='OUTCOME_UNKNOWN',last_error_code='PROVIDER_CREATE_EXCEPTION',version=version+1,updated_at=?
+         WHERE id=? AND status='CREATING'`,
+      )
+      .bind(command.now?.() ?? Date.now(), dispatchId)
+      .run();
+    return failure(
+      "DELIVERY_RECONCILIATION_REQUIRED",
+      "The provider may have accepted the booking; reconciliation is required",
+      command.requestId,
+    );
+  }
   const claimedRow = await readDispatch(database, dispatchId);
   if (!claimedRow)
     return failure(

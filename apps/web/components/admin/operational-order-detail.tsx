@@ -25,6 +25,35 @@ const date = (value: string | null) =>
       }).format(new Date(value))
     : "Not scheduled";
 
+function deliveryLabel(detail: NonNullable<FulfillmentQueueView["operational"]>): string {
+  const execution = detail.deliveryExecution;
+  if (!execution)
+    return detail.fulfillmentMode === "INSTANT"
+      ? "Lalamove books automatically when packing starts"
+      : (detail.deliveryStatus ?? "Choose dispatch after packing");
+  if (execution.method === "MANUAL") return `Manual delivery · ${execution.status}`;
+  if (execution.status === "OUTCOME_UNKNOWN" || execution.status === "RECONCILIATION_REQUIRED")
+    return "Awaiting provider confirmation";
+  if (execution.status === "PENDING" || execution.status === "CREATING") return "Booking Lalamove…";
+  if (execution.status === "RETRY_REQUIRED") return "Retrying Lalamove booking…";
+  if (execution.status === "FAILED") return "Lalamove booking failed";
+  if (execution.status === "CANCELED") return "Lalamove booking canceled";
+  switch (execution.providerStatus) {
+    case "ALLOCATING":
+      return "Finding rider";
+    case "PENDING_PICKUP":
+    case "PICKING_UP":
+    case "PENDING_DROP_OFF":
+      return "Rider assigned";
+    case "IN_DELIVERY":
+      return "Out for delivery";
+    case "COMPLETED":
+      return "Delivered";
+    default:
+      return detail.deliveryStatus ?? execution.status;
+  }
+}
+
 /** Reusable location-safe detail; it never accepts global finance data. */
 export function OperationalOrderDetail({
   item,
@@ -68,7 +97,7 @@ export function OperationalOrderDetail({
         </div>
         <div>
           <dt className="font-semibold">Dispatch</dt>
-          <dd>{detail.deliveryStatus ?? "Starts after packing"}</dd>
+          <dd>{deliveryLabel(detail)}</dd>
         </div>
       </dl>
       {detail.blockers.length ? (
@@ -123,12 +152,14 @@ export function OperationalOrderDetail({
           </div>
         </div>
       ) : null}
-      {item.status === "PACKED" || detail.deliveryStatus ? (
+      {["PACKED", "HANDED_OFF", "COMPLETED"].includes(item.status) || detail.deliveryExecution ? (
         <Link
           className="inline-flex min-h-11 items-center font-semibold underline"
           href={`/admin/delivery?orderId=${encodeURIComponent(item.orderId)}`}
         >
-          Choose Manual or Lalamove dispatch
+          {detail.fulfillmentMode === "INSTANT"
+            ? "View Lalamove delivery"
+            : "Choose Manual or Lalamove dispatch"}
         </Link>
       ) : null}
     </aside>

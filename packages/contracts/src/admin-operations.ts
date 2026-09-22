@@ -129,6 +129,11 @@ export type OperationalOrderDetailView = {
     timezone: string | null;
   };
   deliveryStatus: string | null;
+  deliveryExecution?: {
+    method: "EXTERNAL" | "MANUAL";
+    status: string;
+    providerStatus: string | null;
+  } | null;
   blockers: readonly string[];
   lines: readonly OperationalOrderLineView[];
 };

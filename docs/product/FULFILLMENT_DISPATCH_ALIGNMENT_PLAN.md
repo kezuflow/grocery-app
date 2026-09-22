@@ -6,6 +6,12 @@ Execution IDs: `FDP-0` through `FDP-6`
 Source baseline: `kezuflow/grocery-app` at `3e928cea43f7e7ce505177a61036b7d56e4fc7bb`
 Status: implementation plan; no implementation, test execution or deployment is claimed.
 
+Superseded dispatch rule, 2026-09-22: this completed plan's staff-selected first-dispatch rule remains
+authoritative for Scheduled only. The latest owner correction in `PRODUCT.md` makes Instant first
+Lalamove booking automatic at `START_PACKING`, with stable bounded safe retry, no replacement for an
+unknown outcome, and Manual available only after definite closure and packing. Do not rerun this plan
+or treat its older Instant matrix as current policy.
+
 ## 1. Owner decision and required outcome
 
 The owner has explicitly confirmed that **Manual and Lalamove are normal delivery options for BOTH Instant and Scheduled orders. Authorized staff/admin choose either at dispatch, at their discretion. Manual is not a fallback that requires a failed Lalamove attempt.** Do not ask the owner to decide this again.

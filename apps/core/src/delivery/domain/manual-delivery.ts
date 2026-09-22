@@ -16,6 +16,7 @@ export function manualDeliveryActions(facts: {
 }): ManualDeliveryAction[] {
   const attempt = facts.attempt;
   if (!attempt || ["CANCELED", "RETURNED", "FAILED"].includes(attempt.status)) {
+    if (facts.mode === "INSTANT" && attempt === null) return [];
     return firstDispatchEligibility({
       canManage: true,
       jobStatus: facts.jobStatus,

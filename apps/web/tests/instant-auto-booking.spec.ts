@@ -21,7 +21,7 @@ const locationId = "location-cebu-central",
 const reason = "Synthetic Instant booking journey";
 
 for (const width of [1440, 390]) {
-  test(`Instant checkout waits for explicit packed dispatch at ${width}px`, async ({
+  test(`Instant checkout automatically books Lalamove when packing starts at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }, testInfo) => {
@@ -338,29 +338,27 @@ for (const width of [1440, 390]) {
     expect((await delivery()).externalDispatch).toBeNull();
     await admin.getByRole("button", { name: "Start packing", exact: true }).click();
     await expect(row).toContainText("PACKING");
-    expect((await delivery()).externalDispatch).toBeNull();
-    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
-    expect((await delivery()).externalDispatch).toBeNull();
-    await admin.getByRole("button", { name: "Finish packing", exact: true }).click();
-    await expect(row).toContainText("PACKED");
-    expect((await delivery()).externalDispatch).toBeNull();
-    await admin.goto("/admin/delivery");
-    const courierRow = admin.getByRole("row").filter({ hasText: orderId });
-    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
-    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
-    await expect(admin.getByRole("row").filter({ hasText: orderId })).toContainText(
-      "Finding rider",
-    );
     const booked = await delivery();
     expect(booked.externalDispatch).toMatchObject({ status: "ACTIVE" });
     expect(booked.status).toBe("UNASSIGNED");
+    await expect(admin.getByText("Finding rider", { exact: true })).toBeVisible();
     expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
     expect((await delivery()).externalDispatch?.dispatchId).toBe(
       booked.externalDispatch?.dispatchId,
     );
+    await admin.getByRole("button", { name: "Finish packing", exact: true }).click();
+    await expect(row).toContainText("PACKED");
+    expect((await delivery()).externalDispatch?.dispatchId).toBe(
+      booked.externalDispatch?.dispatchId,
+    );
+    await admin.goto("/admin/delivery");
+    const courierRow = admin.getByRole("row").filter({ hasText: orderId });
+    await expect(admin.getByRole("row").filter({ hasText: orderId })).toContainText(
+      "Finding rider",
+    );
     admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("CANCELED");
+    await expect(courierRow).toContainText("Booking canceled");
     await courierRow
       .getByRole("button", { name: "Record agreed delivery time", exact: true })
       .click();
@@ -407,7 +405,7 @@ for (const width of [1440, 390]) {
       retried.externalDispatch?.dispatchId,
     );
     await admin.screenshot({
-      path: testInfo.outputPath(`instant-explicit-dispatch-${width}.png`),
+      path: testInfo.outputPath(`instant-auto-booking-${width}.png`),
       fullPage: true,
     });
     await completeLocalCourierDelivery(admin, page, orderId, locationId);

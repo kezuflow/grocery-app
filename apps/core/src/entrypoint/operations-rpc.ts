@@ -4,6 +4,8 @@ import type {
   ProcurementCommandRequest,
   ReceivingCommandRequest,
 } from "@freshmarkets/contracts";
+import { bookAutomaticInstantDeliveries } from "../delivery/application/book-automatic-instant-deliveries";
+import { log } from "../observability";
 import { adjustInventory } from "../inventory/application/adjust-inventory";
 import { advanceFulfillment } from "../operations/application/advance-fulfillment";
 import { createProcurementRequirement } from "../procurement/application/create-procurement-requirement";
@@ -108,6 +110,19 @@ export function createOperationsRpc(context: CoreRpcContext) {
         authorize: (locationId) =>
           context.access.requireOperationalAccess(input, "fulfillment.manage", locationId),
       });
+      if (result.ok && validation.data.action === "START_PACKING")
+        try {
+          await bookAutomaticInstantDeliveries(
+            context.env.DB,
+            () => context.deliveryProviders(),
+            context.access.now(),
+            validation.data.orderId,
+          );
+        } catch {
+          log("error", "delivery.instant_booking.trigger_failed", {
+            requestId: validation.data.requestId,
+          });
+        }
       return result.ok
         ? {
             ok: true as const,

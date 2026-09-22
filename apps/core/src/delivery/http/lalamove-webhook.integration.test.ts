@@ -202,6 +202,19 @@ describe("Lalamove tracking webhook", () => {
         "SELECT status FROM grocery_order WHERE id='order-lalamove-webhook-notices'",
       ).first(),
     ).toEqual({ status: "DELIVERED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM fulfillment_record WHERE id='webhook-fulfillment-notices'",
+      ).first(),
+    ).toEqual({ status: "COMPLETED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT handed_over_at,completed_at FROM delivery_provider_dispatch WHERE id='dispatch-lalamove-webhook-notices'",
+      ).first(),
+    ).toEqual({
+      handed_over_at: Date.parse("2026-09-04T01:00:00.000Z"),
+      completed_at: Date.parse("2026-09-04T02:00:00Z"),
+    });
   });
   it("bounds background retries and preserves unresolved early pickup evidence", async () => {
     await seedDispatch("bounded", "1900000000000000008");
@@ -331,6 +344,11 @@ describe("Lalamove tracking webhook", () => {
         "SELECT status,version FROM grocery_order WHERE id='order-lalamove-webhook-early'",
       ).first(),
     ).toEqual({ status: "OUT_FOR_DELIVERY", version: 2 });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM fulfillment_record WHERE id='webhook-fulfillment-early'",
+      ).first(),
+    ).toEqual({ status: "HANDED_OFF" });
   });
   it("applies a concurrent duplicate once and ignores an older observation", async () => {
     await seedDispatch("race", "1900000000000000005");

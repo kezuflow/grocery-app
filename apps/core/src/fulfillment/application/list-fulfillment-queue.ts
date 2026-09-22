@@ -81,13 +81,18 @@ export async function listFulfillmentQueue(
        COALESCE(json_extract(o.address_snapshot_json,'$.recipient'),'Recipient unavailable') recipient,
        COALESCE(json_extract(o.address_snapshot_json,'$.phone'),'Phone unavailable') phone,
        cycle.name cycle_name,delivery_window.name window_name,delivery_window.starts_at,delivery_window.ends_at,delivery_window.pickup_at,delivery_window.timezone,
-       job.status delivery_status,
+       job.status delivery_status,attempt.method delivery_method,
+       attempt.status delivery_attempt_status,attempt.provider_status delivery_provider_status,
        EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt JOIN delivery_job job ON job.id=attempt.delivery_job_id
          WHERE job.order_id=f.order_id AND attempt.method='MANUAL' AND attempt.status='ACTIVE') AS manual_custody
        FROM fulfillment_record f JOIN grocery_order o ON o.id=f.order_id
        LEFT JOIN delivery_cycle cycle ON cycle.id=o.cycle_id
        LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=o.id
        LEFT JOIN delivery_job job ON job.order_id=o.id
+       LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(
+         SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=job.id
+         ORDER BY latest.attempt_sequence DESC LIMIT 1
+       )
        WHERE ${clauses.join(" AND ")}
        ORDER BY COALESCE(o.committed_at,o.created_at) DESC,f.order_id DESC LIMIT ?`,
     )
@@ -111,6 +116,9 @@ export async function listFulfillmentQueue(
       pickup_at: number | null;
       timezone: string | null;
       delivery_status: string | null;
+      delivery_method: "EXTERNAL" | "MANUAL" | null;
+      delivery_attempt_status: string | null;
+      delivery_provider_status: string | null;
     }>();
   const orderIds = rows.results.map((row) => row.order_id);
   const lineRows = orderIds.length
@@ -233,6 +241,14 @@ export async function listFulfillmentQueue(
         timezone: r.timezone,
       },
       deliveryStatus: r.delivery_status,
+      deliveryExecution:
+        r.delivery_method && r.delivery_attempt_status
+          ? {
+              method: r.delivery_method,
+              status: r.delivery_attempt_status,
+              providerStatus: r.delivery_provider_status,
+            }
+          : null,
       blockers:
         r.status === "SHORTED" || r.status === "ESCALATED"
           ? ["Fulfillment shortage requires resolution"]

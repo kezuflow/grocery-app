@@ -117,6 +117,7 @@ export default function FulfillmentPage() {
       (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
     )
       void load(pagination.cursor);
+    if (payload.ok) operationalRefresh.refresh();
   }
   return (
     <div className="w-full space-y-6">
@@ -230,7 +231,11 @@ export default function FulfillmentPage() {
                           {item.allowedActions[0]
                             ? actionLabels[item.allowedActions[0]]
                             : item.status === "PACKED"
-                              ? "Choose dispatch"
+                              ? item.operational?.fulfillmentMode === "INSTANT"
+                                ? item.operational.deliveryExecution?.status === "FAILED"
+                                  ? "Resolve Lalamove booking failure"
+                                  : "View Lalamove delivery"
+                                : "Choose dispatch"
                               : "No action"}
                         </TableCell>
                       </TableRow>

@@ -1,5 +1,6 @@
 import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
 import { reviseDeliveryPromise } from "../../delivery/application/revise-delivery-promise";
+import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
 import { expireUnsubmittedBookings } from "../../delivery/application/expire-unsubmitted-bookings";
 import { manageManualDelivery } from "../../delivery/application/manage-manual-delivery";
 import { listAdminDeliveryOperations } from "./operations-reads";
@@ -698,86 +699,249 @@ describe("external delivery request", () => {
     ).toEqual({ count: 0 });
   });
 
-  it.each(["INSTANT", "SCHEDULED"] as const)(
-    "offers explicit Lalamove and ordinary Manual dispatch for a packed %s order",
-    async (mode) => {
-      const now = Date.now();
-      const deps = dependencies(["delivery.read", "delivery.manage"]);
-      await upsertLocationDeliveryProfile(deps, profileRequest(0));
-      const lalamoveDelivery = await seedScheduledDelivery(now, mode);
-      const manualDelivery = await seedScheduledDelivery(now, mode);
-      await preparePackedDelivery(lalamoveDelivery, mode, now);
-      await preparePackedDelivery(manualDelivery, mode, now);
-      const provider = createMockDeliveryProvider(() => now);
-      const create = vi.spyOn(provider, "create");
+  it("offers explicit Lalamove and ordinary Manual dispatch for a packed Scheduled order", async () => {
+    const mode = "SCHEDULED" as const;
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const lalamoveDelivery = await seedScheduledDelivery(now, mode);
+    const manualDelivery = await seedScheduledDelivery(now, mode);
+    await preparePackedDelivery(lalamoveDelivery, mode, now);
+    await preparePackedDelivery(manualDelivery, mode, now);
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
 
-      const queue = await listAdminDeliveryOperations(deps, {
-        headers: {},
-        requestId: crypto.randomUUID(),
-        locationId: LOCATION,
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+    });
+    if (!queue.ok) throw new Error(queue.error.message);
+    for (const delivery of [lalamoveDelivery, manualDelivery])
+      expect(queue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
+        courierPickup: {
+          allowedKinds: ["IMMEDIATE", "SCHEDULED"],
+        },
+        manualActions: ["ASSIGN"],
       });
-      if (!queue.ok) throw new Error(queue.error.message);
-      for (const delivery of [lalamoveDelivery, manualDelivery])
-        expect(queue.value.items.find((item) => item.jobId === delivery.jobId)).toMatchObject({
-          courierPickup: {
-            allowedKinds: mode === "INSTANT" ? ["IMMEDIATE"] : ["IMMEDIATE", "SCHEDULED"],
-          },
-          manualActions: ["ASSIGN"],
-        });
-      expect(create).not.toHaveBeenCalled();
-      expect(
-        await env.DB.prepare(
-          "SELECT COUNT(*) count FROM delivery_provider_dispatch WHERE delivery_job_id IN (?,?)",
-        )
-          .bind(lalamoveDelivery.jobId, manualDelivery.jobId)
-          .first(),
-      ).toEqual({ count: 0 });
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM delivery_provider_dispatch WHERE delivery_job_id IN (?,?)",
+      )
+        .bind(lalamoveDelivery.jobId, manualDelivery.jobId)
+        .first(),
+    ).toEqual({ count: 0 });
 
-      expect(
-        await requestExternalDelivery(
-          { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
-          {
-            headers: {},
-            requestId: crypto.randomUUID(),
-            locationId: LOCATION,
-            jobId: lalamoveDelivery.jobId,
-            expectedVersion: 1,
-            providerCode: "lalamove",
-            pickup: { kind: "IMMEDIATE" },
-            idempotencyKey: crypto.randomUUID(),
-          },
-        ),
-      ).toMatchObject({ ok: true });
-      expect(create).toHaveBeenCalledOnce();
+    expect(
+      await requestExternalDelivery(
+        { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+        {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          jobId: lalamoveDelivery.jobId,
+          expectedVersion: 1,
+          providerCode: "lalamove",
+          pickup: { kind: "IMMEDIATE" },
+          idempotencyKey: crypto.randomUUID(),
+        },
+      ),
+    ).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
 
-      const manual = await manageManualDelivery(deps, {
-        headers: {},
-        requestId: crypto.randomUUID(),
-        locationId: LOCATION,
-        jobId: manualDelivery.jobId,
-        expectedVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-        action: "ASSIGN",
-        personName: "Delivery helper",
-        phoneE164: "+639171110000",
-      });
-      expect(manual).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
-      expect(
-        await env.DB.prepare(
-          "SELECT method,manual_reason,json_extract(request_snapshot_json,'$.note') note FROM delivery_provider_dispatch WHERE delivery_job_id=?",
-        )
-          .bind(manualDelivery.jobId)
-          .first(),
-      ).toEqual({ method: "MANUAL", manual_reason: "STAFF_SELECTED_MANUAL", note: null });
-    },
-  );
+    const manual = await manageManualDelivery(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId: manualDelivery.jobId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      action: "ASSIGN",
+      personName: "Delivery helper",
+      phoneE164: "+639171110000",
+    });
+    expect(manual).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT method,manual_reason,json_extract(request_snapshot_json,'$.note') note FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(manualDelivery.jobId)
+        .first(),
+    ).toEqual({ method: "MANUAL", manual_reason: "STAFF_SELECTED_MANUAL", note: null });
+  });
 
-  it("admits exactly one execution when Manual and Lalamove are selected concurrently", async () => {
+  it("keeps explicit Lalamove recovery available while reserving first Instant Manual assignment", async () => {
     const now = Date.now();
     const deps = dependencies(["delivery.read", "delivery.manage"]);
     await upsertLocationDeliveryProfile(deps, profileRequest(0));
     const delivery = await seedScheduledDelivery(now, "INSTANT");
     await preparePackedDelivery(delivery, "INSTANT", now);
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+    });
+    expect(
+      queue.ok && queue.value.items.find((item) => item.jobId === delivery.jobId),
+    ).toMatchObject({ courierPickup: { allowedKinds: ["IMMEDIATE"] }, manualActions: [] });
+    expect(
+      await requestExternalDelivery(
+        { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+        {
+          headers: {},
+          requestId: crypto.randomUUID(),
+          locationId: LOCATION,
+          jobId: delivery.jobId,
+          expectedVersion: 1,
+          providerCode: "lalamove",
+          pickup: { kind: "IMMEDIATE" },
+          idempotencyKey: crypto.randomUUID(),
+        },
+      ),
+    ).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("automatically books Instant at packing with one stable provider identity and never books Scheduled", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const instant = await seedScheduledDelivery(now, "INSTANT");
+    const scheduled = await seedScheduledDelivery(now, "SCHEDULED");
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
+    const providers = () => new Map([["lalamove", provider]]);
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ).toMatchObject({ attempted: 0 });
+    for (const delivery of [instant, scheduled]) {
+      for (const [index, action] of (
+        ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+      ).entries()) {
+        expect(
+          (
+            await advanceFulfillment(
+              env.DB,
+              {
+                headers: {},
+                requestId: crypto.randomUUID(),
+                orderId: delivery.orderId,
+                action,
+                expectedVersion: index + 1,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              { authorize: async () => true },
+            )
+          ).ok,
+        ).toBe(true);
+      }
+    }
+    const results = await Promise.all([
+      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+      bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ]);
+    expect(results.some((result) => result.submitted === 1)).toBe(true);
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      merchantOrderId: `fm-auto-${instant.jobId}`,
+      serviceType: "MOTORCYCLE",
+      schedule: null,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+      )
+        .bind(`auto-book:${instant.jobId}`)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, scheduled.orderId),
+    ).toMatchObject({ attempted: 0 });
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
+    ).toMatchObject({ attempted: 0 });
+  });
+
+  it("bounds definitely retryable Instant booking failures and exposes safe staff recovery after packing", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const instant = await seedScheduledDelivery(now, "INSTANT");
+    for (const [index, action] of (
+      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+    ).entries())
+      expect(
+        (
+          await advanceFulfillment(
+            env.DB,
+            {
+              headers: {},
+              requestId: crypto.randomUUID(),
+              orderId: instant.orderId,
+              action,
+              expectedVersion: index + 1,
+              idempotencyKey: crypto.randomUUID(),
+            },
+            { authorize: async () => true },
+          )
+        ).ok,
+      ).toBe(true);
+    const provider = createMockDeliveryProvider(() => now);
+    provider.create = vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: "PROVIDER_UNAVAILABLE",
+        message: "Unavailable",
+        retryable: true,
+        outcomeUnknown: false,
+      },
+    }));
+    const providers = () => new Map([["lalamove", provider]]);
+    // This provider-failure fixture has no inventory reservation; preserve the
+    // tested packing boundary while the separate fulfillment suites own consumption.
+    await preparePackedDelivery(instant, "INSTANT", now);
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      expect(
+        await bookAutomaticInstantDeliveries(env.DB, providers, now + attempt, instant.orderId),
+      ).toMatchObject({ attempted: 1, submitted: 0, deferred: 1 });
+    expect(
+      await bookAutomaticInstantDeliveries(env.DB, providers, now + 3, instant.orderId),
+    ).toMatchObject({ attempted: 0, failed: 1 });
+    expect(provider.create).toHaveBeenCalledTimes(3);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,last_error_code,attempt_count FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(instant.jobId)
+        .first(),
+    ).toEqual({
+      status: "FAILED",
+      last_error_code: "AUTOMATIC_BOOKING_RETRIES_EXHAUSTED",
+      attempt_count: 3,
+    });
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+    });
+    expect(
+      queue.ok && queue.value.items.find((item) => item.jobId === instant.jobId),
+    ).toMatchObject({
+      courierPickup: { allowedKinds: ["IMMEDIATE"] },
+      manualActions: ["ASSIGN"],
+      externalDispatch: { status: "FAILED" },
+    });
+  });
+
+  it("admits exactly one execution when Manual and Lalamove are selected concurrently", async () => {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now, "SCHEDULED");
+    await preparePackedDelivery(delivery, "SCHEDULED", now);
     const provider = createMockDeliveryProvider(() => now);
     const create = vi.spyOn(provider, "create");
     const [manual, external] = await Promise.all([

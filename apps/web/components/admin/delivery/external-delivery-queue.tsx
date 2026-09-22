@@ -16,6 +16,31 @@ import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
 
+export function externalStatusLabel(
+  dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
+) {
+  if (dispatch.status === "OUTCOME_UNKNOWN" || dispatch.status === "RECONCILIATION_REQUIRED")
+    return "Awaiting provider confirmation";
+  if (dispatch.status === "PENDING" || dispatch.status === "CREATING") return "Booking Lalamove…";
+  if (dispatch.status === "RETRY_REQUIRED") return "Retrying Lalamove booking…";
+  if (dispatch.status === "FAILED") return "Booking failed";
+  if (dispatch.status === "CANCELED") return "Booking canceled";
+  switch (dispatch.providerStatus) {
+    case "ALLOCATING":
+      return "Finding rider";
+    case "PENDING_PICKUP":
+    case "PICKING_UP":
+    case "PENDING_DROP_OFF":
+      return "Rider assigned";
+    case "IN_DELIVERY":
+      return "Out for delivery";
+    case "COMPLETED":
+      return "Delivered";
+    default:
+      return dispatch.status;
+  }
+}
+
 export function ExternalDeliveryQueue() {
   const { locationId, label } = useAdminLocation();
   const orderId = useSearchParams().get("orderId");
@@ -137,11 +162,7 @@ export function ExternalDeliveryQueue() {
                           <div className="space-y-1 text-xs">
                             <p>
                               {item.externalDispatch.provider} ·{" "}
-                              {item.externalDispatch.status === "OUTCOME_UNKNOWN"
-                                ? "Awaiting provider confirmation"
-                                : item.externalDispatch.providerStatus === "ALLOCATING"
-                                  ? "Finding rider"
-                                  : item.externalDispatch.status}
+                              {externalStatusLabel(item.externalDispatch)}
                             </p>
                             {item.externalDispatch.trackingUrl ? (
                               <a
@@ -156,6 +177,8 @@ export function ExternalDeliveryQueue() {
                           </div>
                         ) : item.manualDelivery ? (
                           "Manual delivery"
+                        ) : item.fulfillmentMode === "INSTANT" ? (
+                          "Automatic Lalamove booking pending"
                         ) : (
                           "Not booked"
                         )}

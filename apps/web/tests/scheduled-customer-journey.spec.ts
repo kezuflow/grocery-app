@@ -530,7 +530,7 @@ for (const width of [1440, 390]) {
     // Definite pre-handover closure must expose the same ordinary manual action.
     admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("CANCELED");
+    await expect(courierRow).toContainText("Booking canceled");
     await courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }).check();
     await courierRow.getByLabel("Pickup time", { exact: true }).fill(pickupInput);
     await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
@@ -538,7 +538,7 @@ for (const width of [1440, 390]) {
     await expect(courierRow).toContainText("Finding rider");
     admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("CANCELED");
+    await expect(courierRow).toContainText("Booking canceled");
     await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
     await courierRow
       .getByLabel("Person delivering", { exact: true })
@@ -757,7 +757,7 @@ for (const width of [1440, 390]) {
       const retainedRow = admin.getByRole("row").filter({ hasText: retained.orderId });
       admin.once("dialog", (dialog) => dialog.accept());
       await retainedRow.getByRole("button", { name: "Cancel", exact: true }).click();
-      await expect(retainedRow).toContainText("CANCELED");
+      await expect(retainedRow).toContainText("Booking canceled");
       await retainedRow
         .getByRole("button", { name: "Review Lalamove booking", exact: true })
         .click();

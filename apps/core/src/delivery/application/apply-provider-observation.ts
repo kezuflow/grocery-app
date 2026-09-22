@@ -209,7 +209,10 @@ export async function applyProviderObservation(
   statements.push(
     database
       .prepare(`UPDATE delivery_provider_dispatch SET status=?,provider_status=?,provider_observed_at=?,provider_status_rank=?,
-      tracking_url=COALESCE(?,tracking_url),pickup_pin=COALESCE(?,pickup_pin),last_error_code=?,version=version+1,updated_at=?
+      tracking_url=COALESCE(?,tracking_url),pickup_pin=COALESCE(?,pickup_pin),
+      handed_over_at=CASE WHEN ?=1 THEN COALESCE(handed_over_at,?) ELSE handed_over_at END,
+      completed_at=CASE WHEN ?=1 THEN COALESCE(completed_at,?) ELSE completed_at END,
+      last_error_code=?,version=version+1,updated_at=?
       WHERE id=? AND version=?`)
       .bind(
         dispatchStatus(observation.status),
@@ -218,6 +221,10 @@ export async function applyProviderObservation(
         rank,
         observation.trackingUrl,
         observation.pickupPin ?? null,
+        ["IN_DELIVERY", "COMPLETED"].includes(observation.status) ? 1 : 0,
+        observation.observedAt,
+        observation.status === "COMPLETED" ? 1 : 0,
+        observation.observedAt,
         observation.status === "FAILED" ? "DELIVERY_PROVIDER_FAILED" : null,
         now,
         dispatch.id,
@@ -254,6 +261,18 @@ export async function applyProviderObservation(
     );
   if (orderStatus)
     statements.push(
+      database
+        .prepare(`UPDATE fulfillment_record SET status=?,version=version+1,updated_at=?
+    WHERE order_id=(SELECT job.order_id FROM delivery_provider_dispatch dispatch JOIN delivery_job job ON job.id=dispatch.delivery_job_id WHERE dispatch.id=?)
+      AND location_id=(SELECT job.location_id FROM delivery_provider_dispatch dispatch JOIN delivery_job job ON job.id=dispatch.delivery_job_id WHERE dispatch.id=?)
+      AND status IN ('PACKED','HANDED_OFF') AND status!=?`)
+        .bind(
+          normalized === "DELIVERED" ? "COMPLETED" : "HANDED_OFF",
+          now,
+          dispatch.id,
+          dispatch.id,
+          normalized === "DELIVERED" ? "COMPLETED" : "HANDED_OFF",
+        ),
       database
         .prepare(`UPDATE grocery_order SET status=?,version=version+1
     WHERE id=(SELECT job.order_id FROM delivery_provider_dispatch dispatch JOIN delivery_job job ON job.id=dispatch.delivery_job_id WHERE dispatch.id=?)

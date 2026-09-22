@@ -189,6 +189,33 @@ describe("requestProviderDelivery", () => {
     ).toEqual({ count: 0 });
   });
 
+  it("atomically admits only the stable system booking while an Instant order is packing", async () => {
+    const id = `job-auto-packing-${crypto.randomUUID()}`;
+    await deliveryJob(id, false);
+    const input = request(`fm-auto-${id}`);
+    const courier = provider({
+      ok: true,
+      value: {
+        providerDeliveryId: `provider-${id}`,
+        merchantOrderId: input.merchantOrderId,
+        status: "ALLOCATING",
+        trackingUrl: null,
+        pickupPin: null,
+        quote: null,
+      },
+    });
+    const result = await requestProviderDelivery(env.DB, courier, {
+      requestId: crypto.randomUUID(),
+      deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
+      automaticInstant: true,
+      clientIdempotencyKey: `auto-book:${id}`,
+      request: input,
+    });
+    expect(result).toMatchObject({ ok: true, value: { status: "ACTIVE", attemptCount: 1 } });
+    expect(courier.create).toHaveBeenCalledOnce();
+  });
+
   it("rolls back provider identity when its create evidence is omitted and never resubmits the uncertain create", async () => {
     const id = `job-create-rollback-${crypto.randomUUID()}`;
     await deliveryJob(id);
@@ -385,6 +412,39 @@ describe("requestProviderDelivery", () => {
         .bind(id)
         .first(),
     ).resolves.toEqual({ status: "OUTCOME_UNKNOWN", last_error_code: "GRAB_OUTCOME_UNKNOWN" });
+  });
+
+  it("treats a thrown provider create as unknown and never submits it again", async () => {
+    const id = `job-thrown-${crypto.randomUUID()}`;
+    await deliveryJob(id);
+    const input = request(`merchant-${id}`);
+    const grab = provider({
+      ok: false,
+      error: { code: "UNUSED", retryable: false, outcomeUnknown: false },
+    });
+    grab.create.mockRejectedValueOnce(new Error("connection interrupted"));
+    const command = {
+      requestId: crypto.randomUUID(),
+      deliveryJobId: id,
+      expectedDeliveryJobVersion: 1,
+      request: input,
+    };
+    expect(await requestProviderDelivery(env.DB, grab, command)).toMatchObject({
+      ok: false,
+      error: { code: "DELIVERY_RECONCILIATION_REQUIRED" },
+    });
+    expect(await requestProviderDelivery(env.DB, grab, command)).toMatchObject({
+      ok: false,
+      error: { code: "DELIVERY_RECONCILIATION_REQUIRED" },
+    });
+    expect(grab.create).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare(
+        "SELECT status,last_error_code FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ status: "OUTCOME_UNKNOWN", last_error_code: "PROVIDER_CREATE_EXCEPTION" });
   });
 
   it("rejects a replay that changes the immutable outbound request", async () => {

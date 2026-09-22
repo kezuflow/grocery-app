@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OperationalOrderDetail } from "./operational-order-detail";
 
 describe("OperationalOrderDetail", () => {
-  it("shows the location-safe paid snapshot and both dispatch choices without finance fields", () => {
+  it("shows the location-safe paid snapshot and automatic Instant dispatch without finance fields", () => {
     const markup = renderToStaticMarkup(
       <OperationalOrderDetail
         item={{
@@ -28,6 +28,11 @@ describe("OperationalOrderDetail", () => {
               timezone: null,
             },
             deliveryStatus: "UNASSIGNED",
+            deliveryExecution: {
+              method: "EXTERNAL",
+              status: "ACTIVE",
+              providerStatus: "ALLOCATING",
+            },
             blockers: [],
             lines: [
               {
@@ -58,7 +63,8 @@ describe("OperationalOrderDetail", () => {
     expect(markup).toContain("FM-1001");
     expect(markup).toContain("Paid addition");
     expect(markup).toContain("Reserved");
-    expect(markup).toContain("Choose Manual or Lalamove dispatch");
+    expect(markup).toContain("Finding rider");
+    expect(markup).toContain("View Lalamove delivery");
     expect(markup).not.toContain("Payment");
     expect(markup).not.toContain("₱");
   });

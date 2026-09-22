@@ -1,15 +1,20 @@
 # FreshMarkets Product Rules
 
-Owner supplement, 2026-09-22: Manual and Lalamove are ordinary staff-selected dispatch methods
-for both Instant and Scheduled Orders. Staff choose only after packing; Manual is not a fallback and
-does not require a failed courier attempt. No new first Lalamove booking starts automatically from
-payment, picking, packing or a scheduler. Existing submitted or uncertain provider attempts retain
-their identities, custody history and bounded recovery. The accepted customer delivery charge,
-provider/service intent, address, item snapshots and promise remain immutable when staff choose the
-execution method. A Scheduled payment admitted strictly before its cutoff may complete through the
-verified idempotent commitment reaction after cutoff; new admission at or after cutoff remains
-invalid. This supplement supersedes the conflicting automatic-Instant, Scheduled-only Manual and
-ordinary pre-packed dispatch rules below.
+Owner correction, 2026-09-22: Instant and Scheduled have different first-dispatch workflows. Payment
+creates paid fulfillment work but never summons a rider. For Instant, the authorized `START_PACKING`
+transition automatically submits the first Lalamove booking using the immutable customer-selected
+provider/service snapshot; packing and rider search then proceed concurrently. The same stable system
+identity is recovered by the minute job only for definitely unsubmitted work. A timeout or other
+unknown create outcome retains that attempt and blocks replacement. Definitely retryable submission
+failure is bounded to three attempts; definite closure permits an explicit Lalamove retry or Manual
+assignment after packing. An explicit post-pack Lalamove command remains a recovery control when the
+automatic trigger produced no attempt. Manual is not an ordinary first Instant choice. Scheduled is
+unchanged: authorized staff choose Lalamove or Manual only after packing, and Manual is not a fallback.
+Verified provider pickup/completion advances delivery, Order and fulfillment custody together. The
+accepted customer delivery charge, provider/service intent, address, item snapshots and promise remain
+immutable. A Scheduled payment admitted strictly before its cutoff may complete through the verified
+idempotent commitment reaction after cutoff; new admission at or after cutoff remains invalid. This
+correction supersedes the earlier same-day no-automatic-booking supplement and conflicting rules below.
 
 Owner supplement, 2026-09-21: while the QR Ph provider step is open, checkout automatically checks
 the authenticated customer's owning Payment completion. A signed provider success first displays
@@ -197,7 +202,7 @@ On 2026-09-21 the owner placed Product name, Product lifecycle, selling-option l
 
 ## Explicit owner supplement — failed delivery and refunds
 
-On 2026-09-09 the owner approved contacting the customer after a failed pickup/delivery attempt, inspecting groceries physically returned to the facility, and retrying the same Order when the goods remain suitable and the customer agrees. Returned groceries are never automatically credited to available stock; damaged/spoiled goods stay separate from sellable stock. Pre-pickup provider retry remains approved after definite prior-attempt closure. The 2026-09-22 supplement supersedes the earlier Scheduled-only fallback limitation: Manual is an ordinary choice for either mode while replacement of an existing attempt still requires definite closure.
+On 2026-09-09 the owner approved contacting the customer after a failed pickup/delivery attempt, inspecting groceries physically returned to the facility, and retrying the same Order when the goods remain suitable and the customer agrees. Returned groceries are never automatically credited to available stock; damaged/spoiled goods stay separate from sellable stock. Pre-pickup provider retry remains approved after definite prior-attempt closure. The latest 2026-09-22 correction makes Manual an ordinary first choice for Scheduled and an Instant recovery choice only after definite closure of the automatic/provider attempt; every replacement still requires definite closure.
 
 The owner then clarified and approved: **customer-caused missed deliveries are not automatically refundable**. A courier failure report alone does not establish customer fault. Staff review delivery-attempt/contact evidence; unclear responsibility remains under review. Merely leaving the facility does not end FreshMarkets responsibility. FreshMarkets/courier-caused failures retain applicable replacement/refund handling and the existing FreshMarkets-caused cancellation rules. This is not a blanket denial of refunds after dispatch.
 

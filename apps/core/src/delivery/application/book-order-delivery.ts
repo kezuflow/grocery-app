@@ -169,12 +169,13 @@ function publicDispatch(value: ProviderDispatchView): ExternalDeliveryDispatchVi
   };
 }
 
-/** Authorized staff command for an explicit external delivery selection. */
+/** Shared booking command. A null actor is reserved for the system-owned Instant first booking. */
 export async function bookOrderDelivery(
   deps: OrderDeliveryBookingDependencies,
   request: RequestExternalDeliveryRequest,
-  actorUserId: string,
+  actorUserId: string | null,
 ): Promise<RpcResult<ExternalDeliveryDispatchView>> {
+  const automaticInstant = actorUserId === null;
   if (deps.provider.code !== request.providerCode)
     return failure(
       "CONFIGURATION_ERROR",
@@ -221,13 +222,18 @@ export async function bookOrderDelivery(
       .first<ExternalDeliveryDispatchView>();
     if (prior.status === "SUCCEEDED" && existing)
       return { ok: true, value: existing, requestId: request.requestId };
-    return failure(
-      "CONFLICT",
-      prior.status === "FAILED"
-        ? "The previous courier booking failed; use a new request key after review"
-        : "The courier booking is still processing",
-      request.requestId,
-    );
+    const canResumeAutomatic =
+      automaticInstant &&
+      prior.status === "PROCESSING" &&
+      (!existing || ["PENDING", "RETRY_REQUIRED"].includes(existing.status));
+    if (!canResumeAutomatic)
+      return failure(
+        "CONFLICT",
+        prior.status === "FAILED"
+          ? "The previous courier booking failed; use a new request key after review"
+          : "The courier booking is still processing",
+        request.requestId,
+      );
   }
 
   const row = await deps.db
@@ -264,31 +270,52 @@ export async function bookOrderDelivery(
     .first<DispatchSourceRow>();
   if (!row) return failure("NOT_FOUND", "Delivery job is unavailable", request.requestId);
   const now = deps.now();
-  const eligibility = firstDispatchEligibility({
-    canManage: true,
-    jobStatus: row.job_status,
-    orderStatus: row.order_status,
-    fulfillmentStatus: row.fulfillment_status,
-    pendingCancellation: Boolean(row.pending_cancel),
-    latestAttempt:
-      row.latest_attempt_status === null ? null : { status: row.latest_attempt_status },
-    retryReady: Boolean(row.retry_ready),
-    deliveryDeadline: row.fulfillment_mode === "INSTANT" ? row.promised_at : row.delivery_date,
-    now,
-  });
-  if (!eligibility.eligible)
-    return failure(
-      "ILLEGAL_TRANSITION",
-      dispatchUnavailableMessage(eligibility),
-      request.requestId,
-    );
+  if (automaticInstant) {
+    const resumableAttempt =
+      row.latest_attempt_status === null ||
+      ["PENDING", "RETRY_REQUIRED"].includes(row.latest_attempt_status);
+    if (
+      row.fulfillment_mode !== "INSTANT" ||
+      row.job_status !== "UNASSIGNED" ||
+      !["FULFILLMENT_PENDING", "FULFILLMENT_READY"].includes(row.order_status) ||
+      !["PACKING", "PACKED"].includes(row.fulfillment_status) ||
+      !resumableAttempt ||
+      Boolean(row.pending_cancel) ||
+      row.promised_at === null ||
+      row.promised_at <= now
+    )
+      return failure(
+        "ILLEGAL_TRANSITION",
+        "Automatic Instant booking is unavailable for the current delivery state",
+        request.requestId,
+      );
+  } else {
+    const eligibility = firstDispatchEligibility({
+      canManage: true,
+      jobStatus: row.job_status,
+      orderStatus: row.order_status,
+      fulfillmentStatus: row.fulfillment_status,
+      pendingCancellation: Boolean(row.pending_cancel),
+      latestAttempt:
+        row.latest_attempt_status === null ? null : { status: row.latest_attempt_status },
+      retryReady: Boolean(row.retry_ready),
+      deliveryDeadline: row.fulfillment_mode === "INSTANT" ? row.promised_at : row.delivery_date,
+      now,
+    });
+    if (!eligibility.eligible)
+      return failure(
+        "ILLEGAL_TRANSITION",
+        dispatchUnavailableMessage(eligibility),
+        request.requestId,
+      );
+  }
   if (row.job_version !== request.expectedVersion)
     return failure(
       "STALE_VERSION",
       "Delivery job changed; refresh before booking",
       request.requestId,
     );
-  const retry = row.job_status === "FAILED";
+  const retry = !automaticInstant && row.job_status === "FAILED";
   if (
     retry &&
     !(await deps.db
@@ -398,7 +425,7 @@ export async function bookOrderDelivery(
       "Order shipping weight is unavailable",
       request.requestId,
     );
-  {
+  if (!(automaticInstant && prior?.status === "PROCESSING")) {
     const claim = await claimCommandIdempotency(
       deps.db,
       deps.now,
@@ -437,9 +464,10 @@ export async function bookOrderDelivery(
     deliveryJobId: request.jobId,
     expectedDeliveryJobVersion: request.expectedVersion,
     retry,
+    automaticInstant,
     clientIdempotencyKey: request.idempotencyKey,
     now: deps.now,
-    actorAuthUserId: actorUserId,
+    ...(actorUserId === null ? {} : { actorAuthUserId: actorUserId }),
     completionStatements: [
       deps.db
         .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(
@@ -458,6 +486,7 @@ export async function bookOrderDelivery(
             jobId: request.jobId,
             providerCode: request.providerCode,
             pickupKind: request.pickup.kind,
+            automatic: automaticInstant,
           }),
           request.idempotencyKey,
           request.locationId,
@@ -468,7 +497,7 @@ export async function bookOrderDelivery(
       deps.db.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1"),
     ],
     request: {
-      merchantOrderId: `fm-${crypto.randomUUID()}`,
+      merchantOrderId: automaticInstant ? `fm-auto-${request.jobId}` : `fm-${crypto.randomUUID()}`,
       serviceType,
       currencyCode: row.currency,
       currencyExponent: 2,
@@ -524,7 +553,18 @@ export async function bookOrderDelivery(
     },
   });
   if (!providerResult.ok) {
-    await failIdempotency(deps.db, commandScope, request.idempotencyKey);
+    const retained = automaticInstant
+      ? await deps.db
+          .prepare("SELECT status FROM delivery_provider_dispatch WHERE client_idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first<{ status: string }>()
+      : null;
+    if (
+      !automaticInstant ||
+      !retained ||
+      !["PENDING", "RETRY_REQUIRED", "CREATING", "OUTCOME_UNKNOWN"].includes(retained.status)
+    )
+      await failIdempotency(deps.db, commandScope, request.idempotencyKey);
     return failure("CONFLICT", providerResult.error.message, request.requestId);
   }
   return {

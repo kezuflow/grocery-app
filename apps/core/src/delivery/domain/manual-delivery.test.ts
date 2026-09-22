@@ -40,6 +40,13 @@ describe("staff-selected manual delivery", () => {
         attempt: null,
         retryReady: false,
       }),
+    ).toEqual([]);
+    expect(
+      manualDeliveryActions({
+        ...facts,
+        mode: "INSTANT",
+        attempt: { method: "EXTERNAL", status: "FAILED", handedOverAt: null },
+      }),
     ).toEqual(["ASSIGN"]);
     expect(manualDeliveryActions({ ...facts, pendingCancellation: true })).toEqual([]);
     expect(manualDeliveryActions({ ...facts, retryReady: false })).toEqual([]);
