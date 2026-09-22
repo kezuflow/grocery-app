@@ -94,7 +94,12 @@ it("previews a direct-cart quantity request, then accepts the Core result", asyn
   );
   const stepper = document.querySelector('[aria-label="Increase Page fruit"]')?.parentElement;
   expect(stepper?.querySelector("span")?.textContent).toBe("2");
-  expect(document.body.textContent).toContain("Updating quantity…");
+  expect(stepper?.nextElementSibling?.getAttribute("aria-label")).toBe("Updating quantity");
+  expect(document.querySelector('[role="status"][aria-label="Updating quantity"]')).not.toBeNull();
+  expect(document.body.textContent).not.toContain("Updating quantity…");
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Increase Page fruit"]')?.disabled,
+  ).toBe(false);
   expect(document.body.textContent).toContain("Total 100");
   expect(
     [...document.querySelectorAll("button")].find((button) => button.textContent === "Checkout")
@@ -114,6 +119,8 @@ it("previews a direct-cart quantity request, then accepts the Core result", asyn
       }),
     ),
   );
-  await vi.waitFor(() => expect(document.body.textContent).not.toContain("Updating quantity…"));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="status"][aria-label="Updating quantity"]')).toBeNull(),
+  );
   expect(document.body.textContent).toContain("Total 200");
 });

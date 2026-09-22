@@ -5,7 +5,12 @@ import { ArrowRight, Info, Minus, Plus, ShoppingBasket } from "lucide-react";
 import type { CartView, CheckoutQuoteView } from "@freshmarkets/contracts";
 import { useEffect, useState, type CSSProperties } from "react";
 import { cn } from "../../../lib/utils";
+import {
+  cartItemsWithPending,
+  type PendingCartQuantity,
+} from "../../../lib/query/cart-quantity-queue";
 import { ProductMedia } from "../product-media";
+import { QuantityPendingSpinner } from "./quantity-pending-spinner";
 
 function money(value: number, currency: string): string {
   return new Intl.NumberFormat("en-PH", {
@@ -27,8 +32,8 @@ export function OrderSummary({
   quoteState = "needs-input",
   showItems = false,
   onQuantityChange,
-  updatingSkuId,
-  updatingQuantity,
+  pendingQuantities,
+  quantityControlsDisabled = false,
   surface = "card",
   actionTextClassName,
   actionTextStyle,
@@ -44,8 +49,8 @@ export function OrderSummary({
   quoteState?: "needs-input" | "quoting" | "ready" | "refreshing" | "error";
   showItems?: boolean;
   onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
-  updatingSkuId?: string | null;
-  updatingQuantity?: number | null;
+  pendingQuantities?: ReadonlyMap<string, PendingCartQuantity>;
+  quantityControlsDisabled?: boolean;
   surface?: "card" | "flat";
   actionTextClassName?: string;
   actionTextStyle?: CSSProperties;
@@ -55,6 +60,7 @@ export function OrderSummary({
   const total = totalMinor ?? quote?.totalMinor ?? subtotal;
   const pricesAvailable = !cart?.items.some((item) => item.lineTotalMinor === null);
   const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const displayItems = cartItemsWithPending(cart, pendingQuantities ?? new Map());
   const flat = surface === "flat";
   const [resolvedValuesVisible, setResolvedValuesVisible] = useState(Boolean(quote));
   useEffect(() => {
@@ -97,9 +103,10 @@ export function OrderSummary({
 
       {showItems ? (
         <div className="mt-4 divide-y divide-[var(--fm-border)] border-y border-[var(--fm-border)]">
-          {cart?.items.length ? (
-            cart.items.map((item) => {
-              const updating = updatingSkuId === item.skuId;
+          {displayItems.length ? (
+            displayItems.map((item) => {
+              const pending = pendingQuantities?.get(item.skuId);
+              const updating = Boolean(pending);
               return (
                 <div key={item.skuId} className="flex gap-3 py-4" aria-busy={updating}>
                   <ProductMedia
@@ -120,23 +127,25 @@ export function OrderSummary({
                         <button
                           type="button"
                           aria-label={`Decrease ${item.name}`}
-                          disabled={!onQuantityChange || Boolean(updatingSkuId)}
+                          disabled={
+                            !onQuantityChange ||
+                            quantityControlsDisabled ||
+                            (pending?.quantity ?? item.quantity) <= 0
+                          }
                           onClick={() => onQuantityChange?.(item, item.quantity - 1)}
                           className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)] disabled:cursor-wait disabled:opacity-50"
                         >
                           <Minus className="size-3.5" aria-hidden="true" />
                         </button>
                         <span className="min-w-8 text-center text-xs font-semibold tabular-nums">
-                          {updating && updatingQuantity !== null && updatingQuantity !== undefined
-                            ? updatingQuantity
-                            : item.quantity}
+                          {pending?.quantity ?? item.quantity}
                         </span>
                         <button
                           type="button"
                           aria-label={`Increase ${item.name}`}
                           disabled={
                             !onQuantityChange ||
-                            Boolean(updatingSkuId) ||
+                            quantityControlsDisabled ||
                             item.availability !== "AVAILABLE"
                           }
                           onClick={() => onQuantityChange?.(item, item.quantity + 1)}
@@ -145,6 +154,7 @@ export function OrderSummary({
                           <Plus className="size-3.5" aria-hidden="true" />
                         </button>
                       </div>
+                      {updating ? <QuantityPendingSpinner /> : null}
                       <p className="ml-auto shrink-0 whitespace-nowrap text-right text-sm font-bold tabular-nums">
                         {item.regularLineTotalMinor !== undefined ? (
                           <del
@@ -161,11 +171,6 @@ export function OrderSummary({
                           : money(item.lineTotalMinor, currency)}
                       </p>
                     </div>
-                    {updating ? (
-                      <p role="status" className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                        Updating quantity…
-                      </p>
-                    ) : null}
                     {item.unavailableReason ? (
                       <p
                         role="status"

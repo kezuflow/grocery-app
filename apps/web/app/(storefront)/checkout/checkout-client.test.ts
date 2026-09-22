@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const checkout = readFileSync(new URL("./checkout-client.tsx", import.meta.url), "utf8");
+const quantityQueue = readFileSync(
+  new URL("../../../lib/query/cart-quantity-queue.ts", import.meta.url),
+  "utf8",
+);
 
 describe("checkout address guide layout contract", () => {
   it("uses the simplified address guide inside the complete checkout workspace", () => {
@@ -43,16 +47,15 @@ describe("checkout address guide layout contract", () => {
   });
 
   it("uses the rich editable order summary and invalidates pricing before quantity changes", () => {
-    const quantityUpdate = checkout.slice(
-      checkout.indexOf("async function updateCartQuantity"),
-      checkout.indexOf("async function confirmPayment"),
-    );
-    expect(quantityUpdate.indexOf("await invalidatePendingQuote()")).toBeLessThan(
-      quantityUpdate.indexOf("await addToCart(item.skuId, quantity"),
+    expect(checkout).toContain("const quantityQueue = useCartQuantityQueue({");
+    expect(checkout).toContain("return invalidatePendingQuote();");
+    expect(quantityQueue.indexOf("await optionsRef.current.beforeStart?.()")).toBeLessThan(
+      quantityQueue.indexOf("await addToCart(skuId, request.quantity"),
     );
     expect(checkout).toContain("showItems");
     expect(checkout).toContain("onQuantityChange={");
-    expect(checkout).toContain("updatingSkuId={updatingSkuId}");
+    expect(checkout).toContain("quantityQueue.request(item, quantity");
+    expect(checkout).toContain("pendingQuantities={quantityQueue.pending}");
     expect(checkout).not.toContain("<CheckoutTotalReview");
     expect(checkout).not.toContain("Discard current total and start again");
     expect(checkout).toContain('"Choose a payment method"');

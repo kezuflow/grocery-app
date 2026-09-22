@@ -18,7 +18,8 @@ import { AddressEditor } from "../../../components/storefront/address/address-ed
 import { AddressList } from "../../../components/storefront/address/address-list";
 import { FulfillmentOptionPicker } from "../../../components/storefront/checkout/fulfillment-option-picker";
 import { PaymentMethodPicker } from "../../../components/storefront/checkout/payment-method-picker";
-import { addToCart, fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
+import { fetchCart, refreshCartForLocation } from "../../../lib/storefront/cart-client";
+import { useCartQuantityQueue } from "../../../lib/query/cart-quantity-queue";
 import {
   readDeliveryLocationSelection,
   rememberDeliveryLocationSelection,
@@ -173,9 +174,6 @@ export function CheckoutClient({
   const initialAddressId = checkoutDraft.draft.addressId;
   const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
-  const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
-  const [updatingQuantity, setUpdatingQuantity] = useState<number | null>(null);
-  const quantityUpdateInFlight = useRef(false);
   const selectedAddressId = useRef(initialAddressId);
   const selectedFulfillmentOptionId = useRef("");
   const selectedDeliveryPartnerIntent = useRef<DeliveryPartnerIntent | null>(null);
@@ -217,6 +215,26 @@ export function CheckoutClient({
   const addressLoadGeneration = useRef(0);
   const fulfillmentLoadGeneration = useRef(0);
   const addressSelectionGeneration = useRef(0);
+  const quantityQueue = useCartQuantityQueue({
+    beforeStart: async () => {
+      if (paymentInProgressRef.current) {
+        setStatus("This cart is locked while its payment is being confirmed.");
+        return false;
+      }
+      return invalidatePendingQuote();
+    },
+    afterDrained: async (view) => {
+      await invalidateCheckoutReads();
+      selectedFulfillmentOptionId.current = "";
+      setFulfillmentOptionId("");
+      setStatus(
+        view.items.length
+          ? "Quantity updated. Choose a delivery option again to confirm the current total."
+          : "Your cart is empty. Add an item before continuing checkout.",
+      );
+    },
+    onFailure: setStatus,
+  });
   useEffect(() => {
     const destination = readDeliveryLocationSelection();
     carriedDestination.current = destination;
@@ -765,46 +783,6 @@ export function CheckoutClient({
     setStatus(`${deliveryPartnerName(option)} selected. Checking the current fee and total.`);
   }
 
-  async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
-    if (quantityUpdateInFlight.current || paymentInProgressRef.current) {
-      if (paymentInProgressRef.current)
-        setStatus("This cart is locked while its payment is being confirmed.");
-      return;
-    }
-    quantityUpdateInFlight.current = true;
-    setUpdatingSkuId(item.skuId);
-    // Preview the requested count while quote release and Core validation run.
-    setUpdatingQuantity(quantity);
-    try {
-      if (!(await invalidatePendingQuote())) return;
-      const result = await addToCart(item.skuId, quantity, {
-        name: item.name,
-        unitPriceMinor: item.unitPriceMinor,
-        currency: cart?.currency ?? "PHP",
-        media: item.media ?? null,
-      });
-      if (!result.ok) {
-        setStatus(result.message);
-        return;
-      }
-      acceptCart(result.view);
-      await invalidateCheckoutReads();
-      selectedFulfillmentOptionId.current = "";
-      setFulfillmentOptionId("");
-      setStatus(
-        result.view.items.length
-          ? "Quantity updated. Choose a delivery option again to confirm the current total."
-          : "Your cart is empty. Add an item before continuing checkout.",
-      );
-    } catch {
-      setStatus("The quantity update is not confirmed yet. Retry the same quantity.");
-    } finally {
-      setUpdatingSkuId(null);
-      setUpdatingQuantity(null);
-      quantityUpdateInFlight.current = false;
-    }
-  }
-
   async function confirmPayment() {
     if (releaseInFlight.current) {
       setStatus("Wait for the current checkout reservation to be released.");
@@ -933,11 +911,12 @@ export function CheckoutClient({
       guest ||
       cart?.checkoutBlocked ||
       paymentInProgressRef.current ||
+      quantityQueue.busy ||
       acceptingPayment
     )
       return;
     void reviewTotal(selectedEligibleFulfillmentOption);
-  }, [automaticQuoteFingerprint, quoteLifecycleRevision]);
+  }, [automaticQuoteFingerprint, quoteLifecycleRevision, quantityQueue.busy]);
   return (
     <>
       <div className="min-h-[100dvh] w-full bg-[var(--fm-background)] pb-28 sm:pb-24">
@@ -1293,16 +1272,18 @@ export function CheckoutClient({
                   ? false
                   : acceptingPayment ||
                     quoteLoadState === "loading" ||
-                    Boolean(updatingSkuId) ||
+                    quantityQueue.busy ||
                     quoteNeedsReplacement ||
                     Boolean(cart?.checkoutBlocked) ||
                     !selectedPaymentMethod ||
                     !pendingQuote
               }
               showItems
-              onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}
-              updatingSkuId={updatingSkuId}
-              updatingQuantity={updatingQuantity}
+              onQuantityChange={(item, quantity) =>
+                quantityQueue.request(item, quantity, cart?.currency ?? "PHP")
+              }
+              pendingQuantities={quantityQueue.pending}
+              quantityControlsDisabled={acceptingPayment || Boolean(cart?.paymentInProgress)}
             />
           </div>
         </div>

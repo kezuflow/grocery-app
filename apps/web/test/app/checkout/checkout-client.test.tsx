@@ -29,6 +29,8 @@ vi.mock("@/lib/storefront/cart-client", () => ({
   addToCart: addToCartMock,
   fetchCart: fetchCartMock,
   refreshCartForLocation: refreshCartForLocationMock,
+  quantityForSku: (view: CartView, skuId: string) =>
+    view.items.find((item) => item.skuId === skuId)?.quantity ?? 0,
   cartLoadError: () => "",
   CART_CHANGED_EVENT: "fm:cart-changed",
 }));
@@ -382,12 +384,10 @@ describe("CheckoutClient delivery inputs", () => {
 
     act(() => initial.onQuantityChange?.(initial.cart!.items[0]!, 2));
     const pending = orderSummaryPropsMock.mock.lastCall?.[0] as {
-      updatingSkuId?: string | null;
-      updatingQuantity?: number | null;
+      pendingQuantities?: ReadonlyMap<string, { quantity: number }>;
       disabled?: boolean;
     };
-    expect(pending.updatingSkuId).toBe("sku-1");
-    expect(pending.updatingQuantity).toBe(2);
+    expect(pending.pendingQuantities?.get("sku-1")?.quantity).toBe(2);
     expect(pending.disabled).toBe(true);
     await flush();
     expect(addToCartMock).toHaveBeenCalledWith("sku-1", 2, expect.any(Object));
@@ -407,12 +407,88 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     const accepted = orderSummaryPropsMock.mock.lastCall?.[0] as {
       cart?: CartView;
-      updatingSkuId?: string | null;
-      updatingQuantity?: number | null;
+      pendingQuantities?: ReadonlyMap<string, { quantity: number }>;
     };
     expect(accepted.cart?.items[0]?.quantity).toBe(2);
-    expect(accepted.updatingSkuId).toBeNull();
-    expect(accepted.updatingQuantity).toBeNull();
+    expect(accepted.pendingQuantities?.size).toBe(0);
+  });
+
+  it("queues rapid checkout taps and blocks payment until both writes settle", async () => {
+    const base = successfulFetch();
+    vi.stubGlobal("fetch", base);
+    const first = deferred<{ ok: true; view: CartView; count: number }>();
+    const second = deferred<{ ok: true; view: CartView; count: number }>();
+    addToCartMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    act(() => root.render(checkout()));
+    await flush();
+    const initial = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      cart?: CartView;
+      onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
+    };
+    if (!initial.cart || !initial.onQuantityChange)
+      throw new Error("Missing checkout quantity action");
+    const item = initial.cart.items[0]!;
+    act(() => initial.onQuantityChange?.(item, 2));
+    await flush();
+    expect(addToCartMock).toHaveBeenCalledTimes(1);
+    act(() => {
+      initial.onQuantityChange?.(item, 2);
+      initial.onQuantityChange?.(item, 2);
+    });
+    const queued = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      pendingQuantities?: ReadonlyMap<string, { quantity: number }>;
+      disabled?: boolean;
+    };
+    expect(queued.pendingQuantities?.get("sku-1")?.quantity).toBe(4);
+    expect(queued.disabled).toBe(true);
+    expect(addToCartMock).toHaveBeenCalledTimes(1);
+
+    await act(async () =>
+      first.resolve({
+        ok: true,
+        count: 2,
+        view: {
+          ...initial.cart!,
+          version: 5,
+          totalMinor: 60000,
+          items: [{ ...item, quantity: 2, lineTotalMinor: 60000 }],
+        },
+      }),
+    );
+    const afterFirst = orderSummaryPropsMock.mock.lastCall?.[0] as
+      | { pendingQuantities?: ReadonlyMap<string, { quantity: number }> }
+      | undefined;
+    expect(afterFirst?.pendingQuantities?.get("sku-1")?.quantity).toBe(4);
+    await vi.waitFor(() => expect(addToCartMock).toHaveBeenCalledTimes(2));
+    expect(addToCartMock).toHaveBeenNthCalledWith(2, "sku-1", 4, expect.any(Object));
+    const stillPending = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      pendingQuantities?: ReadonlyMap<string, { quantity: number }>;
+      disabled?: boolean;
+    };
+    expect(stillPending.pendingQuantities?.get("sku-1")?.quantity).toBe(4);
+    expect(stillPending.disabled).toBe(true);
+
+    await act(async () =>
+      second.resolve({
+        ok: true,
+        count: 4,
+        view: {
+          ...initial.cart!,
+          version: 6,
+          totalMinor: 120000,
+          items: [{ ...item, quantity: 4, lineTotalMinor: 120000 }],
+        },
+      }),
+    );
+    await flush();
+    const accepted = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      cart?: CartView;
+      pendingQuantities?: ReadonlyMap<string, { quantity: number }>;
+    };
+    expect(accepted.cart?.items[0]?.quantity).toBe(4);
+    expect(accepted.pendingQuantities?.size).toBe(0);
+    expect(base.mock.calls.filter(([url]) => String(url).includes("/abandon"))).toHaveLength(0);
   });
 
   it("leaves checkout and never requests another quote while payment is in progress", async () => {

@@ -98,17 +98,19 @@ describe("OrderSummary", () => {
         actionLabel="Continue"
         showItems
         onQuantityChange={vi.fn()}
-        updatingSkuId="sku-banana"
-        updatingQuantity={3}
+        pendingQuantities={
+          new Map([["sku-banana", { item: cart.items[0], quantity: 3, currency: "PHP" }]])
+        }
         disabled
       />,
     );
-    expect(html).toContain("Updating quantity…");
+    expect(html).toContain('aria-label="Updating quantity"');
+    expect(html).toContain("animate-spin motion-reduce:animate-none");
     expect(html).toContain(">3</span>");
     expect(html).toContain("Items subtotal");
     expect(html).toContain("₱170.00");
     expect(html).toContain('aria-busy="true"');
-    expect(html).toContain('disabled=""');
+    expect(html).not.toContain("Updating quantity…");
   });
 
   it("keeps applied and rejected promotion feedback in the quote-backed summary", () => {

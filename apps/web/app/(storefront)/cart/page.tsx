@@ -1,16 +1,16 @@
 "use client";
 import Link from "next/link";
 import { ShoppingBasket } from "lucide-react";
-import { useRef, useState } from "react";
-import type { CartView } from "@freshmarkets/contracts";
-import { addToCart, cartCountFromView } from "../../../lib/storefront/cart-client";
+import { useState } from "react";
+import { cartCountFromView } from "../../../lib/storefront/cart-client";
+import { cartItemsWithPending, useCartQuantityQueue } from "../../../lib/query/cart-quantity-queue";
 import {
-  useAcceptCart,
   useCartQuery,
   useCheckoutDraft,
   useInvalidateCheckoutReads,
 } from "../../../lib/query/cart";
 import { OrderSummary } from "../../../components/storefront/marketplace/order-summary";
+import { QuantityPendingSpinner } from "../../../components/storefront/marketplace/quantity-pending-spinner";
 import { CheckoutAuthDialog } from "../../../components/storefront/marketplace/checkout-auth-dialog";
 import { ProductMedia } from "../../../components/storefront/product-media";
 import { PromotionEntry } from "../../../components/storefront/checkout/promotion-entry";
@@ -24,52 +24,19 @@ export default function CartPage() {
   const checkoutDraft = useCheckoutDraft(cart?.id);
   const loading = query.isPending;
   const [commandError, setCommandError] = useState("");
-  const error =
-    commandError || (query.isError ? "Your cart could not be loaded right now." : query.cartError);
-  const acceptCart = useAcceptCart();
+  const error = query.isError ? "Your cart could not be loaded right now." : query.cartError;
   const invalidateCheckout = useInvalidateCheckoutReads();
   const [authOpen, setAuthOpen] = useState(false);
-  const [pendingQuantity, setPendingQuantity] = useState<{
-    skuId: string;
-    quantity: number;
-  } | null>(null);
-  const quantityUpdateInFlight = useRef(false);
-  async function update(item: CartView["items"][number], quantity: number) {
-    if (quantityUpdateInFlight.current) return;
-    quantityUpdateInFlight.current = true;
-    setCommandError("");
-    // Only the requested count previews immediately; Core still owns prices and totals.
-    setPendingQuantity({ skuId: item.skuId, quantity });
-    let accepted = false;
-    try {
-      const result = await addToCart(item.skuId, quantity, {
-        name: item.name,
-        media: item.media,
-        unitPriceMinor: item.unitPriceMinor,
-        currency: cart?.currency ?? "PHP",
-      });
-      if (!result.ok) {
-        setCommandError(result.message);
-        return;
-      }
-      acceptCart(result.view);
-      accepted = true;
-      await invalidateCheckout();
-    } catch {
-      setCommandError(
-        accepted
-          ? "Cart updated. Refresh checkout details before continuing."
-          : "Your cart could not be updated right now. Retry the same quantity.",
-      );
-    } finally {
-      setPendingQuantity(null);
-      quantityUpdateInFlight.current = false;
-    }
-  }
+  const quantityQueue = useCartQuantityQueue({
+    onStart: () => setCommandError(""),
+    afterDrained: async () => invalidateCheckout(),
+    onFailure: setCommandError,
+  });
 
   const guest = cart?.id === "guest-cart";
   const count = cart ? cartCountFromView(cart) : 0;
   const canCheckout = Boolean(cart?.items.length) && !cart?.checkoutBlocked;
+  const displayItems = cartItemsWithPending(cart, quantityQueue.pending);
   return (
     <>
       <div className="min-h-[100dvh] w-full px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
@@ -81,9 +48,7 @@ export default function CartPage() {
             Continue shopping
           </Link>
           <span className="text-xs text-[var(--fm-text-muted)]">
-            {pendingQuantity
-              ? "Updating cart…"
-              : `${count} ${count === 1 ? "item" : "items"} saved for this browser`}
+            {count} {count === 1 ? "item" : "items"} saved for this browser
           </span>
         </div>
         <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
@@ -112,6 +77,11 @@ export default function CartPage() {
                 </button>
               </p>
             ) : null}
+            {commandError ? (
+              <p role="alert" className="mt-5 text-sm text-[var(--fm-destructive)]">
+                {commandError}
+              </p>
+            ) : null}
             {loading ? (
               <div className="mt-6 space-y-3" aria-label="Loading cart">
                 {[0, 1].map((item) => (
@@ -121,7 +91,7 @@ export default function CartPage() {
                   />
                 ))}
               </div>
-            ) : !cart?.items.length ? (
+            ) : !displayItems.length ? (
               <div className="mt-6 flex min-h-72 flex-col items-center justify-center rounded-[var(--fm-radius-surface)] border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-6 text-center">
                 <span className="flex size-14 items-center justify-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
                   <ShoppingBasket className="size-7" aria-hidden="true" />
@@ -133,10 +103,10 @@ export default function CartPage() {
               </div>
             ) : (
               <div className="mt-6 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
-                {cart.items.map((item) => (
+                {displayItems.map((item) => (
                   <div
                     key={item.skuId}
-                    aria-busy={pendingQuantity?.skuId === item.skuId}
+                    aria-busy={quantityQueue.pending.has(item.skuId)}
                     className="flex gap-4 border-b border-[var(--fm-border)] p-4 last:border-b-0 sm:p-5"
                   >
                     <div className="flex size-20 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
@@ -160,29 +130,42 @@ export default function CartPage() {
                           <button
                             aria-label={`Decrease ${item.name}`}
                             className="inline-flex size-10 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-                            onClick={() => void update(item, item.quantity - 1)}
-                            disabled={Boolean(pendingQuantity) || Boolean(cart?.paymentInProgress)}
+                            onClick={() =>
+                              quantityQueue.request(
+                                item,
+                                item.quantity - 1,
+                                cart?.currency ?? "PHP",
+                              )
+                            }
+                            disabled={
+                              Boolean(cart?.paymentInProgress) ||
+                              (quantityQueue.pending.get(item.skuId)?.quantity ?? item.quantity) <=
+                                0
+                            }
                           >
                             −
                           </button>
                           <span className="min-w-9 text-center text-sm font-semibold tabular-nums">
-                            {pendingQuantity?.skuId === item.skuId
-                              ? pendingQuantity.quantity
-                              : item.quantity}
+                            {quantityQueue.pending.get(item.skuId)?.quantity ?? item.quantity}
                           </span>
                           <button
                             aria-label={`Increase ${item.name}`}
                             className="inline-flex size-10 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-                            onClick={() => void update(item, item.quantity + 1)}
+                            onClick={() =>
+                              quantityQueue.request(
+                                item,
+                                item.quantity + 1,
+                                cart?.currency ?? "PHP",
+                              )
+                            }
                             disabled={
-                              Boolean(pendingQuantity) ||
-                              Boolean(cart?.paymentInProgress) ||
-                              item.availability !== "AVAILABLE"
+                              Boolean(cart?.paymentInProgress) || item.availability !== "AVAILABLE"
                             }
                           >
                             +
                           </button>
                         </div>
+                        {quantityQueue.pending.has(item.skuId) ? <QuantityPendingSpinner /> : null}
                         <strong className="tabular-nums">
                           {item.regularLineTotalMinor !== undefined ? (
                             <del
@@ -203,23 +186,18 @@ export default function CartPage() {
                           </span>
                         </strong>
                       </div>
-                      {pendingQuantity?.skuId === item.skuId ? (
-                        <p role="status" className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                          Updating quantity…
-                        </p>
-                      ) : null}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            {cart?.items.length ? (
+            {displayItems.length ? (
               <div className="mt-5 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 sm:p-5">
                 <PromotionEntry
                   surface="compact"
                   codes={checkoutDraft.draft.promotionCodes}
                   feedback={[]}
-                  disabled={Boolean(pendingQuantity) || Boolean(cart.paymentInProgress)}
+                  disabled={quantityQueue.busy || Boolean(cart?.paymentInProgress)}
                   onAdd={(code) =>
                     checkoutDraft.setPromotionCodes([...checkoutDraft.draft.promotionCodes, code])
                   }
@@ -242,7 +220,7 @@ export default function CartPage() {
               onAction={guest && canCheckout ? () => setAuthOpen(true) : undefined}
               disabled={
                 loading ||
-                Boolean(pendingQuantity) ||
+                quantityQueue.busy ||
                 Boolean(cart?.checkoutBlocked) ||
                 Boolean(cart?.paymentInProgress)
               }
