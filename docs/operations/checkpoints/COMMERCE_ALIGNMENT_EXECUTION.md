@@ -58,6 +58,17 @@ Lalamove's headerless probe until Core is deployed. The one concrete next action
 authorized production Core deployment followed by the empty-probe check and Partner Portal webhook
 registration retry; actual signed-event acceptance remains separate evidence.
 
+The owner then explicitly authorized deployment. A production Core dry run from pushed revision
+`95f657fc1b3692c35a46960c25a82569e446c9a5` retained the isolated production D1, R2, notification
+Queue, PayMongo and enabled Lalamove bindings; no migration was present or run. Core deployed as
+version `4d0ccc97-c4b5-40dd-be30-5a3c37a5436b`. Post-deploy Core `/health` and `/ready` returned HTTP
+200 with production `ok`/`ready` state. The exact public Lalamove callback returned HTTP 200 for a
+headerless empty `POST`, HTTP 415 for a non-empty headerless body, and HTTP 401 for unsigned JSON.
+No provider transaction, courier booking, signed provider event, remote-data mutation or outbound
+message occurred. Completion level: **1 of 1 webhook connection-probe correction released and live
+probe accepted**. The one concrete next action is to retry version-3 registration in the Lalamove
+Production Partner Portal and then record an actual signed event attempt separately.
+
 ## Latest owner request — ADMIN-ACTION-FEEDBACK-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
