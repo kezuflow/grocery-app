@@ -98,6 +98,9 @@ export function createAuth(
       : {},
     trustedOrigins: [...runtime.auth.trustedOrigins],
     advanced: {
+      // The public Web Worker forwards Cloudflare's edge-set single client IP,
+      // never a caller-controlled X-Forwarded-For chain.
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       useSecureCookies: runtime.auth.secureCookies,
       defaultCookieAttributes: {
         httpOnly: true,

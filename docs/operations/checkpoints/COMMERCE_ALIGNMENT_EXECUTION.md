@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — AUTH-IP-TRUST-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, abuse-control prerequisite. Stable ID: `AUTH-IP-TRUST-1`. Acceptance:
+caller-controlled forwarded-IP chains do not select Better Auth's client identity through the
+Web-to-Core proxy; preserve bounded auth transport and existing sign-in/email behavior. This is
+one prerequisite for audit F12, not acceptance of cross-instance rate enforcement.
+
+Observed clean synchronized `main`/`origin/main` at
+`60528f27090f96135d7d406e22ed2e46cf62b189` before editing. The public Web auth route
+proxies to Core by RPC. Previously its proxy copied incoming `X-Forwarded-For` and `X-Real-IP`
+while Better Auth had no explicit trusted client-IP header configured. Core's direct auth HTTP
+handler and Web proxy both ultimately invoke Better Auth. No repository WAF/rate-limit rules or
+shared auth limiter configuration were found; external Cloudflare zone policy was not inspected,
+so production protection is unknown.
+
+The Web auth proxy now drops `X-Forwarded-For`, `X-Real-IP` and RFC `Forwarded`, while retaining
+the Cloudflare edge-set `CF-Connecting-IP` header. Core Better Auth explicitly reads only
+`CF-Connecting-IP` for IP-based auth behavior. No rate budgets, database schema, WAF settings,
+provider limits or deployment changed. Existing bounded body/origin behavior is preserved.
+
+Focused verification on this working-tree scope: Core auth/email and real Worker/D1 auth-flow
+**13/13 across 2 files**, Web proxy **8/8**, complete Web tests **648/648 across 155 files**,
+Core and Web typechecks, Core dry-run and Web builds, architecture/readiness guards, focused
+lint/format and `git diff --check` passed. These tests prove forwarding and configuration, not
+rate limiting across requests/runtime instances or 429 behavior. The prior complete Core suite
+**1713/1713** belongs to the preceding telemetry slice and is not claimed for this auth change.
+The next concrete action for F12 is to inspect the actual Cloudflare zone/WAF policy and choose
+route-specific budgets plus shared auth-rate storage with the owner; then implement and exercise
+the enforcement across instances in an authorized environment. Signed webhooks must not be
+casually throttled and no production WAF change is authorized by this slice.
+
 ## Latest owner request — CORE-RPC-OUTCOME-TELEMETRY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

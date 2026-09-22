@@ -37,6 +37,29 @@ describe("proxyAuthRequest", () => {
     expect(forwarded["x-forwarded-proto"]).toBe("https");
   });
 
+  it("drops caller-controlled IP chains while retaining the edge-set client IP", async () => {
+    const auth = coreAuthSpy();
+    const request = new Request("https://freshmarkets.ph/api/auth/sign-in/email", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "192.0.2.10",
+        "x-real-ip": "192.0.2.11",
+        forwarded: "for=192.0.2.12",
+        "cf-connecting-ip": "198.51.100.7",
+      },
+      body: "{}",
+    });
+
+    await proxyAuthRequest(request, { auth }, "https://freshmarkets.ph");
+
+    const forwarded = auth.mock.calls[0][0].headers;
+    expect(forwarded["cf-connecting-ip"]).toBe("198.51.100.7");
+    expect(forwarded["x-forwarded-for"]).toBeUndefined();
+    expect(forwarded["x-real-ip"]).toBeUndefined();
+    expect(forwarded.forwarded).toBeUndefined();
+  });
+
   it("preserves status, location, and every repeated set-cookie header", async () => {
     const auth = coreAuthSpy();
     const request = new Request("https://freshmarkets.ph/api/auth/sign-out", {

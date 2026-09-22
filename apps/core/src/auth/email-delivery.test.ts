@@ -119,6 +119,11 @@ describe("createRuntimeAuthEmailDelivery", () => {
 });
 
 describe("createAuth email wiring", () => {
+  it("uses only Cloudflare's edge-set client IP header for auth IP tracking", () => {
+    const auth = createAuth(testAuthEnvironment());
+    expect(auth.options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
+  });
+
   it("routes verification and reset sends through the injected delivery", async () => {
     const logs = captureLogs();
     const sent: AuthEmailMessage[] = [];

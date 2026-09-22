@@ -267,6 +267,10 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - All general Core telemetry crosses the redacting observability helper. Cookie, authorization,
   token, secret, password/reset, action URL, webhook/provider payload, and precise-address fields
   are forbidden by runtime redaction plus `pnpm readiness:check` static analysis.
+- The public Web auth proxy removes caller-supplied forwarded-IP chains before sending Auth RPC
+  and retains Cloudflare's edge-set `CF-Connecting-IP`; Core Better Auth uses only that single
+  header for IP-based auth behavior. This trust boundary does not itself prove shared or deployed
+  abuse-rate enforcement.
 - Core RPC telemetry distinguishes a completed transport from the typed business outcome:
   `accepted` or `rejected` is recorded on both the RPC span and structured completion log;
   an unexpected exception is recorded separately. Only declared application error codes are

@@ -33,7 +33,9 @@ export async function proxyAuthRequest(
   const context = webRequestContext(request);
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value;
+    const name = key.toLowerCase();
+    if (name !== "x-forwarded-for" && name !== "x-real-ip" && name !== "forwarded")
+      headers[name] = value;
   });
   const publicUrl = new URL(publicAppOrigin);
   headers["x-forwarded-host"] = publicUrl.host;
