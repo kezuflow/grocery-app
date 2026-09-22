@@ -19,7 +19,9 @@ so production protection is unknown.
 The Web auth proxy now drops `X-Forwarded-For`, `X-Real-IP` and RFC `Forwarded`, while retaining
 the Cloudflare edge-set `CF-Connecting-IP` header. Core Better Auth explicitly reads only
 `CF-Connecting-IP` for IP-based auth behavior. No rate budgets, database schema, WAF settings,
-provider limits or deployment changed. Existing bounded body/origin behavior is preserved.
+provider limits or deployment changed. Existing bounded body/origin behavior is preserved. The
+slice was committed and pushed on `main` as `d7699481dbbfb3e3b35da68be6f895e4e8b6ef39`;
+the checkout was clean and synchronized afterward.
 
 Focused verification on this working-tree scope: Core auth/email and real Worker/D1 auth-flow
 **13/13 across 2 files**, Web proxy **8/8**, complete Web tests **648/648 across 155 files**,
@@ -27,10 +29,10 @@ Core and Web typechecks, Core dry-run and Web builds, architecture/readiness gua
 lint/format and `git diff --check` passed. These tests prove forwarding and configuration, not
 rate limiting across requests/runtime instances or 429 behavior. The prior complete Core suite
 **1713/1713** belongs to the preceding telemetry slice and is not claimed for this auth change.
-The next concrete action for F12 is to inspect the actual Cloudflare zone/WAF policy and choose
-route-specific budgets plus shared auth-rate storage with the owner; then implement and exercise
-the enforcement across instances in an authorized environment. Signed webhooks must not be
-casually throttled and no production WAF change is authorized by this slice.
+The one next action for F12 is to obtain and inspect the actual production Cloudflare zone/WAF
+ruleset for route-specific rate enforcement. Budgets and shared auth-rate storage can then be
+chosen against that evidence, with cross-instance 429 tests in an authorized environment. Signed
+webhooks must not be casually throttled; this slice does not authorize a production WAF change.
 
 ## Latest owner request — CORE-RPC-OUTCOME-TELEMETRY-1 (2026-09-23)
 
@@ -42,7 +44,7 @@ codes are absent from telemetry.
 
 Observed clean `main`/`origin/main` at `efb1690b4ef74eca055e339471227b98cef99f5f` before
 editing. The separate Cart-latency task committed its release checkpoint and Web placement trial
-during this slice; current synchronized `main`/`origin/main` is
+during this slice; at verification time synchronized `main`/`origin/main` was
 `aba063bfcef13ee393e3b00f32c43fdb2ecb97ee`. This slice changed only Core observability,
 its focused tests, and architecture guidance. It did not alter the other agent's Web configuration,
 polling, query paths, deployment or provider operations. The Core source under test did not change
@@ -62,6 +64,7 @@ architecture/readiness guards, focused lint/format and `git diff --check` passed
 No deployed trace/log capture, provider transaction, deployment or complete commerce-phase
 aggregate/browser acceptance is claimed. The next independent item is to assess actual abuse
 controls with deployed configuration evidence; do not infer production limits from local code.
+The slice was committed and pushed on `main` as `60528f27090f96135d7d406e22ed2e46cf62b189`.
 
 ## Latest owner request — BROWSER-STORAGE-RECOVERY-1 (2026-09-23)
 
@@ -92,8 +95,9 @@ Verification on this working-tree scope: targeted Web storage/checkout/cart/paym
 force `getItem`, `setItem` and `removeItem` to throw. This is local simulated browser acceptance,
 not a deployed authenticated browser journey or actual provider acceptance. No outbound payment,
 provider call, deployment or shared data write occurred. No full commerce-phase aggregate acceptance
-is claimed. The next independent slice is operational telemetry outcome semantics; avoid the
-separate loading-time investigation's polling and query-performance work.
+is claimed. The slice was committed and pushed on `main` as
+`efb1690b4ef74eca055e339471227b98cef99f5f`. Its then-next telemetry slice is recorded above;
+the separate loading-time investigation owns its polling and query-performance work.
 
 ## Latest owner request — DEV-ISOLATION-1 (2026-09-23)
 
@@ -121,8 +125,9 @@ focused lint/format and diff checks passed. The binding regression asserts local
 `remote` flag and no Email binding, and that explicit shared mode marks only staging D1/R2 remote
 while disabling direct provider/Email/Queue/cron effects. No live shared-mode startup, remote write,
 outbound send, provider transaction, browser journey or deployment occurred. No full commerce phase
-acceptance is claimed. The next independent slice is the browser storage failure path, once its
-current refresh/Checkout files are rechecked against the loading investigation.
+acceptance is claimed. The slice was committed and pushed on `main` as
+`4f09044fbb6efeaad9dfb00f81611fab7561851c`; its then-next browser-storage slice is recorded
+above.
 
 ## Latest owner request — CART-ADD-LATENCY-1 (2026-09-23)
 
