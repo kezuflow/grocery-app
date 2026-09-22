@@ -8,6 +8,7 @@ import type {
   CustomerOrderLineSnapshot,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { announceToast } from "../../../lib/storefront/cart-client";
 
 const categories: ReadonlyArray<{ value: CustomerOrderIssueCategory; label: string }> = [
   { value: "MISSING_ITEM", label: "Missing item" },
@@ -65,6 +66,7 @@ export function OrderIssueForm({
       key.current = null;
       setState("success");
       setMessage("Your issue was submitted. Our team will review it.");
+      announceToast({ tone: "success", message: "Order issue submitted" });
       setDescription("");
       setAffectedIds([]);
       requestAnimationFrame(() => statusRef.current?.focus());

@@ -83,7 +83,9 @@ export default function InventorySaleDetailPage({
   ): Promise<boolean> {
     try {
       const payload = await command
-        .submit(`/api/admin/promotions/${encodeURIComponent(saleId)}`, body, "PATCH")
+        .submit(`/api/admin/promotions/${encodeURIComponent(saleId)}`, body, "PATCH", {
+          title: "Sale saved",
+        })
         .catch(() => command.retry());
       if (!payload) return false;
       setNotice(payload.ok ? "Sale details saved." : payload.error.message);

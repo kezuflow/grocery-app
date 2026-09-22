@@ -188,7 +188,7 @@ export default function ProductDetailPage({
     successMessage = "Applied.",
   ) {
     skuCommand.setNotice(null);
-    const applied = await command.run(url, url, body, method);
+    const applied = await command.run(url, url, body, method, { title: successMessage });
     setNotice(applied ? successMessage : null);
     if (applied) acceptedProductChange();
     return applied;
@@ -198,7 +198,9 @@ export default function ProductDetailPage({
     const applied =
       body === undefined
         ? await skuCommand.retry()
-        : await skuCommand.run(`${BASE}/skus`, `${BASE}/skus`, body);
+        : await skuCommand.run(`${BASE}/skus`, `${BASE}/skus`, body, "POST", {
+            title: "Variant added",
+          });
     if (applied) {
       setNotice("Variant added.");
       acceptedProductChange();

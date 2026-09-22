@@ -143,6 +143,8 @@ export function CustomerPrivacyPanel({
                   `privacy-create:${customerId}`,
                   `/api/admin/customers/${encodeURIComponent(customerId)}/closure-requests`,
                   { requestType, reason: reason.trim() },
+                  "POST",
+                  { title: "Privacy request opened" },
                 )
               )
                 onChanged();
@@ -223,6 +225,15 @@ export function CustomerPrivacyPanel({
                               action,
                               expectedVersion: item.version,
                               reason: actionReasons[item.privacyRequestId]?.trim(),
+                            },
+                            "POST",
+                            {
+                              title:
+                                action === "APPROVE"
+                                  ? "Privacy request approved"
+                                  : action === "REJECT"
+                                    ? "Privacy request rejected"
+                                    : "Privacy request completed",
                             },
                           )
                         )

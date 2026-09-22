@@ -485,6 +485,8 @@ export default function ProcurementPage() {
                           expectedQuantitySellable: purchase.item.quantitySellable,
                           reason: note.trim() || "Supplier purchase confirmed",
                         },
+                        "POST",
+                        { title: "Purchase recorded" },
                       );
                   if (saved) {
                     setPurchase(null);

@@ -34,6 +34,7 @@ import type {
   RpcResult,
   ServiceabilityResult,
 } from "@freshmarkets/contracts";
+import { announceToast } from "../../../lib/storefront/cart-client";
 import {
   addressPredictionsSchema,
   resolveAddressPrediction,
@@ -725,6 +726,7 @@ export function AddressEditor({
       pendingSave.current = null;
       setSaveUncertain(false);
       setSaveState("idle");
+      announceToast({ tone: "success", message: "Delivery address saved" });
       onConfirmed?.(result.value.id);
     } catch {
       setSaveState("error");

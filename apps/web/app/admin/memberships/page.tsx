@@ -14,6 +14,7 @@ import {
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import { AdminStatusPill } from "../../../components/admin/admin-status-pill";
 import { MembershipStatusBadge } from "../../../components/admin/customer-status-badges";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
@@ -146,6 +147,7 @@ export default function MembershipsPage() {
         return;
       }
       setNotice(`${actionPresentation[action].label} completed.`);
+      notifyCommandSuccess(`${actionPresentation[action].label} completed`);
       setPendingAction(null);
       await load(appliedQuery, pagination.cursor);
     } catch {

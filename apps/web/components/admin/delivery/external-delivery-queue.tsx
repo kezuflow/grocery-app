@@ -1,6 +1,10 @@
 "use client";
 
-import type { DeliveryOperationsSummary, RpcResult } from "@freshmarkets/contracts";
+import type {
+  DeliveryOperationsSummary,
+  ExternalDeliveryDispatchView,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +19,7 @@ import { ExternalDeliveryBooking } from "./external-delivery-booking";
 import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
+import { notifyCommandSuccess } from "../admin-feedback";
 
 export function externalStatusLabel(
   dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
@@ -104,8 +109,15 @@ export function ExternalDeliveryQueue() {
             }),
           },
         )
-      ).json()) as RpcResult<unknown>;
+      ).json()) as RpcResult<ExternalDeliveryDispatchView>;
       setMessage(result.ok ? `Provider delivery ${operation} completed.` : result.error.message);
+      if (
+        result.ok &&
+        operation === "cancel" &&
+        !["OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(result.value.status)
+      ) {
+        notifyCommandSuccess("Lalamove cancellation requested");
+      }
       void load();
     } catch {
       setMessage(`Provider delivery ${operation} outcome is unknown. Refresh before retrying.`);

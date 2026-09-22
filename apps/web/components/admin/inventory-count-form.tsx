@@ -103,6 +103,8 @@ export function InventoryCountForm({
                               quantity: Number(counts[sku.skuId]),
                             })),
                         },
+                        "POST",
+                        { title: "Inventory count saved" },
                       );
                   if (saved) {
                     setOpen(false);

@@ -187,6 +187,8 @@ export function ScheduledCountedReceiving({
                         reason: note.trim() || "Supplier goods weighed and counted",
                         lines,
                       },
+                      "POST",
+                      { title: "Counted receipt saved" },
                     )
                   ) {
                     setSelected(null);

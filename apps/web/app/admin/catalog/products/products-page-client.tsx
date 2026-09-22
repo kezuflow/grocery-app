@@ -27,6 +27,7 @@ import {
 } from "@/lib/admin/product-scope-target";
 import { useQueryEpoch } from "@/components/query-provider";
 import { queryKeys } from "@/lib/query/query-client";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import {
   adminProductDetailResource,
   adminProductListResource,
@@ -220,6 +221,12 @@ export function ProductsPageClient({
         queryClient,
         outcome.succeeded.map((product) => product.productId),
       );
+      if (outcome.succeeded.length > 0 && outcome.failed.length === 0) {
+        notifyCommandSuccess(
+          outcome.succeeded.length === 1 ? "Product deactivated" : "Products deactivated",
+          `${outcome.succeeded.length} ${outcome.succeeded.length === 1 ? "product" : "products"} updated.`,
+        );
+      }
       return outcome;
     } finally {
       setBulkPending(false);

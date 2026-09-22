@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { appErrorCodes, paymentStates } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { announceToast } from "../../../lib/storefront/cart-client";
 
 const failure = z.object({
   ok: z.literal(false),
@@ -212,6 +213,9 @@ export function AmendmentFlow({
             ? "Payment was received. Check your order while the addition is finalized."
             : "Payment is awaiting confirmation. Check your order for the addition's latest status.",
         );
+        if (result.value.state === "SUCCEEDED") {
+          announceToast({ tone: "success", message: "Addition payment received" });
+        }
       }
     } catch {
       setMessage(

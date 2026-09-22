@@ -4,6 +4,7 @@ import type { AdminReconciliationCaseView } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { notifyCommandSuccess } from "./admin-feedback";
 const response = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(true),
@@ -57,6 +58,7 @@ export function ProviderEventRecovery({
           ? "Event retry queued. Refresh for current progress."
           : result.data.error.message,
       );
+      if (result.data.ok) notifyCommandSuccess("Provider event retry queued");
       try {
         await onAccepted();
       } catch {

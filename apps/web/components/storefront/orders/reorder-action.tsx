@@ -7,6 +7,7 @@ import {
   loadCartForLocation,
   requestDeliveryLocation,
 } from "../../../lib/storefront/load-cart-for-location";
+import { announceToast } from "../../../lib/storefront/cart-client";
 
 function reasonLabel(reason: ReorderResultView["skippedLines"][number]["reason"]): string {
   return {
@@ -56,6 +57,9 @@ export function ReorderAction({ orderId, available }: { orderId: string; availab
       }
       setResult(reordered.value);
       setMessage(reorderResultMessage(reordered.value));
+      if (reordered.value.outcome === "COMPLETE") {
+        announceToast({ tone: "success", message: "Order items added to cart" });
+      }
     } catch {
       setMessage("The order could not be added to your cart. Try again.");
     } finally {

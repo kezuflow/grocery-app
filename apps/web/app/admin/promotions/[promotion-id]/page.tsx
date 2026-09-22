@@ -23,6 +23,7 @@ import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 
 type LoadState =
   | { phase: "loading" }
@@ -99,12 +100,13 @@ export default function PromotionDetailPage({
 
   useEffect(() => load(), [load]);
 
-  async function run(url: string, method: "POST" | "PATCH", body: unknown) {
+  async function run(url: string, method: "POST" | "PATCH", body: unknown, successTitle: string) {
     try {
       const payload = await command.submit(url, body, method).catch(() => command.retry());
       if (!payload) return false;
       setNotice(payload.ok ? "Applied." : payload.error.message);
       if (payload.ok) {
+        notifyCommandSuccess(successTitle);
         setGrantCustomer(null);
         load();
       }
@@ -227,7 +229,9 @@ export default function PromotionDetailPage({
           <PromotionDefinitionForm
             promotion={promotion}
             disabled={frozen}
-            onSave={(body) => run(`${BASE}/${encodeURIComponent(promotionId)}`, "PATCH", body)}
+            onSave={(body) =>
+              run(`${BASE}/${encodeURIComponent(promotionId)}`, "PATCH", body, "Promotion saved")
+            }
           />
         ) : (
           <div className="space-y-2 p-4 text-sm">
@@ -296,10 +300,15 @@ export default function PromotionDetailPage({
                 size="sm"
                 disabled={frozen}
                 onClick={() => {
-                  void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
-                    action: "ACTIVATE",
-                    expectedVersion: promotion.version,
-                  });
+                  void run(
+                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                    "POST",
+                    {
+                      action: "ACTIVATE",
+                      expectedVersion: promotion.version,
+                    },
+                    "Promotion activated",
+                  );
                 }}
               >
                 Activate
@@ -311,10 +320,15 @@ export default function PromotionDetailPage({
                 variant="outline"
                 disabled={frozen}
                 onClick={() => {
-                  void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
-                    action: "DEACTIVATE",
-                    expectedVersion: promotion.version,
-                  });
+                  void run(
+                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                    "POST",
+                    {
+                      action: "DEACTIVATE",
+                      expectedVersion: promotion.version,
+                    },
+                    "Promotion deactivated",
+                  );
                 }}
               >
                 Deactivate
@@ -326,10 +340,15 @@ export default function PromotionDetailPage({
                 variant="destructive"
                 disabled={frozen}
                 onClick={() => {
-                  void run(`${BASE}/${encodeURIComponent(promotionId)}/status`, "POST", {
-                    action: "ARCHIVE",
-                    expectedVersion: promotion.version,
-                  });
+                  void run(
+                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                    "POST",
+                    {
+                      action: "ARCHIVE",
+                      expectedVersion: promotion.version,
+                    },
+                    "Promotion archived",
+                  );
                 }}
               >
                 Archive
@@ -465,10 +484,15 @@ export default function PromotionDetailPage({
                   setNotice("Choose a customer first.");
                   return;
                 }
-                void run(`${BASE}/${encodeURIComponent(promotionId)}/grants`, "POST", {
-                  customerId: grantCustomer.customerId,
-                  maxRedemptions: 1,
-                });
+                void run(
+                  `${BASE}/${encodeURIComponent(promotionId)}/grants`,
+                  "POST",
+                  {
+                    customerId: grantCustomer.customerId,
+                    maxRedemptions: 1,
+                  },
+                  "Promotion granted",
+                );
               }}
             >
               Grant to customer

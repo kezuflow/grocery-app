@@ -1,5 +1,72 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-ACTION-FEEDBACK-1 (2026-09-22)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin and storefront operating feedback. Stable ID:
+`ADMIN-ACTION-FEEDBACK-1`. Acceptance: meaningful confirmed mutations show concise Sonner feedback;
+validation remains inline; conflicts, partial results and unknown outcomes remain persistent and do
+not claim success; background provider/poll updates do not create repeated toasts; Instant Start
+packing says only `Packing started`; and the storefront reuses Sonner without introducing a second
+action-feedback authority.
+
+Observed clean `main` at `5483363dd0c043f29299d42f988aa14dac3eaa29` before editing. The Admin
+already mounted one scoped Sonner toaster and had persistent command banners, while most mutation
+callers exposed only local text. The storefront had a separate custom event-driven toast renderer.
+No Core, contract, storage, schema, payment-authority, location-authorization, fulfillment allocation,
+delivery recovery, webhook or provider behavior needed to change.
+
+Implemented one confirmed-result feedback contract across the Admin command hooks and direct mutation
+callers. The generic and catalog command hooks retain their feedback metadata with the idempotent
+request, stay silent for typed failure or transport uncertainty, and emit one stable-ID toast only
+after a typed Core success, including after a safe retry. Fulfillment, delivery, orders, payments and
+recovery, inventory/transfers/receiving/procurement, catalog/media/promotions/sales, customers/privacy,
+staff/roles, memberships, locations/schedules/cycles/service areas and commerce configuration now use
+truth-safe action wording. Partial bulk results remain persistent rather than receiving a success
+toast. Lalamove cancellation says requested; refunds and recovery say accepted or queued; Start
+packing says `Packing started` and does not imply booking success. Existing paid-order background
+notices remain deduplicated and provider polling remains silent.
+
+The storefront's existing `STOREFRONT_TOAST_EVENT` boundary now renders through the shared Sonner
+component, preserving success/error tone and the sign-in action without changing cart or authentication
+business behavior. Confirmed address saves/removal/default selection, full reorders, cancellation,
+issue submission and received addition payments use that same event; partial reorders and pending or
+unknown payment/cancellation states remain inline. Focused tests cover confirmed success, typed
+failure, unknown-result retry with the same idempotency key, one-toast replay behavior and storefront
+event mapping.
+
+Executed verification on the complete intended working-tree scope:
+
+- Focused Admin feedback tests: **20/20 across 7 files**; focused storefront action tests: **33/33
+  across 7 files**.
+- Full Web unit suite: **633/633 across 152 files**; Web typecheck passed.
+- `vinext check`: **100% compatible (16 supported, 0 partial, 0 issues)**; Web production build passed.
+- Final `pnpm check`: Core **1706/1706 across 209 files**, Web **633/633 across 152 files**, contracts
+  **69/69 across 20 files**, config **2/2**, validation **4/4** and domain-shared **2/2**, plus
+  formatting, naming, terminology, harness, migration/schema, architecture/readiness, lint, all
+  workspace typechecks and Core/Web dry-run builds. Only the two pre-existing Web unused-variable
+  warnings and known Wrangler advisories appeared.
+- `git diff --check` passed. Per the owner's instruction, no browser or Playwright test was run and no
+  browser acceptance is claimed.
+
+Exact commands:
+
+```powershell
+pnpm --filter @freshmarkets/web typecheck
+pnpm --filter @freshmarkets/web test -- test/use-admin-command.test.tsx test/catalog-command-state.test.tsx test/storefront-toast-announcer.test.tsx components/admin/promotion-status-switch.test.tsx components/admin/location-fulfillment-workspace.test.tsx components/admin/delivery/location-delivery-profile-panel.test.tsx app/admin/admin-operational-refresh-provider.test.tsx
+pnpm --filter @freshmarkets/web test -- test/storefront-toast-announcer.test.tsx test/app/account/addresses/address-book-client.test.tsx components/storefront/address/address-editor.test.tsx components/storefront/orders/cancel-order-action.test.ts components/storefront/orders/order-issue-form.test.tsx components/storefront/orders/reorder-action.test.tsx components/storefront/orders/amendment-flow.test.tsx
+pnpm --filter @freshmarkets/web test
+pnpm --filter @freshmarkets/web check:vinext
+pnpm --filter @freshmarkets/web build
+pnpm check
+git diff --check
+```
+
+No deployment, production or remote-data mutation, provider transaction, courier booking, outbound
+message or browser run occurred. Completion level: **1 of 1 action-feedback rollout implemented and
+locally verified**. The one concrete next action is commit/push of this verified Web and checkpoint
+scope; deployed visual acceptance remains separate and was not requested.
+
 ## Latest owner request — INSTANT-AUTO-BOOKING-START-PACKING-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

@@ -24,6 +24,7 @@ import {
 } from "../../../components/ui/table";
 import { PromotionStatusSwitch } from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
   SaleTargetsPicker,
@@ -274,6 +275,7 @@ export default function InventorySalesPage() {
       if (!payload) return;
       setNotice(payload.ok ? "Sale created as DRAFT." : payload.error.message);
       if (payload.ok) {
+        notifyCommandSuccess("Sale created", "Saved as draft.");
         setName("");
         setDiscount("");
         setProductTargets([]);

@@ -70,12 +70,18 @@ export default function RolesPage() {
       return;
     }
     if (
-      await command.run("create-role", "/api/admin/roles", {
-        code: code.trim(),
-        name: name.trim(),
-        description: "",
-        capabilityCodes: [],
-      })
+      await command.run(
+        "create-role",
+        "/api/admin/roles",
+        {
+          code: code.trim(),
+          name: name.trim(),
+          description: "",
+          capabilityCodes: [],
+        },
+        "POST",
+        { title: "Role created" },
+      )
     ) {
       setCode("");
       setName("");

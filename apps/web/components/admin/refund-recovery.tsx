@@ -4,6 +4,7 @@ import type { AdminRefundProgress } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { notifyCommandSuccess } from "./admin-feedback";
 const response = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(true),
@@ -59,6 +60,7 @@ export function RefundRecovery({
           ? "Provider check queued. Refresh for current progress."
           : result.data.error.message,
       );
+      if (result.data.ok) notifyCommandSuccess("Refund provider check queued");
       await onAccepted();
     } catch {
       setNotice("The response is unknown. Retry the saved check to recover its acceptance.");

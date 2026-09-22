@@ -12,6 +12,7 @@ import type {
 import { AddressEditor } from "../../../../components/storefront/address/address-editor";
 import { AddressList } from "../../../../components/storefront/address/address-list";
 import { useAccountAddressOwner, useCheckoutBootstrapOwner } from "../../../../lib/query/cart";
+import { announceToast } from "../../../../lib/storefront/cart-client";
 
 export function AddressBookClient({
   browserApiKey,
@@ -95,6 +96,10 @@ export function AddressBookClient({
           : result.error.message,
       );
       if (result.ok) {
+        announceToast({
+          tone: "success",
+          message: result.value.status === "disabled" ? "Address removed" : "Default address saved",
+        });
         await checkoutBootstrap.invalidate();
         await accountAddresses.invalidate();
       }

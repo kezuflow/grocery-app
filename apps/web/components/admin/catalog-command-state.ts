@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { appErrorCodes } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { notifyCommandSuccess, type AdminSuccessFeedback } from "./admin-feedback";
 
 export const catalogErrorSchema = z.object({
   ok: z.literal(false),
@@ -11,7 +12,13 @@ export const catalogErrorSchema = z.object({
     requestId: z.string(),
   }),
 });
-type Intent = { url: string; body: string; method: "POST" | "PATCH" | "DELETE"; key: string };
+type Intent = {
+  url: string;
+  body: string;
+  method: "POST" | "PATCH" | "DELETE";
+  key: string;
+  successFeedback?: AdminSuccessFeedback;
+};
 export function catalogResultSchema<T>(schema: z.ZodType<T>) {
   return z.union([
     z.object({ ok: z.literal(true), value: schema, requestId: z.string() }),
@@ -41,6 +48,13 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
       const result = resultSchema.parse(await response.json());
       saved.current = null;
       setUncertain(false);
+      if (result.ok && command.successFeedback) {
+        notifyCommandSuccess(
+          command.successFeedback.title,
+          command.successFeedback.description,
+          `catalog-command:${command.key}`,
+        );
+      }
       return result;
     } catch (error) {
       setUncertain(true);
@@ -50,9 +64,20 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
       setPending(false);
     }
   }
-  function submit(url: string, body: unknown, method: Intent["method"] = "POST") {
+  function submit(
+    url: string,
+    body: unknown,
+    method: Intent["method"] = "POST",
+    successFeedback?: AdminSuccessFeedback,
+  ) {
     return execute(
-      saved.current ?? { url, body: JSON.stringify(body), method, key: crypto.randomUUID() },
+      saved.current ?? {
+        url,
+        body: JSON.stringify(body),
+        method,
+        key: crypto.randomUUID(),
+        successFeedback,
+      },
     );
   }
   function retry() {

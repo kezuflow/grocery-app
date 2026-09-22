@@ -64,16 +64,21 @@ export default function BannersPage() {
     if (!selected) return;
     setMessage("");
     try {
-      const r = await command.submit("/api/admin/banners", {
-        bannerId: selected.bannerId,
-        expectedVersion: selected.version,
-        name: selected.name,
-        href: selected.href,
-        status: selected.status,
-        priority: selected.priority,
-        startsAt: selected.startsAt,
-        endsAt: selected.endsAt,
-      });
+      const r = await command.submit(
+        "/api/admin/banners",
+        {
+          bannerId: selected.bannerId,
+          expectedVersion: selected.version,
+          name: selected.name,
+          href: selected.href,
+          status: selected.status,
+          priority: selected.priority,
+          startsAt: selected.startsAt,
+          endsAt: selected.endsAt,
+        },
+        "POST",
+        { title: "Banner saved" },
+      );
       if (!r) return;
       if (!r.ok) {
         setMessage(r.error.message);

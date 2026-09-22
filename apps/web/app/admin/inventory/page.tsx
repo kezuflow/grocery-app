@@ -22,6 +22,7 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import {
   AdminConfirmationDialog,
@@ -216,6 +217,7 @@ export default function InventoryPage() {
       );
       if (locationId === command.locationId) {
         if (payload.ok) {
+          notifyCommandSuccess("Stock adjusted");
           setLedgerFor({
             poolId: command.poolId,
             name: command.productName,

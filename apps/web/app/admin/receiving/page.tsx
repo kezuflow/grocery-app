@@ -29,6 +29,7 @@ import {
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -144,7 +145,10 @@ export default function ReceivingPage() {
       });
       setUnresolved(null);
       setNotice(payload.ok ? intent.success : payload.error.message);
-      if (payload.ok) setLineValues({});
+      if (payload.ok) {
+        notifyCommandSuccess(intent.success.replace(/\.$/, ""));
+        setLineValues({});
+      }
       void load(pagination.cursor);
     } catch {
       setNotice(

@@ -21,6 +21,7 @@ import {
 } from "@freshmarkets/validation";
 import { PageHeader, ListPageSection } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -141,6 +142,7 @@ export function LocationsWorkspace({
       });
       setPendingPayload(null);
       if (response.ok) {
+        notifyCommandSuccess(payload.action === "CREATE" ? "Location created" : "Location saved");
         if (detailLocationId) edit(response.value);
         else setEditing(undefined);
         setNotice("Location saved.");

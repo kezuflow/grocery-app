@@ -26,6 +26,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { refundAmountMinor, refundResponse } from "@/lib/refund-response";
+import { notifyCommandSuccess } from "./admin-feedback";
 
 type Tab = "payments" | "attention";
 type StatusFilter = "all" | "paid" | "partially-refunded" | "refunded";
@@ -263,6 +264,7 @@ export function PaymentsWorkspace({
       if (typeof payload.ok !== "boolean") throw new Error("Unknown response");
       setUnresolved(null);
       setNotice(payload.ok ? successMessage : (payload.error?.message ?? "Recovery was rejected."));
+      if (payload.ok) notifyCommandSuccess("Recovery request accepted", successMessage);
       await refresh();
     } catch {
       setNotice("The response is unknown. Retry the saved command to recover the original result.");
@@ -305,6 +307,8 @@ export function PaymentsWorkspace({
           : result.error.message,
       );
       if (result.ok) setRefundAmount("");
+      if (result.ok)
+        notifyCommandSuccess("Refund request accepted", "Provider progress is shown below.");
       await loadDetail(detail.paymentIntentId);
     } catch {
       setNotice("The response is unknown. Retry the saved refund request to recover its result.");

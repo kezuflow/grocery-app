@@ -5,6 +5,7 @@ import { adminProductMediaViewSchema, z } from "@freshmarkets/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { notifyCommandSuccess } from "./admin-feedback";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: adminProductMediaViewSchema }),
@@ -79,6 +80,7 @@ export function ProductMediaUpload({
       // a second upload or an operator workflow.
       const result = await upload().catch(() => upload());
       if (result.ok) {
+        notifyCommandSuccess("Product image uploaded", undefined, `product-media:${saved.key}`);
         intent.current = null;
         setFile(null);
         setPrimary(false);

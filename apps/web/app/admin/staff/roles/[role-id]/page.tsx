@@ -77,8 +77,13 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
 
   useEffect(() => load(), [load]);
 
-  async function run(url: string, method: "POST" | "PUT" | "PATCH", body: unknown) {
-    if (await command.run(url, url, body, method)) load();
+  async function run(
+    url: string,
+    method: "POST" | "PUT" | "PATCH",
+    body: unknown,
+    successTitle: string,
+  ) {
+    if (await command.run(url, url, body, method, { title: successTitle })) load();
   }
   if (state.phase === "loading") {
     return (
@@ -148,11 +153,16 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
               className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
               onSubmit={(event) => {
                 event.preventDefault();
-                void run(`/api/admin/roles/${encodeURIComponent(roleId)}`, "PATCH", {
-                  name: name.trim(),
-                  description: description.trim(),
-                  expectedVersion: role.version,
-                });
+                void run(
+                  `/api/admin/roles/${encodeURIComponent(roleId)}`,
+                  "PATCH",
+                  {
+                    name: name.trim(),
+                    description: description.trim(),
+                    expectedVersion: role.version,
+                  },
+                  "Role details saved",
+                );
               }}
             >
               <Input
@@ -193,10 +203,15 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
                     const next = new Set(assigned);
                     if (event.target.checked) next.add(capability.code);
                     else next.delete(capability.code);
-                    void run(`/api/admin/roles/${encodeURIComponent(roleId)}/capabilities`, "PUT", {
-                      capabilityCodes: [...next],
-                      expectedVersion: role.version,
-                    });
+                    void run(
+                      `/api/admin/roles/${encodeURIComponent(roleId)}/capabilities`,
+                      "PUT",
+                      {
+                        capabilityCodes: [...next],
+                        expectedVersion: role.version,
+                      },
+                      "Role capabilities saved",
+                    );
                   }}
                 />
                 <span className="font-mono text-xs">{capability.code}</span>
@@ -229,10 +244,15 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
                     setNotice("An archive reason is required.");
                     return;
                   }
-                  void run(`/api/admin/roles/${encodeURIComponent(roleId)}/archive`, "POST", {
-                    reason: archiveReason.trim(),
-                    expectedVersion: role.version,
-                  });
+                  void run(
+                    `/api/admin/roles/${encodeURIComponent(roleId)}/archive`,
+                    "POST",
+                    {
+                      reason: archiveReason.trim(),
+                      expectedVersion: role.version,
+                    },
+                    "Role archived",
+                  );
                 }}
               >
                 Archive role

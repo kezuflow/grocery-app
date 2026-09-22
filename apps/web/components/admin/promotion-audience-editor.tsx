@@ -128,7 +128,9 @@ export function PromotionAudienceEditor({
       return;
     }
     try {
-      const result = await command.submit(url, body.data, "PATCH").catch(() => command.retry());
+      const result = await command
+        .submit(url, body.data, "PATCH", { title: "Promotion audience saved" })
+        .catch(() => command.retry());
       if (!result) return;
       if (!result.ok) {
         setNotice(result.error.message);

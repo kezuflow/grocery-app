@@ -112,6 +112,8 @@ export default function StaffPage() {
             : { kind: "location", locationId: inviteScope },
         ],
       },
+      "POST",
+      { title: "Staff invitation created" },
     );
     if (ok) {
       setInviteEmail("");
@@ -275,6 +277,8 @@ export default function StaffPage() {
                             `revoke:${invitation.invitationId}`,
                             `/api/admin/staff/invitations/${encodeURIComponent(invitation.invitationId)}/revoke`,
                             { reason: revokeReason.trim(), expectedVersion: invitation.version },
+                            "POST",
+                            { title: "Staff invitation revoked" },
                           ).then((ok) => {
                             if (ok) {
                               setRevokeReason("");

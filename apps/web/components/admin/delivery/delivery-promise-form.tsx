@@ -5,6 +5,7 @@ import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { notifyCommandSuccess } from "../admin-feedback";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true) }),
@@ -65,12 +66,12 @@ export function DeliveryPromiseForm({
       const result = responseSchema.parse(await response.json());
       setSaved(null);
       if (result.ok) {
+        const successMessage = item.canInspectReturnedGoods
+          ? "Return inspection and redelivery agreement saved"
+          : "Agreed delivery time saved";
         setOpen(false);
-        setMessage(
-          item.canInspectReturnedGoods
-            ? "Return inspection and redelivery agreement saved."
-            : "Agreed delivery time saved.",
-        );
+        setMessage(`${successMessage}.`);
+        notifyCommandSuccess(successMessage, undefined, `delivery-promise:${request.key}`);
         onChanged();
       } else setMessage(result.error.message);
     } catch {

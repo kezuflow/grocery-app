@@ -6,6 +6,7 @@ import { appErrorCodes } from "@freshmarkets/contracts";
 import { useLocationSetup, useSetupNavigationLock } from "./location-setup-state";
 import { LocationFulfillmentWorkspace } from "./location-fulfillment-workspace";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
@@ -52,6 +53,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
       );
       setPending(null);
       if (response.ok) {
+        notifyCommandSuccess("Location activated");
         setReason("");
         reload();
       } else setNotice(response.error.message);

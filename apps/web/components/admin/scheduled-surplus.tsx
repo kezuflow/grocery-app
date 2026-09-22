@@ -115,6 +115,8 @@ export function ScheduledSurplus({
                         inspected: true,
                         reason: reason.trim(),
                       },
+                      "POST",
+                      { title: "Inspected surplus released" },
                     )
                   ) {
                     setSelected(null);

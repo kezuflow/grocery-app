@@ -1,12 +1,14 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import { z } from "@freshmarkets/validation";
+import { notifyCommandSuccess, type AdminSuccessFeedback } from "./admin-feedback";
 type PendingAdminCommand = {
   operationId: string;
   url: string;
   body: string;
   key: string;
   method: "POST" | "PUT" | "PATCH" | "DELETE";
+  successFeedback?: AdminSuccessFeedback;
 };
 const commandResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: z.unknown() }),
@@ -33,6 +35,13 @@ export function useAdminCommand() {
       pending.current = null;
       setUncertain(false);
       setNotice(parsed.data.ok ? "Done." : parsed.data.error.message);
+      if (parsed.data.ok && command.successFeedback) {
+        notifyCommandSuccess(
+          command.successFeedback.title,
+          command.successFeedback.description,
+          `admin-command:${command.key}`,
+        );
+      }
       return parsed.data.ok;
     } catch {
       setUncertain(true);
@@ -51,6 +60,7 @@ export function useAdminCommand() {
       url: string,
       body: unknown,
       method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
+      successFeedback?: AdminSuccessFeedback,
     ) => {
       const serialized = JSON.stringify(body);
       const previous = pending.current;
@@ -70,6 +80,7 @@ export function useAdminCommand() {
         body: serialized,
         key: crypto.randomUUID(),
         method,
+        successFeedback,
       };
       pending.current = command;
       return execute(command);

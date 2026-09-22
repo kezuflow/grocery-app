@@ -5,12 +5,19 @@ import type { AdminDeliveryOperationView, ManualDeliveryAction } from "@freshmar
 import { z } from "@freshmarkets/validation";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { notifyCommandSuccess } from "../admin-feedback";
 
 const labels: Record<ManualDeliveryAction, string> = {
   ASSIGN: "Assign manual delivery",
   HAND_OVER: "Hand over packed order",
   COMPLETE: "Record delivered",
   FAIL: "Record delivery failure",
+};
+const successTitles: Record<ManualDeliveryAction, string> = {
+  ASSIGN: "Manual delivery assigned",
+  HAND_OVER: "Order handed over",
+  COMPLETE: "Manual delivery completed",
+  FAIL: "Manual delivery failure recorded",
 };
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true) }),
@@ -76,6 +83,7 @@ export function ManualDeliveryControls({
       });
       const result = responseSchema.parse(await response.json());
       if (result.ok) {
+        notifyCommandSuccess(successTitles[action], undefined, `manual-delivery:${request.key}`);
         setSaved(null);
         setAction(null);
         setMessage("Manual delivery updated.");

@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../../components/admin/admin-feedback";
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 import { AdminLiveRegion, AdminPageState } from "../../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../../components/admin/admin-shell";
@@ -100,6 +101,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
         return;
       }
       setNotice(`${actionPresentation[action].label} completed.`);
+      notifyCommandSuccess(`${actionPresentation[action].label} completed`);
       setPendingAction(null);
       await load(issue.issueId);
     } catch {

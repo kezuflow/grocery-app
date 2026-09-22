@@ -18,6 +18,7 @@ import {
 } from "@freshmarkets/validation";
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { GoogleMap } from "../maps/google-map";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -308,6 +309,7 @@ export function ServiceAreasWorkspace({
       });
       setPendingBody(null);
       if (response.ok) {
+        notifyCommandSuccess("Service area published");
         setDraft(null);
         setNotice("Service area published. New address checks now use this boundary.");
         await refresh();

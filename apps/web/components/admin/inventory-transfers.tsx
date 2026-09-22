@@ -227,7 +227,9 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
     if (
       await (command.uncertain
         ? command.retry()
-        : command.run("create-transfer", "/api/admin/transfers", body))
+        : command.run("create-transfer", "/api/admin/transfers", body, "POST", {
+            title: "Transfer created",
+          }))
     )
       onCreated();
   }
@@ -475,6 +477,17 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
           action,
           `/api/admin/transfers/${encodeURIComponent(transferId)}/${action.toLowerCase()}`,
           body,
+          "POST",
+          {
+            title:
+              action === "DISPATCH"
+                ? "Transfer dispatched"
+                : action === "RECEIVE"
+                  ? "Transfer receipt saved"
+                  : action === "RESOLVE"
+                    ? "Transfer discrepancy resolved"
+                    : "Transfer canceled",
+          },
         ));
     if (done) {
       setQuantities({});

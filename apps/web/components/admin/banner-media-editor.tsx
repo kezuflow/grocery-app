@@ -7,6 +7,7 @@ import { catalogResultSchema } from "./catalog-command-state";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { notifyCommandSuccess } from "./admin-feedback";
 
 export function BannerMediaEditor({
   bannerId,
@@ -124,6 +125,8 @@ export function BannerMediaEditor({
       }
       const result = await send().catch(() => send());
       if (result.ok) {
+        const successTitle =
+          result.value.status === "active" ? "Banner image saved" : "Banner image removed";
         intent.current = null;
         setFile(null);
         setMedia(result.value.status === "active" ? result.value : null);
@@ -131,6 +134,7 @@ export function BannerMediaEditor({
         setMessage(
           result.value.status === "active" ? "Banner image saved." : "Banner image removed.",
         );
+        notifyCommandSuccess(successTitle, undefined, `banner-media:${saved.key}`);
         onChange?.();
       } else {
         setMessage(result.error.message);

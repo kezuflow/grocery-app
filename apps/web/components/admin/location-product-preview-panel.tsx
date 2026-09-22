@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
 
 type LocationScope = Extract<AdminProductDetail["scope"], { kind: "LOCATION" }>;
@@ -164,6 +165,7 @@ function LocationSkuPriceRow({
         });
         setCommand(null);
         if (result.ok) {
+          notifyCommandSuccess("Location price saved");
           setSavedPriceMinor(pending.amountMinor);
           setNotice("Location price saved.");
           setEditing(false);

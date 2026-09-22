@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { PageHeader } from "./admin-shell";
 import { TimeOfDayInput } from "./time-of-day-input";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { useSetupNavigationLock } from "./location-setup-state";
 
 const responseSchema = z.union([
@@ -106,6 +107,7 @@ export function LocationScheduleWorkspace({
       );
       setPending(null);
       if (next.ok) {
+        notifyCommandSuccess("Operating schedule saved");
         setResult(next);
         setSchedule(next.value.schedule ?? { weekly: [], closures: [] });
         setNotice("Operating schedule saved. Existing orders keep their accepted promises.");

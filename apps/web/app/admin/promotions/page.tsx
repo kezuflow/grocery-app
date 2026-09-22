@@ -35,6 +35,7 @@ import {
 } from "../../../components/ui/table";
 import { PromotionStatusSwitch } from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
   AdminCursorPagination,
@@ -263,6 +264,7 @@ export default function PromotionsPage() {
       if (!payload) return;
       setNotice(payload.ok ? "Promotion created as DRAFT." : payload.error.message);
       if (payload.ok) {
+        notifyCommandSuccess("Promotion created", "Saved as draft.");
         setCode("");
         setName("");
         setDiscount("");

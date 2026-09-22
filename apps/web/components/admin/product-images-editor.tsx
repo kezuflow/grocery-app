@@ -36,6 +36,7 @@ export function ProductImagesEditor({
             `/api/admin/catalog/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(mediaId)}`,
             body,
             remove ? "DELETE" : "PATCH",
+            { title: remove ? "Product image removed" : "Product image saved" },
           );
       if (!result) return;
       onBusyChange?.(false);

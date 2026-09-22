@@ -7,6 +7,7 @@ import type {
   OrderCancellationView,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { announceToast } from "../../../lib/storefront/cart-client";
 
 function money(value: number, currency: string): string {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -85,6 +86,13 @@ export function CancelOrderAction({
       setUnresolved(false);
       setMessage(cancellationResultMessage(result));
       if (result.ok) {
+        announceToast({
+          tone: "success",
+          message:
+            result.value.status === "COMPLETED"
+              ? "Order canceled and refund confirmed"
+              : "Order cancellation accepted",
+        });
         setConfirming(false);
         setAccepted(true);
       }

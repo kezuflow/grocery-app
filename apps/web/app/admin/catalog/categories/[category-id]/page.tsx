@@ -65,11 +65,16 @@ export default function CategoryDetailPage() {
     setConfirming(false);
     const status = result.value.status === "active" ? "inactive" : "active";
     try {
-      const response = await intent.submit(`/api/admin/catalog/categories/${categoryId}/status`, {
-        status,
-        reason: confirmedReason,
-        expectedVersion: result.value.version,
-      });
+      const response = await intent.submit(
+        `/api/admin/catalog/categories/${categoryId}/status`,
+        {
+          status,
+          reason: confirmedReason,
+          expectedVersion: result.value.version,
+        },
+        "POST",
+        { title: status === "active" ? "Category activated" : "Category deactivated" },
+      );
       if (!response) return;
       if (!response.ok) {
         setNotice(

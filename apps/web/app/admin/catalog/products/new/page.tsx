@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -301,6 +302,7 @@ export function NewProductWorkspace({
         return;
       }
       await invalidateAdminProductQueries(queryClient, [result.value.productId]);
+      notifyCommandSuccess("Product created");
       if (onCreated) onCreated(result.value);
       else router.push(`/admin/catalog/products/${result.value.productId}?created=1`);
     } catch (caught) {

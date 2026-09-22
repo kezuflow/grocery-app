@@ -63,6 +63,7 @@ export default function EditCategoryPage() {
         `/api/admin/catalog/categories/${categoryId}`,
         { ...value, expectedVersion: detail.version },
         "PATCH",
+        { title: "Category saved" },
       );
       if (!result) return;
       if (!result.ok) {

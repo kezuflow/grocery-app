@@ -7,6 +7,7 @@ import { catalogResultSchema } from "./catalog-command-state";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { notifyCommandSuccess } from "./admin-feedback";
 
 export function PromotionMediaEditor({
   promotionId,
@@ -111,6 +112,8 @@ export function PromotionMediaEditor({
       }
       const result = await send().catch(() => send());
       if (result.ok) {
+        const successTitle =
+          result.value.status === "active" ? "Campaign image saved" : "Campaign image removed";
         intent.current = null;
         setFile(null);
         setMedia(result.value.status === "active" ? result.value : null);
@@ -118,6 +121,7 @@ export function PromotionMediaEditor({
         setMessage(
           result.value.status === "active" ? "Campaign image saved." : "Campaign image removed.",
         );
+        notifyCommandSuccess(successTitle, undefined, `promotion-media:${saved.key}`);
       } else {
         setMessage(result.error.message);
         if (result.error.code !== "CONFLICT") {

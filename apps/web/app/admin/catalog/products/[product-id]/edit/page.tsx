@@ -121,6 +121,7 @@ export default function EditProductPage() {
               `/api/admin/catalog/products/${productId}`,
               { ...value, expectedVersion: editVersion.current ?? detail.version },
               "PATCH",
+              { title: "Product saved" },
             )
           : null;
       if (!result) return;

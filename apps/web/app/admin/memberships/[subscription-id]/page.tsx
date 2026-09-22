@@ -8,6 +8,7 @@ import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../../components/admin/admin-feedback";
 
 export default function MembershipDetailPage({
   params,
@@ -63,6 +64,7 @@ export default function MembershipDetailPage({
     });
     setNotice(payload.ok ? "Membership cancellation submitted." : payload.error.message);
     if (payload.ok) {
+      notifyCommandSuccess("Membership cancellation submitted");
       setReason("");
       await load(id);
     }

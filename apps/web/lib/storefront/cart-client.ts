@@ -682,5 +682,5 @@ async function loadCart(): Promise<CartView | null> {
 }
 
 export function announceToast(toast: StorefrontToast): void {
-  window.dispatchEvent(new CustomEvent(STOREFRONT_TOAST_EVENT, { detail: toast }));
+  window.dispatchEvent(new window.CustomEvent(STOREFRONT_TOAST_EVENT, { detail: toast }));
 }

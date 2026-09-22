@@ -6,6 +6,10 @@ import { ArrowLeft, Clipboard, MapPin, Phone, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import {
+  notifyCommandError,
+  notifyCommandSuccess,
+} from "../../../../components/admin/admin-feedback";
 import { AdminConfirmationDialog } from "../../../../components/admin/admin-controls";
 import { AdminLiveRegion, AdminTimeline } from "../../../../components/admin/admin-page-state";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
@@ -137,6 +141,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             : "Cancellation accepted. Current refund progress is shown below."
           : payload.error.message,
       );
+      if (payload.ok) {
+        notifyCommandSuccess(
+          payload.value.state === "CANCELED" ? "Order canceled" : "Cancellation accepted",
+        );
+      }
       await load(command.orderId);
     } catch {
       setMessage("The cancellation result is unknown. Retry the saved request.");
@@ -151,8 +160,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
   }
 
   async function copy(value: string, label: string) {
-    await navigator.clipboard.writeText(value);
-    setMessage(`${label} copied.`);
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(`${label} copied.`);
+    } catch {
+      notifyCommandError("Copy failed", `${label} could not be written to the clipboard.`);
+    }
   }
 
   const customerIssues = order?.exceptions.filter((item) => item.source === "ORDER_ISSUE") ?? [];

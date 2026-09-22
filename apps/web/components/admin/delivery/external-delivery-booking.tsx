@@ -15,6 +15,7 @@ import {
 } from "../../ui/alert-dialog";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { notifyCommandSuccess } from "../admin-feedback";
 import { Label } from "../../ui/label";
 import type { OrderedDeliveryItem } from "./delivery-order-list";
 
@@ -89,6 +90,17 @@ export function ExternalDeliveryBooking({
       );
       setReviewing(false);
       if (result.ok) {
+        if (
+          !["OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED", "FAILED"].includes(result.value.status)
+        ) {
+          notifyCommandSuccess(
+            result.value.status === "ACTIVE"
+              ? "Lalamove booking confirmed"
+              : "Lalamove booking request accepted",
+            undefined,
+            `lalamove-booking:${key.current}`,
+          );
+        }
         key.current = crypto.randomUUID();
         const cost =
           result.value.quoteAmountMinor === null || result.value.quoteCurrency === null

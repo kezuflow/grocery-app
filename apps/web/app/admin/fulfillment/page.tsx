@@ -24,6 +24,7 @@ import {
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { OperationalOrderDetail } from "../../../components/admin/operational-order-detail";
 import { useAdminOperationalRefresh } from "../admin-operational-refresh-provider";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 
 const actionLabels: Record<string, string> = {
   START_PICKING: "Accept order & start picking",
@@ -34,6 +35,17 @@ const actionLabels: Record<string, string> = {
   RESUME_PICKING: "Resume picking",
   RESUME_READY_TO_PACK: "Resume packing preparation",
   ESCALATE: "Escalate shortage",
+};
+
+const actionSuccessTitles: Record<string, string> = {
+  START_PICKING: "Picking started",
+  MARK_READY_TO_PACK: "Picking finished",
+  START_PACKING: "Packing started",
+  MARK_PACKED: "Packing finished",
+  RECORD_SHORTAGE: "Shortage recorded",
+  RESUME_PICKING: "Picking resumed",
+  RESUME_READY_TO_PACK: "Packing preparation resumed",
+  ESCALATE: "Shortage escalated",
 };
 
 export default function FulfillmentPage() {
@@ -117,7 +129,10 @@ export default function FulfillmentPage() {
       (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
     )
       void load(pagination.cursor);
-    if (payload.ok) operationalRefresh.refresh();
+    if (payload.ok) {
+      notifyCommandSuccess(actionSuccessTitles[action] ?? "Fulfillment updated");
+      operationalRefresh.refresh();
+    }
   }
   return (
     <div className="w-full space-y-6">

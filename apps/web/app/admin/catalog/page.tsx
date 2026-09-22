@@ -21,6 +21,7 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -132,6 +133,7 @@ export default function CatalogPage() {
     }
     setNotice(payload.ok ? "Category created." : (payload.error?.message ?? "Creation failed."));
     if (payload.ok) {
+      notifyCommandSuccess("Category created");
       setNewCategory({ code: "", name: "", slug: "" });
       load(appliedQuery, pagination.cursor, categoryPagination.cursor);
     }

@@ -39,6 +39,7 @@ import { AdminCursorPagination, useAdminPagination } from "@/components/admin/ad
 import { useAdminContext } from "../../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { NewCategoryWorkspace } from "./new/page";
+import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 
 type CategoriesPageClientProps = {
   initialPayload: RpcResult<AdminCategoryPage>;
@@ -158,6 +159,7 @@ export function CategoriesPageClient({
           : current,
       );
       setCommandResult({ kind: "success", message: `${result.value.name} deactivated.` });
+      notifyCommandSuccess("Category deactivated", result.value.name);
       setCategoryToDeactivate(null);
     } catch {
       setCommandResult({ kind: "error", message: "Network error while deactivating category." });

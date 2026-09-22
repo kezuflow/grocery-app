@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import {
   AdminConfirmationDialog,
   AdminCursorPagination,
@@ -159,6 +160,7 @@ export default function IssuesPage() {
         return;
       }
       setNotice(`${actionPresentation[action].label} completed.`);
+      notifyCommandSuccess(`${actionPresentation[action].label} completed`);
       setPendingAction(null);
       await load(status, pagination.cursor);
     } catch {

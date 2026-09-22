@@ -141,9 +141,15 @@ export default function CustomersPage() {
       return;
     }
     if (
-      await invitationCommand.run("create-invitation", "/api/admin/customers/invitations", {
-        email: inviteEmail.trim(),
-      })
+      await invitationCommand.run(
+        "create-invitation",
+        "/api/admin/customers/invitations",
+        {
+          email: inviteEmail.trim(),
+        },
+        "POST",
+        { title: "Customer invitation created" },
+      )
     ) {
       setInviteEmail("");
       await load(appliedQuery, pagination.cursor);
@@ -534,6 +540,8 @@ export default function CustomersPage() {
                               expectedVersion: invitation.version,
                               reason: revokeReasons[invitation.invitationId]?.trim(),
                             },
+                            "POST",
+                            { title: "Customer invitation revoked" },
                           )
                         )
                           await load(appliedQuery, pagination.cursor);

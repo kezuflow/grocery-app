@@ -65,7 +65,9 @@ export function SkuVariantEditor({
     try {
       // A transport retry keeps the original complete request and remains invisible.
       const result = await command
-        .submit(`/api/admin/catalog/skus/${encodeURIComponent(sku.skuId)}`, parsed.data, "PATCH")
+        .submit(`/api/admin/catalog/skus/${encodeURIComponent(sku.skuId)}`, parsed.data, "PATCH", {
+          title: "Variant saved",
+        })
         .catch(() => command.retry());
       if (!result) return;
       if (!result.ok) {

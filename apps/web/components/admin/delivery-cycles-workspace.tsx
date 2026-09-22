@@ -23,6 +23,7 @@ import {
 import { PageHeader } from "./admin-shell";
 import { WorkspaceNavigation } from "./workspace-navigation";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Sheet, SheetContent } from "../ui/sheet";
@@ -341,6 +342,13 @@ export function DeliveryCyclesWorkspace({
       );
       setPending(null);
       if (result.ok) {
+        notifyCommandSuccess(
+          result.value.status === "DRAFT"
+            ? "Delivery cycle draft saved"
+            : result.value.status === "CANCELED"
+              ? "Delivery cycle deactivated"
+              : "Delivery cycle activated",
+        );
         setPage((current) =>
           current
             ? {

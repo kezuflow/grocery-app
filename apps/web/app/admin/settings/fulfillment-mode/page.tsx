@@ -4,6 +4,7 @@ import { appErrorCodes, type GlobalCommerceConfigurationView } from "@freshmarke
 import { z } from "@freshmarkets/validation";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { notifyCommandSuccess } from "../../../../components/admin/admin-feedback";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
@@ -130,6 +131,13 @@ export default function FulfillmentModePage() {
           : payload.error.message,
       );
       if (payload.ok) {
+        notifyCommandSuccess(
+          command.action === "PAUSE"
+            ? "Selling paused"
+            : command.action === "OPEN"
+              ? "Selling reopened"
+              : "Fulfillment mode saved",
+        );
         setConfiguration(payload.value);
         setMode(payload.value.fulfillmentMode);
         setReason("");

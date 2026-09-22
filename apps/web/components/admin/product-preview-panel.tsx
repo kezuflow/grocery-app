@@ -113,6 +113,7 @@ export function GlobalProductPreviewPanel({
         `/api/admin/catalog/products/${encodeURIComponent(product.productId)}`,
         body.data,
         "PATCH",
+        { title: "Product name saved" },
       );
       if (!result) return;
       if (!result.ok) return setNotice(result.error.message);
@@ -134,6 +135,8 @@ export function GlobalProductPreviewPanel({
       const result = await productCommand.submit(
         `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/status`,
         body,
+        "POST",
+        { title: status === "active" ? "Product activated" : "Product deactivated" },
       );
       if (!result) return;
       if (!result.ok) return setNotice(result.error.message);
@@ -152,6 +155,7 @@ export function GlobalProductPreviewPanel({
         `/api/admin/catalog/skus/${encodeURIComponent(skuId)}`,
         body,
         "PATCH",
+        { title: status === "active" ? "Variant activated" : "Variant deactivated" },
       );
       if (!result) return;
       if (!result.ok) return setNotice(result.error.message);
@@ -177,6 +181,7 @@ export function GlobalProductPreviewPanel({
         `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/categories`,
         body.data,
         "PATCH",
+        { title: "Product categories saved" },
       );
       if (!result) return;
       if (!result.ok) {

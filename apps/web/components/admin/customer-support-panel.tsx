@@ -169,12 +169,18 @@ export function CustomerSupportPanel({
                 disabled={!reason.trim()}
                 onClick={async () => {
                   if (
-                    await command.run("customer-profile", `${base}/profile`, {
-                      preferredLanguage: language.trim() || null,
-                      promotionalEmails: promotions,
-                      reason: reason.trim(),
-                      expectedVersion: profile.version,
-                    })
+                    await command.run(
+                      "customer-profile",
+                      `${base}/profile`,
+                      {
+                        preferredLanguage: language.trim() || null,
+                        promotionalEmails: promotions,
+                        reason: reason.trim(),
+                        expectedVersion: profile.version,
+                      },
+                      "POST",
+                      { title: "Customer preferences saved" },
+                    )
                   )
                     onChanged();
                 }}
@@ -201,7 +207,15 @@ export function CustomerSupportPanel({
             <Button
               disabled={!body.trim()}
               onClick={async () => {
-                if (await command.run("customer-note", `${base}/notes`, { body: body.trim() }))
+                if (
+                  await command.run(
+                    "customer-note",
+                    `${base}/notes`,
+                    { body: body.trim() },
+                    "POST",
+                    { title: "Support note added" },
+                  )
+                )
                   onChanged();
               }}
             >

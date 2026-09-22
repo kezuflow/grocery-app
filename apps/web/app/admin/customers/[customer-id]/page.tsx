@@ -107,8 +107,8 @@ export default function CustomerDetailPage({
     };
   }, [load]);
 
-  async function run(url: string, body: unknown) {
-    const applied = await command.run(url, url, body);
+  async function run(url: string, body: unknown, successTitle: string) {
+    const applied = await command.run(url, url, body, "POST", { title: successTitle });
     if (applied) load();
     return applied;
   }
@@ -197,11 +197,17 @@ export default function CustomerDetailPage({
                 setNotice("A reason is required.");
                 return;
               }
-              void run(`/api/admin/customers/${encodeURIComponent(customerId)}/access`, {
-                action: customer.accessStatus === "active" ? "DISABLE" : "RESTORE",
-                reason: reason.trim(),
-                expectedVersion: customer.version,
-              });
+              void run(
+                `/api/admin/customers/${encodeURIComponent(customerId)}/access`,
+                {
+                  action: customer.accessStatus === "active" ? "DISABLE" : "RESTORE",
+                  reason: reason.trim(),
+                  expectedVersion: customer.version,
+                },
+                customer.accessStatus === "active"
+                  ? "Customer access disabled"
+                  : "Customer access restored",
+              );
             }}
           >
             {customer.accessStatus === "active" ? "Disable access" : "Restore access"}
@@ -214,9 +220,13 @@ export default function CustomerDetailPage({
                 setNotice("A reason is required.");
                 return;
               }
-              void run(`/api/admin/customers/${encodeURIComponent(customerId)}/sessions/revoke`, {
-                reason: reason.trim(),
-              });
+              void run(
+                `/api/admin/customers/${encodeURIComponent(customerId)}/sessions/revoke`,
+                {
+                  reason: reason.trim(),
+                },
+                "Customer sessions revoked",
+              );
             }}
           >
             Revoke sessions

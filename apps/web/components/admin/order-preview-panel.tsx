@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { adminCancellationResponse } from "../../lib/order-cancellation-response";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
 import { OrderStatusBadge } from "./order-status-badge";
@@ -118,6 +119,9 @@ export function OrderPreviewPanel({
         payload.value.state === "CANCELED"
           ? "Order canceled."
           : "Cancellation accepted. Refund confirmation is still in progress.",
+      );
+      notifyCommandSuccess(
+        payload.value.state === "CANCELED" ? "Order canceled" : "Cancellation accepted",
       );
       await load();
     } catch {

@@ -183,8 +183,9 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
     url: string,
     method: "POST" | "PUT" | "PATCH",
     body: unknown,
+    successTitle: string,
   ) {
-    const ok = await command.run(operation, url, body, method);
+    const ok = await command.run(operation, url, body, method, { title: successTitle });
     if (ok) load(rolePagination.cursor);
     return ok;
   }
@@ -261,10 +262,16 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                 setNotice("A display name is required.");
                 return;
               }
-              void run("profile", `/api/admin/staff/${encodeURIComponent(staffId)}`, "PATCH", {
-                displayName: displayName.trim(),
-                expectedVersion: staff.version,
-              });
+              void run(
+                "profile",
+                `/api/admin/staff/${encodeURIComponent(staffId)}`,
+                "PATCH",
+                {
+                  displayName: displayName.trim(),
+                  expectedVersion: staff.version,
+                },
+                "Staff profile saved",
+              );
             }}
           >
             <Input
@@ -305,6 +312,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                     reason: reason.trim(),
                     expectedVersion: staff.version,
                   },
+                  staff.status === "active" ? "Staff access suspended" : "Staff access activated",
                 );
               }}
             >
@@ -325,6 +333,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                   {
                     reason: reason.trim(),
                   },
+                  "Staff sessions revoked",
                 );
               }}
             >
@@ -366,6 +375,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                           roleIds: [...next],
                           expectedVersion: staff.version,
                         },
+                        "Staff roles saved",
                       );
                     }}
                   />
@@ -409,6 +419,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                       scopes: [{ kind: "global" }],
                       expectedVersion: staff.version,
                     },
+                    "Staff scope saved",
                   )
                 }
               >
@@ -427,6 +438,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                       scopes: [{ kind: "location", locationId: locationId.trim() }],
                       expectedVersion: staff.version,
                     },
+                    "Staff scope saved",
                   )
                 }
               >

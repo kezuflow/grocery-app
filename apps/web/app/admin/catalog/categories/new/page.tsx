@@ -35,7 +35,9 @@ export function NewCategoryWorkspace({
     event.preventDefault();
     setError(null);
     try {
-      const result = await intent.submit("/api/admin/catalog/categories", value);
+      const result = await intent.submit("/api/admin/catalog/categories", value, "POST", {
+        title: "Category created",
+      });
       if (!result) return;
       if (!result.ok) {
         setError({ message: result.error.message, requestId: result.error.requestId });
