@@ -1,5 +1,96 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — INSTANT-AUTO-BOOKING-START-PACKING-1 (2026-09-22)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, with the dispatch-policy correction superseding the Instant portion of the
+completed `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`. Stable ID:
+`INSTANT-AUTO-BOOKING-START-PACKING-1`. Acceptance: an authorized successful Instant
+`START_PACKING` automatically requests the customer-selected Lalamove service while packing
+continues; Scheduled remains staff-selected after packing; definitely unsubmitted failures recover
+under one bounded identity; unknown/provider-accepted outcomes never cause replacement; definite
+closure exposes the existing packed retry/Manual recovery; verified provider observations update
+delivery, Order and fulfillment custody; mounted Admin Fulfillment/Delivery UI refreshes without a
+page reload.
+
+Observed clean `main` and `origin/main` at `a4ee6561` before editing. The prior FDP implementation
+correctly removed automatic first booking under the then-current owner rule. This correction changes
+that rule only for Instant and preserves the existing payment authority, exact-location authorization,
+Instant reservations, Scheduled cycle allocations, immutable paid snapshots, atomic/idempotent
+writes, one active/uncertain attempt, provider recovery, promise revision and custody history. No
+schema change is required.
+
+Implemented one Core-owned automatic command used by both the Worker and alternate operations RPC
+after a successful `START_PACKING`, plus minute-job recovery for admitted packing work. The first
+attempt uses stable `auto-book:{jobId}` and `fm-auto-{jobId}` identities and the immutable Instant
+provider/service snapshot. Only `PENDING` or definitely retryable unsubmitted work can reuse that
+identity; provider create exceptions and explicit unknown results remain `OUTCOME_UNKNOWN` and block
+replacement. Safe submission is capped at three attempts, after which the attempt/job/stop and owning
+receipt close atomically with audit evidence. Packing success is independent of booking success.
+Scheduled has no automatic path and keeps its post-pack Manual/Lalamove choice. Instant Manual is
+unavailable as a first choice, then becomes available alongside explicit Lalamove retry after definite
+closure and packing. Explicit post-pack Lalamove remains a recovery control when the automatic trigger
+created no attempt.
+
+Provider pickup and completion observations now apply external custody consistently with Manual:
+`PACKED -> HANDED_OFF -> COMPLETED`, while job/stop/Order continue through
+`EN_ROUTE`/`OUT_FOR_DELIVERY` and `DELIVERED`. The fulfillment projection includes the latest delivery
+execution so the existing selected-location refresh owner can render Booking Lalamove, Retrying,
+Finding rider, Rider assigned, Out for delivery, Delivered, Booking failed, Booking canceled and
+Awaiting provider confirmation. Successful commands request an immediate refresh; the existing
+focus/online/visibility and eight-second mounted polling remains the fallback. No new UI business
+authority was added.
+
+Changed scope: Core delivery command/admission/observation/manual policy, both fulfillment RPC callers,
+fulfillment projection and scheduler registry/job; their focused provider, webhook, recovery, domain
+and scheduler tests; `packages/contracts/src/admin-operations.ts`; the Admin Fulfillment and Delivery
+queue/detail components plus unit and Instant/Scheduled browser tests; and the owning PRODUCT,
+architecture, API, state-machine, data-model, design, supersession-plan and checkpoint documents.
+No migration, payment, inventory, procurement, receiving or customer-checkout source changed.
+
+Executed verification on the intended working-tree scope before the aggregate gate:
+
+- Focused Core command/provider/webhook/scheduler/RPC/recovery run: **90/90 across 7 files**.
+- Focused contracts run: **9/9 across 2 files**.
+- Focused Web status/detail/refresh/notification/route run: **17/17 across 5 files**.
+- Managed production-build disposable browser run, Instant desktop plus 390 px: **2/2**. It proves
+  no booking before packing, automatic booking at Start packing, identity preservation across a
+  scheduler pass and Finish packing, live Finding rider presentation, definite cancellation and
+  retry recovery.
+- Managed production-build disposable Scheduled desktop regression: **1/1**. It proves retained
+  Scheduled allocation/addition work, packing, explicit courier recovery and normal post-pack Manual
+  assignment remain intact.
+- The first browser invocations reached cancellation correctly but exposed old assertions for the raw
+  `CANCELED` code after the UI adopted the approved `Booking canceled` label. The expectations were
+  corrected and fresh named states passed with `--retries=0`.
+- Final `pnpm check`: Core **1706/1706 across 209 files**, Web **628/628 across 149 files**,
+  contracts **69/69 across 20 files**, config **2/2**, validation **4/4** and domain-shared **2/2**,
+  plus formatting, naming, terminology, harness, architecture/readiness, fresh/populated migration
+  and schema validation, all workspace typechecks, lint and Core/Web dry-run builds. The separate
+  vinext check reported **100% compatibility (16 supported, 0 partial, 0 issues)**. Only the two
+  pre-existing Web unused-variable warnings and known Wrangler advisories appeared.
+
+Exact commands:
+
+```powershell
+pnpm --filter @freshmarkets/core test -- src/admin/application/delivery-provider-operations.integration.test.ts src/delivery/application/request-provider-delivery.integration.test.ts src/delivery/domain/manual-delivery.test.ts src/delivery/http/lalamove-webhook.integration.test.ts src/scheduling/run-scheduled-jobs.integration.test.ts src/entrypoint/operations-rpc.test.ts src/operations/application/fulfillment-command-recovery.integration.test.ts
+pnpm --filter @freshmarkets/contracts test -- src/admin-operations.test.ts src/states.test.ts
+pnpm --filter @freshmarkets/web test -- components/admin/delivery/external-delivery-queue.test.ts components/admin/operational-order-detail.test.tsx app/admin/admin-operational-refresh-provider.test.tsx components/admin/admin-notifications.test.tsx test/app/api/admin/operations-routes.test.ts
+$env:E2E_START_STACK='1'; $env:E2E_PROVIDER_GATEWAY='1'; $env:E2E_STATE_NAME='e2e-instant-auto-start-packing-rerun'; pnpm --filter @freshmarkets/web test:e2e -- tests/instant-auto-booking.spec.ts --retries=0
+$env:E2E_START_STACK='1'; $env:E2E_PROVIDER_GATEWAY='1'; $env:E2E_STATE_NAME='e2e-scheduled-after-instant-auto-rerun'; pnpm --filter @freshmarkets/web test:e2e -- tests/scheduled-customer-journey.spec.ts --grep '1440px' --retries=0
+pnpm --filter @freshmarkets/web check:vinext
+pnpm check
+git diff --check
+```
+
+These are local fake-provider checks only. No deployment, production/remote-data mutation, real or
+sandbox provider transaction, courier booking or outbound message occurred. Completion level:
+**1 of 1 Instant automatic-booking correction implemented and locally accepted**. The final revision
+is `068fc6d4adaddbd4d0ca32f0e9b5df3274c5f3b0`, descended from `a4ee6561`; this checkpoint-only
+follow-up changes no tested runtime behavior. The one concrete next action is separately authorized
+deployed-environment and actual-provider acceptance; no further local implementation work remains for
+this correction.
+
 ## Latest owner request — FDP-6 integrated acceptance and release gate (2026-09-22)
 
 Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-6 — Integration,
