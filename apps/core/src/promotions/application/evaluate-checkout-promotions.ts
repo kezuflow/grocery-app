@@ -84,26 +84,21 @@ export async function evaluateCheckoutPromotions<T extends PromotionEvaluationCo
     .all<PromotionRow>();
 
   const promotionIds = rows.results.map((row) => row.id);
-  const rulesByPromotion = new Map<string, CheckoutPromotionRule[]>();
-  if (promotionIds.length > 0) {
-    const rules = await database
-      .prepare(
-        `SELECT promotion_id, rule_type, parameters_json FROM promotion_rule
+  const rulesRead =
+    promotionIds.length > 0
+      ? database
+          .prepare(
+            `SELECT promotion_id, rule_type, parameters_json FROM promotion_rule
          WHERE promotion_id IN (SELECT value FROM json_each(?))
          ORDER BY promotion_id, sort_order, id`,
-      )
-      .bind(JSON.stringify(promotionIds))
-      .all<{ promotion_id: string; rule_type: string; parameters_json: string }>();
-    for (const row of rules.results) {
-      const parsed = safeRule(row);
-      const current = rulesByPromotion.get(row.promotion_id) ?? [];
-      if (parsed) current.push(parsed);
-      else current.push({ type: "SPECIFIC_CUSTOMERS", parameters: { customerIds: [] } });
-      rulesByPromotion.set(row.promotion_id, current);
-    }
-  }
+          )
+          .bind(JSON.stringify(promotionIds))
+          .all<{ promotion_id: string; rule_type: string; parameters_json: string }>()
+      : Promise.resolve({ results: [] });
 
-  const [orderCount, segments, productTargets] = await Promise.all([
+  // These reads all depend on the promotion IDs, not on each other's results.
+  const [rules, orderCount, segments, productTargets] = await Promise.all([
+    rulesRead,
     database
       .prepare("SELECT COUNT(*) AS count FROM grocery_order WHERE customer_id=?")
       .bind(context.customerId)
@@ -121,6 +116,15 @@ export async function evaluateCheckoutPromotions<T extends PromotionEvaluationCo
       cartId: context.cartId,
     }),
   ]);
+
+  const rulesByPromotion = new Map<string, CheckoutPromotionRule[]>();
+  for (const row of rules.results) {
+    const parsed = safeRule(row);
+    const current = rulesByPromotion.get(row.promotion_id) ?? [];
+    if (parsed) current.push(parsed);
+    else current.push({ type: "SPECIFIC_CUSTOMERS", parameters: { customerIds: [] } });
+    rulesByPromotion.set(row.promotion_id, current);
+  }
 
   const candidates: CheckoutPromotionCandidate[] = rows.results.map((row) => ({
     productTargets: productTargets.filter((target) => target.promotionId === row.id),

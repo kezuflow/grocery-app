@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { addCartItemsBatch, getCart, setCartItem } from "./cart";
 import { mergeGuestCart } from "./merge-guest-cart";
@@ -87,6 +87,47 @@ async function lockCartForPayment(customerId: string, cartId: string) {
 }
 
 describe("cart aggregate", () => {
+  it("records safe read and write stage durations for a confirmed item update", async () => {
+    const principal = await customer();
+    const initial = await getCart(env.DB, principal);
+    if (!initial.ok) throw new Error("cart setup failed");
+    const logged = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const idempotencyKey = `private-cart-key-${crypto.randomUUID()}`;
+    try {
+      const result = await setCartItem(env.DB, {
+        ...principal,
+        cartId: initial.value.id,
+        skuId: "sku-red-onion-500g",
+        quantity: 1,
+        expectedVersion: initial.value.version,
+        idempotencyKey,
+      });
+      expect(result.ok).toBe(true);
+      const events = logged.mock.calls.map(([payload]) => JSON.parse(String(payload)));
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "cart.read.completed",
+          requestId: principal.requestId,
+          promotionsMs: expect.any(Number),
+          paymentGuardMs: expect.any(Number),
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "cart.setItem.completed",
+          requestId: principal.requestId,
+          batchMs: expect.any(Number),
+          readMs: expect.any(Number),
+        }),
+      );
+      expect(JSON.stringify(events)).not.toContain(initial.value.id);
+      expect(JSON.stringify(events)).not.toContain(idempotencyKey);
+      expect(JSON.stringify(events)).not.toContain("sku-red-onion-500g");
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("locks cart mutations while an accepted checkout payment is unresolved", async () => {
     const principal = await customer();
     const initial = await getCart(env.DB, principal);

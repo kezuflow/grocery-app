@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-ADD-LATENCY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, storefront product-to-cart performance. Stable ID: `CART-ADD-LATENCY-1`.
+Acceptance: identify signed-in add-to-cart latency stages with safe Web/Core measurements, remove
+an avoidable database dependency without changing Cart or promotion decisions, and compare live
+behavior before deciding whether Web Worker placement is warranted. The owner authorized production
+Core/Web deployment after checks, but not Smart Placement or D1 replication.
+
+Observed `main`/`origin/main` at `ef89e7e255b3356d6de51d23f99bdd881551d52b` before editing.
+Unrelated unfinished Admin/Core/contracts changes were present and were committed by their owning
+task as `f2122d2b` while this slice was in progress. This slice did not edit those files. Earlier
+live Codex in-app-browser clicks measured about 5.5–6.1 seconds for signed-in add-to-cart and
+0.3–0.6 seconds for guest clicks. Those are click-to-feedback observations, not a server stage
+breakdown. The Web command uses Core RPC; Core resolves the customer, validates and commits the
+versioned Cart command, then reads the full Cart and evaluates promotions. A read-only production
+D1 count found two automatic promotion definitions; the production primary served that query from
+SIN. No remote write or provider action occurred.
+
+Implemented, pending aggregate/release verification: Web POST cart timing logs and `Server-Timing`
+for total adapter/RPC durations; Core RPC customer-resolution versus Cart-command timing; and
+PII-free Cart write/read stage durations in the redacting telemetry boundary. Promotion rules,
+order count, customer segments and sale targets now start together after promotion IDs are known,
+eliminating one sequential D1 query round trip without changing evaluation inputs or result. No
+schema, contract, payment, checkout, provider or placement configuration changed.
+
+Focused verification on this working-tree scope: cart Web route and client **22/22 across 2 files**;
+Core Cart/RPC/promotion **23/23 across 4 files**; Core and Web typechecks, architecture/readiness,
+format and vinext checks passed. An aggregate `pnpm check` passed its static gates and Web suite but
+was stopped during the full Core suite after the concurrent Admin commit changed the source
+revision. No aggregate result or browser acceptance is claimed. No deployment has occurred. The
+one next action is to finish the aggregate gate against a stable checkout, review/stage only this
+slice, commit/push on `main`, and deploy from a clean checkout under the owner's explicit production
+authorization. After release, collect correlated live timing evidence before any placement decision.
+
 ## Latest owner request — ADMIN-OPERATIONAL-READ-CORRECTNESS-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

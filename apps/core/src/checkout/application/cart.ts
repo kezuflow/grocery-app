@@ -7,6 +7,7 @@ import type {
 } from "@freshmarkets/contracts";
 import type { AppErrorCode } from "@freshmarkets/contracts";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { log } from "../../observability";
 import { evaluateCheckoutPromotions } from "../../promotions/application/evaluate-checkout-promotions";
 import {
   productMediaProjectionSql,
@@ -20,6 +21,10 @@ import {
 
 const CART_SET_SCOPE = "cart.setItem";
 const CART_BATCH_SCOPE = "cart.addBatch";
+
+function elapsedMs(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
 
 function failure(
   code: AppErrorCode,
@@ -59,7 +64,9 @@ export async function getCart(
   database: D1Database,
   input: AuthenticatedRequest & { customerId: string },
 ): Promise<CartResult> {
+  const startedAt = performance.now();
   const cart = await activeCart(database, input.customerId);
+  const cartLookupMs = elapsedMs(startedAt);
   if (!cart) {
     return failure(
       "DELIVERY_LOCATION_REQUIRED",
@@ -68,6 +75,7 @@ export async function getCart(
     );
   }
 
+  const marketStartedAt = performance.now();
   const currency = await database
     .prepare(
       "SELECT COALESCE(mcp.currency, m.currency) AS currency,m.id marketId,configuration.fulfillment_mode fulfillmentMode FROM fulfillment_location fl JOIN market m ON m.id=fl.market_id LEFT JOIN market_commerce_policy mcp ON mcp.market_id=m.id LEFT JOIN global_commerce_configuration configuration ON configuration.id='global' WHERE fl.id=?",
@@ -78,6 +86,7 @@ export async function getCart(
       marketId: string;
       fulfillmentMode: "INSTANT" | "SCHEDULED" | null;
     }>();
+  const marketMs = elapsedMs(marketStartedAt);
   if (!currency)
     return failure(
       "CONFIGURATION_ERROR",
@@ -86,6 +95,7 @@ export async function getCart(
     );
 
   const now = Date.now();
+  const linesStartedAt = performance.now();
   const rows = await database
     .prepare(
       `SELECT ci.sku_id, ci.quantity, p.name || ' · ' || s.name AS name,p.id product_id,p.category_id,
@@ -133,7 +143,9 @@ export async function getCart(
       product_id: string;
       category_id: string;
     }>();
+  const linesMs = elapsedMs(linesStartedAt);
 
+  const projectionStartedAt = performance.now();
   const items: CartView["items"][number][] = rows.results.map((row) => {
     const unavailableReason: CartView["items"][number]["unavailableReason"] =
       row.sku_status !== "active" ||
@@ -165,6 +177,8 @@ export async function getCart(
       lineTotalMinor: unitPriceMinor === null ? null : row.quantity * unitPriceMinor,
     };
   });
+  const projectionMs = elapsedMs(projectionStartedAt);
+  const promotionsStartedAt = performance.now();
   if (currency.fulfillmentMode) {
     const evaluated = await evaluateCheckoutPromotions(database, {
       customerId: input.customerId,
@@ -199,6 +213,7 @@ export async function getCart(
       }
     }
   }
+  const promotionsMs = elapsedMs(promotionsStartedAt);
   const blockingReasons = [
     ...(items.some((item) => item.availability === "UNAVAILABLE")
       ? (["ITEM_UNAVAILABLE"] as const)
@@ -207,7 +222,19 @@ export async function getCart(
       ? (["PRICE_UNAVAILABLE"] as const)
       : []),
   ];
+  const paymentGuardStartedAt = performance.now();
   const paymentInProgress = await cartHasUnsettledCheckout(database, cart.id);
+  const paymentGuardMs = elapsedMs(paymentGuardStartedAt);
+  log("info", "cart.read.completed", {
+    requestId: input.requestId,
+    totalMs: elapsedMs(startedAt),
+    cartLookupMs,
+    marketMs,
+    linesMs,
+    projectionMs,
+    promotionsMs,
+    paymentGuardMs,
+  });
   return {
     ok: true,
     value: {
@@ -230,13 +257,17 @@ export async function setCartItem(
   database: D1Database,
   command: SetCartItemRequest & { customerId: string },
 ): Promise<CartResult> {
+  const startedAt = performance.now();
   const hash = await requestHash({
     cartId: command.cartId,
     skuId: command.skuId,
     quantity: command.quantity,
     expectedVersion: command.expectedVersion,
   });
+  const hashMs = elapsedMs(startedAt);
+  const idempotencyStartedAt = performance.now();
   const existing = await findIdempotencyRecord(database, CART_SET_SCOPE, command.idempotencyKey);
+  const idempotencyMs = elapsedMs(idempotencyStartedAt);
   if (existing) {
     if (existing.requestHash !== hash)
       return failure(
@@ -248,15 +279,19 @@ export async function setCartItem(
     return failure("CONFLICT", "The cart command is already being processed", command.requestId);
   }
 
+  const cartLookupStartedAt = performance.now();
   const cart = await database
     .prepare(
       "SELECT id, location_id, version FROM cart WHERE id=? AND customer_id=? AND status='ACTIVE'",
     )
     .bind(command.cartId, command.customerId)
     .first<CartRow>();
+  const cartLookupMs = elapsedMs(cartLookupStartedAt);
   if (!cart) return failure("NOT_FOUND", "Active cart not found", command.requestId);
+  const paymentGuardStartedAt = performance.now();
   if (await cartHasUnsettledCheckout(database, cart.id))
     return paymentInProgressFailure(command.requestId);
+  const paymentGuardMs = elapsedMs(paymentGuardStartedAt);
   if (cart.version !== command.expectedVersion)
     return failure(
       "CART_VERSION_CONFLICT",
@@ -264,10 +299,13 @@ export async function setCartItem(
       command.requestId,
     );
 
+  const lineLookupStartedAt = performance.now();
   const existingLine = await database
     .prepare("SELECT quantity FROM cart_item WHERE cart_id=? AND sku_id=?")
     .bind(cart.id, command.skuId)
     .first<{ quantity: number }>();
+  const lineLookupMs = elapsedMs(lineLookupStartedAt);
+  const validationStartedAt = performance.now();
   if (command.quantity > (existingLine?.quantity ?? 0)) {
     const now = Date.now();
     const sku = await database
@@ -310,6 +348,7 @@ export async function setCartItem(
     if (sku.unit_price_minor === null)
       return failure("PRICE_UNAVAILABLE", "This item has no current price", command.requestId);
   }
+  const validationMs = elapsedMs(validationStartedAt);
 
   const now = Date.now();
   const itemStatement =
@@ -362,6 +401,7 @@ export async function setCartItem(
             hash,
           );
 
+  const batchStartedAt = performance.now();
   try {
     await database.batch([
       database
@@ -420,7 +460,22 @@ export async function setCartItem(
       );
     return failure("INTERNAL_ERROR", "The cart update could not be applied", command.requestId);
   }
-  return getCart(database, command);
+  const batchMs = elapsedMs(batchStartedAt);
+  const readStartedAt = performance.now();
+  const result = await getCart(database, command);
+  log("info", "cart.setItem.completed", {
+    requestId: command.requestId,
+    totalMs: elapsedMs(startedAt),
+    hashMs,
+    idempotencyMs,
+    cartLookupMs,
+    paymentGuardMs,
+    lineLookupMs,
+    validationMs,
+    batchMs,
+    readMs: elapsedMs(readStartedAt),
+  });
+  return result;
 }
 
 export type AddCartItemsBatchCommand = {

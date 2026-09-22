@@ -39,6 +39,7 @@ import {
 } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { validationFailure } from "./validation-errors";
+import { log, observeCoreRpc } from "../observability";
 import {
   configuredInstantDeliveryPartners,
   type RuntimeDeliveryProviderEnvironment,
@@ -85,11 +86,37 @@ export function createCheckoutRpc(context: CoreRpcContext) {
     },
 
     async setCartItem(input: SetCartItemRequest) {
-      const validation = setCartItemRequestSchema.safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
-      if (!customer.ok) return customer;
-      return setCartItem(context.env.DB, { ...input, customerId: customer.value.customerId });
+      return observeCoreRpc("cart.setItem", input.requestId, async () => {
+        const validation = setCartItemRequestSchema.safeParse(input);
+        if (!validation.success) return validationFailure(input.requestId, validation.error);
+        const customerStartedAt = performance.now();
+        const customer = await context.access.resolveAuthenticatedCustomer(input);
+        const customerMs = Math.round((performance.now() - customerStartedAt) * 10) / 10;
+        if (!customer.ok) {
+          log("info", "cart.rpc.stages", { requestId: input.requestId, customerMs });
+          return customer;
+        }
+        const commandStartedAt = performance.now();
+        try {
+          const result = await setCartItem(context.env.DB, {
+            ...input,
+            customerId: customer.value.customerId,
+          });
+          log("info", "cart.rpc.stages", {
+            requestId: input.requestId,
+            customerMs,
+            commandMs: Math.round((performance.now() - commandStartedAt) * 10) / 10,
+          });
+          return result;
+        } catch (error) {
+          log("error", "cart.rpc.stages", {
+            requestId: input.requestId,
+            customerMs,
+            commandMs: Math.round((performance.now() - commandStartedAt) * 10) / 10,
+          });
+          throw error;
+        }
+      });
     },
 
     async clearCart(input: ClearCartRequest) {
