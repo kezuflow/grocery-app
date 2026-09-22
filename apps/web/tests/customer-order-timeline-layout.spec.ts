@@ -9,18 +9,30 @@ const timeline = [
     status: "SUCCEEDED",
     occurredAt: "2026-09-21T00:00:00.000Z",
   },
-  ...[
-    ["preparing", "Preparing your order"],
-    ["ready", "Ready for pickup"],
-    ["delivery", "Out for delivery"],
-  ].map(([eventId, title], index) => ({
-    eventId,
+  {
+    eventId: "delivery",
+    type: "DELIVERY_STATUS",
+    title: "Delivery update",
+    description: "Your delivery is now unassigned.",
+    status: "UNASSIGNED",
+    occurredAt: "2026-09-21T01:00:00.000Z",
+  },
+  {
+    eventId: "confirmed",
     type: "ORDER_COMMITTED",
-    title,
-    description: `${title} update`,
+    title: "Order confirmed",
+    description: "We confirmed your order after payment was verified.",
     status: "COMMITTED",
-    occurredAt: `2026-09-21T0${index + 1}:00:00.000Z`,
-  })),
+    occurredAt: "2026-09-21T01:00:00.000Z",
+  },
+  {
+    eventId: "preparing",
+    type: "FULFILLMENT_STATUS",
+    title: "Order preparation update",
+    description: "Order preparation is now packing.",
+    status: "PACKING",
+    occurredAt: "2026-09-21T04:00:00.000Z",
+  },
 ];
 
 async function mockOrder(page: Page) {
@@ -111,6 +123,7 @@ test("places the horizontal order timeline above Items across responsive widths"
 
   const progress = page.getByRole("list", { name: "Order progress" });
   await expect(progress).toBeVisible();
+  await expect(progress.locator("[data-timeline-marker] svg")).toHaveCount(4);
   const desktopPositions = await progress.locator("li").evaluateAll((items) =>
     items.map((item) => {
       const box = item.getBoundingClientRect();
@@ -121,11 +134,18 @@ test("places the horizontal order timeline above Items across responsive widths"
     desktopPositions.map(({ x }) => x).sort((a, b) => a - b),
   );
   expect(new Set(desktopPositions.map(({ y }) => Math.round(y))).size).toBe(1);
+  const progressLabels = await progress.getByRole("heading").allTextContents();
+  expect(progressLabels).toEqual([
+    "Payment update",
+    "Order confirmed",
+    "Order preparation update",
+    "Delivery update",
+  ]);
   await expect(progress.getByRole("heading", { name: "Payment update" })).toHaveClass(
     /text-\[var\(--fm-success\)\]/,
   );
   await expect(page.getByRole("region", { name: "Order timeline" }).locator("p")).toHaveText(
-    "Out for delivery update",
+    "Order preparation is now packing.",
   );
   const [progressBox, firstMarkerBox] = await Promise.all([
     progress.boundingBox(),
@@ -143,10 +163,9 @@ test("places the horizontal order timeline above Items across responsive widths"
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(progress).toBeVisible();
-  const mobileOverflow = await progress.evaluate(
-    (element) => element.scrollWidth > element.clientWidth,
+  expect(await progress.evaluate((element) => element.scrollWidth)).toBe(
+    await progress.evaluate((element) => element.clientWidth),
   );
-  expect(mobileOverflow).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     await page.evaluate(() => document.documentElement.clientWidth),
   );
