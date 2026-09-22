@@ -106,7 +106,9 @@ describe("admin operations BFF routes", () => {
       new Request("https://app/receiving?locationId=l1&cursor=next", { headers: cookie }),
     );
     await fulfillmentGet(
-      new Request("https://app/fulfillment?locationId=l1&cycleId=c1", { headers: cookie }),
+      new Request("https://app/fulfillment?locationId=l1&cycleId=c1&filter=READY_FOR_DISPATCH", {
+        headers: cookie,
+      }),
     );
     await deliveryGet(new Request("https://app/delivery?locationId=l1", { headers: cookie }));
     await activityGet(new Request("https://app/activity?locationId=l1", { headers: cookie }));
@@ -127,6 +129,7 @@ describe("admin operations BFF routes", () => {
     expect(coreMocks.listFulfillmentQueue.mock.calls[0][0]).toMatchObject({
       locationId: "l1",
       cycleId: "c1",
+      filter: "READY_FOR_DISPATCH",
     });
     expect(coreMocks.listDeliveryOperations.mock.calls[0][0]).toMatchObject({ locationId: "l1" });
     expect(coreMocks.listOperationalActivity.mock.calls[0][0]).toMatchObject({
@@ -139,6 +142,14 @@ describe("admin operations BFF routes", () => {
     expect(coreMocks.listOperationalExceptions.mock.calls[0][0]).toMatchObject({
       locationId: "l1",
     });
+  });
+
+  it("rejects an unknown fulfillment filter before Core", async () => {
+    const response = await fulfillmentGet(
+      new Request("https://app/fulfillment?locationId=l1&filter=UNKNOWN", { headers: cookie }),
+    );
+    expect(response.status).toBe(400);
+    expect(coreMocks.listFulfillmentQueue).not.toHaveBeenCalled();
   });
 
   it("delegates explicit writes with idempotency keys and current expected versions", async () => {

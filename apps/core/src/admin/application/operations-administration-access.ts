@@ -23,6 +23,10 @@ export type OperationsAdministrationCapability =
   | "delivery.manage"
   | "fulfillment.manage";
 
+export type OperationsAdministrationAnyAccess = OperationsAdministrationAccess & {
+  capabilities: ReadonlyArray<OperationsAdministrationCapability>;
+};
+
 export type OperationsAdministrationAccessOptions = {
   /** Return the same result for missing and out-of-scope locations on protected reads. */
   concealOutOfScopeLocation?: boolean;
@@ -82,6 +86,29 @@ export async function resolveOperationsAdministrationAccess(
   locationId: string,
   options: OperationsAdministrationAccessOptions = {},
 ): Promise<RpcResult<OperationsAdministrationAccess>> {
+  const access = await resolveOperationsAdministrationAnyAccess(
+    deps,
+    request,
+    [capability],
+    locationId,
+    options,
+  );
+  if (!access.ok) return access;
+  return {
+    ok: true,
+    value: { staffId: access.value.staffId, authUserId: access.value.authUserId },
+    requestId: request.requestId,
+  };
+}
+
+/** Resolve every requested capability the caller holds for one location-scoped read. */
+export async function resolveOperationsAdministrationAnyAccess(
+  deps: OperationsAdministrationDeps,
+  request: AuthenticatedRequest,
+  capabilities: ReadonlyArray<OperationsAdministrationCapability>,
+  locationId: string,
+  options: OperationsAdministrationAccessOptions = {},
+): Promise<RpcResult<OperationsAdministrationAnyAccess>> {
   const database = drizzle(deps.db, { schema: iamSchema });
   const context = await applicationContextForRequest(
     deps.auth,
@@ -100,12 +127,16 @@ export async function resolveOperationsAdministrationAccess(
       },
     };
   }
-  if (options.concealOutOfScopeLocation && !context.value.capabilities.includes(capability)) {
+  const grantedCapabilities = capabilities.filter((capability) =>
+    context.value.capabilities.includes(capability),
+  );
+  const capabilityLabel = capabilities.join(" or ");
+  if (options.concealOutOfScopeLocation && grantedCapabilities.length === 0) {
     return {
       ok: false,
       error: {
         code: "FORBIDDEN",
-        message: `${capability} is required`,
+        message: `${capabilityLabel} is required`,
         requestId: request.requestId,
       },
     };
@@ -139,17 +170,17 @@ export async function resolveOperationsAdministrationAccess(
       ok: false,
       error: {
         code: "FORBIDDEN",
-        message: `${capability} and location scope are required`,
+        message: `${capabilityLabel} and location scope are required`,
         requestId: request.requestId,
       },
     };
   }
-  if (!context.value.capabilities.includes(capability)) {
+  if (grantedCapabilities.length === 0) {
     return {
       ok: false,
       error: {
         code: "FORBIDDEN",
-        message: `${capability} and location scope are required`,
+        message: `${capabilityLabel} and location scope are required`,
         requestId: request.requestId,
       },
     };
@@ -167,7 +198,11 @@ export async function resolveOperationsAdministrationAccess(
   }
   return {
     ok: true,
-    value: { staffId: staffRecord.id, authUserId: context.value.principal.userId },
+    value: {
+      staffId: staffRecord.id,
+      authUserId: context.value.principal.userId,
+      capabilities: grantedCapabilities,
+    },
     requestId: request.requestId,
   };
 }

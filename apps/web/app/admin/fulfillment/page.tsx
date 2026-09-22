@@ -1,8 +1,13 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { FulfillmentQueuePage, RpcResult } from "@freshmarkets/contracts";
+import {
+  fulfillmentQueueFilters,
+  type FulfillmentQueueFilter,
+  type FulfillmentQueuePage,
+  type RpcResult,
+} from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
@@ -56,18 +61,23 @@ export default function FulfillmentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
-  const [view, setView] = useState<string>("ALL");
+  const [view, setView] = useState<FulfillmentQueueFilter>("ALL");
   const operationalRefresh = useAdminOperationalRefresh();
   const actionIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination(`${locationId}:${orderId}`);
+  const pagination = useAdminPagination(`${locationId}:${orderId}:${view}`);
   const load = useCallback(
     async (cursor: string | null, background = false) => {
       if (!background) setState("loading");
       try {
+        const params = new URLSearchParams({
+          locationId: locationId ?? "",
+          limit: "50",
+          filter: view,
+        });
+        if (orderId) params.set("orderId", orderId);
+        if (cursor) params.set("cursor", cursor);
         const payload = (await (
-          await fetch(
-            `/api/admin/fulfillment?locationId=${locationId ?? ""}&limit=50${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-          )
+          await fetch(`/api/admin/fulfillment?${params}`)
         ).json()) as RpcResult<FulfillmentQueuePage>;
         if (!payload.ok) {
           setNotice(
@@ -79,14 +89,18 @@ export default function FulfillmentPage() {
           return;
         }
         setPage(payload.value);
-        setSelectedOrderId((current) => current ?? payload.value.items[0]?.orderId ?? null);
+        setSelectedOrderId((current) =>
+          current && payload.value.items.some((item) => item.orderId === current)
+            ? current
+            : (payload.value.items[0]?.orderId ?? null),
+        );
         setState("ready");
       } catch {
         setNotice("Network error loading fulfillment.");
         setState("error");
       }
     },
-    [locationId, orderId],
+    [locationId, orderId, view],
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
@@ -96,10 +110,6 @@ export default function FulfillmentPage() {
     // The shared owner drives narrow revalidation without clearing the current list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operationalRefresh.revision]);
-  const filteredItems = useMemo(
-    () => page?.items.filter((item) => view === "ALL" || item.operational?.progress === view) ?? [],
-    [page, view],
-  );
   const selected = page?.items.find((item) => item.orderId === selectedOrderId) ?? null;
   async function act(orderId: string, action: string, expectedVersion: number) {
     if (!locationId || actionIntent.pending) return;
@@ -180,18 +190,16 @@ export default function FulfillmentPage() {
             description={`Current location: ${label}. Paid operational snapshots only; finance remains in Orders.`}
           >
             <div className="flex flex-wrap gap-2 border-b p-3" aria-label="Fulfillment views">
-              {["ALL", "NEW", "PREPARING", "READY_FOR_DISPATCH", "UPCOMING", "HISTORY"].map(
-                (candidate) => (
-                  <Button
-                    key={candidate}
-                    size="sm"
-                    variant={view === candidate ? "default" : "outline"}
-                    onClick={() => setView(candidate)}
-                  >
-                    {candidate.replaceAll("_", " ")}
-                  </Button>
-                ),
-              )}
+              {fulfillmentQueueFilters.map((candidate) => (
+                <Button
+                  key={candidate}
+                  size="sm"
+                  variant={view === candidate ? "default" : "outline"}
+                  onClick={() => setView(candidate)}
+                >
+                  {candidate.replaceAll("_", " ")}
+                </Button>
+              ))}
               {operationalRefresh.refreshing ? (
                 <span className="self-center text-xs text-[var(--fm-text-muted)]">Updating…</span>
               ) : null}
@@ -206,7 +214,7 @@ export default function FulfillmentPage() {
                 {notice}
               </p>
             ) : null}
-            {filteredItems.length === 0 ? (
+            {page.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]">
                 No fulfillment tasks match this location.
               </p>
@@ -223,7 +231,7 @@ export default function FulfillmentPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredItems.map((item) => (
+                    {page.items.map((item) => (
                       <TableRow
                         key={item.orderId}
                         className="cursor-pointer"

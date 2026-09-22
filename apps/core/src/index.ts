@@ -108,6 +108,7 @@ import {
   adminCapabilityCodes,
   analyticsDimensionKeys,
   analyticsMetricCategories,
+  fulfillmentQueueFilters,
   metricDefinitionStatuses,
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
@@ -2531,7 +2532,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").AdminFulfillmentQueueRequest,
   ) {
     const validation = adminOperationsCycleSchema
-      .extend({ orderId: validationSchema.string().trim().min(1).max(200).optional() })
+      .extend({
+        orderId: validationSchema.string().trim().min(1).max(200).optional(),
+        filter: validationSchema.enum(fulfillmentQueueFilters).optional(),
+      })
       .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);

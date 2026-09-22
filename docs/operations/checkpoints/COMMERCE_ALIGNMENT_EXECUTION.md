@@ -1,5 +1,80 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-OPERATIONAL-READ-CORRECTNESS-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Admin operational read correctness. Stable ID:
+`ADMIN-OPERATIONAL-READ-CORRECTNESS-1`. Acceptance: Delivery totals count each open job once and
+report booked work only for the current accepted latest attempt; the activity feed returns the union
+permitted by `fulfillment.read` and `delivery.read`; Fulfillment filters are applied in Core before
+pagination, their cursors are bound to the complete query, and changing a filter resets page and
+selection state. The owner separately started another agent to investigate loading times, so this
+slice deliberately leaves polling cadence, request coalescing, response ordering, request volume and
+query-performance work untouched.
+
+Observed clean `main` and `origin/main` at `ef89e7e255b3356d6de51d23f99bdd881551d52b`
+before editing. During verification, concurrent uncommitted work appeared in Checkout/cart,
+commerce-cart route/tests and promotion evaluation. Those files belong to the owner's other agent;
+they were not edited, staged or used as authority for this slice. No schema or migration change was
+required.
+
+Implemented one closed Fulfillment filter vocabulary across contracts, Core validation, Web adapter
+and UI. Core now applies `ALL`, `NEW`, `PREPARING`, `READY_FOR_DISPATCH`, `UPCOMING` or `HISTORY`
+before the bounded keyset page, uses one captured time for Scheduled upcoming classification, and
+binds opaque cursors to location, optional Order/cycle and filter context. Reusing a cursor for
+another filter is rejected. Web sends the selected filter to Core and resets pagination and selected
+detail when the returned page no longer contains that Order. A 51-row nonmatching fixture proves a
+later matching row is present on the first filtered page.
+
+The activity authorization boundary now resolves the set of relevant capabilities held by the
+caller once and passes their union to the notification projection. Regressions cover both
+capabilities, fulfillment-only, delivery-only, neither and a concealed out-of-scope location.
+Delivery summary totals now join only the latest numbered attempt, preserve one result row per job
+and count `bookedJobs` only when that latest external or manual attempt is `ACTIVE`; multiple failed
+and active attempt history no longer inflates totals or claims failed-only work is booked. The owning
+API contract records these semantics.
+
+Executed verification on the intended slice (the workspace also contained the separately owned
+concurrent files named above):
+
+- Core Worker/D1 regressions passed **6/6 across 2 files**, covering capability union/concealment,
+  pre-pagination filtering, query-bound cursors and latest-attempt Delivery totals.
+- Web adapter regressions passed **5/5** and the Fulfillment UI filter/pagination/selection regression
+  passed **1/1**. Contracts passed **3/3**.
+- Contracts, Core and Web typechecks passed. Architecture and readiness/security checks passed.
+- Core Wrangler dry-run build passed. `vinext check` remained **100% compatible (16 supported, 0
+  partial, 0 issues)** and the Web production build passed.
+- Focused source/spec format and TypeScript lint checks plus `git diff --check` passed. The checkpoint
+  retains pre-existing whole-file formatter drift outside this new section. No full aggregate,
+  authenticated browser journey, deployment, provider transaction, courier booking, remote-data
+  mutation or outbound message is claimed. A full aggregate was not started against the concurrently
+  changing Checkout/cart working tree.
+
+Exact commands:
+
+```powershell
+pnpm --filter @freshmarkets/contracts test -- src/admin-operations.test.ts
+pnpm --filter @freshmarkets/web test -- test/app/api/admin/operations-routes.test.ts
+pnpm --filter @freshmarkets/web test -- test/app/admin/fulfillment.test.tsx
+pnpm --filter @freshmarkets/core test -- src/admin/application/admin-overview.integration.test.ts src/admin/application/operations-read-correctness.integration.test.ts
+pnpm --filter @freshmarkets/contracts typecheck
+pnpm --filter @freshmarkets/core typecheck
+pnpm --filter @freshmarkets/web typecheck
+pnpm architecture:check
+pnpm readiness:check
+pnpm --filter @freshmarkets/core build
+pnpm --filter @freshmarkets/web check:vinext
+pnpm --filter @freshmarkets/web build
+pnpm exec oxfmt --check <intended source/spec files>
+pnpm exec oxlint <intended TypeScript files>
+git diff --check
+```
+
+Completion level: **3 of 3 selected operational read defects implemented and locally verified**.
+Loading-time/browser refresh work remains with the owner's other agent. The next independent
+authorized slice is F08's isolated development default and explicit shared-staging opt-in, after
+revalidating the working tree and actual environment bindings.
+
 ## Latest owner request — LALAMOVE-WEBHOOK-CONNECTION-PROBE-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

@@ -5,6 +5,7 @@ import {
   fulfillmentStatuses,
   deliveryActions,
   deliveryStatuses,
+  fulfillmentQueueFilters,
   type DeliveryOperationsSummary,
   type AdminDeliveryOperationView,
   type GlobalCommerceConfigurationView,
@@ -47,6 +48,14 @@ describe("admin operations contracts", () => {
       "RESUME_PICKING",
       "RESUME_READY_TO_PACK",
       "ESCALATE",
+    ]);
+    expect(fulfillmentQueueFilters).toEqual([
+      "ALL",
+      "NEW",
+      "PREPARING",
+      "READY_FOR_DISPATCH",
+      "UPCOMING",
+      "HISTORY",
     ]);
     expect(deliveryStatuses).toEqual([
       "UNASSIGNED",

@@ -1,6 +1,7 @@
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
 import { env } from "cloudflare:workers";
+import { fulfillmentQueueFilters } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
@@ -30,6 +31,11 @@ async function GETHandler(request: Request) {
   if (locationId instanceof Response) return locationId;
   const limit = optionalLimit(request, params);
   if (limit instanceof Response) return limit;
+  const filter = z
+    .enum(fulfillmentQueueFilters)
+    .optional()
+    .safeParse(params.get("filter") ?? undefined);
+  if (!filter.success) return invalid(request, "filter is invalid");
   return adminJson(
     await coreClient(env.CORE).listFulfillmentQueue({
       requestId: webRequestId(request),
@@ -37,6 +43,7 @@ async function GETHandler(request: Request) {
       locationId,
       orderId: params.get("orderId") ?? undefined,
       cycleId: params.get("cycleId") ?? undefined,
+      filter: filter.data,
       cursor: params.get("cursor") ?? undefined,
       limit,
     }),

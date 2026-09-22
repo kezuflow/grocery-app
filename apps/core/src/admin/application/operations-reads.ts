@@ -29,6 +29,7 @@ import { getGlobalCommerceConfiguration } from "../../commerce/application/globa
 import { listProcurementQueue } from "../../procurement/application/list-procurement-queue";
 import {
   resolveGlobalOperationsAdministrationAccess,
+  resolveOperationsAdministrationAnyAccess,
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -38,12 +39,19 @@ import {
   encodeStaffCursor,
 } from "./staff-administration-access";
 
-function pageRequest(request: {
-  cursor?: string;
-  limit?: number;
-  requestId: string;
-}):
-  | { limit: number; cursor?: { createdAt: number; id: string }; cursorId?: string }
+function pageRequest(
+  request: {
+    cursor?: string;
+    limit?: number;
+    requestId: string;
+  },
+  cursorContext?: string,
+):
+  | {
+      limit: number;
+      cursor?: { createdAt: number; id: string; context?: string };
+      cursorId?: string;
+    }
   | RpcResult<never> {
   const limit = boundListLimit(request.limit);
   if (limit === "invalid")
@@ -57,12 +65,12 @@ function pageRequest(request: {
     };
   if (!request.cursor) return { limit };
   const cursor = decodeStaffCursor(request.cursor);
-  if (!cursor)
+  if (!cursor || cursor.context !== cursorContext)
     return {
       ok: false,
       error: {
         code: "VALIDATION_FAILED",
-        message: "cursor is malformed",
+        message: "cursor is malformed or does not match the current query",
         requestId: request.requestId,
       },
     };
@@ -77,6 +85,16 @@ function isPageError(
 
 function nextCursor(hasMore: boolean, id: string | undefined): string | null {
   return hasMore && id ? encodeStaffCursor({ createdAt: 0, id }) : null;
+}
+
+function fulfillmentCursorContext(request: AdminFulfillmentQueueRequest): string {
+  return JSON.stringify([
+    "fulfillment",
+    request.locationId,
+    request.orderId ?? null,
+    request.cycleId ?? null,
+    request.filter ?? "ALL",
+  ]);
 }
 
 export async function getAdminGlobalCommerceConfiguration(
@@ -217,12 +235,14 @@ export async function listAdminFulfillmentQueue(
     request.locationId,
   );
   if (!access.ok) return access;
-  const page = pageRequest(request);
+  const cursorContext = fulfillmentCursorContext(request);
+  const page = pageRequest(request, cursorContext);
   if (isPageError(page)) return page;
   const rows = await listFulfillmentRows(deps.db, {
     orderId: request.orderId,
     locationId: request.locationId,
     cycleId: request.cycleId,
+    filter: request.filter,
     cursor: page.cursor,
     limit: page.limit + 1,
   });
@@ -241,7 +261,11 @@ export async function listAdminFulfillmentQueue(
       })),
       nextCursor:
         pageRows.at(-1) && rows.length > page.limit
-          ? encodeStaffCursor({ createdAt: pageRows.at(-1)!.sortAt, id: pageRows.at(-1)!.orderId })
+          ? encodeStaffCursor({
+              createdAt: pageRows.at(-1)!.sortAt,
+              id: pageRows.at(-1)!.orderId,
+              context: cursorContext,
+            })
           : null,
     },
     requestId: request.requestId,
@@ -253,30 +277,19 @@ export async function listAdminOperationalActivity(
   deps: OperationsAdministrationDeps,
   request: AdminOperationsLocationRequest,
 ): Promise<RpcResult<OperationalActivityView>> {
-  const fulfillmentAccess = await resolveOperationsAdministrationAccess(
+  const access = await resolveOperationsAdministrationAnyAccess(
     deps,
     request,
-    "fulfillment.read",
+    ["fulfillment.read", "delivery.read"],
     request.locationId,
     { concealOutOfScopeLocation: true },
   );
-  const access = fulfillmentAccess.ok
-    ? fulfillmentAccess
-    : fulfillmentAccess.error.code === "FORBIDDEN"
-      ? await resolveOperationsAdministrationAccess(
-          deps,
-          request,
-          "delivery.read",
-          request.locationId,
-          { concealOutOfScopeLocation: true },
-        )
-      : fulfillmentAccess;
   if (!access.ok) return access;
   const notifications = await readAdminNotifications(deps.db, {
     locationIds: [request.locationId],
     globalView: false,
     globalStaff: false,
-    capabilities: fulfillmentAccess.ok ? ["fulfillment.read"] : ["delivery.read"],
+    capabilities: access.value.capabilities,
   });
   const first = notifications[0];
   return {
@@ -347,10 +360,14 @@ export async function listAdminDeliveryOperations(
   const totals = await deps.db
     .prepare(
       `SELECT COUNT(*) AS totalOpenJobs,
-              COUNT(DISTINCT CASE WHEN dispatch.id IS NOT NULL THEN d.id END) AS bookedJobs
+              COUNT(CASE WHEN dispatch.status='ACTIVE' THEN 1 END) AS bookedJobs
        FROM delivery_job d JOIN fulfillment_record f ON f.order_id=d.order_id
        LEFT JOIN grocery_order o ON o.id=d.order_id
-       LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.delivery_job_id=d.id
+       LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.id=(
+         SELECT latest.id FROM delivery_provider_dispatch latest
+         WHERE latest.delivery_job_id=d.id
+         ORDER BY latest.attempt_sequence DESC LIMIT 1
+       )
        WHERE ${clauses.join(" AND ")}`,
     )
     .bind(...binds)

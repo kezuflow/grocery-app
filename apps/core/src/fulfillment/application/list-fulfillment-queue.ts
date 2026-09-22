@@ -1,4 +1,5 @@
 import type {
+  FulfillmentQueueFilter,
   FulfillmentQueueItem,
   OperationalOrderDetailView,
   OperationalOrderLineView,
@@ -44,8 +45,10 @@ export async function listFulfillmentQueue(
     locationId: string;
     orderId?: string;
     cycleId?: string;
+    filter?: FulfillmentQueueFilter;
     cursor?: { createdAt: number; id: string };
     limit?: number;
+    now?: number;
   },
 ): Promise<
   Array<
@@ -58,6 +61,7 @@ export async function listFulfillmentQueue(
   >
 > {
   const limit = query.limit ?? 200;
+  const now = query.now ?? Date.now();
   const clauses = ["f.location_id=?"];
   const binds: unknown[] = [query.locationId];
   if (query.orderId) {
@@ -67,6 +71,31 @@ export async function listFulfillmentQueue(
   if (query.cycleId) {
     clauses.push("o.cycle_id=?");
     binds.push(query.cycleId);
+  }
+  switch (query.filter ?? "ALL") {
+    case "HISTORY":
+      clauses.push("f.status IN ('COMPLETED','CANCELED','HANDED_OFF')");
+      break;
+    case "READY_FOR_DISPATCH":
+      clauses.push("f.status='PACKED'");
+      break;
+    case "UPCOMING":
+      clauses.push(
+        "f.status='NOT_STARTED' AND o.fulfillment_mode='SCHEDULED' AND COALESCE(delivery_window.starts_at,0)>?",
+      );
+      binds.push(now);
+      break;
+    case "NEW":
+      clauses.push(
+        "f.status='NOT_STARTED' AND NOT (o.fulfillment_mode='SCHEDULED' AND COALESCE(delivery_window.starts_at,0)>?)",
+      );
+      binds.push(now);
+      break;
+    case "PREPARING":
+      clauses.push("f.status NOT IN ('COMPLETED','CANCELED','HANDED_OFF','PACKED','NOT_STARTED')");
+      break;
+    case "ALL":
+      break;
   }
   if (query.cursor) {
     clauses.push(
@@ -226,7 +255,7 @@ export async function listFulfillmentQueue(
           ? "READY_FOR_DISPATCH"
           : r.status === "NOT_STARTED" &&
               r.fulfillment_mode === "SCHEDULED" &&
-              (r.starts_at ?? 0) > Date.now()
+              (r.starts_at ?? 0) > now
             ? "UPCOMING"
             : r.status === "NOT_STARTED"
               ? "NEW"

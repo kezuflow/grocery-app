@@ -284,18 +284,16 @@ describe("Admin operational overview", () => {
         ],
       },
     });
-    expect(
-      await core.listOperationalActivity({
-        ...request,
-        locationId: "location-cebu-central",
-      }),
-    ).toMatchObject({
-      ok: true,
-      value: {
-        notifications: [{ id: `order:${localOrder}`, orderId: localOrder }],
-        latest: { id: `order:${localOrder}` },
-      },
+    const combinedActivity = await core.listOperationalActivity({
+      ...request,
+      locationId: "location-cebu-central",
     });
+    if (!combinedActivity.ok) throw new Error(JSON.stringify(combinedActivity.error));
+    expect(
+      combinedActivity.value.notifications
+        .filter((item) => item.orderId === localOrder)
+        .map((item) => item.id),
+    ).toEqual(expect.arrayContaining([`order:${localOrder}`, expect.stringMatching(/^delivery:/)]));
     expect(
       await core.listOperationalActivity({
         ...request,
@@ -316,6 +314,29 @@ describe("Admin operational overview", () => {
       ok: true,
       value: { notifications: [{ id: expect.stringMatching(/^delivery:/), orderId: localOrder }] },
     });
+    const fulfillmentOnlyCookie = await seedStaff({
+      capabilities: ["fulfillment.read"],
+      scope: "location",
+    });
+    const fulfillmentOnly = await core.listOperationalActivity({
+      ...request,
+      headers: { cookie: fulfillmentOnlyCookie },
+      locationId: "location-cebu-central",
+    });
+    if (!fulfillmentOnly.ok) throw new Error(JSON.stringify(fulfillmentOnly.error));
+    expect(
+      fulfillmentOnly.value.notifications
+        .filter((item) => item.orderId === localOrder)
+        .map((item) => item.id),
+    ).toEqual([`order:${localOrder}`]);
+    const neitherCookie = await seedStaff({ capabilities: [], scope: "location" });
+    expect(
+      await core.listOperationalActivity({
+        ...request,
+        headers: { cookie: neitherCookie },
+        locationId: "location-cebu-central",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(
       await core.listDeliveryOperations({
         ...request,

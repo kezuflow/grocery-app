@@ -113,12 +113,24 @@ export type OperationalOrderLineView = {
   };
 };
 
+export const fulfillmentQueueFilters = [
+  "ALL",
+  "NEW",
+  "PREPARING",
+  "READY_FOR_DISPATCH",
+  "UPCOMING",
+  "HISTORY",
+] as const;
+
+export type FulfillmentQueueFilter = (typeof fulfillmentQueueFilters)[number];
+export type FulfillmentProgress = Exclude<FulfillmentQueueFilter, "ALL">;
+
 /** Location-safe paid-order projection. Financial and payment fields are deliberately absent. */
 export type OperationalOrderDetailView = {
   orderNumber: string;
   committedAt: string;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
-  progress: "NEW" | "PREPARING" | "READY_FOR_DISPATCH" | "HISTORY" | "UPCOMING";
+  progress: FulfillmentProgress;
   recipient: { name: string; phone: string };
   timing: {
     cycleName: string | null;
@@ -333,6 +345,7 @@ export type AdminReceivingSessionsRequest = AdminOperationsLocationRequest & {
 export type AdminFulfillmentQueueRequest = AdminOperationsLocationRequest & {
   orderId?: string;
   cycleId?: string;
+  filter?: FulfillmentQueueFilter;
   cursor?: string;
   limit?: number;
 };

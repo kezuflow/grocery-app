@@ -229,7 +229,7 @@ function fromBase64Url(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-export type StaffKeysetCursor = { createdAt: number; id: string };
+export type StaffKeysetCursor = { createdAt: number; id: string; context?: string };
 
 export function encodeStaffCursor(cursor: StaffKeysetCursor): string {
   return toBase64Url(JSON.stringify(cursor));
@@ -237,14 +237,23 @@ export function encodeStaffCursor(cursor: StaffKeysetCursor): string {
 
 export function decodeStaffCursor(cursor: string): StaffKeysetCursor | null {
   try {
-    const parsed = JSON.parse(fromBase64Url(cursor)) as { createdAt?: unknown; id?: unknown };
+    const parsed = JSON.parse(fromBase64Url(cursor)) as {
+      createdAt?: unknown;
+      id?: unknown;
+      context?: unknown;
+    };
     if (
       typeof parsed.createdAt === "number" &&
       Number.isFinite(parsed.createdAt) &&
       typeof parsed.id === "string" &&
-      parsed.id.length > 0
+      parsed.id.length > 0 &&
+      (parsed.context === undefined || typeof parsed.context === "string")
     ) {
-      return { createdAt: parsed.createdAt, id: parsed.id };
+      return {
+        createdAt: parsed.createdAt,
+        id: parsed.id,
+        ...(parsed.context === undefined ? {} : { context: parsed.context }),
+      };
     }
     return null;
   } catch {
