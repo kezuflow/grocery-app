@@ -66,6 +66,9 @@
     "production": {
       "images": { "binding": "IMAGES" },
       "workers_dev": true,
+      // Cart and other business RPCs execute with this fetch handler. The D1
+      // primary serves from Singapore, so keep those calls near the database.
+      "placement": { "region": "aws:ap-southeast-1" },
       "routes": [
         {
           "pattern": "freshmarkets.ph",
