@@ -13,6 +13,7 @@ export function AdminMasterDetailWorkspace({
   open,
   master,
   detail,
+  detailKey,
   panelId,
   labelledBy,
   resizeLabel,
@@ -21,6 +22,7 @@ export function AdminMasterDetailWorkspace({
   open: boolean;
   master: ReactNode;
   detail: ReactNode;
+  detailKey?: string;
   panelId: string;
   labelledBy: string;
   resizeLabel: string;
@@ -76,7 +78,9 @@ export function AdminMasterDetailWorkspace({
               onWidthChange={setPanelWidth}
               onResizeStateChange={setResizing}
             />
-            {detail}
+            <div key={detailKey} className="fm-admin-detail-reveal flex min-h-0 flex-1 flex-col">
+              {detail}
+            </div>
           </div>
         </aside>
       ) : null}

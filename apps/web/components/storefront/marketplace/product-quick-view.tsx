@@ -37,12 +37,15 @@ export function ProductQuickView({
   const [quantity, setQuantity] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState(false);
+  const [showLoadingLayer, setShowLoadingLayer] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!slug) {
       dialog?.close();
       setView(null);
+      setLoading(false);
+      setShowLoadingLayer(false);
       setVariantId("");
       setQuantity(1);
       return;
@@ -73,6 +76,15 @@ export function ProductQuickView({
       });
     return () => controller.abort();
   }, [slug, attempt]);
+
+  useEffect(() => {
+    if (loading) {
+      setShowLoadingLayer(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowLoadingLayer(false), 150);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const presentation = view ? toPresentationProduct(view.product) : null;
   const preview = products.find((product) => product.slug === slug);
@@ -136,251 +148,262 @@ export function ProductQuickView({
       aria-label={presentation ? `${presentation.name} details` : "Product details"}
       className="m-auto w-full max-w-3xl bg-transparent p-0 backdrop:bg-black/45"
     >
-      {loading ? (
-        <div
-          className="relative space-y-4 rounded-[var(--fm-radius-overlay)] bg-white p-6"
-          aria-label="Loading product"
-          aria-busy="true"
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close product details"
-            className="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-white hover:bg-[var(--fm-hover)]"
+      <div className="grid max-h-[85vh] overflow-y-auto rounded-[var(--fm-radius-overlay)] bg-white shadow-[var(--fm-shadow-popover)]">
+        {showLoadingLayer || loading ? (
+          <div
+            data-loading={loading}
+            inert={!loading}
+            aria-hidden={!loading}
+            className="fm-quick-view-loading relative z-10 col-start-1 row-start-1 min-h-80 space-y-4 bg-white p-6"
+            aria-label="Loading product"
+            aria-busy="true"
           >
-            <X className="size-5" aria-hidden="true" />
-          </button>
-          {preview ? (
-            <>
-              <div className="mx-auto max-w-64">
-                <ProductMedia media={preview.media} name={preview.name} />
-              </div>
-              <h2 className="text-2xl font-semibold">{preview.name}</h2>
-            </>
-          ) : (
-            <div className="h-64 animate-pulse rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-muted)]" />
-          )}
-          <p role="status" className="text-sm text-[var(--fm-text-muted)]">
-            Loading current options and availability…
-          </p>
-        </div>
-      ) : !presentation ? (
-        <div role="alert" className="rounded-[var(--fm-radius-dialog)] bg-white p-8 text-center">
-          <h2 className="text-lg font-bold">Product unavailable</h2>
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-            This grocery could not be loaded.
-          </p>
-          <button
-            type="button"
-            onClick={() => setAttempt((value) => value + 1)}
-            className="mt-3 min-h-11 px-4 underline"
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-semibold text-white"
-          >
-            Close
-          </button>
-        </div>
-      ) : (
-        <div className="max-h-[85vh] overflow-y-auto rounded-[var(--fm-radius-dialog)] bg-white shadow-[var(--fm-shadow-popover)]">
-          <div className="flex items-center justify-between border-b border-[var(--fm-border)] px-5 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-              {presentation.categoryName}
-            </p>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close product details"
-              className="inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
+              className="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-white hover:bg-[var(--fm-hover)]"
             >
               <X className="size-5" aria-hidden="true" />
             </button>
-          </div>
-          <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
-            <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
-              <ProductGallery
-                images={view?.images ?? (presentation.media ? [presentation.media] : [])}
-                name={presentation.name}
-              />
-            </div>
-            <div>
-              <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>
-              <p
-                className={cn(
-                  "mt-1 flex items-center gap-1.5 text-sm leading-[22px] font-semibold",
-                  presentation.available
-                    ? "text-[var(--fm-success)]"
-                    : "text-[var(--fm-destructive)]",
-                )}
-              >
-                <span
-                  className="inline-block size-1.5 rounded-full bg-current"
-                  aria-hidden="true"
-                />
-                {presentation.available ? "Available for delivery" : "Currently unavailable"}
-              </p>
-              {presentation.description ? (
-                <p className="mt-3 text-sm leading-[22px] text-[var(--fm-text-muted)]">
-                  {presentation.description}
-                </p>
-              ) : null}
-              <fieldset className="mt-5">
-                <legend className="flex w-full items-center justify-between text-sm font-semibold">
-                  Choose a fixed pack
-                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">Required</span>
-                </legend>
-                <div className="mt-2 space-y-2">
-                  {variants.map((variant) => (
-                    <label
-                      key={variant.id}
-                      className={cn(
-                        "flex cursor-pointer items-center justify-between gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-sm has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]",
-                        variant.availability !== "AVAILABLE"
-                          ? "border-[var(--fm-border)] opacity-60"
-                          : "border-[var(--fm-border)]",
-                      )}
-                    >
-                      <span className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="quick-view-variant"
-                          value={variant.id}
-                          checked={variantId === variant.id}
-                          onChange={() => setVariantId(variant.id)}
-                          disabled={variant.availability !== "AVAILABLE"}
-                          className="size-4 accent-[var(--fm-primary-dark)]"
-                        />
-                        <span className="font-semibold">{variant.label}</span>
-                      </span>
-                      <span className="fm-font-display text-base font-bold tabular-nums">
-                        {variant.availability === "OUT_OF_STOCK" ? (
-                          "Out of stock"
-                        ) : (
-                          <ProductPrice variant={variant} />
-                        )}
-                      </span>
-                    </label>
-                  ))}
+            {preview ? (
+              <>
+                <div className="mx-auto max-w-64">
+                  <ProductMedia media={preview.media} name={preview.name} />
                 </div>
-              </fieldset>
-              {selected?.sale ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Sale price is per selling unit.{" "}
-                  {selected.sale.remainingQuantity !== null
-                    ? `Up to ${selected.sale.remainingQuantity} units remain; your full quantity must fit to get the sale.`
-                    : ""}{" "}
-                  Cart and checkout confirm current savings.
-                </p>
-              ) : null}
-              {selected?.contentsNote ? (
-                <p className="mt-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
-                  {selected.contentsNote}
-                </p>
-              ) : null}
-              {presentation.details.length > 0 ? (
-                <dl className="mt-4 space-y-1.5 border-t border-[var(--fm-border)] pt-4">
-                  {presentation.details.map((detail) => (
-                    <div key={detail.label} className="flex gap-2 text-xs leading-5">
-                      <dt className="shrink-0 font-semibold text-[var(--fm-primary-dark)]">
-                        {detail.label}
-                      </dt>
-                      <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
-              {recommendations.length > 0 ? (
-                <div className="mt-5">
-                  <p className="text-sm font-semibold">More from {presentation.categoryName}</p>
-                  <div className="fm-scrollbar-none -mx-1 mt-2 flex gap-3 overflow-x-auto px-1 pb-1">
-                    {recommendations.map((product) => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => onNavigate(product.slug)}
-                        className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
-                      >
-                        <div aria-hidden="true">
-                          <ProductMedia
-                            media={product.media}
-                            name={product.name}
-                            className="rounded-[var(--fm-radius-control)]"
-                          />
-                        </div>
-                        <span className="mt-1 block line-clamp-2 text-xs font-semibold">
-                          {product.name}
-                        </span>
-                        {product.defaultVariant?.priceMinor != null &&
-                        product.defaultVariant.currency ? (
-                          <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
-                            {formatMoney(
-                              product.defaultVariant.priceMinor,
-                              product.defaultVariant.currency,
-                            )}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <Link
-                href={`/products/${presentation.slug}`}
-                className="mt-4 inline-flex text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
-              >
-                View full details
-              </Link>
-            </div>
+                <h2 className="text-2xl font-semibold">{preview.name}</h2>
+              </>
+            ) : (
+              <div className="h-64 animate-pulse rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-muted)] motion-reduce:animate-none" />
+            )}
+            <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+              Loading current options and availability…
+            </p>
           </div>
-          <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 sm:px-6">
-            <div className="inline-flex h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
-              <button
-                type="button"
-                aria-label="Decrease quantity"
-                onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                className="inline-flex size-11 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-              >
-                <Minus className="size-4" aria-hidden="true" />
-              </button>
-              <span
-                className="min-w-10 text-center text-sm font-semibold tabular-nums"
-                aria-live="polite"
-              >
-                {quantity}
-              </span>
-              <button
-                type="button"
-                aria-label="Increase quantity"
-                onClick={() => setQuantity((current) => Math.min(99, current + 1))}
-                className="inline-flex size-11 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-              </button>
-            </div>
+        ) : null}
+        {!loading && !presentation ? (
+          <div
+            role="alert"
+            className="fm-quick-view-reveal col-start-1 row-start-1 bg-white p-8 text-center"
+          >
+            <h2 className="text-lg font-bold">Product unavailable</h2>
+            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              This grocery could not be loaded.
+            </p>
             <button
               type="button"
-              onClick={() => void add()}
-              disabled={
-                pending ||
-                !selected ||
-                selected.priceMinor === null ||
-                selected.availability !== "AVAILABLE"
-              }
-              className="inline-flex h-11 flex-1 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-4 text-sm font-bold text-[var(--fm-primary-dark)] transition-colors hover:bg-[#a9e83f] disabled:opacity-60 sm:flex-none sm:px-6"
+              onClick={() => setAttempt((value) => value + 1)}
+              className="mt-3 min-h-11 px-4 underline"
             >
-              {selected?.sale
-                ? "Add to cart · Check current savings"
-                : selected && selected.priceMinor !== null && selected.currency
-                  ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
-                  : "Add to cart"}
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-semibold text-white"
+            >
+              Close
             </button>
           </div>
-        </div>
-      )}
+        ) : !loading && presentation ? (
+          <div className="fm-quick-view-reveal col-start-1 row-start-1 bg-white">
+            <div className="flex items-center justify-between border-b border-[var(--fm-border)] px-5 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                {presentation.categoryName}
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close product details"
+                className="inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
+              <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
+                <ProductGallery
+                  images={view?.images ?? (presentation.media ? [presentation.media] : [])}
+                  name={presentation.name}
+                />
+              </div>
+              <div>
+                <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>
+                <p
+                  className={cn(
+                    "mt-1 flex items-center gap-1.5 text-sm leading-[22px] font-semibold",
+                    presentation.available
+                      ? "text-[var(--fm-success)]"
+                      : "text-[var(--fm-destructive)]",
+                  )}
+                >
+                  <span
+                    className="inline-block size-1.5 rounded-full bg-current"
+                    aria-hidden="true"
+                  />
+                  {presentation.available ? "Available for delivery" : "Currently unavailable"}
+                </p>
+                {presentation.description ? (
+                  <p className="mt-3 text-sm leading-[22px] text-[var(--fm-text-muted)]">
+                    {presentation.description}
+                  </p>
+                ) : null}
+                <fieldset className="mt-5">
+                  <legend className="flex w-full items-center justify-between text-sm font-semibold">
+                    Choose a fixed pack
+                    <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                      Required
+                    </span>
+                  </legend>
+                  <div className="mt-2 space-y-2">
+                    {variants.map((variant) => (
+                      <label
+                        key={variant.id}
+                        className={cn(
+                          "flex cursor-pointer items-center justify-between gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-sm has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]",
+                          variant.availability !== "AVAILABLE"
+                            ? "border-[var(--fm-border)] opacity-60"
+                            : "border-[var(--fm-border)]",
+                        )}
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="quick-view-variant"
+                            value={variant.id}
+                            checked={variantId === variant.id}
+                            onChange={() => setVariantId(variant.id)}
+                            disabled={variant.availability !== "AVAILABLE"}
+                            className="size-4 accent-[var(--fm-primary-dark)]"
+                          />
+                          <span className="font-semibold">{variant.label}</span>
+                        </span>
+                        <span className="fm-font-display text-base font-bold tabular-nums">
+                          {variant.availability === "OUT_OF_STOCK" ? (
+                            "Out of stock"
+                          ) : (
+                            <ProductPrice variant={variant} />
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                {selected?.sale ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Sale price is per selling unit.{" "}
+                    {selected.sale.remainingQuantity !== null
+                      ? `Up to ${selected.sale.remainingQuantity} units remain; your full quantity must fit to get the sale.`
+                      : ""}{" "}
+                    Cart and checkout confirm current savings.
+                  </p>
+                ) : null}
+                {selected?.contentsNote ? (
+                  <p className="mt-3 rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
+                    {selected.contentsNote}
+                  </p>
+                ) : null}
+                {presentation.details.length > 0 ? (
+                  <dl className="mt-4 space-y-1.5 border-t border-[var(--fm-border)] pt-4">
+                    {presentation.details.map((detail) => (
+                      <div key={detail.label} className="flex gap-2 text-xs leading-5">
+                        <dt className="shrink-0 font-semibold text-[var(--fm-primary-dark)]">
+                          {detail.label}
+                        </dt>
+                        <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                {recommendations.length > 0 ? (
+                  <div className="mt-5">
+                    <p className="text-sm font-semibold">More from {presentation.categoryName}</p>
+                    <div className="fm-scrollbar-none -mx-1 mt-2 flex gap-3 overflow-x-auto px-1 pb-1">
+                      {recommendations.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => onNavigate(product.slug)}
+                          className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
+                        >
+                          <div aria-hidden="true">
+                            <ProductMedia
+                              media={product.media}
+                              name={product.name}
+                              className="rounded-[var(--fm-radius-control)]"
+                            />
+                          </div>
+                          <span className="mt-1 block line-clamp-2 text-xs font-semibold">
+                            {product.name}
+                          </span>
+                          {product.defaultVariant?.priceMinor != null &&
+                          product.defaultVariant.currency ? (
+                            <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
+                              {formatMoney(
+                                product.defaultVariant.priceMinor,
+                                product.defaultVariant.currency,
+                              )}
+                            </span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <Link
+                  href={`/products/${presentation.slug}`}
+                  className="mt-4 inline-flex text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
+                >
+                  View full details
+                </Link>
+              </div>
+            </div>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 sm:px-6">
+              <div className="inline-flex h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
+                <button
+                  type="button"
+                  aria-label="Decrease quantity"
+                  onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+                  className="inline-flex size-11 items-center justify-center rounded-l-[var(--fm-radius-control)] transition-transform duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:bg-[var(--fm-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
+                >
+                  <Minus className="size-4" aria-hidden="true" />
+                </button>
+                <span
+                  className="min-w-10 text-center text-sm font-semibold tabular-nums"
+                  aria-live="polite"
+                >
+                  {quantity}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Increase quantity"
+                  onClick={() => setQuantity((current) => Math.min(99, current + 1))}
+                  className="inline-flex size-11 items-center justify-center rounded-r-[var(--fm-radius-control)] transition-transform duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:bg-[var(--fm-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void add()}
+                disabled={
+                  pending ||
+                  !selected ||
+                  selected.priceMinor === null ||
+                  selected.availability !== "AVAILABLE"
+                }
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-4 text-sm font-bold text-[var(--fm-primary-dark)] transition-[background-color,transform] duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:bg-[#a9e83f] active:scale-[0.97] disabled:active:scale-100 disabled:opacity-60 motion-reduce:active:scale-100 sm:flex-none sm:px-6"
+              >
+                {selected?.sale
+                  ? "Add to cart · Check current savings"
+                  : selected && selected.priceMinor !== null && selected.currency
+                    ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
+                    : "Add to cart"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </dialog>
   );
 }

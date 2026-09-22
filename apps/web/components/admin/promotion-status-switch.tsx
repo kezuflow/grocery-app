@@ -74,22 +74,35 @@ export function PromotionStatusSwitch({
 
   return (
     <div className="space-y-1">
-      {command.pending ? (
+      <span
+        data-pending={command.pending}
+        className="fm-status-switch relative inline-flex size-6 items-center justify-center"
+      >
         <span
-          role="status"
-          aria-label="Updating promotion status"
-          className="inline-flex size-6 items-center justify-center text-[var(--fm-text-muted)]"
+          className="fm-status-switch-control"
+          aria-hidden={command.pending}
+          inert={command.pending}
         >
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          <Switch
+            aria-label={`${promotion.name} ${active ? "on" : "off"}`}
+            checked={active}
+            disabled={command.pending}
+            onCheckedChange={() => void commit()}
+            size="sm"
+          />
         </span>
-      ) : (
-        <Switch
-          aria-label={`${promotion.name} ${active ? "on" : "off"}`}
-          checked={active}
-          onCheckedChange={() => void commit()}
-          size="sm"
-        />
-      )}
+        <span
+          role={command.pending ? "status" : undefined}
+          aria-label={command.pending ? "Updating promotion status" : undefined}
+          aria-hidden={!command.pending}
+          className="fm-status-switch-spinner absolute inset-0 inline-flex items-center justify-center text-[var(--fm-text-muted)]"
+        >
+          <LoaderCircle
+            className="size-4 animate-spin motion-reduce:animate-none"
+            aria-hidden="true"
+          />
+        </span>
+      </span>
       {error ? (
         <p role="alert" className="max-w-48 text-xs text-[var(--fm-destructive)]">
           {error}

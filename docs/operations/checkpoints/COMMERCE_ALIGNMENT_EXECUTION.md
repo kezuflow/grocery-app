@@ -1,5 +1,41 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — UI-MOTION-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `UI-MOTION-1`. Acceptance: implement the six approved
+transitions.dev-inspired motion opportunities across Storefront and Admin without changing commerce
+authority, preserve keyboard/focus and reduced-motion behavior, verify the affected UI and record
+actual browser/aggregate evidence. The owner also asked for a Codex model/reasoning recommendation;
+the current session settings remain unchanged.
+
+Observed clean synchronized `main`/`origin/main` at `5c4ace8d` before editing. The current work is
+limited to Web component/page/CSS/test files plus the owning Design guidance and this checkpoint;
+no Core, D1, provider, placement or deployment changes are included. The existing production Web
+version recorded in the prior slice is unchanged by this source work.
+
+Implemented a persistent quick-view frame with loading-to-content/error crossfade; compact Cart and
+notification count-badge entry/exit/value feedback; restrained add/quantity press feedback; keyed
+Admin detail reveals in Products, Categories, Orders, Customers and Banners; fixed-footprint
+promotion-switch pending crossfade; and the accessible inventory-distribution disclosure. Motion
+uses existing tokens and reduced-motion variants. Command success remains tied to confirmed Core
+results, not animation. A product-detail key was kept stable across background query refreshes to
+avoid discarding in-progress editing state.
+
+Focused Web tests passed **28/28 across 5 existing files** after updating the promotion pending
+assertion; a new badge test covers count changes and retained exit content. The final `pnpm check`
+passed on the source working-tree scope: formatting, naming, terminology, harness, migration,
+commit, architecture, readiness and lint gates; all workspace typechecks; Web **660/660 across 157
+files**, Core Worker/D1 **1714/1714 across 210 files**, shared-package tests, Core dry-run and Web
+build. Earlier attempts exposed formatting in edited files, and one in-progress check was stopped
+to correct reduced-motion specificity; the final check passed on those corrections. `git diff
+--check` passed. Focused local Playwright journeys passed **3/3** against the managed Worker/D1
+browser stack: Storefront product quick view, Admin Product workspace and Promotion Codes workspace.
+This confirms those browser journeys, not every animation timing or provider/production acceptance.
+No real provider command or deployment was run. Final diff review, commit and push remain pending.
+Next action: stage only the verified source, test, Design and checkpoint files; commit and push to
+`main`, then report the source revision and deployment boundary.
+
 ## Latest owner request — CART-RAPID-QUANTITY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

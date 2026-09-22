@@ -366,6 +366,7 @@ export default function OrdersPage() {
       open={panelOpen && selectedOrder !== null}
       master={master}
       detail={detail}
+      detailKey={selectedOrder?.orderId}
       panelId="order-detail-panel"
       labelledBy="order-panel-title"
       resizeLabel="Resize order preview"

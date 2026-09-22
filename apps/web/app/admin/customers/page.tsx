@@ -642,6 +642,7 @@ export default function CustomersPage() {
       open={panelOpen}
       master={master}
       detail={panelMode === "invite" ? inviteDetail : customerDetail}
+      detailKey={panelMode === "invite" ? "invite" : selectedCustomer?.customerId}
       panelId="customer-detail-panel"
       labelledBy="customer-panel-title"
       resizeLabel="Resize customer workspace"

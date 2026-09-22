@@ -438,6 +438,7 @@ export function ProductsPageClient({
       open={panelVisible && (panelMode === "create" || selectedProduct !== null)}
       master={master}
       detail={panelVisible ? (panelMode === "create" ? createDetail : productDetail) : null}
+      detailKey={panelMode === "create" ? `create:${scopeKey}` : selectedProduct?.productId}
       panelId="product-detail-panel"
       labelledBy={panelMode === "create" ? "create-product-panel-title" : "product-panel-title"}
       resizeLabel="Resize product details"

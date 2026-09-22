@@ -326,6 +326,7 @@ export default function BannersPage() {
       open={panelOpen && selected !== null}
       master={master}
       detail={detail}
+      detailKey={selected?.bannerId}
       panelId="banner-detail-panel"
       labelledBy="banner-panel-title"
       resizeLabel="Resize banner workspace"

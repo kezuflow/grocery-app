@@ -467,6 +467,7 @@ export function CategoriesPageClient({
       open={panelOpen && (panelMode === "create" || selectedCategory !== null)}
       master={master}
       detail={panelMode === "create" ? createDetail : categoryDetail}
+      detailKey={panelMode === "create" ? "create" : selectedCategory?.categoryId}
       panelId="category-detail-panel"
       labelledBy={panelMode === "create" ? "create-category-panel-title" : "category-panel-title"}
       resizeLabel="Resize category workspace"

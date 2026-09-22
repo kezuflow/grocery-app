@@ -126,7 +126,7 @@ it("sends the Core status command directly, with version and idempotency key, th
   expect(toast.success).toHaveBeenCalledWith("Spring merch turned on", expect.anything());
 });
 
-it("replaces the switch with a loading state while the status command is pending", async () => {
+it("keeps a disabled switch in place while its loading state crossfades", async () => {
   let resolveResponse!: (response: Response) => void;
   fetchMock.mockReturnValue(
     new Promise<Response>((resolve) => {
@@ -139,7 +139,9 @@ it("replaces the switch with a loading state while the status command is pending
     clickControl(switchControl());
   });
 
-  expect(switchControl()).toBeNull();
+  expect(switchControl().disabled).toBe(true);
+  expect(switchControl().parentElement?.getAttribute("aria-hidden")).toBe("true");
+  expect(switchControl().closest("[data-pending]")?.getAttribute("data-pending")).toBe("true");
   expect(document.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe(
     "Updating promotion status",
   );
@@ -147,7 +149,8 @@ it("replaces the switch with a loading state while the status command is pending
   await act(async () => {
     resolveResponse(ok(activeSummary));
   });
-  expect(switchControl()).not.toBeNull();
+  expect(switchControl().disabled).toBe(false);
+  expect(switchControl().closest("[data-pending]")?.getAttribute("data-pending")).toBe("false");
 });
 
 it("keeps the switch unchanged and shows the safe error when Core rejects", async () => {

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { z, inventoryDistributionPageSchema } from "@freshmarkets/validation";
 import type { InventoryDistributionPage } from "@freshmarkets/contracts";
+import { ChevronDown } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -49,13 +50,21 @@ export function InventoryDistribution() {
         <Button
           variant="outline"
           aria-expanded={expanded}
+          aria-controls="inventory-distribution-content"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? "Hide distribution" : "View distribution"}
+          <ChevronDown aria-hidden="true" className="fm-disclosure-chevron size-4" />
         </Button>
       </div>
-      {expanded ? (
-        <>
+      <div
+        id="inventory-distribution-content"
+        data-open={expanded}
+        className="fm-disclosure-panel"
+        aria-hidden={!expanded}
+        inert={!expanded}
+      >
+        <div className="fm-disclosure-panel-inner min-h-0 space-y-4 overflow-hidden">
           <p className="text-sm">
             Physical stock is held at warehouses and fulfillment sites. Reservations and holds are
             included in physical stock. Damaged and missing goods below are included in transit, not
@@ -130,8 +139,8 @@ export function InventoryDistribution() {
               />
             </>
           )}
-        </>
-      ) : null}
+        </div>
+      </div>
     </section>
   );
 }
