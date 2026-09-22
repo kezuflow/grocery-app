@@ -1,58 +1,65 @@
 # Commerce alignment — active checkpoint
 
-## Latest owner request — FDP-0 through FDP-2 fulfillment/dispatch alignment (2026-09-22)
+## Latest owner request — FDP-3 through FDP-5 fulfillment/dispatch alignment (2026-09-22)
 
-Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-0 — Reconcile
-policy and freeze the implementation boundaries**, **FDP-1 — Protect payment commitment and
-preparation/custody boundaries**, and **FDP-2 — Unify staff-selected dispatch for both modes**.
-Stable IDs: `FDP-0`, `FDP-1`, `FDP-2`. Acceptance: document one four-way mode/method matrix and
-reachable call-site map; permit a trusted pre-cutoff Scheduled Payment admission to complete after
-cutoff without admitting a new at/after-cutoff Payment; stop generic Fulfillment at packed; make Manual
-and Lalamove explicit staff choices after packing for both modes; remove every automatic first-booking
-caller while retaining existing attempt recovery, immutable paid facts, location authorization,
-atomicity, idempotency and one active/uncertain execution.
+Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-3 — Build the
+location Orders and preparation experience**, **FDP-4 — Add one narrow real-time refresh path**, and
+**FDP-5 — Optimize the measured hot paths only**. Stable IDs: `FDP-3`, `FDP-4`, `FDP-5`.
+Acceptance: location-only staff can inspect and prepare their paid Orders without Global finance
+access; original and committed-addition quantities, mode-specific goods evidence, timing, blockers and
+legal actions agree between list/detail; both modes reach the same staff-selected Manual/Lalamove
+journey; cross-location reads remain concealed; one lightweight location refresh owner updates the
+bell and mounted work without clearing prior data or duplicating notices; retained query changes have
+current-code evidence, stable timestamp/identity cursors and migration/query-plan verification.
 
-Observed `main` at `1001cdc900f97465ae5b5ff3bf539b8257862161` with only the owner-provided,
-untracked plan already at its suggested repository path. No unrelated working-tree edits were present.
-Implementation revision `9bface77749ddc016c7c4292e8217997494a87c3` contains the verified
-FDP-0–FDP-2 source, tests and owning-spec changes across 42 files. The principal boundaries are the
-new `delivery/domain/dispatch-eligibility.ts`; external admission in `book-order-delivery.ts` and
-`request-provider-delivery.ts`; Manual admission/custody in `manage-manual-delivery.ts`; dispatch reads
-in `list-delivery-dispatch.ts`; Payment reaction in `apply-checkout-payment-reaction.ts`; the generic
-Fulfillment command/contracts; both Worker RPC entry points and the scheduler registry; Admin Delivery
-Web controls/routes; and PRODUCT/ARCHITECTURE/API/STATE/DATA/DESIGN guidance. The automatic Instant
-booking helper and minute job were removed. No migration was required because the existing attempt
-schema already permits Manual in both modes and protects overlapping active/uncertain execution.
+Observed clean `main` at `dca3ec174984a07eb49667c45b96b1659f7ef19d`, the FDP-0–FDP-2
+checkpoint revision. Implementation revision `f1e2d051a648ad49e1fd937e47061e6e6b03d6dd` contains the
+verified FDP-3–FDP-5 source, migration, tests and owning-spec changes across 24 files. The operational
+Fulfillment projection now returns human Order identity, committed time, mode, recipient, immutable
+window/cycle facts, progress/blockers, Delivery status, original and committed-addition snapshots and
+Instant reservation or Scheduled demand/received-goods evidence. It omits prices, totals, Payments,
+refunds and customer email. The location-authorized queue uses one page read plus one bulk line read,
+and its reusable mounted detail exposes only Core legal actions before linking packed work to the
+ordinary Delivery workspace with the same Manual/Lalamove choice for Instant and Scheduled.
 
-Settled contracts: both Instant and Scheduled require `FULFILLMENT_READY`, `PACKED`, a current
-delivery deadline, scoped `delivery.manage` and no unresolved execution before a new dispatch. Instant
-Lalamove is immediate; Scheduled Lalamove may be immediate or future within its commitment. Manual
-requires person and phone, stores the system selection reason `STAFF_SELECTED_MANUAL`, and accepts an
-optional operational note; it is not a fallback. Commands revalidate admission atomically, including
-the low-level external-attempt insert, while read decisions use the same named blocker policy. Generic
-Fulfillment no longer exposes `HAND_OFF`, `COMPLETE` or `CANCEL`; Delivery commands/observations retain
-custody ownership and historical states remain readable. Scheduled commitment compares the trusted
-server-created Payment intent time strictly before cutoff, with the guarded batch repeating that fact;
-existing unresolved-payment procurement safeguards remain in force. Existing provider refresh,
-webhook, inbox, cancel and unknown-outcome recovery paths remain registered and unchanged.
+`listOperationalActivity` and `/api/admin/operations-activity` are the bounded location feed for
+fulfillment or delivery readers. One layout-owned Web provider refreshes every 8 seconds only while
+visible, also on focus/reconnect, aborts stale scope requests, backs off to 32 seconds after failures,
+retains last successful data, marks staleness, revalidates Fulfillment/Delivery and session-deduplicates
+new-paid-Order notices. Full Overview polling was removed. The settled FDP-0–FDP-2 contracts remain
+unchanged: Manual is a normal selection rather than fallback; new Lalamove work is explicit after
+packing; generic Fulfillment stops at packed; payment authority, location authorization, immutable
+paid facts, atomic/idempotent writes, one active/uncertain execution and provider recovery/custody
+history remain with their existing owners.
 
-Verification on the complete implementation revision: focused Core Worker/D1 suites passed **122/122
-across 5 files**, covering the four dispatch combinations, zero provider calls before explicit choice,
-Manual-versus-Lalamove races, atomic admission, provider evidence/replay, delayed pre-cutoff
-commitment, exact/after-cutoff rejection and fulfillment packing; contracts passed **69/69 across 20
-files**; Web unit tests passed **618/618 across 146 files**; and the two revised browser journeys were
-successfully discovered as **4 tests** at 1440 px and 390 px. The full `pnpm check` aggregate passed:
-Core **1701/1701 across 209 files**, all workspace tests/typechecks, formatting, naming, terminology,
-harness, migration/schema, commit-message, architecture/readiness, lint and Core/Web production builds.
-Only the pre-existing two Web unused-variable warnings and Wrangler environment advisory appeared.
-`git diff --check` passed. No deployment, remote-data mutation, real/sandbox provider transaction or
-outbound message occurred.
+FDP-5 retained only demonstrated changes. Global finance Orders now use the projected
+`COALESCE(committed_at,created_at)` consistently for predicate, order and cursor; Delivery and
+Fulfillment pages use timestamp-plus-identity cursors instead of UUID ordering; the finance projection
+joins the latest dispatch once rather than issuing duplicate correlated lookups; and operational item
+snapshots load in bulk with maps rather than per-Order reads/repeated scans. Local D1 `EXPLAIN QUERY
+PLAN` showed the latest-attempt lookup using `delivery_provider_dispatch_job_sequence_unique`, the
+new `grocery_order_commitment_queue_idx` removing the temporary global Order sort, and
+`fulfillment_record_location_order_idx` replacing a full Fulfillment scan. Migration
+`0102_operational_queue_indexes.sql` changes indexes only; it does not rewrite retained facts.
 
-Completion level: **3 of 7 FDP slices implemented and locally accepted (`FDP-0`–`FDP-2`)**. Browser
-execution behind `E2E_PROVIDER_GATEWAY=1` and actual-provider acceptance remain intentionally
-unexecuted; FDP-6 owns final integrated acceptance. Next action: continue from this checkpoint with
-**FDP-3 — Build the location Orders and preparation experience**, then FDP-4 and FDP-5, preserving the
-settled dispatch, payment, authorization and custody contracts above.
+Verification on the complete implementation revision: the final `pnpm check` aggregate passed Core
+**1702/1702 across 209 files**, Web **620/620 across 148 files**, contracts **69/69 across 20 files**,
+all workspace typechecks, formatting, naming, terminology, harness, fresh/populated migration and
+schema checks, commit-message, architecture/readiness, lint and Core/Web dry-run builds. Focused Core
+authorization/projection and commit-time cursor suites passed **27/27 across 2 files**; focused Web
+route/detail/refresh suites passed **6/6 across 3 files**. A managed production-build local browser
+journey passed **1/1**, proving a location-scoped operator can inspect Instant reservation and
+Scheduled allocation/committed-addition evidence, sees no finance fields, and reaches the identical
+Manual/Lalamove dispatch handoff from both modes. `git diff --check` passed. Only the two pre-existing
+Web unused-variable warnings and known Wrangler advisories appeared. No deployment, production or
+remote-data mutation, real/sandbox provider transaction, courier booking or outbound message occurred.
+
+Completion level: **6 of 7 FDP slices implemented and locally accepted (`FDP-0`–`FDP-5`)**. Actual
+provider acceptance remains intentionally unexecuted, and the integrated release has not been deployed.
+Next action: switch to Sol High for **FDP-6 — Integrated acceptance and release gate**; review the
+integrated diff and execute the plan's required Core/Web/browser/provider-safe acceptance checks from
+revision `f1e2d051a648ad49e1fd937e47061e6e6b03d6dd` without replanning or changing the settled
+contracts.
 
 ## Latest owner request — CUSTOMER-ORDER-TIMELINE-ICONS-1 (2026-09-22)
 
