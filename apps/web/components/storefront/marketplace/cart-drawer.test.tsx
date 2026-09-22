@@ -10,8 +10,20 @@ import { CART_DRAWER_REQUEST_EVENT, clearGuestCart } from "../../../lib/storefro
 import { rememberBrowsingPoint } from "../../../lib/storefront/browsing-location";
 vi.mock("./checkout-auth-dialog", () => ({ CheckoutAuthDialog: () => null }));
 vi.mock("./order-summary", () => ({
-  OrderSummary: ({ cart }: { cart: CartView }) => <p>Total {cart.totalMinor}</p>,
+  OrderSummary: ({ cart, disabled }: { cart: CartView; disabled?: boolean }) => (
+    <>
+      <p>Total {cart.totalMinor}</p>
+      <button disabled={disabled}>Checkout</button>
+    </>
+  ),
 }));
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 let root: Root;
 const drawer = () => (
   <QueryClientProvider client={createQueryClient()}>
@@ -106,6 +118,141 @@ it("uses the mutation response without repeating coverage and cart reads", async
     ["/api/commerce/cart", "POST"],
   ]);
   expect(document.body.textContent).toContain("Total 200");
+});
+
+it("previews a requested quantity immediately without treating the old total as confirmed", async () => {
+  const initial: CartView = {
+    id: "cart-preview",
+    locationId: "location-1",
+    version: 1,
+    currency: "PHP",
+    items: [
+      {
+        skuId: "sku-preview",
+        name: "Preview fruit",
+        quantity: 1,
+        unitPriceMinor: 100,
+        lineTotalMinor: 100,
+        availability: "AVAILABLE",
+      },
+    ],
+    totalMinor: 100,
+    checkoutBlocked: false,
+    blockingReasons: [],
+  };
+  const response = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) =>
+      url === "/api/serviceability"
+        ? Response.json({
+            ok: true,
+            value: { serviceable: true, fulfillmentLocation: { id: "location-1" } },
+          })
+        : init?.method === "POST"
+          ? response.promise
+          : Response.json({ ok: true, value: initial }),
+    ),
+  );
+  await act(async () => root.render(drawer()));
+  await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Increase Preview fruit"]')).not.toBeNull(),
+  );
+
+  act(() =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Increase Preview fruit"]')?.click(),
+  );
+  const stepper = document.querySelector('[aria-label="Increase Preview fruit"]')?.parentElement;
+  expect(stepper?.querySelector("span")?.textContent).toBe("2");
+  expect(document.body.textContent).toContain("Updating quantity…");
+  expect(document.body.textContent).toContain("Total 100");
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent?.trim() === "Checkout",
+    )?.disabled,
+  ).toBe(true);
+  expect(
+    document.querySelector('[aria-label="Increase Preview fruit"]')?.hasAttribute("disabled"),
+  ).toBe(true);
+
+  await act(async () =>
+    response.resolve(
+      Response.json({
+        ok: true,
+        value: {
+          ...initial,
+          version: 2,
+          totalMinor: 200,
+          items: [{ ...initial.items[0], quantity: 2, lineTotalMinor: 200 }],
+        },
+      }),
+    ),
+  );
+  await vi.waitFor(() => expect(document.body.textContent).not.toContain("Updating quantity…"));
+  expect(document.body.textContent).toContain("Total 200");
+  expect(
+    document.querySelector('[aria-label="Increase Preview fruit"]')?.hasAttribute("disabled"),
+  ).toBe(false);
+});
+
+it("rolls back a rejected quantity preview without hiding the cart", async () => {
+  const initial: CartView = {
+    id: "cart-rejected-preview",
+    locationId: "location-1",
+    version: 1,
+    currency: "PHP",
+    items: [
+      {
+        skuId: "sku-rejected-preview",
+        name: "Rejected fruit",
+        quantity: 2,
+        unitPriceMinor: 100,
+        lineTotalMinor: 200,
+        availability: "AVAILABLE",
+      },
+    ],
+    totalMinor: 200,
+    checkoutBlocked: false,
+    blockingReasons: [],
+  };
+  const response = deferred<Response>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) =>
+      url === "/api/serviceability"
+        ? Response.json({
+            ok: true,
+            value: { serviceable: true, fulfillmentLocation: { id: "location-1" } },
+          })
+        : init?.method === "POST"
+          ? response.promise
+          : Response.json({ ok: true, value: initial }),
+    ),
+  );
+  await act(async () => root.render(drawer()));
+  await act(async () => window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT)));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[aria-label="Decrease Rejected fruit"]')).not.toBeNull(),
+  );
+
+  act(() =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Decrease Rejected fruit"]')?.click(),
+  );
+  const stepper = document.querySelector('[aria-label="Decrease Rejected fruit"]')?.parentElement;
+  expect(stepper?.querySelector("span")?.textContent).toBe("1");
+  await act(async () =>
+    response.resolve(
+      Response.json({
+        ok: false,
+        error: { code: "CART_VERSION_CONFLICT", message: "Cart changed. Review it again." },
+      }),
+    ),
+  );
+  await vi.waitFor(() => expect(document.body.textContent).not.toContain("Updating quantity…"));
+  expect(stepper?.querySelector("span")?.textContent).toBe("2");
+  expect(document.body.textContent).toContain("Rejected fruit");
+  expect(document.body.textContent).toContain("Cart changed. Review it again.");
 });
 
 it("does not offer cart mutations while a retained checkout payment is pending", async () => {

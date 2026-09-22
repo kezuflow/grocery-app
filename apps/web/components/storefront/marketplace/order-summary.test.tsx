@@ -91,6 +91,26 @@ describe("OrderSummary", () => {
     expect(html).not.toContain("bg-[var(--fm-surface-soft)]");
   });
 
+  it("labels a requested checkout quantity as pending while retaining authoritative totals", () => {
+    const html = renderToStaticMarkup(
+      <OrderSummary
+        cart={cart}
+        actionLabel="Continue"
+        showItems
+        onQuantityChange={vi.fn()}
+        updatingSkuId="sku-banana"
+        updatingQuantity={3}
+        disabled
+      />,
+    );
+    expect(html).toContain("Updating quantity…");
+    expect(html).toContain(">3</span>");
+    expect(html).toContain("Items subtotal");
+    expect(html).toContain("₱170.00");
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('disabled=""');
+  });
+
   it("keeps applied and rejected promotion feedback in the quote-backed summary", () => {
     const html = renderToStaticMarkup(
       <OrderSummary cart={cart} quote={quote} actionLabel="Continue" />,

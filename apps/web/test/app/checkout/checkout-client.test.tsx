@@ -4,22 +4,29 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- the bundled jsdom test runtime does not publish declarations.
 import { JSDOM } from "jsdom";
-import type { CustomerAddressView, FulfillmentOptionView } from "@freshmarkets/contracts";
+import type { CartView, CustomerAddressView, FulfillmentOptionView } from "@freshmarkets/contracts";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createQueryClient, queryKeys } from "@/lib/query/query-client";
 
-const { addressEditorPropsMock, fetchCartMock, orderSummaryPropsMock, refreshCartForLocationMock } =
-  vi.hoisted(() => ({
-    addressEditorPropsMock: vi.fn(),
-    fetchCartMock: vi.fn(),
-    orderSummaryPropsMock: vi.fn(),
-    refreshCartForLocationMock: vi.fn(),
-  }));
+const {
+  addToCartMock,
+  addressEditorPropsMock,
+  fetchCartMock,
+  orderSummaryPropsMock,
+  refreshCartForLocationMock,
+} = vi.hoisted(() => ({
+  addToCartMock: vi.fn(),
+  addressEditorPropsMock: vi.fn(),
+  fetchCartMock: vi.fn(),
+  orderSummaryPropsMock: vi.fn(),
+  refreshCartForLocationMock: vi.fn(),
+}));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
     createElement("a", { href }, children),
 }));
 vi.mock("@/lib/storefront/cart-client", () => ({
+  addToCart: addToCartMock,
   fetchCart: fetchCartMock,
   refreshCartForLocation: refreshCartForLocationMock,
   cartLoadError: () => "",
@@ -333,6 +340,7 @@ describe("CheckoutClient delivery inputs", () => {
       totalMinor: 30000,
       currency: "PHP",
     });
+    addToCartMock.mockReset();
     refreshCartForLocationMock.mockImplementation(() => fetchCartMock());
     window.localStorage.clear();
     container = document.createElement("div");
@@ -352,6 +360,59 @@ describe("CheckoutClient delivery inputs", () => {
     window.sessionStorage.clear();
     window.localStorage.clear();
     vi.useRealTimers();
+  });
+
+  it("previews a checkout quantity change until Core confirms it", async () => {
+    vi.stubGlobal("fetch", successfulFetch());
+    const response = deferred<{
+      ok: true;
+      view: CartView;
+      count: number;
+    }>();
+    addToCartMock.mockReturnValue(response.promise);
+
+    act(() => root.render(checkout()));
+    await flush();
+    const initial = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      cart?: CartView;
+      onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
+    };
+    if (!initial.cart || !initial.onQuantityChange)
+      throw new Error("Missing checkout quantity action");
+
+    act(() => initial.onQuantityChange?.(initial.cart!.items[0]!, 2));
+    const pending = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      updatingSkuId?: string | null;
+      updatingQuantity?: number | null;
+      disabled?: boolean;
+    };
+    expect(pending.updatingSkuId).toBe("sku-1");
+    expect(pending.updatingQuantity).toBe(2);
+    expect(pending.disabled).toBe(true);
+    await flush();
+    expect(addToCartMock).toHaveBeenCalledWith("sku-1", 2, expect.any(Object));
+
+    await act(async () =>
+      response.resolve({
+        ok: true,
+        count: 2,
+        view: {
+          ...initial.cart!,
+          version: 5,
+          totalMinor: 60000,
+          items: [{ ...initial.cart!.items[0]!, quantity: 2, lineTotalMinor: 60000 }],
+        },
+      }),
+    );
+    await flush();
+    const accepted = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      cart?: CartView;
+      updatingSkuId?: string | null;
+      updatingQuantity?: number | null;
+    };
+    expect(accepted.cart?.items[0]?.quantity).toBe(2);
+    expect(accepted.updatingSkuId).toBeNull();
+    expect(accepted.updatingQuantity).toBeNull();
   });
 
   it("leaves checkout and never requests another quote while payment is in progress", async () => {

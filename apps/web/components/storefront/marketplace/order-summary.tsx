@@ -28,6 +28,7 @@ export function OrderSummary({
   showItems = false,
   onQuantityChange,
   updatingSkuId,
+  updatingQuantity,
   surface = "card",
   actionTextClassName,
   actionTextStyle,
@@ -44,6 +45,7 @@ export function OrderSummary({
   showItems?: boolean;
   onQuantityChange?: (item: CartView["items"][number], quantity: number) => void;
   updatingSkuId?: string | null;
+  updatingQuantity?: number | null;
   surface?: "card" | "flat";
   actionTextClassName?: string;
   actionTextStyle?: CSSProperties;
@@ -118,20 +120,24 @@ export function OrderSummary({
                         <button
                           type="button"
                           aria-label={`Decrease ${item.name}`}
-                          disabled={!onQuantityChange || updating}
+                          disabled={!onQuantityChange || Boolean(updatingSkuId)}
                           onClick={() => onQuantityChange?.(item, item.quantity - 1)}
                           className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)] disabled:cursor-wait disabled:opacity-50"
                         >
                           <Minus className="size-3.5" aria-hidden="true" />
                         </button>
                         <span className="min-w-8 text-center text-xs font-semibold tabular-nums">
-                          {item.quantity}
+                          {updating && updatingQuantity !== null && updatingQuantity !== undefined
+                            ? updatingQuantity
+                            : item.quantity}
                         </span>
                         <button
                           type="button"
                           aria-label={`Increase ${item.name}`}
                           disabled={
-                            !onQuantityChange || updating || item.availability !== "AVAILABLE"
+                            !onQuantityChange ||
+                            Boolean(updatingSkuId) ||
+                            item.availability !== "AVAILABLE"
                           }
                           onClick={() => onQuantityChange?.(item, item.quantity + 1)}
                           className="inline-flex size-9 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)] disabled:cursor-wait disabled:opacity-50"
@@ -155,6 +161,11 @@ export function OrderSummary({
                           : money(item.lineTotalMinor, currency)}
                       </p>
                     </div>
+                    {updating ? (
+                      <p role="status" className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                        Updating quantity…
+                      </p>
+                    ) : null}
                     {item.unavailableReason ? (
                       <p
                         role="status"

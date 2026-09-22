@@ -33,9 +33,14 @@ export function CartDrawer() {
   const checkoutDraft = useCheckoutDraft(cart?.id);
   const loading = open && cartQuery.isPending;
   const [commandError, setCommandError] = useState("");
-  const error =
-    commandError ||
-    (cartQuery.isError ? "Your cart could not be loaded right now." : cartQuery.cartError);
+  const error = cartQuery.isError
+    ? "Your cart could not be loaded right now."
+    : cartQuery.cartError;
+  const [pendingQuantity, setPendingQuantity] = useState<{
+    skuId: string;
+    quantity: number;
+  } | null>(null);
+  const quantityUpdateInFlight = useRef(false);
   const acceptCart = useAcceptCart();
   const invalidateCheckout = useInvalidateCheckoutReads();
   const [authOpen, setAuthOpen] = useState(false);
@@ -103,19 +108,36 @@ export function CartDrawer() {
   }, [confirmingClear]);
 
   async function update(item: CartView["items"][number], quantity: number) {
-    const result = await addToCart(item.skuId, quantity, {
-      name: item.name,
-      media: item.media,
-      unitPriceMinor: item.unitPriceMinor,
-      currency: cart?.currency ?? "PHP",
-    });
-    if (!result.ok) {
-      setCommandError(result.message);
-      return;
-    }
-    acceptCart(result.view);
+    if (quantityUpdateInFlight.current) return;
+    quantityUpdateInFlight.current = true;
     setCommandError("");
-    await invalidateCheckout();
+    // This is a requested count, not an accepted Cart price or checkout total.
+    setPendingQuantity({ skuId: item.skuId, quantity });
+    let accepted = false;
+    try {
+      const result = await addToCart(item.skuId, quantity, {
+        name: item.name,
+        media: item.media,
+        unitPriceMinor: item.unitPriceMinor,
+        currency: cart?.currency ?? "PHP",
+      });
+      if (!result.ok) {
+        setCommandError(result.message);
+        return;
+      }
+      acceptCart(result.view);
+      accepted = true;
+      await invalidateCheckout();
+    } catch {
+      setCommandError(
+        accepted
+          ? "Cart updated. Refresh checkout details before continuing."
+          : "Your cart could not be updated right now. Retry the same quantity.",
+      );
+    } finally {
+      setPendingQuantity(null);
+      quantityUpdateInFlight.current = false;
+    }
   }
 
   async function clearCart() {
@@ -141,7 +163,7 @@ export function CartDrawer() {
 
   const guest = cart?.id === "guest-cart";
   const hasItems = Boolean(cart?.items.length);
-  const canClear = hasItems && !loading && !error && !cart?.paymentInProgress;
+  const canClear = hasItems && !loading && !error && !pendingQuantity && !cart?.paymentInProgress;
 
   return (
     <>
@@ -183,6 +205,11 @@ export function CartDrawer() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
+            {commandError ? (
+              <p role="alert" className="mb-4 text-sm text-[var(--fm-destructive)]">
+                {commandError}
+              </p>
+            ) : null}
             {loading ? (
               <div className="space-y-3" aria-label="Loading cart">
                 {[0, 1, 2].map((item) => (
@@ -228,6 +255,7 @@ export function CartDrawer() {
                 {cart?.items.map((item) => (
                   <div
                     key={item.skuId}
+                    aria-busy={pendingQuantity?.skuId === item.skuId}
                     className="flex gap-3 border-b border-[var(--fm-border)] pb-4"
                   >
                     <div className="flex size-16 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
@@ -246,13 +274,17 @@ export function CartDrawer() {
                             type="button"
                             aria-label={`Decrease ${item.name}`}
                             onClick={() => void update(item, item.quantity - 1)}
-                            disabled={clearing || cart?.paymentInProgress}
+                            disabled={
+                              clearing || Boolean(pendingQuantity) || cart?.paymentInProgress
+                            }
                             className="inline-flex size-9 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
                           >
                             <Minus className="size-3.5" aria-hidden="true" />
                           </button>
                           <span className="min-w-8 text-center text-xs font-semibold tabular-nums">
-                            {item.quantity}
+                            {pendingQuantity?.skuId === item.skuId
+                              ? pendingQuantity.quantity
+                              : item.quantity}
                           </span>
                           <button
                             type="button"
@@ -260,6 +292,7 @@ export function CartDrawer() {
                             onClick={() => void update(item, item.quantity + 1)}
                             disabled={
                               clearing ||
+                              Boolean(pendingQuantity) ||
                               cart?.paymentInProgress ||
                               item.availability !== "AVAILABLE"
                             }
@@ -284,6 +317,11 @@ export function CartDrawer() {
                             : money(item.lineTotalMinor, cart.currency)}
                         </p>
                       </div>
+                      {pendingQuantity?.skuId === item.skuId ? (
+                        <p role="status" className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                          Updating quantity…
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -291,7 +329,9 @@ export function CartDrawer() {
                   surface="compact"
                   codes={checkoutDraft.draft.promotionCodes}
                   feedback={[]}
-                  disabled={clearing || Boolean(cart?.paymentInProgress)}
+                  disabled={
+                    clearing || Boolean(pendingQuantity) || Boolean(cart?.paymentInProgress)
+                  }
                   onAdd={(code) =>
                     checkoutDraft.setPromotionCodes([...checkoutDraft.draft.promotionCodes, code])
                   }
@@ -329,7 +369,12 @@ export function CartDrawer() {
                     : undefined
                 }
                 note="Availability and delivery are confirmed at checkout."
-                disabled={clearing || cart?.checkoutBlocked || cart?.paymentInProgress}
+                disabled={
+                  clearing ||
+                  Boolean(pendingQuantity) ||
+                  cart?.checkoutBlocked ||
+                  cart?.paymentInProgress
+                }
               />
             </div>
           ) : null}

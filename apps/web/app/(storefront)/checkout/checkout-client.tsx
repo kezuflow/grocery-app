@@ -174,6 +174,8 @@ export function CheckoutClient({
   const [addressId, setAddressId] = useState(initialAddressId);
   const [fulfillmentOptionId, setFulfillmentOptionId] = useState("");
   const [updatingSkuId, setUpdatingSkuId] = useState<string | null>(null);
+  const [updatingQuantity, setUpdatingQuantity] = useState<number | null>(null);
+  const quantityUpdateInFlight = useRef(false);
   const selectedAddressId = useRef(initialAddressId);
   const selectedFulfillmentOptionId = useRef("");
   const selectedDeliveryPartnerIntent = useRef<DeliveryPartnerIntent | null>(null);
@@ -764,12 +766,15 @@ export function CheckoutClient({
   }
 
   async function updateCartQuantity(item: CartView["items"][number], quantity: number) {
-    if (updatingSkuId || paymentInProgressRef.current) {
+    if (quantityUpdateInFlight.current || paymentInProgressRef.current) {
       if (paymentInProgressRef.current)
         setStatus("This cart is locked while its payment is being confirmed.");
       return;
     }
+    quantityUpdateInFlight.current = true;
     setUpdatingSkuId(item.skuId);
+    // Preview the requested count while quote release and Core validation run.
+    setUpdatingQuantity(quantity);
     try {
       if (!(await invalidatePendingQuote())) return;
       const result = await addToCart(item.skuId, quantity, {
@@ -791,8 +796,12 @@ export function CheckoutClient({
           ? "Quantity updated. Choose a delivery option again to confirm the current total."
           : "Your cart is empty. Add an item before continuing checkout.",
       );
+    } catch {
+      setStatus("The quantity update is not confirmed yet. Retry the same quantity.");
     } finally {
       setUpdatingSkuId(null);
+      setUpdatingQuantity(null);
+      quantityUpdateInFlight.current = false;
     }
   }
 
@@ -1284,6 +1293,7 @@ export function CheckoutClient({
                   ? false
                   : acceptingPayment ||
                     quoteLoadState === "loading" ||
+                    Boolean(updatingSkuId) ||
                     quoteNeedsReplacement ||
                     Boolean(cart?.checkoutBlocked) ||
                     !selectedPaymentMethod ||
@@ -1292,6 +1302,7 @@ export function CheckoutClient({
               showItems
               onQuantityChange={(item, quantity) => void updateCartQuantity(item, quantity)}
               updatingSkuId={updatingSkuId}
+              updatingQuantity={updatingQuantity}
             />
           </div>
         </div>
