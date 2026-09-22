@@ -41,9 +41,9 @@ const CHECKOUT_PAYMENT_IN_PROGRESS_REASON = "CHECKOUT_PAYMENT_IN_PROGRESS";
 
 function readPaymentContinuation(): PaymentActionView | null {
   if (typeof window === "undefined") return null;
-  const raw = window.sessionStorage.getItem(PAYMENT_ACTION_STORAGE_KEY);
-  if (!raw) return null;
   try {
+    const raw = window.sessionStorage.getItem(PAYMENT_ACTION_STORAGE_KEY);
+    if (!raw) return null;
     const action = JSON.parse(raw) as PaymentActionView;
     const actionable =
       (action.actionType === "REDIRECT" && Boolean(action.redirectUrl)) ||
@@ -52,8 +52,21 @@ function readPaymentContinuation(): PaymentActionView | null {
       throw new Error("expired");
     return action;
   } catch {
-    window.sessionStorage.removeItem(PAYMENT_ACTION_STORAGE_KEY);
+    try {
+      window.sessionStorage.removeItem(PAYMENT_ACTION_STORAGE_KEY);
+    } catch {
+      // Recovery uses the authenticated Order state when browser storage is unavailable.
+    }
     return null;
+  }
+}
+
+function storePaymentContinuation(action: PaymentActionView): boolean {
+  try {
+    window.sessionStorage.setItem(PAYMENT_ACTION_STORAGE_KEY, JSON.stringify(action));
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -853,24 +866,17 @@ export function CheckoutClient({
           ? paymentResult.value
           : null;
       paymentInProgressRef.current = true;
-      paymentContinuationRef.current = continuation;
+      const storedContinuation = continuation ? storePaymentContinuation(continuation) : false;
+      paymentContinuationRef.current =
+        continuation?.actionType === "SDK" && !storedContinuation ? null : continuation;
       // Core has atomically frozen the submitted Cart and created an empty successor.
       // Clear the shared browser projection before leaving checkout so the header and
       // drawer cannot keep showing the submitted lines from cache.
       acceptCart(null);
       if (paymentResult.value.actionType === "REDIRECT" && paymentResult.value.redirectUrl) {
-        window.sessionStorage.setItem(
-          PAYMENT_ACTION_STORAGE_KEY,
-          JSON.stringify(paymentResult.value),
-        );
         setStatus("Payment is ready. Redirecting to the secure payment page…");
-      } else if (paymentResult.value.actionType === "SDK" && paymentResult.value.clientToken) {
-        window.sessionStorage.setItem(
-          PAYMENT_ACTION_STORAGE_KEY,
-          JSON.stringify(paymentResult.value),
-        );
       }
-      window.location.replace(paymentContinuationHref(continuation));
+      window.location.replace(paymentContinuationHref(paymentContinuationRef.current));
     } else {
       if (paymentResult.error?.code === "PRICE_CHANGED") {
         setQuoteNeedsReplacement(true);

@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — BROWSER-STORAGE-RECOVERY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, browser continuation reliability. Stable ID: `BROWSER-STORAGE-RECOVERY-1`.
+Acceptance: a valid Admin activity response remains visible and fresh if optional session storage
+fails; accepted Checkout payment navigation is not blocked by storage failure; SDK continuation
+without saved browser action uses authenticated Order-status recovery rather than a broken token
+page. Reads and cleanup must not throw through the checkout or payment UI.
+
+Observed clean `main`/`origin/main` at `4f09044fbb6efeaad9dfb00f81611fab7561851c` before
+editing, after the independently owned Cart-latency commit and the development isolation slice.
+No files from the loading investigation were changed beyond the Checkout/cart browser-storage
+boundary involved in this finding. No Core, schema, provider, polling, request-volume or deployment
+change was made.
+
+The Admin refresh owner keeps notice IDs in memory and treats storage persistence as best effort,
+publishing successful fetched activity even when `getItem`/`setItem` throw. Checkout continuation
+reads, writes and cleanup are guarded. A failed SDK-token write goes to `/orders?payment=return`,
+where the authenticated server owns recovery; a REDIRECT action still goes directly to its URL.
+Guest-promotion draft cache operations no longer interrupt Cart rendering. The PayMongo payment
+page tolerates unavailable storage for setup, QR persistence and terminal cleanup; its existing
+order-status link remains available when a browser action cannot be read.
+
+Verification on this working-tree scope: targeted Web storage/checkout/cart/payment regressions
+**35/35 across 4 files**, complete Web tests **647/647 across 155 files**, Web typecheck and build,
+`vinext check` (16 supported, 0 issues), focused lint/format and `git diff --check` passed. Tests
+force `getItem`, `setItem` and `removeItem` to throw. This is local simulated browser acceptance,
+not a deployed authenticated browser journey or actual provider acceptance. No outbound payment,
+provider call, deployment or shared data write occurred. No full commerce-phase aggregate acceptance
+is claimed. The next independent slice is operational telemetry outcome semantics; avoid the
+separate loading-time investigation's polling and query-performance work.
+
 ## Latest owner request — DEV-ISOLATION-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

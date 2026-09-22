@@ -42,9 +42,84 @@ describe("PayMongoPayment", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.restoreAllMocks();
     sessionStorage.clear();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("offers authenticated payment recovery when browser storage cannot be read", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+
+    await act(async () =>
+      root.render(
+        <PayMongoPayment
+          storageKey="checkout-action"
+          title="Complete payment"
+          description="Secure payment"
+          returnPath="/orders?payment=return"
+          donePath="/orders?payment=submitted"
+          backPath="/orders?payment=return"
+        />,
+      ),
+    );
+
+    expect(container.textContent).toContain("payment setup is missing");
+    expect(container.querySelector('a[href="/orders?payment=return"]')).not.toBeNull();
+  });
+
+  it("keeps a generated QR usable when browser storage cannot be written", async () => {
+    sessionStorage.setItem(
+      "checkout-action",
+      JSON.stringify({
+        paymentIntentId: "payment-1",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
+        providerReference: "pi_1",
+        actionType: "SDK",
+        clientToken: "pi_1_client_secret",
+        expiresAt: new Date(Date.now() + 40 * 60_000).toISOString(),
+      }),
+    );
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ ok: true, value: { publicKey: "pk_test_public" } }))
+        .mockResolvedValueOnce(Response.json({ data: { id: "pm_qrph", attributes: {} } }))
+        .mockResolvedValueOnce(
+          Response.json({
+            data: {
+              id: "pi_1",
+              attributes: { next_action: { code: { image_url: "data:image/png;base64,first" } } },
+            },
+          }),
+        ),
+    );
+
+    await act(async () =>
+      root.render(
+        <PayMongoPayment
+          storageKey="checkout-action"
+          title="Complete payment"
+          description="Secure payment"
+          returnPath="/orders?payment=return"
+          donePath="/orders?payment=submitted"
+          backPath="/orders?payment=return"
+        />,
+      ),
+    );
+    await flush();
+    await flush();
+
+    expect(container.querySelector('img[alt="QR Ph payment code"]')?.getAttribute("src")).toBe(
+      "data:image/png;base64,first",
+    );
+    expect(container.textContent).not.toContain("storage unavailable");
   });
 
   it("automatically creates QR Ph with PayMongo's documented expiry and refreshes it", async () => {

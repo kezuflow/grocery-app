@@ -36,7 +36,11 @@ const result = (ids: string[]) => ({
 
 function Probe() {
   const refresh = useAdminOperationalRefresh();
-  return <p>{refresh.activity?.notifications.map((notice) => notice.id).join(",") ?? "empty"}</p>;
+  return (
+    <p data-stale={refresh.stale}>
+      {refresh.activity?.notifications.map((notice) => notice.id).join(",") ?? "empty"}
+    </p>
+  );
 }
 
 let root: Root;
@@ -84,5 +88,34 @@ it("preserves activity during refresh and announces each new paid order once per
   expect(toast.info).toHaveBeenCalledOnce();
 
   await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(toast.info).toHaveBeenCalledOnce();
+});
+
+it("publishes valid activity and deduplicates notices when session storage throws", async () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("storage unavailable");
+  });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("storage unavailable");
+  });
+  const replies = [result(["order:first"]), result(["order:second", "order:first"])];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ json: async () => replies.shift()! })),
+  );
+
+  await act(async () =>
+    root.render(
+      <AdminOperationalRefreshProvider>
+        <Probe />
+      </AdminOperationalRefreshProvider>,
+    ),
+  );
+  expect(document.querySelector("p")?.dataset.stale).toBe("false");
+  expect(document.body.textContent).toContain("order:first");
+
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(document.querySelector("p")?.dataset.stale).toBe("false");
+  expect(document.body.textContent).toContain("order:second,order:first");
   expect(toast.info).toHaveBeenCalledOnce();
 });

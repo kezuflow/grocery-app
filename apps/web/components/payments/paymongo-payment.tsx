@@ -50,6 +50,30 @@ const countdown = (seconds: number) =>
     .toString()
     .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
+function readStoredAction(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredAction(key: string, action: StoredAction): void {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(action));
+  } catch {
+    // The current payment view remains usable; authenticated recovery handles a reload.
+  }
+}
+
+function clearStoredAction(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // Clearing a browser hint is not part of the canonical payment outcome.
+  }
+}
+
 export function PayMongoPayment({
   storageKey,
   title,
@@ -83,7 +107,7 @@ export function PayMongoPayment({
   const hasAction = action !== null;
 
   useEffect(() => {
-    const raw = sessionStorage.getItem(storageKey);
+    const raw = readStoredAction(storageKey);
     if (!raw) {
       setMessage("This payment setup is missing or has already been used.");
       return;
@@ -110,11 +134,11 @@ export function PayMongoPayment({
       } else {
         delete parsed.qrCode;
         delete parsed.qrCodeExpiresAt;
-        sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+        writeStoredAction(storageKey, parsed);
       }
       setAction({ ...parsed, providerReference });
     } catch {
-      sessionStorage.removeItem(storageKey);
+      clearStoredAction(storageKey);
       setMessage("This payment setup has expired. Return and start again.");
       return;
     }
@@ -182,7 +206,7 @@ export function PayMongoPayment({
         setCompletion(next);
         setPollingStopped(false);
         if (["COMPLETED", "FAILED", "EXPIRED"].includes(next.state)) {
-          sessionStorage.removeItem(storageKey);
+          clearStoredAction(storageKey);
           stopped = true;
           return;
         }
@@ -265,7 +289,7 @@ export function PayMongoPayment({
       const startedAt = Date.now();
       const availableSeconds = Math.floor((actionExpiresAt - startedAt) / 1000);
       if (availableSeconds < 60) {
-        sessionStorage.removeItem(storageKey);
+        clearStoredAction(storageKey);
         setAction(null);
         setQrCode(null);
         setQrCodeExpiresAt(null);
@@ -295,7 +319,7 @@ export function PayMongoPayment({
           qrCode: imageUrl,
           qrCodeExpiresAt: new Date(expiresAt).toISOString(),
         };
-        sessionStorage.setItem(storageKey, JSON.stringify(persistedAction));
+        writeStoredAction(storageKey, persistedAction);
         setAction(persistedAction);
         setQrCode(imageUrl);
         setQrCodeExpiresAt(expiresAt);
@@ -381,7 +405,7 @@ export function PayMongoPayment({
       });
       const intent = await attachMethod(paymentMethodId, true);
       const redirect = intent.data?.attributes?.next_action?.redirect?.url;
-      sessionStorage.removeItem(storageKey);
+      clearStoredAction(storageKey);
       window.location.assign(redirect || donePath);
     } catch (error) {
       setMessage((error as Error).message);

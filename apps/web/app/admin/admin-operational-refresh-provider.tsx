@@ -59,6 +59,7 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
   const [attempt, setAttempt] = useState(0);
   const failures = useRef(0);
   const initialized = useRef(false);
+  const noticeIdsByLocation = useRef(new Map<string, string[]>());
   const controller = useRef<AbortController | null>(null);
   const refresh = useCallback(() => setAttempt((value) => value + 1), []);
 
@@ -85,7 +86,9 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
         if (current.signal.aborted) return;
         if (!result.ok) throw new Error(result.error.message);
         const storageKey = `freshmarkets.admin.operational-notices:${locationId}`;
-        const stored = new Set(storedNoticeIds(storageKey));
+        const stored = new Set(
+          noticeIdsByLocation.current.get(locationId) ?? storedNoticeIds(storageKey),
+        );
         const priorIds = new Set(activity?.notifications.map((notice) => notice.id) ?? stored);
         if (initialized.current) {
           const newOrder = result.value.notifications.find(
@@ -95,10 +98,13 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
             toast.info("New paid order", { description: `Order ${newOrder.orderNumber}` });
         }
         initialized.current = true;
-        sessionStorage.setItem(
-          storageKey,
-          JSON.stringify(result.value.notifications.map((notice) => notice.id)),
-        );
+        const noticeIds = result.value.notifications.map((notice) => notice.id);
+        noticeIdsByLocation.current.set(locationId, noticeIds);
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify(noticeIds));
+        } catch {
+          // Session storage is optional; the fetched activity remains authoritative.
+        }
         failures.current = 0;
         setStale(false);
         setActivity(result.value);

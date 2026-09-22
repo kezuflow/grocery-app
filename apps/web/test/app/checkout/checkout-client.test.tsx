@@ -381,6 +381,80 @@ describe("CheckoutClient delivery inputs", () => {
     expect(container.textContent).not.toContain("Try quotation again");
   });
 
+  it("uses authenticated payment recovery when continuation storage cannot be read or cleared", async () => {
+    const cart = await fetchCartMock();
+    fetchCartMock.mockResolvedValue({ ...cart, paymentInProgress: true });
+    vi.spyOn(window.Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    vi.spyOn(window.Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    const base = successfulFetch();
+    vi.stubGlobal("fetch", base);
+
+    act(() => root.render(checkout()));
+    await flush();
+    await flush();
+
+    expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+      0,
+    );
+    expect(container.textContent).not.toContain("Try quotation again");
+  });
+
+  it("continues after accepted payment when continuation storage cannot be written", async () => {
+    const base = successfulFetch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === "/api/checkout/payment")
+          return Promise.resolve(
+            json({
+              ok: true,
+              value: {
+                paymentIntentId: "payment-1",
+                state: "REQUIRES_ACTION",
+                actionType: "SDK",
+                redirectUrl: null,
+                clientToken: "client-token",
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+              },
+              requestId: "payment",
+            }),
+          );
+        return base(url, init);
+      }),
+    );
+    act(() => root.render(checkout()));
+    await flush();
+    choose(container, "Home");
+    await flush();
+    await vi.waitFor(() =>
+      expect(base.mock.calls.filter(([url]) => String(url) === "/api/checkout/quote")).toHaveLength(
+        1,
+      ),
+    );
+    click(container, "QR Ph");
+    await flush();
+    const storageWrite = vi.spyOn(window.Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    const props = orderSummaryPropsMock.mock.lastCall?.[0] as {
+      onAction?: () => Promise<void>;
+    };
+    if (!props.onAction) throw new Error("Missing checkout payment action");
+
+    await act(props.onAction);
+
+    expect(storageWrite).toHaveBeenCalledWith(
+      "freshmarkets.checkoutPaymentAction",
+      expect.any(String),
+    );
+    expect(container.textContent).not.toContain("storage unavailable");
+    expect(container.textContent).not.toContain("Payments are unavailable");
+  });
+
   it("fails closed on an empty payment response and retries the same payment identity", async () => {
     const paymentKeys: string[] = [];
     const base = successfulFetch();

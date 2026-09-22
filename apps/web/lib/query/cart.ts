@@ -28,7 +28,11 @@ function transferredGuestPromotions(cartId: string | undefined): CheckoutDraft {
     const promotionCodes = parsed.promotionCodes.filter(
       (code): code is string => typeof code === "string",
     );
-    window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+    try {
+      window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+    } catch {
+      // The parsed promotion draft is still valid without cache cleanup.
+    }
     return { cartId, addressId: "", promotionCodes };
   } catch {
     return EMPTY_CHECKOUT_DRAFT;
@@ -37,13 +41,17 @@ function transferredGuestPromotions(cartId: string | undefined): CheckoutDraft {
 
 function rememberGuestPromotions(cartId: string, promotionCodes: readonly string[]) {
   if (typeof window === "undefined") return;
-  if (cartId === "guest-cart" && promotionCodes.length) {
-    window.sessionStorage.setItem(
-      GUEST_PROMOTION_TRANSFER_KEY,
-      JSON.stringify({ sourceCartId: cartId, promotionCodes }),
-    );
-  } else {
-    window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+  try {
+    if (cartId === "guest-cart" && promotionCodes.length) {
+      window.sessionStorage.setItem(
+        GUEST_PROMOTION_TRANSFER_KEY,
+        JSON.stringify({ sourceCartId: cartId, promotionCodes }),
+      );
+    } else {
+      window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+    }
+  } catch {
+    // The current draft lives in React Query even when optional storage fails.
   }
 }
 
@@ -186,7 +194,13 @@ export function useCheckoutDraft(cartId?: string) {
           ? current.promotionCodes
           : [],
     }));
-    if (cartId !== "guest-cart") window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+    if (cartId !== "guest-cart") {
+      try {
+        window.sessionStorage.removeItem(GUEST_PROMOTION_TRANSFER_KEY);
+      } catch {
+        // Cache cleanup must not prevent a valid Cart from rendering.
+      }
+    }
   }, [cached.cartId, cartId, client, key]);
 
   const patchAddress = useCallback(
