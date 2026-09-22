@@ -29,25 +29,26 @@ runtime preserves the `CORE` RPC binding across vinext program reloads. Browser-
 Better Auth routes remain under Web at `http://localhost:3000/api/auth/*`. Use
 `pnpm dev:core` only when working on Core in isolation.
 
-By default, `pnpm dev` uses the staging Wrangler variables and **the same D1 and R2
-resources as freshmarkets.ph**. Both Workers still run local source with hot reload;
-database and image changes affect the deployed site's data. Auth URLs and cookies
-remain on localhost. Cloudflare operator login is required for remote bindings.
-Core's Email binding is remote too; scheduled jobs and notification queue processing
-remain owned by the deployed Core, which reads the shared notification outbox.
+By default, `pnpm dev` is isolated. It uses local D1, R2 and Queue state under
+`apps/core/.wrangler/state`, disables outbound Email, and keeps payment and delivery
+providers disabled. It does not write deployed storage or a deployed notification
+outbox. Use `pnpm seed:development` when that isolated database needs representative
+data.
 
 Secrets remain in ignored `apps/core/.dev.vars` and `apps/web/.dev.vars`; deployed
-secret values cannot be downloaded from Wrangler. Core requires a private
-`BETTER_AUTH_SECRET` of at least 32 characters for this mode. Provider credentials
-must match the connected environment. Google login additionally needs local
-`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and an allowed localhost callback in
-Google's configuration. Localhost has its own login session.
+secret values cannot be downloaded from Wrangler. Google login additionally needs
+local `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and an allowed localhost callback
+in Google's configuration. Localhost has its own login session.
 
-For isolated local data in PowerShell, run
-`$env:FRESHMARKETS_DEV_DATA='local'; pnpm dev`; remove the override afterward with
-`Remove-Item Env:FRESHMARKETS_DEV_DATA`. This isolated mode and `pnpm dev:core` use
-`apps/core/.wrangler/state`. Builds do not enable shared dev
-bindings. Explicit `CLOUDFLARE_ENV` selection retains Wrangler environment behavior.
+For deliberate read-oriented access to the remote `freshmarkets-core-staging` D1 and
+`freshmarkets-product-media-staging` R2, run `pnpm dev:shared-staging`. That explicit
+mode prints its policy before startup, requires Cloudflare operator login and a
+private 32+ character `BETTER_AUTH_SECRET`, and disables local Email, Queue, cron,
+PayMongo and delivery-provider effects. It is not a mutation sandbox: writes change
+shared staging records, and the deployed staging Core may consume notification
+outbox rows written to that D1. Do not use ordinary customer or Staff mutations in
+this mode. Builds and explicit `CLOUDFLARE_ENV` selections retain their own Wrangler
+environment behavior.
 
 The normal `pnpm dev` runtime uses `http://localhost:3000` as its public origin.
 

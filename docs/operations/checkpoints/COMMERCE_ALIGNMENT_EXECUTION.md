@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — DEV-ISOLATION-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, development environment safety. Stable ID: `DEV-ISOLATION-1`. Acceptance:
+ordinary `pnpm dev` uses local data and cannot create deliverable shared outbox entries; access to
+shared staging data requires an explicit command that names its resources and indirect effects.
+
+Observed synchronized `main`/`origin/main` at `c3bc5347e64102a5f1409909d34a26c9b2a4fa91`
+after the independently owned Cart latency change was committed and pushed. This slice changes only
+the Web Vite development configuration, its mode resolver/tests, the root command and the current
+architecture/README guidance. No Wrangler deployment configuration, schema, business write path,
+provider operation or shared resource was changed.
+
+`pnpm dev` now selects local D1/R2/Queue simulation and removes its outbound Email binding. The
+explicit `pnpm dev:shared-staging` command opts into remote staging D1/R2, prints a resource/effect
+warning, and disables local Email, Queue, cron, PayMongo and delivery providers. This does not make
+shared staging writes safe: the deployed staging Core can consume outbox rows written to the same D1.
+Builds and explicit `CLOUDFLARE_ENV` selection keep their Wrangler configuration. The README now
+names staging resources accurately after the production cutover.
+
+Verification on this working-tree scope: the mode/binding regression passed **5/5**; Web typecheck,
+`vinext check` (16 supported, 0 issues), Web build, architecture/readiness, naming, terminology,
+focused lint/format and diff checks passed. The binding regression asserts local D1/R2 have no
+`remote` flag and no Email binding, and that explicit shared mode marks only staging D1/R2 remote
+while disabling direct provider/Email/Queue/cron effects. No live shared-mode startup, remote write,
+outbound send, provider transaction, browser journey or deployment occurred. No full commerce phase
+acceptance is claimed. The next independent slice is the browser storage failure path, once its
+current refresh/Checkout files are rechecked against the loading investigation.
+
 ## Latest owner request — CART-ADD-LATENCY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
