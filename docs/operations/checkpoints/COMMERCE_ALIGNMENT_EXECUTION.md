@@ -1,5 +1,59 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — FDP-0 through FDP-2 fulfillment/dispatch alignment (2026-09-22)
+
+Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-0 — Reconcile
+policy and freeze the implementation boundaries**, **FDP-1 — Protect payment commitment and
+preparation/custody boundaries**, and **FDP-2 — Unify staff-selected dispatch for both modes**.
+Stable IDs: `FDP-0`, `FDP-1`, `FDP-2`. Acceptance: document one four-way mode/method matrix and
+reachable call-site map; permit a trusted pre-cutoff Scheduled Payment admission to complete after
+cutoff without admitting a new at/after-cutoff Payment; stop generic Fulfillment at packed; make Manual
+and Lalamove explicit staff choices after packing for both modes; remove every automatic first-booking
+caller while retaining existing attempt recovery, immutable paid facts, location authorization,
+atomicity, idempotency and one active/uncertain execution.
+
+Observed `main` at `1001cdc900f97465ae5b5ff3bf539b8257862161` with only the owner-provided,
+untracked plan already at its suggested repository path. No unrelated working-tree edits were present.
+Implementation revision `9bface77749ddc016c7c4292e8217997494a87c3` contains the verified
+FDP-0–FDP-2 source, tests and owning-spec changes across 42 files. The principal boundaries are the
+new `delivery/domain/dispatch-eligibility.ts`; external admission in `book-order-delivery.ts` and
+`request-provider-delivery.ts`; Manual admission/custody in `manage-manual-delivery.ts`; dispatch reads
+in `list-delivery-dispatch.ts`; Payment reaction in `apply-checkout-payment-reaction.ts`; the generic
+Fulfillment command/contracts; both Worker RPC entry points and the scheduler registry; Admin Delivery
+Web controls/routes; and PRODUCT/ARCHITECTURE/API/STATE/DATA/DESIGN guidance. The automatic Instant
+booking helper and minute job were removed. No migration was required because the existing attempt
+schema already permits Manual in both modes and protects overlapping active/uncertain execution.
+
+Settled contracts: both Instant and Scheduled require `FULFILLMENT_READY`, `PACKED`, a current
+delivery deadline, scoped `delivery.manage` and no unresolved execution before a new dispatch. Instant
+Lalamove is immediate; Scheduled Lalamove may be immediate or future within its commitment. Manual
+requires person and phone, stores the system selection reason `STAFF_SELECTED_MANUAL`, and accepts an
+optional operational note; it is not a fallback. Commands revalidate admission atomically, including
+the low-level external-attempt insert, while read decisions use the same named blocker policy. Generic
+Fulfillment no longer exposes `HAND_OFF`, `COMPLETE` or `CANCEL`; Delivery commands/observations retain
+custody ownership and historical states remain readable. Scheduled commitment compares the trusted
+server-created Payment intent time strictly before cutoff, with the guarded batch repeating that fact;
+existing unresolved-payment procurement safeguards remain in force. Existing provider refresh,
+webhook, inbox, cancel and unknown-outcome recovery paths remain registered and unchanged.
+
+Verification on the complete implementation revision: focused Core Worker/D1 suites passed **122/122
+across 5 files**, covering the four dispatch combinations, zero provider calls before explicit choice,
+Manual-versus-Lalamove races, atomic admission, provider evidence/replay, delayed pre-cutoff
+commitment, exact/after-cutoff rejection and fulfillment packing; contracts passed **69/69 across 20
+files**; Web unit tests passed **618/618 across 146 files**; and the two revised browser journeys were
+successfully discovered as **4 tests** at 1440 px and 390 px. The full `pnpm check` aggregate passed:
+Core **1701/1701 across 209 files**, all workspace tests/typechecks, formatting, naming, terminology,
+harness, migration/schema, commit-message, architecture/readiness, lint and Core/Web production builds.
+Only the pre-existing two Web unused-variable warnings and Wrangler environment advisory appeared.
+`git diff --check` passed. No deployment, remote-data mutation, real/sandbox provider transaction or
+outbound message occurred.
+
+Completion level: **3 of 7 FDP slices implemented and locally accepted (`FDP-0`–`FDP-2`)**. Browser
+execution behind `E2E_PROVIDER_GATEWAY=1` and actual-provider acceptance remain intentionally
+unexecuted; FDP-6 owns final integrated acceptance. Next action: continue from this checkpoint with
+**FDP-3 — Build the location Orders and preparation experience**, then FDP-4 and FDP-5, preserving the
+settled dispatch, payment, authorization and custody contracts above.
+
 ## Latest owner request — CUSTOMER-ORDER-TIMELINE-ICONS-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
