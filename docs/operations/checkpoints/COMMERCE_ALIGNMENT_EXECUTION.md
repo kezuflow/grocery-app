@@ -1,5 +1,67 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-QUANTITY-FEEDBACK-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, storefront cart interaction. Stable ID: `CART-QUANTITY-FEEDBACK-1`.
+Acceptance: the drawer, direct Cart page and Checkout quantity controls visibly respond to an
+increase/decrease immediately, identify the count as pending until Core confirms it, retain
+authoritative prices/totals, prevent checkout and conflicting cart commands while pending, and
+restore the accepted count with an actionable error after rejection. The owner explicitly approved a
+Web-only production deployment after full checks for a live Codex in-app-browser test.
+
+Observed clean synchronized `main`/`origin/main` at `60528f27` before editing; independently owned
+auth/checkpoint commits reached `f9dfa255` during verification without modifying this slice's Web
+files. The current production Web deployment remained version
+`0ffc618a-9591-4222-8a72-586479f8eaee`, with `aws:ap-southeast-1` placement, while Core remained
+on the earlier Cart-latency release. In the owner's signed-in Codex in-app browser, one controlled
+increase/decrease of Abiu was restored to its initial count. Correlated Web Cart POSTs were about
+219 and 214 ms, yet the count stayed unchanged until response handling, taking roughly 0.7 to over
+1.1 seconds click-to-visible-state in that small manual sample. This separates remaining perceived
+interaction lag from the previously fixed 7–11 second server path.
+
+Implemented an immediate requested-count preview with `Updating quantity…` status in the cart
+drawer, direct Cart page and Checkout order summary. The preview never claims a committed Cart total
+or price. Core remains the versioned business authority; a rejected/failed command clears the
+preview and displays its error without hiding the existing drawer cart. Quantity controls,
+promotion edits and checkout/payment actions are blocked while an update is pending. Checkout
+previews through reservation release before its Cart command, then invalidates quote reads on
+acceptance. No Core, D1, schema, provider, placement or payment command was changed.
+
+Focused Web regressions for drawer acceptance/rejection, direct Cart page, order summary and
+Checkout passed **36/36 across 4 files**. The complete `pnpm check` passed on the source
+working-tree scope: formatting, naming, terminology, harness, migration, commit, architecture,
+readiness and lint gates; all workspace typechecks; Web **653/653 across 156 files**, Core Worker/D1
+**1714/1714 across 210 files** and shared-package tests; Core dry-run and Web build. Lint retained
+two pre-existing unused-variable warnings in the unrelated address-book test. `git diff --check`
+passed. The Web source/tests were committed and pushed on `main` as `ee8268e5`.
+
+For the approved Web-only release, the clean detached production worktree at the already deployed
+`c3bc5347` application source cherry-picked the existing Singapore Web placement `77f04b5c` and
+only this Web source commit, yielding release revision `d1f86b92`. The release checkout passed Web
+typecheck, **642/642 tests across 155 files**, Vinext compatibility **16 supported/0 issues**,
+`CLOUDFLARE_ENV=production` build and generated-config inspection. The generated Worker targeted
+`freshmarkets-web-production`, `freshmarkets.ph`, the production Core RPC binding and
+`aws:ap-southeast-1`. A Wrangler dry run passed; Cloudflare listed the three required Web secrets
+by name (their values were not read). The Web-only deployment created production version
+`28fe1d8c-6a14-4251-ae36-712fbc4858b1`; Core and D1 were not deployed or changed. Web homepage,
+Web `/api/core-health`, Core `/health` and Core `/ready` returned HTTP 200. A US-side dynamic probe
+returned `cf-placement: remote-` without a location suffix; the configured Singapore hint is
+verified in the generated deployment configuration, but this response alone does not re-prove the
+physical execution PoP.
+
+After reloading the owner's signed-in Codex in-app browser, a controlled Anonas increase from 3 to
+4 and decrease back to 3 each displayed the requested count and `Updating quantity…` while the old
+line price remained authoritative. Browser-control observations captured those pending states about
+301 and 297 ms after click (including automation round-trip); both commands then completed and the
+cart returned to its starting **21 items / ₱1,075**. A separate Abiu increase preview returned to its
+starting count without a captured result or a persistent error; no conclusion is drawn from that
+single attempt. This is live signed-in drawer acceptance, not a guest browser test, sustained p95 or
+Checkout/provider acceptance. Completion level: **1 of 1 cart quantity feedback slice implemented,
+verified, pushed and deployed**, with the controlled signed-in drawer journey accepted. The next
+action is owner testing of rapid quantity taps in the live cart; if lag persists, capture correlated
+client click-to-confirm and Web/Core timings for that exact path before another optimization.
+
 ## Latest owner request — AUTH-IP-TRUST-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
