@@ -69,6 +69,19 @@ message occurred. Completion level: **1 of 1 webhook connection-probe correction
 probe accepted**. The one concrete next action is to retry version-3 registration in the Lalamove
 Production Partner Portal and then record an actual signed event attempt separately.
 
+The Partner Portal retry still reported a non-200 response. A live production Worker tail on version
+`4d0ccc97-c4b5-40dd-be30-5a3c37a5436b` captured two requests from Lalamove's API client at the exact
+callback path: both were `application/json` `POST` requests with a two-byte body and both returned
+HTTP 401. This establishes that the current portal sends the empty JSON object `{}` as its connection
+probe, despite the tutorial describing no body. The ingress now acknowledges only that exact `{}`
+body as another connection check before signature verification; every other non-empty JSON body keeps
+the existing API-key/HMAC requirement. The new regression failed at 401 before the correction and the
+focused bounded-body/Lalamove run passed **17/17 across 2 files** afterward; Core typecheck and focused
+format/diff checks passed. At the owner's request, the repeat aggregate run was stopped after its
+shared-package and **633/633 Web** tests passed while Core was still running; no complete repeat
+aggregate result is claimed for this follow-up. The next action is to deploy this exact two-byte-probe
+correction and retry the Production Partner Portal registration.
+
 ## Latest owner request — ADMIN-ACTION-FEEDBACK-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

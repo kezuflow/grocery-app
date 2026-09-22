@@ -526,6 +526,21 @@ describe("Lalamove tracking webhook", () => {
     expect(await response.json()).toMatchObject({ ok: true, connectionCheck: true });
   });
 
+  it("acknowledges Lalamove's empty JSON object registration probe", async () => {
+    const response = await handleLalamoveWebhook(
+      env.DB,
+      credentials,
+      new Request("https://core.example.invalid/webhooks/delivery/lalamove", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+      crypto.randomUUID(),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, connectionCheck: true });
+  });
+
   it("verifies the official data signature, applies status, and deduplicates eventId", async () => {
     await seedDispatch();
     const event = payload();

@@ -183,7 +183,9 @@ export async function handleLalamoveWebhook(
     return json(requestId, body.error.status, {
       error: { code: body.error.code, message: body.error.message, requestId },
     });
-  if (body.value.length === 0)
+  // The Partner Portal currently sends `{}` for its connection check even though
+  // the webhook tutorial describes an empty body.
+  if (body.value.length === 0 || body.value === "{}")
     return json(requestId, 200, { ok: true, connectionCheck: true, requestId });
   let payload: unknown;
   try {
