@@ -107,10 +107,34 @@ removed that remote setting; it was not an intentional latency optimization. Cor
 Web `/api/core-health` and the homepage returned HTTP 200. Web production secrets were present and
 the payment public-key configuration endpoint reported configured; no key value was logged. A fresh
 guest add-to-cart in the Codex in-app browser updated the cart in **619 ms** click-to-visible-state.
-This is browser guest acceptance only; no new authenticated add-to-cart or correlated production
-timing breakdown has yet been collected. The one next action is to capture several signed-in clicks
-with the new Web/Core stage telemetry, then compare placement options for the Web fetch handler;
-do not infer signed-in improvement from the guest result.
+This is browser guest acceptance, separate from the authenticated path.
+
+The owner then signed in and authorized an explicit Singapore Web-placement trial. Before placement,
+two correlated successful Cart POSTs took **7352 ms** and **11524 ms** in the Web adapter, of which
+Core took **7234 ms** and **11493 ms**. The respective Core customer/command stages were **856/6378
+ms** and **1338/10155 ms**; the command's post-write Cart read took **3516/4656 ms**, including
+promotion evaluation **2206/3848 ms**. These are live production observations, not local mocks.
+
+Production Web configuration now has the `aws:ap-southeast-1` placement hint, committed/pushed on
+`main` as `77f04b5c`. To isolate this experiment from newer, separately owned Web changes, the
+deployed build used the same pinned `c3bc5347` application source plus the identical one-file
+placement diff; generated production configuration identified the correct Web/Core Workers and
+region. Web typecheck, vinext compatibility, Wrangler binding freshness, production build and
+deployment dry run passed for this scope. Web production version
+`0ffc618a-9591-4222-8a72-586479f8eaee` is live; Core stayed at the version above. Core health,
+readiness, Web bridge and homepage again returned HTTP 200. A dynamic Web API returned
+`cf-placement: remote-SIN`, confirming the placed execution location. Two subsequent correlated
+successful signed-in Cart POSTs took **240 ms** and **224 ms** in Web, with Core at **240 ms** and
+**222 ms**; the corresponding Cart reads took **69 ms** and **65 ms**, promotions **27 ms** and
+**23 ms**. A further Web success was 744 ms while the Core tail labeled its invocation canceled,
+so it is excluded from the clean comparison. Static assets remain edge-served; Core RPC placement
+was not configured because Cloudflare placement does not move named RPC entrypoints. This small
+before/after sample strongly implicates repeated cross-region D1 round trips, not D1 size or
+availability, as the dominant Cart delay. No D1 replication, migration, provider transaction or
+Smart Placement was enabled. Completion level: **1 of 1 Cart-latency diagnosis/placement trial
+implemented and live-smoke accepted**; sustained p95 and other dynamic-route effects remain
+unmeasured. The one next action is to monitor production Cart and other dynamic-request latency
+over a representative traffic window, rolling back the Web hint if it harms those routes.
 
 ## Latest owner request — ADMIN-OPERATIONAL-READ-CORRECTNESS-1 (2026-09-23)
 
