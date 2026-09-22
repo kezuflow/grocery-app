@@ -32,9 +32,12 @@ to correct reduced-motion specificity; the final check passed on those correctio
 --check` passed. Focused local Playwright journeys passed **3/3** against the managed Worker/D1
 browser stack: Storefront product quick view, Admin Product workspace and Promotion Codes workspace.
 This confirms those browser journeys, not every animation timing or provider/production acceptance.
-No real provider command or deployment was run. Final diff review, commit and push remain pending.
-Next action: stage only the verified source, test, Design and checkpoint files; commit and push to
-`main`, then report the source revision and deployment boundary.
+No real provider command or deployment was run. The reviewed, staged diff passed `git diff
+--cached --check` and the source/test/Design/checkpoint slice was committed to and pushed on
+`main` as `5877a7fb`. This final checkpoint evidence is a separate documentation commit.
+Completion level: **1 of 1 approved UI-motion slice implemented, aggregate-verified,
+browser-smoke-tested and pushed**. The next action is owner review of the motion in a deployed Web
+release when separately authorized; provider and production acceptance remain unchanged.
 
 ## Latest owner request — CART-RAPID-QUANTITY-1 (2026-09-23)
 
