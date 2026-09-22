@@ -514,15 +514,14 @@ describe("Lalamove tracking webhook", () => {
     ).toBeNull();
   });
 
-  it("acknowledges Lalamove's empty registration probe", async () => {
-    const response = await handleLalamoveWebhook(
-      env.DB,
-      credentials,
-      new Request("https://core.example.invalid/webhooks/delivery/lalamove", {
-        method: "POST",
-      }),
-      crypto.randomUUID(),
-    );
+  it("acknowledges Lalamove's headerless empty registration probe", async () => {
+    const request = new Request("https://core.example.invalid/webhooks/delivery/lalamove", {
+      method: "POST",
+      body: new Uint8Array(0),
+    });
+    expect(request.body).not.toBeNull();
+    expect(request.headers.get("content-type")).toBeNull();
+    const response = await handleLalamoveWebhook(env.DB, credentials, request, crypto.randomUUID());
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, connectionCheck: true });
   });

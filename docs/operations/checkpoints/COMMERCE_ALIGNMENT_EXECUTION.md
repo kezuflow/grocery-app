@@ -1,5 +1,63 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — LALAMOVE-WEBHOOK-CONNECTION-PROBE-1 (2026-09-22)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, Lalamove production webhook registration. Stable ID:
+`LALAMOVE-WEBHOOK-CONNECTION-PROBE-1`. Acceptance: the documented Lalamove initial connection
+`POST` with an empty body and no `Content-Type` receives HTTP 200 at the exact Core callback path;
+non-empty callbacks still require JSON media type and the existing API-key/HMAC verification,
+bounded body, durable inbox, deduplication, ordering and reconciliation behavior.
+
+Observed clean `main` and `origin/main` at `4ea8011585b67544745a292eb210c2087e532910` before
+editing. Production already had the required Lalamove secret names and enabled provider variables.
+The correct public callback was
+`https://freshmarkets-core-production.ilyreggie.workers.dev/webhooks/delivery/lalamove`;
+`https://freshmarkets.ph/webhooks/delivery/lalamove` entered the Web Worker and returned 404. A live
+headerless empty `POST` to the Core callback reproduced the Partner Portal failure as HTTP 415, while
+an empty `application/json` `POST` returned 200. Current official Lalamove documentation and the v3
+webhook tutorial require an empty initial connection request to receive 200 before signature work.
+
+Implemented an explicit bounded-reader option used only by the Lalamove ingress: a missing content
+type is provisionally admitted for a bounded read and succeeds only when zero bytes were received.
+Any non-empty headerless request remains HTTP 415; an explicitly unsupported media type remains
+rejected; non-empty JSON continues through the unchanged Lalamove key/signature and event-processing
+path. The regression constructs the Worker-runtime shape that exposed the defect: a non-null empty
+body stream with no `Content-Type`.
+
+Verification on the intended working-tree scope:
+
+- The new webhook regression failed before the implementation with expected 200 versus actual 415.
+- Focused bounded-body and Lalamove Worker/D1 run passed **16/16 across 2 files**; Core typecheck
+  passed.
+- An initial `pnpm check` reached the full Core suite but the Windows native process exited with
+  `3221226505` without an assertion failure. The isolated full Core rerun passed **1707/1707 across
+  209 files**.
+- A fresh complete `pnpm check` then passed: Core **1707/1707 across 209 files**, Web **633/633 across
+  152 files**, contracts **69/69 across 20 files**, config **2/2**, validation **4/4** and
+  domain-shared **2/2**, plus formatting, naming, terminology, harness, migration/schema,
+  architecture/readiness, lint, all workspace typechecks and Core/Web dry-run builds. Only the two
+  pre-existing Web unused-variable warnings and known Wrangler advisories appeared.
+- `git diff --check` passed. No browser journey, deployment, Lalamove registration, provider event,
+  courier booking, remote-data mutation or outbound message occurred.
+
+Exact commands:
+
+```powershell
+pnpm --filter @freshmarkets/core test -- src/delivery/http/lalamove-webhook.integration.test.ts
+pnpm --filter @freshmarkets/core test -- src/http/bounded-body.test.ts src/delivery/http/lalamove-webhook.integration.test.ts
+pnpm --filter @freshmarkets/core typecheck
+pnpm --filter @freshmarkets/core test
+pnpm check
+git diff --check
+```
+
+Completion level before release: **1 of 1 local webhook connection-probe correction implemented and
+verified**. The production endpoint remains on the prior runtime and will continue returning 415 to
+Lalamove's headerless probe until Core is deployed. The one concrete next action is an explicitly
+authorized production Core deployment followed by the empty-probe check and Partner Portal webhook
+registration retry; actual signed-event acceptance remains separate evidence.
+
 ## Latest owner request — ADMIN-ACTION-FEEDBACK-1 (2026-09-22)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

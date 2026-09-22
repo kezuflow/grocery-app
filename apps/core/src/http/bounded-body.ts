@@ -21,6 +21,7 @@ export type BoundedBodyResult<T> = { ok: true; value: T } | { ok: false; error: 
 export type BoundedTextOptions = {
   maxBytes: number;
   contentTypes: ReadonlyArray<string>;
+  allowEmptyWithoutContentType?: boolean;
 };
 
 export type BoundedJsonOptions = {
@@ -51,7 +52,8 @@ export async function readBoundedText(
 
   const allowedTypes = options.contentTypes.map((value) => value.toLowerCase());
   const contentType = normalizedContentType(request);
-  if (!contentType || !allowedTypes.includes(contentType)) {
+  const allowedContentType = contentType !== null && allowedTypes.includes(contentType);
+  if (!allowedContentType && !(contentType === null && options.allowEmptyWithoutContentType)) {
     return rejected(415, "UNSUPPORTED_MEDIA_TYPE", "Unsupported request content type");
   }
 
@@ -89,6 +91,10 @@ export async function readBoundedText(
     return rejected(400, "BODY_READ_FAILED", "Request body could not be read");
   } finally {
     reader.releaseLock();
+  }
+
+  if (!allowedContentType && totalBytes > 0) {
+    return rejected(415, "UNSUPPORTED_MEDIA_TYPE", "Unsupported request content type");
   }
 
   const bytes = new Uint8Array(totalBytes);

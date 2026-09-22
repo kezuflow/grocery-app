@@ -177,6 +177,7 @@ export async function handleLalamoveWebhook(
   const body = await readBoundedText(request, {
     maxBytes: MAXIMUM_BODY_BYTES,
     contentTypes: ["application/json"],
+    allowEmptyWithoutContentType: true,
   });
   if (!body.ok)
     return json(requestId, body.error.status, {
