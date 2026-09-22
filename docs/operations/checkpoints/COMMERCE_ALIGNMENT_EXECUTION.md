@@ -62,11 +62,29 @@ pnpm check
 git diff --check
 ```
 
-No deployment, production or remote-data mutation, provider transaction, courier booking, outbound
-message or browser run occurred. Completion level: **1 of 1 action-feedback rollout implemented and
-locally verified**. The verified runtime, tests and checkpoint were committed directly to `main` and
-pushed to `origin/main` as `93fdf7b0`. The one concrete next action, only if separately requested, is
-deployed visual acceptance; it remains unexecuted and was not requested.
+Before the subsequent release request, no deployment, production or remote-data mutation, provider
+transaction, courier booking, outbound message or browser run had occurred. Completion level at that
+point: **1 of 1 action-feedback rollout implemented and locally verified**. The verified runtime was
+committed directly to `main` as `93fdf7b0`; its checkpoint followed as `eb8b6d24`, and both were pushed
+to `origin/main`.
+
+The owner then authorized production deployment. Because pushed revision `eb8b6d24` also contains the
+previously undeployed Instant Start-packing auto-booking and FDP Core work, this was a coordinated
+Core-and-Web release rather than a Web-only release. No schema migration was present or run. A fresh
+`CLOUDFLARE_ENV=production` Web build and both Wrangler dry runs passed. The generated Web configuration
+resolved to `freshmarkets-web-production`, the `freshmarkets.ph` custom domain and
+`freshmarkets-core-production#CoreEntrypoint`; the Core dry run retained the isolated production D1,
+R2 and notification-queue bindings.
+
+Core deployed first as version `8fa7867a-4f4b-43d6-8452-70e62513019d`; Web deployed second as version
+`f4ced7eb-f596-4235-9920-14c94bb272d5`. Post-deploy probes returned HTTP 200 for Core `/health`
+(`status: ok`, production), Core `/ready` (`status: ready`, runtime configuration, database and
+PayMongo ready), Web `/api/core-health` (`status: ok`), the public homepage, `/admin/fulfillment` and
+the Web production diagnostic hostname. No production-data mutation, provider transaction, courier
+booking, payment/refund, outbound message or browser run was part of release verification. Completion
+level: **1 of 1 action-feedback rollout released, and current pushed Core/Web work deployed and
+health-verified**. Authenticated visual acceptance remains unexecuted by the owner's prior instruction;
+no release blocker was observed.
 
 ## Latest owner request — INSTANT-AUTO-BOOKING-START-PACKING-1 (2026-09-22)
 
