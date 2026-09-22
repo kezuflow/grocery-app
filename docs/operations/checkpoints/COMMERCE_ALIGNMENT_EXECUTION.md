@@ -1,65 +1,92 @@
 # Commerce alignment — active checkpoint
 
-## Latest owner request — FDP-3 through FDP-5 fulfillment/dispatch alignment (2026-09-22)
+## Latest owner request — FDP-6 integrated acceptance and release gate (2026-09-22)
 
-Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-3 — Build the
-location Orders and preparation experience**, **FDP-4 — Add one narrow real-time refresh path**, and
-**FDP-5 — Optimize the measured hot paths only**. Stable IDs: `FDP-3`, `FDP-4`, `FDP-5`.
-Acceptance: location-only staff can inspect and prepare their paid Orders without Global finance
-access; original and committed-addition quantities, mode-specific goods evidence, timing, blockers and
-legal actions agree between list/detail; both modes reach the same staff-selected Manual/Lalamove
-journey; cross-location reads remain concealed; one lightweight location refresh owner updates the
-bell and mounted work without clearing prior data or duplicating notices; retained query changes have
-current-code evidence, stable timestamp/identity cursors and migration/query-plan verification.
+Active plan: `docs/product/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN.md`, **FDP-6 — Integration,
+release-readiness review and acceptance**. Stable ID: `FDP-6`. Acceptance: review the integrated
+FDP-0–FDP-5 change against the approved dispatch contract and all 21 mandatory matrix rows; revisit
+alternate RPC, scheduler, direct-route and provider-recovery paths; run the required Core/Web/D1,
+aggregate and isolated browser checks; document compatibility and release order without deploying.
 
-Observed clean `main` at `dca3ec174984a07eb49667c45b96b1659f7ef19d`, the FDP-0–FDP-2
-checkpoint revision. Implementation revision `f1e2d051a648ad49e1fd937e47061e6e6b03d6dd` contains the
-verified FDP-3–FDP-5 source, migration, tests and owning-spec changes across 24 files. The operational
-Fulfillment projection now returns human Order identity, committed time, mode, recipient, immutable
-window/cycle facts, progress/blockers, Delivery status, original and committed-addition snapshots and
-Instant reservation or Scheduled demand/received-goods evidence. It omits prices, totals, Payments,
-refunds and customer email. The location-authorized queue uses one page read plus one bulk line read,
-and its reusable mounted detail exposes only Core legal actions before linking packed work to the
-ordinary Delivery workspace with the same Manual/Lalamove choice for Instant and Scheduled.
+Observed clean `main` and `origin/main` at `6dd0fca74d4b33c015cdc6db2c0cd729ed87e71c` before FDP-6.
+The transactional implementation is `9bface77` (FDP-0–FDP-2), the operating experience and measured
+query work is `f1e2d051` (FDP-3–FDP-5), and the final browser-acceptance correction is
+`c040611a015c45841c6575423b98e1199d518e5b`. FDP-6 changed only
+`apps/web/tests/instant-auto-booking.spec.ts` and
+`apps/web/tests/scheduled-customer-journey.spec.ts`: it narrowed the Instant dispatch journey back to
+its dispatch responsibility, updated both journeys to current checkout/detail controls, and moved
+Scheduled Manual assignment after packing as required. No runtime, schema or business-rule change was
+needed during final review.
 
-`listOperationalActivity` and `/api/admin/operations-activity` are the bounded location feed for
-fulfillment or delivery readers. One layout-owned Web provider refreshes every 8 seconds only while
-visible, also on focus/reconnect, aborts stale scope requests, backs off to 32 seconds after failures,
-retains last successful data, marks staleness, revalidates Fulfillment/Delivery and session-deduplicates
-new-paid-Order notices. Full Overview polling was removed. The settled FDP-0–FDP-2 contracts remain
-unchanged: Manual is a normal selection rather than fallback; new Lalamove work is explicit after
-packing; generic Fulfillment stops at packed; payment authority, location authorization, immutable
-paid facts, atomic/idempotent writes, one active/uncertain execution and provider recovery/custody
-history remain with their existing owners.
+The settled contract is implemented consistently. Manual and Lalamove are ordinary staff-selected
+options for both Instant and Scheduled, after packing; Manual has no failed-courier prerequisite and
+new Lalamove work is never automatic. Generic Fulfillment stops at `PACKED`. Direct Web routes enter
+the same Core commands; alternate operations RPC exposes preparation only; scheduler registration has
+no first-booking job; and provider webhook/recovery/redrive paths retain existing/uncertain attempts
+without creating a replacement. Shared Core eligibility rejects pre-packed dispatch and overlapping
+execution. Atomic claims precede provider creation, idempotent receipts protect replay, and payment
+authority, location authorization, Instant reservations, Scheduled allocations, immutable paid
+snapshots, custody history and inspected-return/retry safeguards remain with their existing owners.
 
-FDP-5 retained only demonstrated changes. Global finance Orders now use the projected
-`COALESCE(committed_at,created_at)` consistently for predicate, order and cursor; Delivery and
-Fulfillment pages use timestamp-plus-identity cursors instead of UUID ordering; the finance projection
-joins the latest dispatch once rather than issuing duplicate correlated lookups; and operational item
-snapshots load in bulk with maps rather than per-Order reads/repeated scans. Local D1 `EXPLAIN QUERY
-PLAN` showed the latest-attempt lookup using `delivery_provider_dispatch_job_sequence_unique`, the
-new `grocery_order_commitment_queue_idx` removing the temporary global Order sort, and
-`fulfillment_record_location_order_idx` replacing a full Fulfillment scan. Migration
-`0102_operational_queue_indexes.sql` changes indexes only; it does not rewrite retained facts.
+The mandatory matrix is covered at the recorded revision. The two isolated browser journeys prove all
+four mode/method combinations, honest Scheduled goods blockers, no external dispatch during
+preparation or scheduler runs, explicit post-pack Lalamove, normal Manual assignment, custody progress
+and duplicate handover handling at desktop and 390 px. Core Worker/D1 suites cover single payment
+commitment and duplicate/late/cutoff reactions, packing rollback/idempotency, pre-pack dispatch
+rejection, concurrent Manual/Lalamove ownership, unknown create/cancel outcomes, idempotent Manual
+receipts, generic-RPC confinement, duplicate/out-of-order provider events, retained-attempt recovery,
+failed/returned delivery, cross-location tampering and paid-snapshot preservation when the actual
+method differs from the quoted courier. Admin/Core/Web suites cover stable timestamp-plus-identity
+pagination and refresh/reconnect/scope-switch behavior without stale leakage or duplicate notice
+identity.
 
-Verification on the complete implementation revision: the final `pnpm check` aggregate passed Core
-**1702/1702 across 209 files**, Web **620/620 across 148 files**, contracts **69/69 across 20 files**,
-all workspace typechecks, formatting, naming, terminology, harness, fresh/populated migration and
-schema checks, commit-message, architecture/readiness, lint and Core/Web dry-run builds. Focused Core
-authorization/projection and commit-time cursor suites passed **27/27 across 2 files**; focused Web
-route/detail/refresh suites passed **6/6 across 3 files**. A managed production-build local browser
-journey passed **1/1**, proving a location-scoped operator can inspect Instant reservation and
-Scheduled allocation/committed-addition evidence, sees no finance fields, and reaches the identical
-Manual/Lalamove dispatch handoff from both modes. `git diff --check` passed. Only the two pre-existing
-Web unused-variable warnings and known Wrangler advisories appeared. No deployment, production or
-remote-data mutation, real/sandbox provider transaction, courier booking or outbound message occurred.
+Executed verification on the complete intended scope:
 
-Completion level: **6 of 7 FDP slices implemented and locally accepted (`FDP-0`–`FDP-5`)**. Actual
-provider acceptance remains intentionally unexecuted, and the integrated release has not been deployed.
-Next action: switch to Sol High for **FDP-6 — Integrated acceptance and release gate**; review the
-integrated diff and execute the plan's required Core/Web/browser/provider-safe acceptance checks from
-revision `f1e2d051a648ad49e1fd937e47061e6e6b03d6dd` without replanning or changing the settled
-contracts.
+- Focused Core command/webhook/recovery/RPC run: **141/141 across 8 files**.
+- Focused contracts run: **19/19 across 3 files**.
+- Focused Web route/detail/refresh/notification run: **15/15 across 5 files**.
+- Managed production-build disposable browser runs: Instant desktop **1/1**, Scheduled desktop
+  **1/1**, and combined 390 px **2/2**. The first combined attempt exposed stale selectors and an
+  orphaned local test stack; the exact local processes were stopped and fresh named states passed.
+- Final `pnpm check`: Core **1702/1702 across 209 files**, Web **620/620 across 148 files**, contracts
+  **69/69 across 20 files**, plus formatting, naming, terminology, harness, architecture/readiness,
+  fresh/populated migration and schema validation, all workspace typechecks, lint and Core/Web dry-run
+  builds. `git diff --check` passed. Only the two pre-existing Web unused-variable warnings and known
+  Wrangler advisories appeared.
+
+Exact commands:
+
+```powershell
+pnpm --filter @freshmarkets/core test -- src/admin/application/delivery-provider-operations.integration.test.ts src/delivery/application/request-provider-delivery.integration.test.ts src/delivery/http/lalamove-webhook.integration.test.ts src/delivery/http/grab-express-webhook.integration.test.ts src/orders/application/apply-checkout-payment-reaction.integration.test.ts src/orders/application/instant-commitment.integration.test.ts src/operations/application/fulfillment-command-recovery.integration.test.ts src/entrypoint/operations-rpc.test.ts
+pnpm --filter @freshmarkets/contracts test -- src/admin-operations.test.ts src/core-service.test.ts src/states.test.ts
+pnpm --filter @freshmarkets/web test -- app/admin/admin-operational-refresh-provider.test.tsx components/admin/operational-order-detail.test.tsx components/admin/location-fulfillment-workspace.test.tsx components/admin/admin-notifications.test.tsx test/app/api/admin/operations-routes.test.ts
+$env:E2E_START_STACK='1'; $env:E2E_PROVIDER_GATEWAY='1'; $env:E2E_STATE_NAME='e2e-fdp6-instant-g'; pnpm --filter @freshmarkets/web test:e2e -- tests/instant-auto-booking.spec.ts --grep '1440px' --retries=0
+$env:E2E_START_STACK='1'; $env:E2E_PROVIDER_GATEWAY='1'; $env:E2E_STATE_NAME='e2e-fdp6-scheduled-f'; pnpm --filter @freshmarkets/web test:e2e -- tests/scheduled-customer-journey.spec.ts --grep '1440px' --retries=0
+$env:E2E_START_STACK='1'; $env:E2E_PROVIDER_GATEWAY='1'; $env:E2E_STATE_NAME='e2e-fdp6-responsive-c'; pnpm --filter @freshmarkets/web test:e2e -- tests/instant-auto-booking.spec.ts tests/scheduled-customer-journey.spec.ts --grep '390px' --retries=0
+pnpm check
+git diff --check
+```
+
+The focused commands selected the delivery-provider operations, provider request/webhook, payment
+reaction, Instant commitment, fulfillment recovery and operations-RPC Core files; the three affected
+contract files; the five operational Web files; and the two dispatch browser specs. Browser runs used
+`E2E_START_STACK=1`, `E2E_PROVIDER_GATEWAY=1`, disposable named local state, `--retries=0`, and the
+`1440px` or `390px` grep. These fake-provider checks prove local handling only. No deployment,
+production/remote-data mutation, real or sandbox provider transaction, courier booking or outbound
+message occurred.
+
+Release order, if separately authorized, is: apply index-only migration
+`0102_operational_queue_indexes.sql`, release Core, then release Web. The new Core activity RPC is
+backward-compatible with the old Web, while the new Web expects that Core method; therefore Core must
+precede Web. The migration rewrites no retained facts and may remain if Web rolls back. Existing
+provider intents, active/uncertain attempts and recovery jobs keep their identifiers and remain
+recoverable throughout; no migration or release step deletes or rebooks them.
+
+Completion level: **7 of 7 FDP slices implemented and locally accepted (`FDP-0`–`FDP-6`)**. Actual
+provider acceptance and deployed-environment acceptance remain intentionally unexecuted and are not
+claimed. No FDP implementation work remains. The one concrete next action, only with separate release
+authorization, is a staged migration/Core/Web release in the order above followed by authenticated
+location-operator and actual-provider acceptance while preserving existing intent recovery.
 
 ## Latest owner request — CUSTOMER-ORDER-TIMELINE-ICONS-1 (2026-09-22)
 
