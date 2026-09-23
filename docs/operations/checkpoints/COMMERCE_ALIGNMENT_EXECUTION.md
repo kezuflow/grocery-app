@@ -1,5 +1,45 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-RAIL-PROD-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-RAIL-PROD-1`. Acceptance: publish the verified
+storefront rail-drag change to production Web, retain the production Core binding, and confirm
+published health and browser behavior. This owner request explicitly authorizes a Web deployment,
+not a Core/D1 migration, provider transaction, customer write, or broader resource reset.
+
+Observed clean synchronized `main`/`origin/main` at `3aab2974`. A separate clean release worktree
+was first built from `ef04115c` while the unrelated mobile source was being verified, then moved
+to final pushed `3aab2974` after that source and checkpoint landed. The final Web release includes
+the previously pushed visual, rail-drag and narrow-phone quick-view presentation changes; no
+uncommitted checkout content was released. Before upload, Wrangler listed Web production version
+`cb2da6d6-330c-4bfc-9234-a820134193a6` at 100% traffic. The checked generated production config
+targeted `freshmarkets-web-production`, `freshmarkets.ph`,
+`freshmarkets-core-production#CoreEntrypoint`, `aws:ap-southeast-1`, production origin, logs and
+traces. All three required Web secret binding names were present remotely; no values were read.
+
+Release evidence: `pnpm check` passed on clean `ef04115c`, including **661/661 Web** and **1714/1714
+Core Worker/D1** tests, shared/harness suites, static gates, all workspace types and both builds.
+The owner’s mobile slice separately recorded a passing aggregate on its updated Web source. On
+final release SHA `3aab2974`, Web typecheck and **661/661 Web tests** passed, `check:vinext`
+reported **16 supported/0 issues**, `CLOUDFLARE_ENV=production` Web build passed, and generated
+Wrangler deployment dry-run exited zero. Local build warnings named missing local secrets only;
+remote production bindings were checked separately. Pre- and post-deployment Web homepage, Web
+`/health`, Web `/api/core-health`, Core `/health` and Core `/ready` each returned HTTP 200.
+
+Web-only deployment succeeded: version `5509bfff-933e-40be-875b-689f010a8320` was listed at
+**100%** traffic. In a separate temporary Codex in-app browser tab at 390px, category drag changed
+scroll position 0→256 and product-row drag 0→210 while URL remained `/` and no quick view opened;
+an ordinary product click then opened the published Abiu quick view with its real product photo.
+At 320px, the Add control was inside the frame and fully visible, but live page width was **367px**
+against a **320px** viewport: the product-row heading/action group extended to about 367px. This
+remaining horizontal-overflow defect is separate from rail dragging and was not changed during the
+release. The temporary tab was closed and viewport override reset. No Core Worker, D1, provider,
+payment or customer data operation was performed. Completion level: **1 of 1 requested Web
+deployment completed and live rail drag verified**; Phase 7 provider acceptance remains open.
+Next action: correct and browser-verify the 320px product-row heading overflow in a separate source
+slice before claiming the entire narrow-phone storefront is overflow-free.
+
 ## Latest owner request — STOREFRONT-MOBILE-COMPAT-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
