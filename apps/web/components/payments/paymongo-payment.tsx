@@ -423,17 +423,21 @@ export function PayMongoPayment({
       {completion?.state === "COMPLETED" && completion.orderId ? (
         <section
           aria-live="polite"
-          className="grid justify-items-center gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-8 text-center"
+          className="grid justify-items-center gap-4 rounded-lg border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-8 text-center"
           role="status"
         >
           <PaymentSuccessAnimation />
           <div>
-            <h2 className="text-2xl font-semibold text-emerald-950">Payment successful</h2>
-            <p className="mt-2 text-sm leading-6 text-emerald-900">Your order is confirmed.</p>
+            <h2 className="text-2xl font-semibold text-[var(--fm-storefront-accent)]">
+              Payment successful
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--fm-storefront-accent)]">
+              Your order is confirmed.
+            </p>
           </div>
           <Link
             href={`/orders/${encodeURIComponent(completion.orderId)}`}
-            className="inline-flex min-h-11 items-center justify-center rounded bg-emerald-700 px-5 font-medium text-white"
+            className="inline-flex min-h-11 items-center justify-center rounded bg-[var(--fm-storefront-action)] px-5 font-medium text-white! hover:bg-[var(--fm-storefront-action-hover)]"
           >
             View order
           </Link>
@@ -443,11 +447,13 @@ export function PayMongoPayment({
       {completion?.state === "FINALIZING_ORDER" ? (
         <section
           aria-live="polite"
-          className="rounded-lg border border-emerald-200 bg-emerald-50 p-6"
+          className="rounded-lg border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] p-6"
           role="status"
         >
-          <h2 className="text-xl font-semibold text-emerald-950">Payment received</h2>
-          <p className="mt-2 text-sm leading-6 text-emerald-900">
+          <h2 className="text-xl font-semibold text-[var(--fm-storefront-accent)]">
+            Payment received
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--fm-storefront-accent)]">
             We’re finalizing your order now. Keep this page open and it will update automatically.
           </p>
           {pollingStopped ? (
@@ -500,7 +506,7 @@ export function PayMongoPayment({
               ) : null}
               <Link
                 href={donePath}
-                className="inline-flex min-h-11 items-center justify-center rounded bg-emerald-700 px-4 font-medium text-white"
+                className="inline-flex min-h-11 items-center justify-center rounded bg-[var(--fm-storefront-action)] px-4 font-medium text-white! hover:bg-[var(--fm-storefront-action-hover)]"
               >
                 Check payment status
               </Link>
@@ -510,7 +516,7 @@ export function PayMongoPayment({
               type="button"
               onClick={() => void startQrPh()}
               disabled={busy}
-              className="min-h-11 rounded bg-emerald-700 px-4 font-medium text-white disabled:opacity-50"
+              className="min-h-11 rounded bg-[var(--fm-storefront-action)] px-4 font-medium text-white hover:bg-[var(--fm-storefront-action-hover)] disabled:opacity-50"
             >
               {busy ? "Generating secure QR…" : "Try generating QR Ph again"}
             </button>
@@ -590,7 +596,7 @@ export function PayMongoPayment({
           </div>
           <button
             disabled={busy}
-            className="rounded bg-emerald-700 px-4 py-2 font-medium text-white disabled:opacity-50"
+            className="rounded bg-[var(--fm-storefront-action)] px-4 py-2 font-medium text-white hover:bg-[var(--fm-storefront-action-hover)] disabled:opacity-50"
           >
             {busy ? "Connecting to PayMongo…" : "Continue securely"}
           </button>

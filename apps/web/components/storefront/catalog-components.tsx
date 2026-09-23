@@ -99,7 +99,7 @@ export function ProductGridEmpty({ query }: { query: string }) {
       </p>
       <Link
         href="/"
-        className="mt-4 inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
+        className="mt-4 inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[var(--fm-storefront-accent)]! underline underline-offset-4"
       >
         Browse all groceries
         <ArrowRight className="size-3.5" aria-hidden="true" />

@@ -7,7 +7,7 @@ function StaticSuccessMark() {
   return (
     <svg
       aria-hidden="true"
-      className="h-32 w-32 text-emerald-700"
+      className="h-32 w-32 text-[var(--fm-storefront-accent)]"
       viewBox="0 0 128 128"
       fill="none"
     >

@@ -25,7 +25,7 @@ export function AccountPopover({ mobile = false }: { mobile?: boolean }) {
         <PopoverTrigger
           className={
             mobile
-              ? "flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-primary-dark)]"
+              ? "flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)]! hover:text-[var(--fm-storefront-accent)]!"
               : "flex min-h-11 w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
           }
         >

@@ -30,8 +30,8 @@ describe("OrderTimeline", () => {
     expect(html).toContain("<ol");
     expect(html).toContain('aria-label="Order progress"');
     expect(html).not.toContain("overflow-x-auto");
-    expect(html).toContain("bg-[var(--fm-success)]");
-    expect(html).toContain("text-[var(--fm-success)]");
+    expect(html).toContain("bg-[var(--fm-storefront-accent)]");
+    expect(html).toContain("text-[var(--fm-storefront-accent)]");
     expect(html).not.toContain("Your payment is now succeeded.");
     expect(html).toContain("Order placed");
     expect(html).toContain("Your payment was verified and your order was placed.");

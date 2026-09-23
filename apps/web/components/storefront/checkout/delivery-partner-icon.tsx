@@ -22,7 +22,7 @@ export function DeliveryPartnerIcon({ code }: { code?: DeliveryPartnerCode }) {
     return (
       <span
         aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#eaf8ef] text-[#00b14f]"
+        className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#eaf8ef] text-[var(--fm-storefront-accent)]"
         data-provider-icon="grab-express"
       >
         <svg viewBox="0 0 24 24" className="size-5" fill="none">

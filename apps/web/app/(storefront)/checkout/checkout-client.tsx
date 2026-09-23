@@ -923,7 +923,7 @@ export function CheckoutClient({
         <header className="border-b border-[var(--fm-border)] bg-white px-4 py-6 sm:px-6 lg:px-10">
           <Link
             href="/cart"
-            className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[var(--fm-primary-dark)] transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+            className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[var(--fm-storefront-accent)]! transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             Back to cart
@@ -952,7 +952,7 @@ export function CheckoutClient({
                 </p>
                 <Link
                   href="/auth/login?returnTo=/checkout"
-                  className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
+                  className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white! hover:bg-[var(--fm-storefront-action-hover)]"
                 >
                   Sign in to continue
                 </Link>
@@ -1038,7 +1038,7 @@ export function CheckoutClient({
 
                   {browsingDestination ? (
                     <div className="mt-5 flex max-w-80 items-start gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-warning-border)] bg-white p-4">
-                      <span className="grid size-9 shrink-0 place-items-center text-[var(--fm-primary-dark)]">
+                      <span className="grid size-9 shrink-0 place-items-center text-[var(--fm-storefront-accent)]">
                         <MapPin className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -1063,7 +1063,7 @@ export function CheckoutClient({
                               setEditingAddress(undefined);
                               setShowAddressEditor(true);
                             }}
-                            className="text-xs font-bold text-[var(--fm-primary-dark)] underline underline-offset-4"
+                            className="text-xs font-bold text-[var(--fm-storefront-accent)] underline underline-offset-4"
                           >
                             Complete delivery details
                           </button>

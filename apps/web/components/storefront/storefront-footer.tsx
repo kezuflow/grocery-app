@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const footerLinkClassName =
-  "w-fit rounded-sm text-sm text-[var(--fm-text-muted)] transition-colors hover:text-[var(--fm-primary-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-primary-dark)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fm-surface-soft)]";
+  "w-fit rounded-sm text-sm text-[var(--fm-text-muted)]! transition-colors hover:text-[var(--fm-storefront-accent)]! focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-storefront-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fm-surface-soft)]";
 
 export function StorefrontFooter() {
   return (
@@ -14,7 +14,7 @@ export function StorefrontFooter() {
         <div className="col-span-2 max-w-xs sm:col-span-3 lg:col-span-1">
           <Link
             href="/"
-            className="fm-font-display inline-flex items-center gap-2 rounded-sm text-lg font-bold text-[var(--fm-primary-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-primary-dark)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fm-surface-soft)]"
+            className="fm-font-display inline-flex items-center gap-2 rounded-sm text-lg font-bold text-[var(--fm-primary-dark)]! focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-primary-dark)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--fm-surface-soft)]"
           >
             <span
               aria-hidden="true"

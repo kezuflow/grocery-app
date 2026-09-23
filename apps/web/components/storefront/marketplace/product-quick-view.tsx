@@ -245,7 +245,7 @@ export function ProductQuickView({
                   className={cn(
                     "mt-1 flex items-center gap-1.5 text-sm leading-[22px] font-semibold",
                     presentation.available
-                      ? "text-[var(--fm-success)]"
+                      ? "text-[var(--fm-storefront-accent)]"
                       : "text-[var(--fm-destructive)]",
                   )}
                 >
@@ -319,7 +319,7 @@ export function ProductQuickView({
                   <dl className="mt-4 space-y-1.5 border-t border-[var(--fm-border)] pt-4">
                     {presentation.details.map((detail) => (
                       <div key={detail.label} className="flex gap-2 text-xs leading-5">
-                        <dt className="shrink-0 font-semibold text-[var(--fm-primary-dark)]">
+                        <dt className="shrink-0 font-semibold text-[var(--fm-storefront-accent)]">
                           {detail.label}
                         </dt>
                         <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>
@@ -367,7 +367,7 @@ export function ProductQuickView({
                 ) : null}
                 <Link
                   href={`/products/${presentation.slug}`}
-                  className="mt-4 inline-flex text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
+                  className="mt-4 inline-flex text-sm font-semibold text-[var(--fm-storefront-accent)]! underline underline-offset-4"
                 >
                   View full details
                 </Link>

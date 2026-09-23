@@ -125,7 +125,7 @@ export function DeliveryAddressDialog() {
         aria-expanded={open}
         aria-label="Choose delivery address"
       >
-        <MapPin className="size-4 shrink-0 text-[var(--fm-primary-dark)]" aria-hidden="true" />
+        <MapPin className="size-4 shrink-0 text-[var(--fm-storefront-accent)]" aria-hidden="true" />
         <span className="min-w-0">
           <span className="block text-[10px] text-[var(--fm-text-muted)]">Deliver to</span>
           <span className="flex min-w-0 items-center gap-1 font-semibold">

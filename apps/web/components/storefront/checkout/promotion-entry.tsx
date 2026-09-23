@@ -81,7 +81,7 @@ export function PromotionEntry({
       <div className={cn("flex items-start", compact ? "gap-2" : "gap-3")}>
         <span
           className={cn(
-            "grid shrink-0 place-items-center text-[var(--fm-primary-dark)]",
+            "grid shrink-0 place-items-center text-[var(--fm-storefront-accent)]",
             compact ? "size-7" : "size-10",
             !flat && "rounded-full bg-[var(--fm-surface-soft)]",
           )}
@@ -142,7 +142,7 @@ export function PromotionEntry({
               key={code}
               aria-busy={pendingAction === `remove:${code}`}
               className={cn(
-                "inline-flex max-w-full items-stretch overflow-hidden rounded-[var(--fm-radius-control)] border border-dashed border-[var(--fm-primary-dark)] text-[var(--fm-primary-dark)]",
+                "inline-flex max-w-full items-stretch overflow-hidden rounded-[var(--fm-radius-control)] border border-dashed border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]",
                 flat ? "bg-transparent" : "bg-[var(--fm-surface-soft)]",
               )}
             >
@@ -196,7 +196,7 @@ export function PromotionEntry({
             key={`${entry.code}-${entry.status}`}
             className={
               entry.status === "APPLIED"
-                ? "text-[var(--fm-success)]"
+                ? "text-[var(--fm-storefront-accent)]"
                 : "text-[var(--fm-text-muted)]"
             }
           >

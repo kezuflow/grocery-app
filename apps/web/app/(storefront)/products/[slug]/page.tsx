@@ -14,7 +14,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
         <Link
           href="/"
-          className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[var(--fm-primary-dark)] hover:underline"
+          className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[var(--fm-storefront-accent)]! hover:underline"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
           Back to groceries

@@ -1,5 +1,43 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-GREEN-TEXT-1 (2026-09-24)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-GREEN-TEXT-1`. Acceptance: audit Storefront green
+text accents and links, including “Available for delivery,” and use the owner's exact `#00B14F`
+reference while keeping brand lettering, warnings, errors, inverse text and Admin distinct. The
+owner accepted the lower contrast for small green text. This is a source-change request, not a
+production deployment authorization.
+
+Started on synchronized `main` at `b53c0be3` with unrelated order-follow-up source in progress.
+That work landed independently as `9ef25218`/`16eb1a71`; its Core and Web files were preserved.
+The current checkout is `main`/`origin/main` at `16eb1a71` with only this Storefront color source,
+browser test and Design hunk pending. No schema, Core command, provider or customer-data change is
+needed.
+
+Storefront text/status/link accents now use a single `--fm-storefront-accent: #00b14f` token,
+shared with the existing primary action fill. The audit covers product availability, address and
+delivery confirmation, cart/checkout, order timeline and discount totals, payment status, account,
+footer, and category/product navigation. Filled link-buttons retain white labels despite the
+global anchor cascade; brand and inverse surfaces keep their distinct text colors. Admin was not
+modified. The exact accent on white/pale green is below normal-text contrast guidance and is
+recorded in `docs/design/DESIGN.md`.
+
+Local evidence on this working tree: Web typecheck passed; Web Vitest passed **663/663
+across 158 files**; `pnpm lint` passed with two existing unrelated warnings; `pnpm exec oxfmt
+--check apps/web docs/design/DESIGN.md` passed; Web build passed; `check:vinext` reported **16
+supported, 0 issues**; `git diff --check` passed. The first managed browser run exposed a
+product-availability success token still rendering `#238636`; the second exposed the global
+anchor color cascade hiding an accent link. Both were corrected in source, with explicit browser
+assertions for availability, the browse link and white filled-link labels. The final managed local
+Worker/D1 browser rerun passed **1/1** for those colors and unchanged product-row browse controls.
+It is local presentation acceptance, not production/provider acceptance. The aggregate `pnpm
+check` was not rerun for this presentation-only slice; separate Core suites in another worktree
+were active during this task. Phase 7 aggregate and provider/journey obligations remain open.
+
+Next action: review the final diff, then commit and push only this source slice. A separate owner
+request is required before production Web deployment and published-color acceptance.
+
 ## Latest owner request — ORDER-FOLLOWUP-PACKING-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

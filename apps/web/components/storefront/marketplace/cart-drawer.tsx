@@ -205,7 +205,7 @@ export function CartDrawer() {
               </div>
             ) : !hasItems ? (
               <div className="flex min-h-64 flex-col items-center justify-center text-center">
-                <span className="flex size-14 items-center justify-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+                <span className="flex size-14 items-center justify-center rounded-full bg-[var(--fm-surface-soft)] text-[var(--fm-storefront-accent)]">
                   <ShoppingBasket className="size-7" aria-hidden="true" />
                 </span>
                 <h3 className="mt-4 text-lg font-bold">Your cart is empty</h3>
@@ -228,7 +228,7 @@ export function CartDrawer() {
                     aria-busy={quantityQueue.pending.has(item.skuId)}
                     className="flex gap-3 border-b border-[var(--fm-border)] pb-4"
                   >
-                    <div className="flex size-16 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+                    <div className="flex size-16 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-storefront-accent)]">
                       <ProductMedia
                         media={item.media ?? null}
                         name={item.name}

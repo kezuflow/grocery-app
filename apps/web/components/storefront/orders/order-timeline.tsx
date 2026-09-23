@@ -81,7 +81,7 @@ export function OrderTimeline({ entries }: { entries: readonly CustomerTimelineE
                   <span
                     className={`relative z-10 flex size-8 items-center justify-center rounded-full border-2 border-white text-white ring-1 ${
                       paymentSucceeded
-                        ? "bg-[var(--fm-success)] ring-[var(--fm-success)]"
+                        ? "bg-[var(--fm-storefront-accent)] ring-[var(--fm-storefront-accent)]"
                         : "bg-[var(--fm-primary-dark)] ring-[var(--fm-primary-dark)]"
                     }`}
                     data-timeline-marker
@@ -92,7 +92,7 @@ export function OrderTimeline({ entries }: { entries: readonly CustomerTimelineE
                   <div className="mt-3">
                     <h3
                       className={`text-sm font-semibold leading-tight break-words sm:text-base ${
-                        paymentSucceeded ? "text-[var(--fm-success)]" : ""
+                        paymentSucceeded ? "text-[var(--fm-storefront-accent)]" : ""
                       }`}
                     >
                       {entry.title}

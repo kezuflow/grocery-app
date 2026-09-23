@@ -80,7 +80,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
         />
       </div>
       <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-primary-dark)]">
+        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--fm-storefront-accent)]">
           {view.product.category.name}
         </p>
         <h1 className="mt-2 text-4xl font-bold tracking-[-0.03em]">{view.product.name}</h1>

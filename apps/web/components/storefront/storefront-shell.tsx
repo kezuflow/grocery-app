@@ -119,7 +119,7 @@ export function MobileNavigation() {
           <Link
             key={label}
             href={href}
-            className="flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-primary-dark)]"
+            className="flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] font-medium text-[var(--fm-text-muted)]! hover:text-[var(--fm-storefront-accent)]!"
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             {label}

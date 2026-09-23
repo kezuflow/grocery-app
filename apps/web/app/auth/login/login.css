@@ -76,7 +76,7 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  color: var(--fm-primary-dark);
+  color: var(--fm-storefront-accent);
 }
 
 @media (max-width: 480px) {

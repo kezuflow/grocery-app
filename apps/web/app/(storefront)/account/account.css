@@ -43,7 +43,7 @@
   width: 24px;
   height: 24px;
   margin-bottom: 20px;
-  color: var(--fm-primary-dark);
+  color: var(--fm-storefront-accent);
 }
 .fm-account-tile h2 {
   font-size: 18px;
@@ -83,7 +83,7 @@
   min-height: 44px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--fm-primary-dark);
+  color: var(--fm-storefront-accent);
 }
 .fm-account-row {
   display: flex;

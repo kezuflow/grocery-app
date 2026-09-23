@@ -746,7 +746,7 @@ export function AddressEditor({
     >
       {wizard && (
         <div className="border-b border-[var(--fm-border)] pb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-primary-dark)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-storefront-accent)]">
             Step {step} of 2
           </p>
           <h2
@@ -1008,7 +1008,7 @@ export function AddressEditor({
                   aria-live="polite"
                   className={
                     serviceability.serviceable
-                      ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                      ? "rounded-lg bg-[var(--fm-success-soft)] p-3 text-sm text-[var(--fm-storefront-accent)]"
                       : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
                   }
                 >
@@ -1248,7 +1248,7 @@ export function AddressEditor({
                     aria-live="polite"
                     className={
                       serviceability.serviceable
-                        ? "rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                        ? "rounded-lg bg-[var(--fm-success-soft)] p-3 text-sm text-[var(--fm-storefront-accent)]"
                         : "rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
                     }
                   >
@@ -1304,7 +1304,7 @@ export function AddressEditor({
             >
               {selectedDisplayAddress ? (
                 <div className="flex items-start gap-3 border-y border-[var(--fm-border)] py-4">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--fm-storefront-accent)] shadow-sm">
                     <MapPin className="size-4" aria-hidden="true" />
                   </span>
                   <div className="min-w-0 flex-1">

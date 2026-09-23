@@ -43,7 +43,7 @@ export default function CartPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
-            className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--fm-primary-dark)] underline underline-offset-4"
+            className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--fm-storefront-accent)]! underline underline-offset-4"
           >
             Continue shopping
           </Link>
@@ -93,7 +93,7 @@ export default function CartPage() {
               </div>
             ) : !displayItems.length ? (
               <div className="mt-6 flex min-h-72 flex-col items-center justify-center rounded-[var(--fm-radius-surface)] border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-6 text-center">
-                <span className="flex size-14 items-center justify-center rounded-full bg-white text-[var(--fm-primary-dark)] shadow-sm">
+                <span className="flex size-14 items-center justify-center rounded-full bg-white text-[var(--fm-storefront-accent)] shadow-sm">
                   <ShoppingBasket className="size-7" aria-hidden="true" />
                 </span>
                 <h2 className="mt-4 text-xl font-bold">Your cart is empty</h2>
@@ -109,7 +109,7 @@ export default function CartPage() {
                     aria-busy={quantityQueue.pending.has(item.skuId)}
                     className="flex gap-4 border-b border-[var(--fm-border)] p-4 last:border-b-0 sm:p-5"
                   >
-                    <div className="flex size-20 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-primary-dark)]">
+                    <div className="flex size-20 shrink-0 items-center justify-center rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] text-[var(--fm-storefront-accent)]">
                       <ProductMedia
                         media={item.media ?? null}
                         name={item.name}

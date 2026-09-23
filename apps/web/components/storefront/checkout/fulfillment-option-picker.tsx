@@ -86,8 +86,8 @@ export function FulfillmentOptionPicker({
           className={cn(
             "group flex min-h-20 w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-[color,opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] first:pt-2 last:pb-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55 disabled:active:scale-100",
             selectedOptionId === option.optionId
-              ? "text-[var(--fm-primary-dark)]"
-              : "text-[var(--fm-text)] hover:text-[var(--fm-primary-dark)]",
+              ? "text-[var(--fm-storefront-accent)]"
+              : "text-[var(--fm-text)] hover:text-[var(--fm-storefront-accent)]",
           )}
         >
           <DeliveryPartnerIcon code={option.deliveryPartner?.code} />

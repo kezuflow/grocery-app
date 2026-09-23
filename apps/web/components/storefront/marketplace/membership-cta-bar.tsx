@@ -77,7 +77,7 @@ export function MembershipCtaBar({
 
         <Link
           href="/account"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-[var(--fm-radius-control)] bg-white px-2 text-[11px] font-bold text-[var(--fm-primary-dark)] transition-colors hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4 sm:text-sm"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-[var(--fm-radius-control)] bg-white px-2 text-[11px] font-bold text-[var(--fm-primary-dark)]! transition-colors hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4 sm:text-sm"
         >
           {trialAvailable ? "Review introductory trial" : "Review membership"}
         </Link>

@@ -97,7 +97,10 @@ export function OrderSummary({
             {itemCount} {itemCount === 1 ? "item" : "items"}
           </span>
         ) : (
-          <ShoppingBasket className="size-5 text-[var(--fm-primary-dark)]" aria-hidden="true" />
+          <ShoppingBasket
+            className="size-5 text-[var(--fm-storefront-accent)]"
+            aria-hidden="true"
+          />
         )}
       </div>
 
@@ -207,7 +210,7 @@ export function OrderSummary({
                 key={`${entry.code}-${entry.status}`}
                 className={
                   entry.status === "APPLIED"
-                    ? "text-[var(--fm-success)]"
+                    ? "text-[var(--fm-storefront-accent)]"
                     : "text-[var(--fm-text-muted)]"
                 }
               >
@@ -255,7 +258,7 @@ export function OrderSummary({
                 <span>Item discounts</span>
                 <span
                   className={cn(
-                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-storefront-accent)]",
                     resolvedValueClass,
                   )}
                 >
@@ -268,7 +271,7 @@ export function OrderSummary({
                 <span>Order discount</span>
                 <span
                   className={cn(
-                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-storefront-accent)]",
                     resolvedValueClass,
                   )}
                 >
@@ -292,7 +295,7 @@ export function OrderSummary({
                 <span>Delivery discount</span>
                 <span
                   className={cn(
-                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-success)]",
+                    "min-w-[5.5rem] text-right font-medium tabular-nums text-[var(--fm-storefront-accent)]",
                     resolvedValueClass,
                   )}
                 >
@@ -352,7 +355,10 @@ export function OrderSummary({
             : "rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3",
         )}
       >
-        <Info className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-dark)]" aria-hidden="true" />
+        <Info
+          className="mt-0.5 size-4 shrink-0 text-[var(--fm-storefront-accent)]"
+          aria-hidden="true"
+        />
         <span>
           {note ??
             (quote
@@ -378,7 +384,7 @@ export function OrderSummary({
           aria-disabled={disabled}
           style={actionTextStyle}
           className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white active:scale-[0.985]",
+            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white! transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white! active:scale-[0.985]",
             disabled && "pointer-events-none opacity-50",
             actionTextClassName,
           )}

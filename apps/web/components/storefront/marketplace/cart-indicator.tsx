@@ -23,7 +23,7 @@ export function CartIndicator() {
         event.preventDefault();
         window.dispatchEvent(new Event(CART_DRAWER_REQUEST_EVENT));
       }}
-      className="relative inline-flex h-11 items-center rounded-full p-2.5 text-sm font-semibold text-[var(--fm-text)] transition-colors hover:text-[var(--fm-primary-dark)]"
+      className="relative inline-flex h-11 items-center rounded-full p-2.5 text-sm font-semibold text-[var(--fm-text)] transition-colors hover:text-[var(--fm-storefront-accent)]"
     >
       <span className="relative inline-flex">
         <ShoppingCart className="size-6" aria-hidden="true" />

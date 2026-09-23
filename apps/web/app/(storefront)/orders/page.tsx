@@ -193,7 +193,7 @@ export default function OrdersPage() {
                   value === "all" ? "/orders" : `/orders?filter=${value}`,
                 );
               }}
-              className={`rounded-full border px-4 py-2 text-sm font-medium ${filter === value ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-600"}`}
+              className={`rounded-full border px-4 py-2 text-sm font-medium ${filter === value ? "border-[var(--fm-storefront-accent)] bg-[var(--fm-success-soft)] text-[var(--fm-storefront-accent)]" : "border-slate-200 bg-white text-slate-600"}`}
             >
               {value === "incomplete" ? "Needs payment" : value[0].toUpperCase() + value.slice(1)}
             </button>
@@ -207,7 +207,7 @@ export default function OrdersPage() {
                 return (
                   <article
                     key={item.paymentIntentId}
-                    className={`rounded-lg border bg-white p-5 ${selected ? "border-emerald-700 ring-2 ring-emerald-100" : ""}`}
+                    className={`rounded-lg border bg-white p-5 ${selected ? "border-[var(--fm-storefront-accent)] ring-2 ring-[var(--fm-success-border)]" : ""}`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>

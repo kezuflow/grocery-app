@@ -51,7 +51,7 @@ export function AddressList({
         <div className="flex items-start gap-3">
           <span
             className={cn(
-              "grid size-10 shrink-0 place-items-center text-[var(--fm-primary-dark)]",
+              "grid size-10 shrink-0 place-items-center text-[var(--fm-storefront-accent)]",
               !flat && "rounded-full bg-white shadow-sm",
             )}
           >
@@ -126,8 +126,8 @@ export function AddressList({
                     ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
                     : available
                       ? flat
-                        ? "border-[var(--fm-border)] bg-transparent text-[var(--fm-primary-dark)]"
-                        : "border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)]"
+                        ? "border-[var(--fm-border)] bg-transparent text-[var(--fm-storefront-accent)]"
+                        : "border-[var(--fm-border)] bg-white text-[var(--fm-storefront-accent)]"
                       : flat
                         ? "border-[var(--fm-warning-border)] bg-transparent text-amber-800"
                         : "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] text-amber-800",
@@ -168,7 +168,7 @@ export function AddressList({
                   role="status"
                   className={cn(
                     "mt-3 inline-flex items-center gap-1.5 text-xs font-semibold",
-                    available ? "text-[var(--fm-success)]" : "text-amber-800",
+                    available ? "text-[var(--fm-storefront-accent)]" : "text-amber-800",
                   )}
                 >
                   <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
@@ -183,7 +183,7 @@ export function AddressList({
               className={cn(
                 "mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-semibold transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]",
                 flat
-                  ? "text-[var(--fm-primary-dark)] underline underline-offset-4"
+                  ? "text-[var(--fm-storefront-accent)] underline underline-offset-4"
                   : "rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white px-3",
               )}
             >

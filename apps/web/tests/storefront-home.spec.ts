@@ -135,7 +135,7 @@ test("a product card opens the quick-view dialog with fixed variants", async ({ 
   await expect(dialog.getByRole("radio", { name: /1 kg/ })).not.toBeChecked();
 });
 
-test("filled storefront actions use the reference green without recoloring browse controls", async ({
+test("storefront actions and text accents use the reference green without recoloring browse controls", async ({
   page,
 }) => {
   await page.goto("/");
@@ -150,15 +150,25 @@ test("filled storefront actions use the reference green without recoloring brows
     "color",
     "rgb(255, 255, 255)",
   );
+  await expect(dialog.getByText("Available for delivery")).toHaveCSS("color", "rgb(0, 177, 79)");
 
   await page.goto("/retail");
   await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
     "background-color",
     "rgb(0, 177, 79)",
   );
+  await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Next Fruits products" })).not.toHaveCSS(
     "background-color",
+    "rgb(0, 177, 79)",
+  );
+  await page.goto("/?q=zzznothing");
+  await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
+    "color",
     "rgb(0, 177, 79)",
   );
 });

@@ -80,7 +80,7 @@ export function AddToCartButton({
       aria-busy={pending}
       aria-label={pending ? `Adding ${productName} to cart` : `Add ${productName} to cart`}
       className={cn(
-        "inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white text-[var(--fm-primary-dark)] shadow-sm transition-[background-color,border-color,transform] duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:border-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)] active:scale-[0.97] disabled:active:scale-100 disabled:opacity-60 motion-reduce:active:scale-100",
+        "inline-flex size-10 items-center justify-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-white text-[var(--fm-storefront-accent)] shadow-sm transition-[background-color,border-color,transform] duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:border-[var(--fm-storefront-accent)] hover:bg-[var(--fm-hover)] active:scale-[0.97] disabled:active:scale-100 disabled:opacity-60 motion-reduce:active:scale-100",
         className,
       )}
     >

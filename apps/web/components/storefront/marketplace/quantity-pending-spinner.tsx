@@ -6,7 +6,7 @@ export function QuantityPendingSpinner() {
     <span
       role="status"
       aria-label="Updating quantity"
-      className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--fm-primary-dark)]"
+      className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--fm-storefront-accent)]"
     >
       <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
     </span>

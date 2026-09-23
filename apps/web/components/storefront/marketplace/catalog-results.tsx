@@ -52,7 +52,7 @@ export function CatalogResults({
         <button
           type="button"
           onClick={() => void result.refetch()}
-          className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)]"
+          className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-storefront-accent)] hover:bg-[var(--fm-hover)]"
         >
           Try again
         </button>
@@ -95,7 +95,7 @@ export function CatalogResults({
             <button
               type="button"
               onClick={() => void result.fetchNextPage()}
-              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)]"
+              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-5 text-sm font-semibold text-[var(--fm-storefront-accent)] hover:bg-[var(--fm-hover)]"
             >
               Try again
             </button>

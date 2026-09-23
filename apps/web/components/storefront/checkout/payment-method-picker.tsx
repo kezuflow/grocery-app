@@ -148,7 +148,7 @@ export function PaymentMethodPicker({
               onClick={() => setActiveCategory(category.id)}
               className={`min-h-10 rounded-[var(--fm-radius-control)] border px-3 py-2 text-sm font-semibold transition-[border-color,background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100 ${
                 active
-                  ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] text-[var(--fm-primary-dark)]"
+                  ? "border-[var(--fm-primary-dark)] bg-[var(--fm-hover)] text-[var(--fm-storefront-accent)]"
                   : "border-[var(--fm-border)] bg-white text-[var(--fm-text)]"
               } disabled:bg-[var(--fm-surface-soft)] disabled:text-slate-400 disabled:opacity-65`}
             >
@@ -181,7 +181,7 @@ export function PaymentMethodPicker({
                 disabled={!method.available}
                 onClick={() => onSelect({ kind: "TOKEN", value: method.value })}
                 className={`flex min-h-20 w-full items-center gap-4 px-3 py-3 text-left transition-[background-color,color,opacity,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fm-primary-dark)] active:scale-[0.99] disabled:cursor-not-allowed disabled:active:scale-100 ${
-                  checked ? "bg-[var(--fm-hover)] text-[var(--fm-primary-dark)]" : "bg-white"
+                  checked ? "bg-[var(--fm-hover)] text-[var(--fm-storefront-accent)]" : "bg-white"
                 } disabled:text-slate-400 disabled:opacity-65`}
               >
                 <span
