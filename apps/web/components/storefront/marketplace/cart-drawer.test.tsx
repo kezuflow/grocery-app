@@ -772,7 +772,18 @@ it("confirms before clearing every cart line through one authoritative mutation"
   await vi.waitFor(() =>
     expect(cartDialog?.querySelector('[aria-label="Remove SAVE10 promotion code"]')).not.toBeNull(),
   );
-  expect(cartDialog?.textContent).toContain("eligibility pending checkout");
+  const removeVoucher = cartDialog?.querySelector<HTMLButtonElement>(
+    '[aria-label="Remove SAVE10 promotion code"]',
+  );
+  expect(removeVoucher?.textContent).toBe("");
+  expect(removeVoucher?.parentElement?.className).toContain("border-dashed");
+  expect(cartDialog?.textContent).not.toContain(
+    "SAVE10 added. Review the total to check eligibility.",
+  );
+  await act(async () => removeVoucher?.click());
+  await vi.waitFor(() =>
+    expect(cartDialog?.querySelector('[aria-label="Remove SAVE10 promotion code"]')).toBeNull(),
+  );
 
   await act(async () => {
     [...(cartDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])]

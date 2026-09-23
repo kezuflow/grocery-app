@@ -1,6 +1,6 @@
 "use client";
 
-import { TicketPercent } from "lucide-react";
+import { LoaderCircle, TicketPercent, X } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import type { PromotionCodeFeedback } from "@freshmarkets/contracts";
 import { promotionCodeMaxLength } from "@freshmarkets/validation";
@@ -52,6 +52,7 @@ export function PromotionEntry({
       return;
     }
     try {
+      setLocalStatus("");
       setPendingAction(`add:${normalized}`);
       if ((await onAdd(normalized)) === false) {
         setLocalStatus("The code was not added. Release the current checkout and try again.");
@@ -64,7 +65,6 @@ export function PromotionEntry({
       setPendingAction("");
     }
     input.value = "";
-    setLocalStatus(`${normalized} added. Review the total to check eligibility.`);
   }
 
   return (
@@ -140,22 +140,26 @@ export function PromotionEntry({
           {codes.map((code) => (
             <li
               key={code}
+              aria-busy={pendingAction === `remove:${code}`}
               className={cn(
-                "inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold",
-                flat
-                  ? "border border-[var(--fm-border)] bg-transparent"
-                  : "bg-[var(--fm-surface-soft)]",
+                "inline-flex max-w-full items-stretch overflow-hidden rounded-[var(--fm-radius-control)] border border-dashed border-[var(--fm-primary-dark)] text-[var(--fm-primary-dark)]",
+                flat ? "bg-transparent" : "bg-[var(--fm-surface-soft)]",
               )}
             >
-              <span className="min-w-0 break-all">{code}</span>
+              <span className="flex min-w-0 items-center gap-2 px-3 py-2">
+                <TicketPercent className="size-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 break-all font-mono text-xs font-bold tracking-wide">
+                  {code}
+                </span>
+              </span>
               <button
                 type="button"
                 aria-label={`Remove ${code} promotion code`}
                 onClick={async () => {
+                  setLocalStatus("");
                   setPendingAction(`remove:${code}`);
                   try {
                     await onRemove(code);
-                    setLocalStatus(`${code} removed.`);
                   } catch {
                     setLocalStatus(`${code} could not be removed. Try again.`);
                   } finally {
@@ -163,13 +167,17 @@ export function PromotionEntry({
                   }
                 }}
                 disabled={disabled || Boolean(pendingAction)}
-                className="underline underline-offset-2 disabled:opacity-50"
+                className="grid size-11 shrink-0 place-items-center border-l border-dashed border-[var(--fm-primary-dark)] hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--fm-focus)] disabled:cursor-wait disabled:opacity-50"
               >
-                {pendingAction === `remove:${code}` ? "Removing…" : "Remove"}
+                {pendingAction === `remove:${code}` ? (
+                  <LoaderCircle
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <X className="size-4" aria-hidden="true" />
+                )}
               </button>
-              {compact ? (
-                <span className="sr-only">Added; eligibility pending checkout.</span>
-              ) : null}
             </li>
           ))}
         </ul>
@@ -177,7 +185,10 @@ export function PromotionEntry({
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="mt-3 space-y-1 text-sm [overflow-wrap:anywhere]"
+        className={cn(
+          "space-y-1 text-sm [overflow-wrap:anywhere]",
+          localStatus || feedback.length ? "mt-3" : "sr-only",
+        )}
       >
         {localStatus ? <p>{localStatus}</p> : null}
         {feedback.map((entry) => (

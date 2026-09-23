@@ -18,6 +18,8 @@ describe("PromotionEntry", () => {
     expect(html).toContain('type="submit"');
     expect(html).toContain("SAVE10");
     expect(html).toContain('aria-label="Remove SAVE10 promotion code"');
+    expect(html).toContain("border-dashed");
+    expect(html).not.toContain(">Remove</button>");
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain("Promotion applied");
   });
@@ -77,6 +79,7 @@ describe("PromotionEntry", () => {
     expect(inputIds).toHaveLength(2);
     expect(new Set(inputIds).size).toBe(2);
     expect(html).toContain("Eligibility is checked with your delivery total at checkout.");
-    expect(html).toContain("Added; eligibility pending checkout.");
+    expect(html).not.toContain("Added; eligibility pending checkout.");
+    expect(html).toContain('aria-live="polite"');
   });
 });
