@@ -1,5 +1,47 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-ACTION-GREEN-PROD-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-ACTION-GREEN-PROD-1`. Acceptance: deploy the verified
+storefront button-color source to production Web only, preserve the production Core binding and
+unrelated in-progress work, and verify published health and button appearance. This request
+authorizes Web deployment, not Core/D1 migration, provider transaction, customer write or remote
+resource reset.
+
+Started from synchronized `main`/`origin/main` at `2c6deefd`, with an unrelated order-detail task
+editing the shared checkout. An isolated clean release worktree at source `2c6deefd` contained
+only the button-color source `58c0aa2a` and documentation since the prior Web release; later
+customer-timeline commits and uncommitted cancellation work were excluded. The generated production
+configuration targeted `freshmarkets-web-production` and `freshmarkets.ph`, retained
+`freshmarkets-core-production#CoreEntrypoint`, `aws:ap-southeast-1`, production origin, logs and
+traces. The three required Web secret binding names were present remotely; no values were read.
+Before release, version `5509bfff-933e-40be-875b-689f010a8320` had 100% traffic.
+
+On clean release source `2c6deefd`, `pnpm --filter @freshmarkets/web typecheck` passed, Web tests
+passed **661/661**, `check:vinext` reported **16 supported/0 issues**, and
+`CLOUDFLARE_ENV=production pnpm --filter @freshmarkets/web build` passed. Generated-config
+Wrangler `deploy --dry-run` exited zero. Build-time warnings named missing local secrets; the
+remote production binding names were checked separately. Before and after deployment, the Web
+homepage, Web `/health`, Web `/api/core-health`, Core `/health` and Core `/ready` returned HTTP 200;
+Core readiness reported `ready`. The Web-only deployment succeeded as version
+`1c7f22c2-294b-4601-a6c8-0f6b91d72f32` at **100% traffic**. A read-only Playwright test against
+`https://freshmarkets.ph` passed **1/1**, confirming live quick-view Add and Retail CTA backgrounds
+`rgb(0, 177, 79)`, a white Add label and unchanged product-rail browse control. No Core Worker, D1,
+provider, payment, customer-data or outbound-message operation was performed.
+
+Release commands used the isolated checkout: `pnpm --filter @freshmarkets/web exec wrangler deploy
+--config dist/server/wrangler.json --dry-run`, then the same deploy with `--strict --message` for
+the Web-only upload. Published browser verification used `APP_BASE_URL=https://freshmarkets.ph`
+with `pnpm --filter @freshmarkets/web test:e2e -- tests/storefront-home.spec.ts --grep 'reference
+green' --workers=1 --retries=0`. No managed local stack or production mutation fixture was run.
+
+Completion level: **1 of 1 requested Web deployments complete with published button-color
+acceptance**; Phase 7 provider/journey acceptance remains open. The exact white-on-green choice
+still has about 2.84:1 text contrast, and the previously observed 320px product-row heading
+overflow remains separate. Next action: address and browser-verify that 320px heading overflow in
+a separately authorized source slice before claiming narrow-phone storefront completion.
+
 ## Latest owner request — CUSTOMER-ORDER-TIMELINE-CLARITY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
