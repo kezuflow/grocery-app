@@ -7,6 +7,7 @@ import { Minus, Plus, X } from "lucide-react";
 import { ProductMedia } from "../product-media";
 import { ProductGallery } from "../product-gallery";
 import { ProductPrice } from "../product-price";
+import { Button } from "../../ui/button";
 import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { formatMoney, toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
@@ -146,15 +147,15 @@ export function ProductQuickView({
         if (event.target === dialogRef.current) onClose();
       }}
       aria-label={presentation ? `${presentation.name} details` : "Product details"}
-      className="m-auto w-full max-w-3xl bg-transparent p-0 backdrop:bg-black/45"
+      className="m-auto w-[calc(100%-2rem)] max-w-3xl overflow-visible border-0 bg-transparent p-0 backdrop:bg-black/45"
     >
-      <div className="grid max-h-[85vh] overflow-y-auto rounded-[var(--fm-radius-overlay)] bg-white shadow-[var(--fm-shadow-popover)]">
+      <div className="grid max-h-[min(85dvh,800px)] overflow-hidden rounded-[var(--fm-radius-overlay)] bg-white shadow-[var(--fm-shadow-overlay)]">
         {showLoadingLayer || loading ? (
           <div
             data-loading={loading}
             inert={!loading}
             aria-hidden={!loading}
-            className="fm-quick-view-loading relative z-10 col-start-1 row-start-1 min-h-80 space-y-4 bg-white p-6"
+            className="fm-quick-view-loading relative z-10 col-start-1 row-start-1 min-h-0 space-y-4 overflow-y-auto bg-white p-6"
             aria-label="Loading product"
             aria-busy="true"
           >
@@ -184,7 +185,7 @@ export function ProductQuickView({
         {!loading && !presentation ? (
           <div
             role="alert"
-            className="fm-quick-view-reveal col-start-1 row-start-1 bg-white p-8 text-center"
+            className="fm-quick-view-reveal col-start-1 row-start-1 min-h-0 overflow-y-auto bg-white p-8 text-center"
           >
             <h2 className="text-lg font-bold">Product unavailable</h2>
             <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
@@ -197,16 +198,12 @@ export function ProductQuickView({
             >
               Try again
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-semibold text-white"
-            >
+            <Button type="button" onClick={onClose} className="mt-4 min-h-11">
               Close
-            </button>
+            </Button>
           </div>
         ) : !loading && presentation ? (
-          <div className="fm-quick-view-reveal col-start-1 row-start-1 bg-white">
+          <div className="fm-quick-view-reveal col-start-1 row-start-1 flex min-h-0 max-h-[min(85dvh,800px)] flex-col overflow-hidden bg-white">
             <div className="flex items-center justify-between border-b border-[var(--fm-border)] px-5 py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                 {presentation.categoryName}
@@ -220,14 +217,14 @@ export function ProductQuickView({
                 <X className="size-5" aria-hidden="true" />
               </button>
             </div>
-            <div className="grid gap-6 p-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:p-6">
-              <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-4">
+            <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-6 overflow-y-auto overscroll-contain p-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] sm:p-6">
+              <div className="mx-auto w-full max-w-[184px] self-start rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-3 sm:max-w-none">
                 <ProductGallery
                   images={view?.images ?? (presentation.media ? [presentation.media] : [])}
                   name={presentation.name}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-[32px] leading-[42px] font-semibold">{presentation.name}</h2>
                 <p
                   className={cn(
@@ -326,11 +323,14 @@ export function ProductQuickView({
                           onClick={() => onNavigate(product.slug)}
                           className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
                         >
-                          <div aria-hidden="true">
+                          <div
+                            aria-hidden="true"
+                            className="overflow-hidden rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)]"
+                          >
                             <ProductMedia
                               media={product.media}
                               name={product.name}
-                              className="rounded-[var(--fm-radius-control)]"
+                              className="rounded-[var(--fm-radius-surface)] p-1"
                             />
                           </div>
                           <span className="mt-1 block line-clamp-2 text-xs font-semibold">
@@ -358,7 +358,7 @@ export function ProductQuickView({
                 </Link>
               </div>
             </div>
-            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 sm:px-6">
               <div className="inline-flex h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
                 <button
                   type="button"
@@ -383,7 +383,7 @@ export function ProductQuickView({
                   <Plus className="size-4" aria-hidden="true" />
                 </button>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={() => void add()}
                 disabled={
@@ -392,14 +392,14 @@ export function ProductQuickView({
                   selected.priceMinor === null ||
                   selected.availability !== "AVAILABLE"
                 }
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-4 text-sm font-bold text-[var(--fm-primary-dark)] transition-[background-color,transform] duration-(--fm-motion-fast) ease-(--fm-ease-out) hover:bg-[#a9e83f] active:scale-[0.97] disabled:active:scale-100 disabled:opacity-60 motion-reduce:active:scale-100 sm:flex-none sm:px-6"
+                className="h-11 min-w-0 flex-1 px-4 font-bold sm:flex-none sm:px-6"
               >
                 {selected?.sale
                   ? "Add to cart · Check current savings"
                   : selected && selected.priceMinor !== null && selected.currency
                     ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
                     : "Add to cart"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}

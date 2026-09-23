@@ -15,7 +15,7 @@ export default function MeatPage() {
         </p>
         <Link
           href="/?category=all"
-          className="mt-6 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-lime)] px-5 font-semibold text-[var(--fm-primary-dark)]"
+          className="mt-6 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 font-semibold text-white transition-colors hover:bg-[var(--fm-primary-hover)]"
         >
           Browse all groceries
         </Link>

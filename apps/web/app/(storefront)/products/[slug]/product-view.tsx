@@ -73,7 +73,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
 
   return (
     <div className="grid gap-8 md:grid-cols-[1fr_1.1fr]">
-      <div className="rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
+      <div className="self-start rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)] p-6">
         <ProductGallery
           images={view.images ?? (view.product.media ? [view.product.media] : [])}
           name={view.product.name}
@@ -154,7 +154,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
                 type="button"
                 aria-label="Decrease quantity"
                 onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                className="inline-flex size-10 items-center justify-center hover:bg-[var(--fm-hover)]"
+                className="inline-flex size-10 items-center justify-center rounded-l-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
               >
                 <Minus className="size-4" aria-hidden="true" />
               </button>
@@ -168,7 +168,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
                 type="button"
                 aria-label="Increase quantity"
                 onClick={() => setQuantity((current) => Math.min(99, current + 1))}
-                className="inline-flex size-10 items-center justify-center hover:bg-[var(--fm-hover)]"
+                className="inline-flex size-10 items-center justify-center rounded-r-[var(--fm-radius-control)] hover:bg-[var(--fm-hover)]"
               >
                 <Plus className="size-4" aria-hidden="true" />
               </button>
@@ -177,6 +177,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
           <Button
             type="button"
             onClick={() => void add()}
+            className="min-h-11 font-bold"
             disabled={
               !selectedVariant ||
               selectedPrice === null ||

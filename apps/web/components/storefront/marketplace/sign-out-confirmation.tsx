@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
 } from "../../ui/alert-dialog";
+import { Button } from "../../ui/button";
 
 export function SignOutConfirmation({
   open,
@@ -64,26 +65,27 @@ export function SignOutConfirmation({
           </p>
         )}
         <div className="flex justify-end gap-3">
-          <button
+          <Button
             ref={cancelRef}
             type="button"
+            variant="outline"
             disabled={busy}
             onClick={() => {
               setError("");
               onOpenChange(false);
             }}
-            className="min-h-11 rounded-lg border px-4 text-sm font-semibold disabled:opacity-50"
+            className="min-h-11 font-semibold"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={busy}
             onClick={() => void confirm()}
-            className="min-h-11 rounded-lg bg-[var(--fm-primary-lime)] px-4 text-sm font-semibold disabled:opacity-50"
+            className="min-h-11 font-semibold"
           >
             {busy ? "Signing out…" : "Sign out"}
-          </button>
+          </Button>
         </div>
       </AlertDialogContent>
     </AlertDialog>
