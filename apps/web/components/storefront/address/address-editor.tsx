@@ -868,7 +868,7 @@ export function AddressEditor({
                       onClick={() => setSearchExpanded((current) => !current)}
                       className={`inline-flex size-11 shrink-0 items-center justify-center rounded-full border shadow-md transition-[transform,background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
                         searchExpanded
-                          ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
+                          ? "border-[var(--fm-storefront-action)] bg-[var(--fm-storefront-action)] text-white"
                           : "border-white/80 bg-white/95 text-[var(--fm-text)] backdrop-blur-sm"
                       }`}
                     >
@@ -1284,7 +1284,7 @@ export function AddressEditor({
                 type="button"
                 disabled={saveState === "saving" || serviceabilityState !== "ready"}
                 onClick={() => void confirmBrowsing()}
-                className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                className="rounded-lg bg-[var(--fm-storefront-action)] px-5 py-3 font-semibold text-white hover:bg-[var(--fm-storefront-action-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
               >
                 {saveState === "saving" ? "Confirming address…" : "Deliver here"}
               </button>
@@ -1354,7 +1354,7 @@ export function AddressEditor({
                       onClick={() => setLabel(shortcut)}
                       className={`min-h-11 rounded-full border px-4 text-sm font-semibold ${
                         label === shortcut
-                          ? "border-[var(--fm-primary-dark)] bg-[var(--fm-primary-dark)] text-white"
+                          ? "border-[var(--fm-storefront-action)] bg-[var(--fm-storefront-action)] text-white"
                           : "border-[var(--fm-border)] bg-white"
                       }`}
                     >
@@ -1469,7 +1469,7 @@ export function AddressEditor({
                 {step < 2 && (
                   <button
                     type="submit"
-                    className="ml-auto inline-flex min-h-12 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                    className="ml-auto inline-flex min-h-12 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] active:scale-[0.97]"
                   >
                     Continue
                     <ArrowRight className="size-4" aria-hidden="true" />
@@ -1479,7 +1479,7 @@ export function AddressEditor({
                   <button
                     type="submit"
                     disabled={saveState === "saving" || !coordinate || !confirmationSource}
-                    className="ml-auto inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+                    className="ml-auto inline-flex min-h-12 items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
                   >
                     {saveState === "saving"
                       ? "Saving address…"
@@ -1496,7 +1496,7 @@ export function AddressEditor({
               <button
                 type="submit"
                 disabled={saveState === "saving" || !coordinate || !confirmationSource}
-                className="flex items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+                className="flex items-center justify-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-5 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
               >
                 {saveState === "saving"
                   ? "Saving address…"
@@ -1514,7 +1514,7 @@ export function AddressEditor({
         <button
           type="submit"
           disabled={saveState === "saving"}
-          className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white"
+          className="rounded-lg bg-[var(--fm-storefront-action)] px-5 py-3 font-semibold text-white hover:bg-[var(--fm-storefront-action-hover)]"
         >
           {saveState === "saving" ? "Saving address…" : "Retry saving address"}
         </button>

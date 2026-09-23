@@ -80,6 +80,7 @@ export function SignOutConfirmation({
           </Button>
           <Button
             type="button"
+            variant="storefrontPrimary"
             disabled={busy}
             onClick={() => void confirm()}
             className="min-h-11 font-semibold"

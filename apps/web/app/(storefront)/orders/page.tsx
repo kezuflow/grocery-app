@@ -235,7 +235,7 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => continuePayment(item)}
-                          className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white"
+                          className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
                         >
                           Continue payment
                         </button>

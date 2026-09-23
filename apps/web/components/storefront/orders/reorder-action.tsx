@@ -73,7 +73,7 @@ export function ReorderAction({ orderId, available }: { orderId: string; availab
         type="button"
         onClick={reorder}
         disabled={!available || busy}
-        className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? "Checking current items…" : "Buy again"}
       </button>

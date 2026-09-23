@@ -12,7 +12,7 @@ export default function SeafoodPage() {
         </p>
         <Link
           href="/?category=all"
-          className="mt-6 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-5 font-semibold text-white transition-colors hover:bg-[var(--fm-primary-hover)]"
+          className="mt-6 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-5 font-semibold text-white transition-colors hover:bg-[var(--fm-storefront-action-hover)]"
         >
           Browse all groceries
         </Link>

@@ -176,6 +176,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
           </div>
           <Button
             type="button"
+            variant="storefrontPrimary"
             onClick={() => void add()}
             className="min-h-11 font-bold"
             disabled={

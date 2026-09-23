@@ -105,7 +105,7 @@ export function CatalogResults({
               onClick={() => void result.fetchNextPage()}
               disabled={result.isFetchingNextPage}
               data-testid="load-more"
-              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-6 text-sm font-bold text-white disabled:opacity-60"
+              className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-6 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)] disabled:opacity-60"
             >
               {result.isFetchingNextPage ? "Loading…" : "Load more groceries"}
             </button>

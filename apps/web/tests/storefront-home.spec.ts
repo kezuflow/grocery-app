@@ -135,6 +135,34 @@ test("a product card opens the quick-view dialog with fixed variants", async ({ 
   await expect(dialog.getByRole("radio", { name: /1 kg/ })).not.toBeChecked();
 });
 
+test("filled storefront actions use the reference green without recoloring browse controls", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Baguio Strawberries details" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Add to cart/ })).toHaveCSS(
+    "background-color",
+    "rgb(0, 177, 79)",
+  );
+  await expect(dialog.getByRole("button", { name: /Add to cart/ })).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
+
+  await page.goto("/retail");
+  await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
+    "background-color",
+    "rgb(0, 177, 79)",
+  );
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Next Fruits products" })).not.toHaveCSS(
+    "background-color",
+    "rgb(0, 177, 79)",
+  );
+});
+
 test("anonymous add-to-cart saves the item and offers sign-in without redirecting", async ({
   page,
 }) => {

@@ -9,6 +9,8 @@ export const buttonVariants = cva(
       variant: {
         default:
           "bg-[var(--fm-primary-dark)] text-[var(--fm-primary-foreground)] hover:bg-[var(--fm-primary-hover)]",
+        storefrontPrimary:
+          "bg-[var(--fm-storefront-action)] text-white hover:bg-[var(--fm-storefront-action-hover)]",
         outline:
           "border border-[var(--fm-border)] bg-[var(--fm-background)] hover:bg-[var(--fm-hover)]",
         destructive: "bg-[var(--fm-destructive)] text-white hover:bg-[var(--fm-destructive-hover)]",

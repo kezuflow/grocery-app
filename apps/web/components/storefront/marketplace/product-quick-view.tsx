@@ -208,7 +208,12 @@ export function ProductQuickView({
             >
               Try again
             </button>
-            <Button type="button" onClick={onClose} className="mt-4 min-h-11">
+            <Button
+              type="button"
+              variant="storefrontPrimary"
+              onClick={onClose}
+              className="mt-4 min-h-11"
+            >
               Close
             </Button>
           </div>
@@ -395,6 +400,7 @@ export function ProductQuickView({
               </div>
               <Button
                 type="button"
+                variant="storefrontPrimary"
                 onClick={() => void add()}
                 aria-label={addLabel}
                 disabled={

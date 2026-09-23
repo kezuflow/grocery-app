@@ -952,7 +952,7 @@ export function CheckoutClient({
                 </p>
                 <Link
                   href="/auth/login?returnTo=/checkout"
-                  className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white hover:bg-[#294f30]"
+                  className="mt-4 inline-flex min-h-10 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
                 >
                   Sign in to continue
                 </Link>
@@ -1028,7 +1028,7 @@ export function CheckoutClient({
                         setEditingAddress(undefined);
                         setShowAddressEditor(true);
                       }}
-                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-3 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-3 text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] active:scale-[0.97]"
                     >
                       <Plus className="size-4" aria-hidden="true" />
                       <span className="hidden sm:inline">Add address</span>

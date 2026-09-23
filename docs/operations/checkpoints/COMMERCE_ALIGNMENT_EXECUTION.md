@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-ACTION-GREEN-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-ACTION-GREEN-1`. Acceptance: match the supplied
+Search-button reference on filled primary storefront actions, retain distinct Admin, secondary,
+destructive, icon-only and inverse-on-dark controls, and verify representative storefront behavior.
+The owner confirmed the exact visual match: sampled fill `#00B14F` with white labels. This source
+request does not authorize another production deployment.
+
+Started on synchronized `main`/`origin/main` at `50978b81` with a clean checkout. Added a scoped
+storefront action token and hover, an explicit shared Button variant, and applied them to storefront
+catalog/product, cart, checkout/address, order and availability actions. Admin's default Button
+variant and non-primary treatments remain unchanged. Updated the owning Design guide. The sampled
+white-on-green combination measures about **2.84:1** text contrast, below the 4.5:1 normal-text
+target; this is an owner-directed visual match, not accessibility acceptance.
+
+On the button-color working tree, Web typecheck passed, Web tests passed **661/661 across 158
+files**, `oxfmt --check apps/web docs/design/DESIGN.md` and `git diff --check` passed. A fresh
+isolated local Worker/D1 browser run passed the new focused Playwright test **1/1**: the quick-view
+Add action and Retail browse CTA computed to `rgb(0, 177, 79)`, the Add label stayed white, and a
+product-rail browse control did not acquire the action fill. `pnpm check` also passed, including
+**1716/1716 Core Worker/D1** tests and both builds, but a separate order-detail task began editing
+unrelated Core/Web/contract/Design files during that aggregate. Treat the aggregate as mixed
+workspace evidence, not an isolated button revision or actual provider acceptance. No provider,
+production, customer-data or deployment operation occurred. Preserve the order-detail task's
+uncommitted files and Design hunk when staging this slice.
+
+Completion level: **1 of 1 requested button-color source slice implemented and locally/browser
+verified; production release remains separate and Phase 7 provider acceptance remains open**. The
+previously observed 320px product-row heading overflow is unchanged. Next action: obtain explicit
+authorization for a Web-only release, then verify the published storefront actions on production.
+
 ## Latest owner request — STOREFRONT-RAIL-PROD-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

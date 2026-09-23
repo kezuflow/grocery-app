@@ -128,7 +128,7 @@ export function PromotionEntry({
           type="submit"
           disabled={disabled || Boolean(pendingAction) || codes.length >= MAX_PROMOTION_CODES}
           className={cn(
-            "rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
+            "rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] text-sm font-bold text-white transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
             compact ? "min-h-10 px-4" : "min-h-12 px-5",
           )}
         >

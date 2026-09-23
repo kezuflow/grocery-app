@@ -37,7 +37,7 @@ export function TransactionSummary({ summary }: { summary: ProvisionalTransactio
         <button
           type="button"
           onClick={() => window.print()}
-          className="transaction-summary-actions mt-4 min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 font-bold text-white"
+          className="transaction-summary-actions mt-4 min-h-11 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
         >
           Print transaction summary
         </button>

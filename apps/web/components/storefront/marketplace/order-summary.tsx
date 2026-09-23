@@ -378,7 +378,7 @@ export function OrderSummary({
           aria-disabled={disabled}
           style={actionTextStyle}
           className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] hover:text-white active:scale-[0.985]",
+            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white active:scale-[0.985]",
             disabled && "pointer-events-none opacity-50",
             actionTextClassName,
           )}
@@ -393,7 +393,7 @@ export function OrderSummary({
           disabled={disabled}
           style={actionTextStyle}
           className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-primary-dark)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[#294f30] hover:text-white active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-white disabled:active:scale-100",
+            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-white disabled:active:scale-100",
             actionTextClassName,
           )}
         >

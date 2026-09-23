@@ -138,6 +138,7 @@ export function OrderIssueForm({
       </div>
       <Button
         type="submit"
+        variant="storefrontPrimary"
         disabled={!available || state === "submitting" || !description.trim()}
         className="min-h-11"
       >
