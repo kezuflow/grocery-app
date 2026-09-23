@@ -17,6 +17,7 @@ function disabledMessage(reason: string | null): string {
   return (
     {
       CANCELLATION_WINDOW_CLOSED: "The cancellation window has closed.",
+      PACKING_STARTED: "Packing has started, so online cancellation is closed.",
       REFUND_EVIDENCE_REQUIRES_REVIEW:
         "Contact support to review the historical fee and earlier refunds before cancellation.",
       REFUND_ALREADY_IN_PROGRESS: "A refund is already being processed for this order.",
@@ -116,7 +117,13 @@ export function CancelOrderAction({
   if (!available && !unresolved)
     return (
       <div className="rounded-lg border border-[var(--fm-border)] p-3 text-sm">
-        <p className="font-semibold">Cancel order</p>
+        <button
+          type="button"
+          disabled
+          className="min-h-11 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-surface-soft)] px-4 font-bold text-[var(--fm-text-muted)] opacity-60"
+        >
+          Cancel order
+        </button>
         <p className="mt-1 text-[var(--fm-text-muted)]">{disabledMessage(disabledReason)}</p>
       </div>
     );

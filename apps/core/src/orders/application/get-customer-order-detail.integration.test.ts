@@ -268,6 +268,29 @@ describe("getCustomerOrderDetail", () => {
     });
   });
 
+  it("disables Scheduled customer cancellation once packing starts", async () => {
+    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true });
+    await env.DB.prepare(
+      "UPDATE fulfillment_record SET status='PACKING',version=version+1 WHERE order_id=?",
+    )
+      .bind(fixture.orderId)
+      .run();
+    const result = await getCustomerOrderDetail(env.DB, {
+      customerId: fixture.customerId,
+      orderId: fixture.orderId,
+      requestId: "detail-after-packing",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        cancellation: { requiredRefundMinor: null },
+        actions: expect.arrayContaining([
+          { action: "CANCEL", available: false, disabledReason: "PACKING_STARTED" },
+        ]),
+      },
+    });
+  });
+
   it.each([500, 28_500])(
     "previews only the remaining balance after %i was refunded",
     async (amount) => {

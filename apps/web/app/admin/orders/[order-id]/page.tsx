@@ -596,6 +596,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                       />
                     ) : null}
                   </dl>
+                  {order.fulfillment?.locationId ? (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button size="sm" variant="outline" asChild>
+                        <Link
+                          href={`/admin/fulfillment?orderId=${encodeURIComponent(order.orderId)}`}
+                          prefetch={false}
+                        >
+                          Update preparation
+                        </Link>
+                      </Button>
+                      {order.delivery ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link
+                            href={`/admin/delivery?orderId=${encodeURIComponent(order.orderId)}`}
+                            prefetch={false}
+                          >
+                            Manage delivery
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 

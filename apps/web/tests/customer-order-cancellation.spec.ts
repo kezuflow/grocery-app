@@ -97,8 +97,8 @@ test("confirms the Core refund preview and requests cancellation without optimis
 
   await page.goto("/orders/order-cancel");
   await expect(page.getByText("Refund if canceled now")).toBeVisible();
-  await expect(page.getByLabel("Order follow-up").getByText("₱1,000.00")).toBeVisible();
-  await expect(page.getByLabel("Order follow-up").getByText("₱25.00")).toBeVisible();
+  await expect(page.getByLabel("Order options").getByText("₱1,000.00")).toBeVisible();
+  await expect(page.getByLabel("Order options").getByText("₱25.00")).toBeVisible();
   await page.getByRole("button", { name: "Cancel order", exact: true }).click();
   await page.getByLabel("Reason for cancellation").fill("Plans changed");
   await page.getByRole("button", { name: "Confirm cancellation" }).click();

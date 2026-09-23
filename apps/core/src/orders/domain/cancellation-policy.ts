@@ -26,6 +26,7 @@ export type OrderCancellationPolicyInput = {
   grossPaidMinor: number;
   now: number;
   cutoffAt: number | null;
+  packingStarted: boolean;
 };
 
 const businessCancelableStates = new Set<OrderLifecycleState>([
@@ -58,7 +59,7 @@ export function decideOrderCancellation(input: OrderCancellationPolicyInput): Ca
       };
     if (input.mode === "SCHEDULED") {
       if (input.cutoffAt === null) return { allowed: false, code: "CUTOFF_EVIDENCE_MISSING" };
-      if (input.now >= input.cutoffAt)
+      if (input.now >= input.cutoffAt || input.packingStarted)
         return { allowed: false, code: "CANCELLATION_WINDOW_CLOSED" };
     }
     const retainedServiceFeeMinor = input.mode === "INSTANT" ? input.serviceFeeMinor : 0;

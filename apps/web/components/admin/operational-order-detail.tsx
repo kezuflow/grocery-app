@@ -131,6 +131,7 @@ export function OperationalOrderDetail({
       </div>
       {item.allowedActions.length ? (
         <div className="space-y-3">
+          <p className="text-sm font-semibold">Next preparation step</p>
           <Input
             aria-label="Fulfillment action reason"
             placeholder="Describe a shortage when reporting one"
@@ -142,7 +143,7 @@ export function OperationalOrderDetail({
               <Button
                 key={action}
                 size="sm"
-                variant={action === "MARK_PACKED" ? "default" : "outline"}
+                variant={action === item.allowedActions[0] ? "default" : "outline"}
                 disabled={pending}
                 onClick={() => onAction(action)}
               >

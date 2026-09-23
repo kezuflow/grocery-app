@@ -315,9 +315,16 @@ export async function requestOrderCancellation(
         "Historical fee/refund components require financial review before customer cancellation",
       );
     const snapshot = await database
-      .prepare("SELECT cutoff_at FROM order_fulfillment_snapshot WHERE order_id=?")
+      .prepare(`SELECT ofs.cutoff_at,
+        (f.status IN ('PACKING','PACKED','HANDED_OFF','COMPLETED') OR EXISTS (
+          SELECT 1 FROM audit_event event WHERE event.aggregate_type='fulfillment_record'
+          AND event.aggregate_id=ofs.order_id AND event.action='OPERATIONS.FULFILLMENT_ADVANCED'
+          AND CASE WHEN json_valid(event.after_json) THEN json_extract(event.after_json,'$.status') END='PACKING'
+        )) AS packing_started
+        FROM order_fulfillment_snapshot ofs
+        LEFT JOIN fulfillment_record f ON f.order_id=ofs.order_id WHERE ofs.order_id=?`)
       .bind(order.id)
-      .first<{ cutoff_at: number | null }>();
+      .first<{ cutoff_at: number | null; packing_started: number }>();
     const policy = decideOrderCancellation({
       actor,
       cause,
@@ -327,6 +334,7 @@ export async function requestOrderCancellation(
       grossPaidMinor: initialSet.grossPaidMinor,
       now: nowClock(),
       cutoffAt: snapshot?.cutoff_at ?? null,
+      packingStarted: Boolean(snapshot?.packing_started),
     });
     if (!policy.allowed) throwPolicy(policy.code);
     const refundSet = {
@@ -404,7 +412,16 @@ export async function requestOrderCancellation(
       statements.push(
         database
           .prepare(
-            "INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (SELECT 1 FROM order_fulfillment_snapshot WHERE order_id=? AND cutoff_at=? AND cutoff_at>?)",
+            `INSERT INTO commitment_abort(id) SELECT -20 WHERE NOT EXISTS (
+              SELECT 1 FROM order_fulfillment_snapshot ofs
+              LEFT JOIN fulfillment_record f ON f.order_id=ofs.order_id
+              WHERE ofs.order_id=? AND ofs.cutoff_at=? AND ofs.cutoff_at>?
+              AND (f.status IS NULL OR f.status IN ('NOT_STARTED','PICKING','READY_TO_PACK','SHORTED'))
+              AND NOT EXISTS (
+                SELECT 1 FROM audit_event event WHERE event.aggregate_type='fulfillment_record'
+                AND event.aggregate_id=ofs.order_id AND event.action='OPERATIONS.FULFILLMENT_ADVANCED'
+                AND CASE WHEN json_valid(event.after_json) THEN json_extract(event.after_json,'$.status') END='PACKING'
+              ))`,
           )
           .bind(order.id, snapshot?.cutoff_at ?? null, now),
       );

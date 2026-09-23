@@ -148,7 +148,7 @@ export default function FulfillmentPage() {
     <div className="w-full space-y-6">
       <PageHeader
         title="Fulfillment"
-        description="Accept paid orders, pick items and complete packing. Accepting an Instant order closes customer cancellation; Scheduled cancellation closes at cutoff."
+        description="Accept paid orders, finish picking, start packing and finish packing. Instant cancellation closes at acceptance; Scheduled cancellation closes at packing or cutoff, whichever comes first."
       />
       {orderId ? (
         <Link href="/admin/fulfillment" className="text-sm underline">

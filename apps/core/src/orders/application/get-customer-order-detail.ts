@@ -181,6 +181,11 @@ export async function getCustomerOrderDetail(
               (SELECT revision.promised_at FROM delivery_promise_revision revision JOIN delivery_job job ON job.id=revision.delivery_job_id WHERE job.order_id=ofs.order_id ORDER BY revision.job_version DESC LIMIT 1) AS agreedDeliveryAt,
               window.name AS windowName,window.timezone AS windowTimezone,window.starts_at AS windowStartsAt,window.ends_at AS windowEndsAt,
               f.status AS fulfillmentStatus, f.updated_at AS fulfillmentUpdatedAt,
+              (f.status IN ('PACKING','PACKED','HANDED_OFF','COMPLETED') OR EXISTS (
+                SELECT 1 FROM audit_event event WHERE event.aggregate_type='fulfillment_record'
+                AND event.aggregate_id=o.id AND event.action='OPERATIONS.FULFILLMENT_ADVANCED'
+                AND CASE WHEN json_valid(event.after_json) THEN json_extract(event.after_json,'$.status') END='PACKING'
+              )) AS packingStarted,
               d.id AS deliveryId, d.status AS deliveryStatus, d.updated_at AS deliveryUpdatedAt,
               EXISTS(SELECT 1 FROM order_payment_reaction opr
                      WHERE opr.order_id=o.id AND opr.checkout_quote_id IS NOT NULL) AS hasQuote
@@ -220,6 +225,7 @@ export async function getCustomerOrderDetail(
       agreedDeliveryAt: number | null;
       fulfillmentStatus: string | null;
       fulfillmentUpdatedAt: number | null;
+      packingStarted: number;
       deliveryId: string | null;
       deliveryStatus: string | null;
       deliveryUpdatedAt: number | null;
@@ -427,6 +433,7 @@ export async function getCustomerOrderDetail(
           grossPaidMinor: initialRefundSet.grossPaidMinor,
           now: Date.now(),
           cutoffAt: row.cutoffAt,
+          packingStarted: Boolean(row.packingStarted),
         })
       : null;
   const cancellation: CustomerOrderDetailView["cancellation"] = cancellationRow
@@ -453,11 +460,13 @@ export async function getCustomerOrderDetail(
         ? "REFUND_EVIDENCE_REQUIRES_REVIEW"
         : cancellationDecision?.allowed
           ? null
-          : cancellationDecision?.code === "CANCELLATION_WINDOW_CLOSED"
-            ? "CANCELLATION_WINDOW_CLOSED"
-            : cancellationDecision?.code === "CUTOFF_EVIDENCE_MISSING"
-              ? "CANCELLATION_CONFIGURATION_UNAVAILABLE"
-              : "ORDER_NOT_CANCELABLE";
+          : row.fulfillmentMode === "SCHEDULED" && row.packingStarted
+            ? "PACKING_STARTED"
+            : cancellationDecision?.code === "CANCELLATION_WINDOW_CLOSED"
+              ? "CANCELLATION_WINDOW_CLOSED"
+              : cancellationDecision?.code === "CUTOFF_EVIDENCE_MISSING"
+                ? "CANCELLATION_CONFIGURATION_UNAVAILABLE"
+                : "ORDER_NOT_CANCELABLE";
   const issues = issuesResult.results.map(toCustomerOrderIssueView);
   const invoice: CustomerOrderDetailView["invoice"] = invoiceRow
     ? {

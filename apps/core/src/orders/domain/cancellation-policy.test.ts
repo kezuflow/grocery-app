@@ -12,6 +12,7 @@ const base = {
   grossPaidMinor: 100_000,
   now,
   cutoffAt: null,
+  packingStarted: false,
 };
 
 describe("order cancellation policy", () => {
@@ -34,14 +35,8 @@ describe("order cancellation policy", () => {
     });
   });
 
-  it("uses Scheduled cutoff regardless of earlier operational progress", () => {
-    for (const orderState of [
-      "COMMITTED",
-      "FULFILLMENT_PENDING",
-      "FULFILLMENT_READY",
-      "OUT_FOR_DELIVERY",
-      "EXCEPTION",
-    ] as const) {
+  it("allows Scheduled cancellation before packing and cutoff", () => {
+    for (const orderState of ["COMMITTED", "FULFILLMENT_PENDING"] as const) {
       for (const offset of [-1, 0, 1]) {
         expect(
           decideOrderCancellation({
@@ -67,6 +62,18 @@ describe("order cancellation policy", () => {
         cutoffAt: now + 1,
       }),
     ).toMatchObject({ allowed: false, code: "ORDER_NOT_CANCELABLE" });
+  });
+
+  it("closes Scheduled customer cancellation as soon as packing starts", () => {
+    expect(
+      decideOrderCancellation({
+        ...base,
+        mode: "SCHEDULED",
+        orderState: "FULFILLMENT_PENDING",
+        cutoffAt: now + 1,
+        packingStarted: true,
+      }),
+    ).toMatchObject({ allowed: false, code: "CANCELLATION_WINDOW_CLOSED" });
   });
 
   it("locks Scheduled cancellation at cutoff equality and requires cutoff evidence", () => {

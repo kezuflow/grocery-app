@@ -163,78 +163,53 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </dl>
           </section>
 
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            aria-labelledby="follow-up-heading"
-          >
-            <h2 id="follow-up-heading" className="text-xl font-bold">
-              Order follow-up
-            </h2>
-            {reorderAction ? (
-              <div className="mt-4">
-                <ReorderAction orderId={order.orderId} available={reorderAction.available} />
-              </div>
-            ) : null}
-            {summaryAction?.available ? (
-              <Link
-                href={`/orders/${encodeURIComponent(order.orderId)}/transaction-summary`}
-                className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 text-sm font-bold"
-              >
-                View transaction summary
-              </Link>
-            ) : null}
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {order.actions
-                .filter(
-                  (action) =>
-                    ![
-                      "REORDER",
-                      "SUBMIT_ISSUE",
-                      "REQUEST_AMENDMENT",
-                      "VIEW_TRANSACTION_SUMMARY",
-                      "CANCEL",
-                    ].includes(action.action),
-                )
-                .map((action) => (
-                  <div
-                    key={action.action}
-                    className="rounded-lg border border-[var(--fm-border)] p-3 text-sm"
-                  >
-                    <p className="font-semibold">{label(action.action)}</p>
-                    <p className="mt-1 text-[var(--fm-text-muted)]">
-                      {action.available
-                        ? "Available for this order"
-                        : label(action.disabledReason ?? "Unavailable")}
-                    </p>
-                  </div>
-                ))}
-            </div>
-            {issueAction ? (
-              <OrderIssueForm
-                orderId={order.orderId}
-                items={order.items}
-                available={issueAction.available}
-              />
-            ) : null}
-            {amendmentAction ? (
-              <AmendmentFlow
-                orderId={order.orderId}
-                orderVersion={order.version}
-                available={amendmentAction.available}
-              />
-            ) : null}
-            {cancelAction ? (
-              <div className="mt-4">
-                <CancelOrderAction
+          {order.status !== "DELIVERED" ? (
+            <section
+              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
+              aria-labelledby="order-options-heading"
+            >
+              <h2 id="order-options-heading" className="text-xl font-bold">
+                Order options
+              </h2>
+              {amendmentAction ? (
+                <AmendmentFlow
                   orderId={order.orderId}
                   orderVersion={order.version}
-                  available={cancelAction.available}
-                  disabledReason={cancelAction.disabledReason}
-                  cancellation={order.cancellation}
+                  available={amendmentAction.available}
                 />
-              </div>
-            ) : null}
-          </section>
+              ) : null}
+              {cancelAction ? (
+                <div className="mt-4">
+                  <CancelOrderAction
+                    orderId={order.orderId}
+                    orderVersion={order.version}
+                    available={cancelAction.available}
+                    disabledReason={cancelAction.disabledReason}
+                    cancellation={order.cancellation}
+                  />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {order.status === "DELIVERED" ? (
+            <section
+              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
+              aria-labelledby="follow-up-heading"
+            >
+              <h2 id="follow-up-heading" className="text-xl font-bold">
+                Order follow-up
+              </h2>
+              {reorderAction ? (
+                <div className="mt-4">
+                  <ReorderAction orderId={order.orderId} available={reorderAction.available} />
+                </div>
+              ) : null}
+              {issueAction?.available ? (
+                <OrderIssueForm orderId={order.orderId} items={order.items} available />
+              ) : null}
+            </section>
+          ) : null}
 
           {order.amendments.length ? (
             <section
@@ -309,6 +284,14 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                 <dd>{money(order.financial.totalMinor, order.financial.currency)}</dd>
               </div>
             </dl>
+            {summaryAction?.available ? (
+              <Link
+                href={`/orders/${encodeURIComponent(order.orderId)}/transaction-summary`}
+                className="mt-4 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 text-sm font-bold"
+              >
+                View transaction summary
+              </Link>
+            ) : null}
           </section>
           <section
             className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5"
@@ -342,19 +325,6 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                   .join(", ")}
               </p>
             ) : null}
-          </section>
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5"
-            aria-labelledby="invoice-heading"
-          >
-            <h2 id="invoice-heading" className="text-xl font-bold">
-              Invoice
-            </h2>
-            <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
-              {order.invoice.status === "ISSUED"
-                ? `Invoice ${order.invoice.invoiceIdentifier ?? "issued"}`
-                : "An invoice is not yet available for this order."}
-            </p>
           </section>
         </aside>
       </div>

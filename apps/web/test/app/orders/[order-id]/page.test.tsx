@@ -122,7 +122,7 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
       currency: "PHP",
     },
     actions: [
-      { action: "SUBMIT_ISSUE", available: true, disabledReason: null },
+      { action: "SUBMIT_ISSUE", available: false, disabledReason: "Available after delivery" },
       { action: "VIEW_TRANSACTION_SUMMARY", available: true, disabledReason: null },
       {
         action: "CANCEL",
@@ -134,20 +134,44 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
 }
 
 describe("customer order detail", () => {
-  it("renders immutable items, financials, fulfillment, issues, invoice state, timeline, and Core actions", () => {
+  it("keeps cancellation with active order options and hides delivery follow-up and invoice UI", () => {
     const html = renderToStaticMarkup(<OrderDetailContent order={detail("CHECKOUT_QUOTE")} />);
     expect(html).toContain("FM-2026-ORDER1");
     expect(html).toContain("Red onion");
     expect(html).toContain("Merchandise subtotal");
     expect(html).toContain("Ayala Cebu");
     expect(html).toContain("Bruised");
-    expect(html).toContain("invoice is not yet available");
+    expect(html).not.toContain("View invoice");
+    expect(html).not.toContain("Invoice</h2>");
+    expect(html).not.toContain("Order follow-up");
+    expect(html).not.toContain("What went wrong?");
+    expect(html).toContain("Order options");
     expect(html).toContain("Order placed");
     expect(html).toContain("Placed ");
     expect(html).toContain("Refund if canceled now");
     expect(html).toContain("₱285.00");
     expect(html).toContain("View transaction summary");
     expect(html.indexOf("Order timeline")).toBeLessThan(html.indexOf("Items"));
+  });
+
+  it("shows follow-up and problem reporting after delivery", () => {
+    const delivered = detail("CHECKOUT_QUOTE");
+    const html = renderToStaticMarkup(
+      <OrderDetailContent
+        order={{
+          ...delivered,
+          status: "DELIVERED",
+          actions: delivered.actions.map((action) =>
+            action.action === "SUBMIT_ISSUE"
+              ? { ...action, available: true, disabledReason: null }
+              : action,
+          ),
+        }}
+      />,
+    );
+    expect(html).toContain("Order follow-up");
+    expect(html).toContain("What went wrong?");
+    expect(html).not.toContain("Order options");
   });
 
   it("states when historical monetary components are unavailable", () => {

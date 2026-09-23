@@ -121,6 +121,54 @@ function command(orderId: string): Parameters<typeof cancelOrder>[1] {
 }
 
 describe("explicit cancellation and refund orchestration", () => {
+  it("closes Scheduled customer cancellation at packing, including after a shortage", async () => {
+    const fixture = await paidOrderFixture();
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','NOT_STARTED',1,?)",
+    )
+      .bind(crypto.randomUUID(), fixture.orderId, now)
+      .run();
+    for (const [index, action] of (
+      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "RECORD_SHORTAGE"] as const
+    ).entries()) {
+      const result = await advanceFulfillment(
+        env.DB,
+        {
+          orderId: fixture.orderId,
+          action,
+          headers: {},
+          expectedVersion: index + 1,
+          idempotencyKey: `packing-lock-${fixture.orderId}-${action}`,
+          requestId: crypto.randomUUID(),
+        },
+        { authorize: async () => true },
+      );
+      expect(result.ok).toBe(true);
+    }
+    const request = { ...command(fixture.orderId), expectedVersion: 2 };
+    const result = await cancelOrder(env.DB, request, {
+      now: () => now + 1,
+      requestRefund: async () => {
+        throw new Error("Refund must not be requested");
+      },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "FINANCIAL_OPERATION_REQUIRES_REVIEW" },
+    });
+    expect(
+      await env.DB.prepare("SELECT id FROM order_cancellation WHERE order_id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT scope FROM idempotency_records WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toBeNull();
+  });
+
   it.each([-1, 0, 1])(
     "uses the Scheduled cutoff with earlier preparation at offset %s",
     async (offset) => {

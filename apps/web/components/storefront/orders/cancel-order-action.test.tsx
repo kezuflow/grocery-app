@@ -26,6 +26,26 @@ describe("CancelOrderAction", () => {
     expect(html).toContain('aria-live="polite"');
   });
 
+  it("shows a disabled cancellation control once packing has started", () => {
+    const html = renderToStaticMarkup(
+      <CancelOrderAction
+        orderId="order-1"
+        orderVersion={3}
+        available={false}
+        disabledReason="PACKING_STARTED"
+        cancellation={{
+          status: null,
+          requiredRefundMinor: null,
+          retainedServiceFeeMinor: null,
+          currency: "PHP",
+        }}
+      />,
+    );
+    expect(html).toContain("disabled");
+    expect(html).toContain("Packing has started");
+    expect(html).not.toContain("Refund if canceled now");
+  });
+
   it("does not optimistically claim an order is canceled", () => {
     const processing = {
       ok: true,

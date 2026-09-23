@@ -225,6 +225,28 @@ export function OrderPreviewPanel({
             <p className="text-xs text-[var(--fm-text-muted)]">
               Available changes follow the order’s current lifecycle and your permissions.
             </p>
+            {detail.fulfillment?.locationId ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <Link
+                    href={`/admin/fulfillment?orderId=${encodeURIComponent(detail.orderId)}`}
+                    prefetch={false}
+                  >
+                    Update preparation
+                  </Link>
+                </Button>
+                {detail.delivery ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link
+                      href={`/admin/delivery?orderId=${encodeURIComponent(detail.orderId)}`}
+                      prefetch={false}
+                    >
+                      Manage delivery
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
 
             <section aria-labelledby="order-preview-items">
               <div className="mb-2 flex items-center justify-between gap-3">
