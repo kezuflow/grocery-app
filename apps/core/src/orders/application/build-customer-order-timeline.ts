@@ -8,9 +8,9 @@ export type CustomerTimelineFact = {
 };
 
 const titles: Record<CustomerTimelineEntry["type"], string> = {
-  ORDER_COMMITTED: "Order confirmed",
+  ORDER_COMMITTED: "Order placed",
   PAYMENT_STATUS: "Payment update",
-  FULFILLMENT_STATUS: "Order preparation update",
+  FULFILLMENT_STATUS: "Preparation update",
   DELIVERY_STATUS: "Delivery update",
   AMENDMENT_STATUS: "Order addition update",
   REFUND_STATUS: "Refund update",
@@ -21,11 +21,56 @@ function readableStatus(status: string): string {
   return status.toLowerCase().replaceAll("_", " ");
 }
 
+function title(type: CustomerTimelineEntry["type"], status: string): string {
+  if (type === "PAYMENT_STATUS" && status === "SUCCEEDED") return "Payment successful";
+  if (type === "FULFILLMENT_STATUS") {
+    switch (status) {
+      case "PICKING":
+        return "Picking items";
+      case "READY_TO_PACK":
+        return "Ready to pack";
+      case "PACKING":
+        return "Packing order";
+      case "PACKED":
+        return "Order packed";
+      case "HANDED_OFF":
+        return "Handed to courier";
+      case "COMPLETED":
+        return "Preparation complete";
+      case "SHORTED":
+      case "ESCALATED":
+        return "Preparation needs attention";
+      case "CANCELED":
+        return "Preparation stopped";
+    }
+  }
+  if (type === "DELIVERY_STATUS") {
+    switch (status) {
+      case "ASSIGNED":
+        return "Courier assigned";
+      case "EN_ROUTE":
+        return "Out for delivery";
+      case "ARRIVED":
+        return "Courier arrived";
+      case "DELIVERED":
+        return "Delivered";
+      case "FAILED":
+      case "ESCALATED":
+        return "Delivery needs attention";
+      case "RETRY_SCHEDULED":
+        return "Delivery retry planned";
+      case "CANCELED":
+        return "Delivery attempt canceled";
+    }
+  }
+  return titles[type];
+}
+
 function description(type: CustomerTimelineEntry["type"], status: string): string {
   const readable = readableStatus(status);
   switch (type) {
     case "ORDER_COMMITTED":
-      return "We confirmed your order after payment was verified.";
+      return "Your payment was verified and your order was placed.";
     case "PAYMENT_STATUS":
       return `Your payment is now ${readable}.`;
     case "FULFILLMENT_STATUS":
@@ -54,7 +99,7 @@ export function buildCustomerOrderTimeline(
     .map((fact) => ({
       eventId: `${fact.type}:${fact.id}`,
       type: fact.type,
-      title: titles[fact.type],
+      title: title(fact.type, fact.status),
       description: description(fact.type, fact.status),
       status: fact.status,
       occurredAt: new Date(fact.occurredAt).toISOString(),

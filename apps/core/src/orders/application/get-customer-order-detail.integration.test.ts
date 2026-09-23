@@ -214,9 +214,34 @@ describe("getCustomerOrderDetail", () => {
     expect(result.value.timeline.map((entry) => entry.occurredAt)).toEqual(
       result.value.timeline.map((entry) => entry.occurredAt).sort(),
     );
+    expect(result.value.timeline.map((entry) => entry.title)).toContain("Picking items");
+    expect(result.value.timeline.some((entry) => entry.type === "DELIVERY_STATUS")).toBe(false);
     expect(JSON.stringify(result.value)).not.toMatch(
       /provider-secret|assigned_staff|internal resolution|internal refund|latitude|longitude|location-cebu|zone-cebu|rider/i,
     );
+  });
+
+  it("does not date preparation or delivery before either has started", async () => {
+    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true });
+    await env.DB.prepare("UPDATE fulfillment_record SET status='NOT_STARTED' WHERE order_id=?")
+      .bind(fixture.orderId)
+      .run();
+
+    const result = await getCustomerOrderDetail(env.DB, {
+      customerId: fixture.customerId,
+      orderId: fixture.orderId,
+      requestId: "detail-unstarted",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fulfillment.status).toBe("NOT_STARTED");
+    expect(result.value.fulfillment.deliveryStatus).toBe("UNASSIGNED");
+    expect(result.value.timeline.map((entry) => entry.type)).toEqual([
+      "ORDER_COMMITTED",
+      "PAYMENT_STATUS",
+      "ISSUE_STATUS",
+    ]);
   });
 
   it("returns a Core-calculated cancellation preview before the Scheduled cutoff", async () => {

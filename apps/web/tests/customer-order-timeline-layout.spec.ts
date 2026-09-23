@@ -4,7 +4,7 @@ const timeline = [
   {
     eventId: "payment",
     type: "PAYMENT_STATUS",
-    title: "Payment update",
+    title: "Payment successful",
     description: "Your payment is now succeeded.",
     status: "SUCCEEDED",
     occurredAt: "2026-09-21T00:00:00.000Z",
@@ -12,23 +12,23 @@ const timeline = [
   {
     eventId: "delivery",
     type: "DELIVERY_STATUS",
-    title: "Delivery update",
-    description: "Your delivery is now unassigned.",
-    status: "UNASSIGNED",
-    occurredAt: "2026-09-21T01:00:00.000Z",
+    title: "Courier assigned",
+    description: "Your delivery is now assigned.",
+    status: "ASSIGNED",
+    occurredAt: "2026-09-21T05:00:00.000Z",
   },
   {
     eventId: "confirmed",
     type: "ORDER_COMMITTED",
-    title: "Order confirmed",
-    description: "We confirmed your order after payment was verified.",
+    title: "Order placed",
+    description: "Your payment was verified and your order was placed.",
     status: "COMMITTED",
     occurredAt: "2026-09-21T01:00:00.000Z",
   },
   {
     eventId: "preparing",
     type: "FULFILLMENT_STATUS",
-    title: "Order preparation update",
+    title: "Packing order",
     description: "Order preparation is now packing.",
     status: "PACKING",
     occurredAt: "2026-09-21T04:00:00.000Z",
@@ -136,16 +136,16 @@ test("places the horizontal order timeline above Items across responsive widths"
   expect(new Set(desktopPositions.map(({ y }) => Math.round(y))).size).toBe(1);
   const progressLabels = await progress.getByRole("heading").allTextContents();
   expect(progressLabels).toEqual([
-    "Payment update",
-    "Order confirmed",
-    "Order preparation update",
-    "Delivery update",
+    "Payment successful",
+    "Order placed",
+    "Packing order",
+    "Courier assigned",
   ]);
-  await expect(progress.getByRole("heading", { name: "Payment update" })).toHaveClass(
+  await expect(progress.getByRole("heading", { name: "Payment successful" })).toHaveClass(
     /text-\[var\(--fm-success\)\]/,
   );
   await expect(page.getByRole("region", { name: "Order timeline" }).locator("p")).toHaveText(
-    "Order preparation is now packing.",
+    "Your delivery is now assigned.",
   );
   const [progressBox, firstMarkerBox] = await Promise.all([
     progress.boundingBox(),

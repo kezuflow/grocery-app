@@ -69,7 +69,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           </p>
           <h1 className="mt-1 text-3xl font-bold">{label(order.status)}</h1>
           <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
-            Confirmed {new Date(order.committedAt).toLocaleString()}
+            Placed {new Date(order.committedAt).toLocaleString()}
           </p>
         </div>
         <span className="rounded-full bg-[var(--fm-surface-soft)] px-3 py-2 text-sm font-semibold">

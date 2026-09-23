@@ -480,7 +480,9 @@ export async function getCustomerOrderDetail(
       status: payment.status,
       occurredAt: payment.updatedAt,
     })),
-    ...(row.fulfillmentStatus && row.fulfillmentUpdatedAt !== null
+    ...(row.fulfillmentStatus &&
+    row.fulfillmentStatus !== "NOT_STARTED" &&
+    row.fulfillmentUpdatedAt !== null
       ? [
           {
             type: "FULFILLMENT_STATUS" as const,
@@ -490,7 +492,10 @@ export async function getCustomerOrderDetail(
           },
         ]
       : []),
-    ...(row.deliveryId && row.deliveryStatus && row.deliveryUpdatedAt !== null
+    ...(row.deliveryId &&
+    row.deliveryStatus &&
+    row.deliveryStatus !== "UNASSIGNED" &&
+    row.deliveryUpdatedAt !== null
       ? [
           {
             type: "DELIVERY_STATUS" as const,

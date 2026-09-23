@@ -1,5 +1,46 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CUSTOMER-ORDER-TIMELINE-CLARITY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, customer Order detail/timeline. Acceptance: a newly paid Order does not show
+dated preparation or delivery progress merely because Core created `NOT_STARTED` and `UNASSIGNED`
+records; committed payment is distinguishable from staff preparation; an actual preparation or
+delivery state remains visible with its recorded time. Investigate the owner's observed Packing state
+without mutating the live Order.
+
+Observed `main` at `50978b81` before editing, with unrelated uncommitted storefront, checkout and
+Design files already present. That separate work was committed/pushed during verification; current
+`main`/HEAD is `2c6deefd` before this slice's commit. Only this slice's Core customer Order
+read/timeline, Web Order page, focused tests and owning specifications remain modified. The
+authenticated production customer page showed payment succeeded, Order commitment and an initial
+Unassigned delivery record, plus a current Packing fulfillment state. Core creates `NOT_STARTED`
+fulfillment and `UNASSIGNED` delivery records during paid commitment, then the old customer read
+projected their setup timestamps as generic timeline updates. `PACKING` is a stored fulfillment state;
+the normal `START_PACKING` command writes it with audit evidence. A read-only production D1 audit query
+was denied by Cloudflare (7403), and the signed-in customer session lacked an active staff principal
+for the Admin audit page. The actor/reason for this Order's Packing transition remains unverified.
+
+Implemented: Core omits only those two initial placeholder states from the customer timeline, while
+keeping current authoritative preparation/delivery statuses and timestamps. Customer titles now name
+recorded states; paid commitment is labeled “Order placed” and the header says “Placed,” avoiding an
+implication of manual store confirmation. No lifecycle command, persisted status, payment, delivery
+attempt or remote customer record changed. API and Design guidance describe the projection.
+
+Verification on the working tree, including the separate concurrent storefront source: focused Core
+Worker/D1 timeline/detail tests **9/9**, focused Web component/page tests **5/5**, Core/Web typechecks
+and focused Oxlint passed. Managed local production-build Playwright in fresh disposable
+`apps/core/.wrangler/e2e-order-timeline-clarity` passed **1/1** at desktop and 390 px with no timeline
+or page overflow; its Order response was mocked for presentation and is not a production read.
+`pnpm check` passed: formatting, naming, terminology, harness, migrations, commit, architecture,
+readiness, lint, all workspace types, Web **661/661**, Core Worker/D1 **1716/1716**, shared tests,
+Core dry-run and Web build. `git diff --check` passed. No deployment, production write, provider
+transaction or outbound message occurred. Completion level: **1 of 1 timeline clarity source slice
+implemented and locally accepted**; live release and the factual Packing audit remain open at the
+Phase 7 acceptance level. Next action: use an authorized staff audit view or read-only production D1
+access to identify the recorded Packing transition before deciding whether any operational correction
+is needed. Production Core/Web release requires separate authorization.
+
 ## Latest owner request — STOREFRONT-ACTION-GREEN-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and

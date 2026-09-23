@@ -28,11 +28,26 @@ describe("buildCustomerOrderTimeline", () => {
     expect(entry).toEqual({
       eventId: "DELIVERY_STATUS:delivery-a",
       type: "DELIVERY_STATUS",
-      title: "Delivery update",
+      title: "Out for delivery",
       description: "Your delivery is now en route.",
       status: "EN_ROUTE",
       occurredAt: new Date(100).toISOString(),
     });
     expect(JSON.stringify(entry)).not.toMatch(/provider|rider|staff|payload|coordinate/i);
+  });
+
+  it("names payment, placement, and preparation facts by what happened", () => {
+    const timeline = buildCustomerOrderTimeline([
+      { type: "PAYMENT_STATUS", id: "payment-a", status: "SUCCEEDED", occurredAt: 100 },
+      { type: "ORDER_COMMITTED", id: "order-a", status: "COMMITTED", occurredAt: 200 },
+      { type: "FULFILLMENT_STATUS", id: "order-a", status: "PACKING", occurredAt: 300 },
+    ]);
+
+    expect(timeline.map((entry) => entry.title)).toEqual([
+      "Payment successful",
+      "Order placed",
+      "Packing order",
+    ]);
+    expect(timeline[1]?.description).toBe("Your payment was verified and your order was placed.");
   });
 });

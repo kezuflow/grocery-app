@@ -109,8 +109,8 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
       {
         eventId: "ORDER_COMMITTED:order-1",
         type: "ORDER_COMMITTED",
-        title: "Order confirmed",
-        description: "We confirmed your order after payment was verified.",
+        title: "Order placed",
+        description: "Your payment was verified and your order was placed.",
         status: "COMMITTED",
         occurredAt: "2026-08-30T00:00:00.000Z",
       },
@@ -142,7 +142,8 @@ describe("customer order detail", () => {
     expect(html).toContain("Ayala Cebu");
     expect(html).toContain("Bruised");
     expect(html).toContain("invoice is not yet available");
-    expect(html).toContain("Order confirmed");
+    expect(html).toContain("Order placed");
+    expect(html).toContain("Placed ");
     expect(html).toContain("Refund if canceled now");
     expect(html).toContain("₱285.00");
     expect(html).toContain("View transaction summary");
