@@ -123,6 +123,12 @@ describe("Admin operational overview", () => {
     );
     expect(result.value.deniedSections).toEqual([]);
     expect(result.value.exceptions.length).toBeLessThanOrEqual(12);
+    expect(result.value.cards.find((card) => card.code === "OPEN_EXCEPTIONS")?.href).toBe(
+      "/admin/issues/operational-exceptions",
+    );
+    expect(
+      result.value.exceptions.every((item) => item.href === "/admin/issues/operational-exceptions"),
+    ).toBe(true);
   });
 
   it("keeps location-scoped operations visible while denying global sections", async () => {

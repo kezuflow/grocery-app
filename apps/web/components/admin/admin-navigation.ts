@@ -5,7 +5,6 @@ import type {
 } from "@freshmarkets/contracts";
 import {
   BarChart3,
-  BadgeDollarSign,
   BadgePercent,
   Boxes,
   ClipboardList,
@@ -21,44 +20,6 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react";
-
-const CANONICAL_ORDER: ReadonlyArray<string> = [
-  "overview",
-  "products",
-  "products-list",
-  "products-create",
-  "categories",
-  "categories-create",
-  "orders",
-  "orders-list",
-  "orders-issues",
-  "customers",
-  "customers-list",
-  "memberships",
-  "promotions",
-  "sales",
-  "banners",
-  "location-products",
-  "inventory",
-  "fulfillment",
-  "delivery",
-  "payments",
-  "payments-overview",
-  "payments-transactions",
-  "payments-reconciliation",
-  "commerce-configuration",
-  "analytics",
-  "locations",
-  "locations-list",
-  "locations-service-areas",
-  "staff",
-  "staff-list",
-  "staff-roles",
-  "audit",
-  "settings",
-  "settings-fulfillment-mode",
-  "settings-delivery-cycles",
-];
 
 const SECTION_ORDER: ReadonlyArray<AdminNavigationSectionCode> = [
   "overview",
@@ -82,12 +43,14 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   "location-products": Boxes,
   orders: ClipboardList,
   inventory: Warehouse,
+  transfers: Truck,
+  procurement: ClipboardList,
+  receiving: Warehouse,
   fulfillment: ClipboardList,
   delivery: Truck,
   customers: Users,
   memberships: ShieldCheck,
   payments: CreditCard,
-  "commerce-configuration": BadgeDollarSign,
   promotions: BarChart3,
   sales: BadgePercent,
   banners: Images,
@@ -96,6 +59,14 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   staff: Users,
   audit: ScrollText,
   settings: Settings,
+};
+
+const SECTION_ICONS: Record<AdminNavigationSectionCode, LucideIcon> = {
+  overview: LayoutDashboard,
+  commerce: Boxes,
+  operations: Warehouse,
+  finance: CreditCard,
+  administration: Settings,
 };
 
 export type AdminNavigationEntry = AdminNavigationItem & { icon: LucideIcon };
@@ -133,14 +104,13 @@ export function adminNavigationItemsForScope(
 export function adminNavigationFromContext(
   items: ReadonlyArray<AdminNavigationItem>,
 ): ReadonlyArray<AdminNavigationEntry> {
-  return CANONICAL_ORDER.flatMap((code) => {
-    const item = items.find((candidate) => candidate.code === code);
-    if (!item) return [];
+  return items.map((item) => {
     const parent = item.parentCode
       ? items.find((candidate) => candidate.code === item.parentCode)
       : undefined;
-    const icon = ICONS[item.code] ?? (parent ? ICONS[parent.code] : undefined);
-    return icon ? [{ ...item, icon }] : [];
+    const icon =
+      ICONS[item.code] ?? (parent ? ICONS[parent.code] : undefined) ?? SECTION_ICONS[item.section];
+    return { ...item, icon };
   });
 }
 

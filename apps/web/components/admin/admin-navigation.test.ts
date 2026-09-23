@@ -49,7 +49,7 @@ describe("admin navigation mapping", () => {
         scopeKinds: globalScope,
       },
     ]);
-    expect(items.map((item) => item.code)).toEqual(["promotions", "banners"]);
+    expect(items.map((item) => item.code)).toEqual(["banners", "promotions"]);
     expect(mostSpecificActiveNavigation(items, "/admin/banners")?.code).toBe("banners");
     expect(
       adminNavigationItemsForScope(items, {
@@ -59,14 +59,14 @@ describe("admin navigation mapping", () => {
       }),
     ).toEqual([]);
   });
-  it("renders only Core-provided navigation in canonical order", () => {
+  it("preserves the navigation order supplied by Core", () => {
     expect(adminNavigationFromContext([audit, overview]).map((item) => item.code)).toEqual([
-      "overview",
       "audit",
+      "overview",
     ]);
   });
 
-  it("drops unknown codes and keeps Core labels and hrefs verbatim", () => {
+  it("keeps Core-provided destinations even when Web has no dedicated icon", () => {
     const items = adminNavigationFromContext([
       {
         code: "not-a-workspace",
@@ -87,8 +87,8 @@ describe("admin navigation mapping", () => {
         kind: "workspace",
       },
     ]);
-    expect(items.map((item) => item.code)).toEqual(["orders"]);
-    expect(items[0]).toMatchObject({ label: "Orders", href: "/admin/orders" });
+    expect(items.map((item) => item.code)).toEqual(["not-a-workspace", "orders"]);
+    expect(items[0]).toMatchObject({ label: "Mystery", href: "/admin/mystery" });
     expect(items[0].icon).toBeTruthy();
   });
 
@@ -96,12 +96,12 @@ describe("admin navigation mapping", () => {
     expect(adminNavigationFromContext([])).toEqual([]);
   });
 
-  it("renders the Core-authorized Membership pricing workspace", () => {
+  it("uses the section icon for an unfamiliar Core-provided workspace", () => {
     const items = adminNavigationFromContext([
       {
-        code: "commerce-configuration",
-        label: "Membership pricing",
-        href: "/admin/commerce-configuration",
+        code: "future-finance-workspace",
+        label: "Future finance workspace",
+        href: "/admin/future-finance-workspace",
         section: "finance",
         scopeKinds: globalScope,
         parentCode: null,
@@ -109,9 +109,9 @@ describe("admin navigation mapping", () => {
       },
     ]);
     expect(items[0]).toMatchObject({
-      code: "commerce-configuration",
-      label: "Membership pricing",
-      href: "/admin/commerce-configuration",
+      code: "future-finance-workspace",
+      label: "Future finance workspace",
+      href: "/admin/future-finance-workspace",
     });
     expect(items[0]?.icon).toBeTruthy();
   });
@@ -368,6 +368,56 @@ describe("admin navigation mapping", () => {
         locationId: "location-cebu-central",
       }).map((item) => item.code),
     ).toEqual(["overview", "orders", "location-products", "inventory", "fulfillment", "audit"]);
+  });
+
+  it("shows Procurement, Receiving and Transfers according to Core scope metadata", () => {
+    const items = [
+      overview,
+      {
+        code: "transfers",
+        label: "Warehouse transfers",
+        href: "/admin/transfers",
+        section: "operations" as const,
+        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "procurement",
+        label: "Procurement",
+        href: "/admin/procurement",
+        section: "operations" as const,
+        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "receiving",
+        label: "Receiving",
+        href: "/admin/receiving",
+        section: "operations" as const,
+        scopeKinds: ["LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+    ];
+    const global = adminNavigationFromContext(
+      adminNavigationItemsForScope(items, { kind: "GLOBAL" }),
+    );
+    expect(global.map((item) => item.code)).toEqual(["overview", "transfers", "procurement"]);
+    const centralCebu = adminNavigationFromContext(
+      adminNavigationItemsForScope(items, {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      }),
+    );
+    expect(groupAdminNavigation(centralCebu)[1]?.items.map((item) => item.code)).toEqual([
+      "transfers",
+      "procurement",
+      "receiving",
+    ]);
+    expect(mostSpecificActiveNavigation(centralCebu, "/admin/receiving")?.code).toBe("receiving");
   });
 
   it("groups Memberships inside Customers instead of creating a top-level workspace", () => {

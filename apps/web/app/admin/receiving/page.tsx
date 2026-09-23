@@ -34,7 +34,6 @@ import {
   AdminCursorPagination,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
-import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 const errorResult = z.object({
   ok: z.literal(false),
@@ -222,7 +221,6 @@ export default function ReceivingPage() {
         title="Receiving"
         description={`Record accepted and rejected base-unit quantities for ${label}.`}
       />
-      <WorkspaceNavigation parentCode="procurement" label="Procurement administration" />
       <ScheduledCountedReceiving
         items={state === "ready" ? (page?.items ?? []) : []}
         receipts={state === "ready" ? (page?.countedReceipts ?? []) : []}

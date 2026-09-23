@@ -119,6 +119,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["catalog.read", "catalog.manage"],
   },
   {
+    code: "catalog-overview",
+    label: "Catalog overview",
+    href: "/admin/catalog",
+    section: "commerce",
+    parentCode: "products",
+    kind: "destination",
+    capabilities: ["catalog.read"],
+  },
+  {
     code: "products-create",
     label: "Add product",
     href: "/admin/catalog/products/new",
@@ -172,6 +181,24 @@ const WORKSPACES: ReadonlyArray<{
     kind: "workspace",
     capabilities: ["catalog.read", "inventory.read"],
     capabilityMode: "ALL",
+  },
+  {
+    code: "procurement",
+    label: "Procurement",
+    href: "/admin/procurement",
+    section: "operations",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["procurement.read"],
+  },
+  {
+    code: "receiving",
+    label: "Receiving",
+    href: "/admin/receiving",
+    section: "operations",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["procurement.manage"],
   },
   {
     code: "fulfillment",
@@ -340,6 +367,7 @@ const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "location-products",
   "inventory",
+  "receiving",
   "fulfillment",
   "delivery",
 ]);
@@ -350,6 +378,7 @@ const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "locations-service-areas",
   "settings",
   "transfers",
+  "procurement",
 ]);
 
 function navigationScopeKindsFor(code: string): ReadonlyArray<AdminNavigationScopeKind> {

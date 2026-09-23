@@ -184,6 +184,15 @@ describe("scoped admin context", () => {
       kind: "destination",
     });
     expect(context.value.navigation).toContainEqual({
+      code: "catalog-overview",
+      label: "Catalog overview",
+      href: "/admin/catalog",
+      section: "commerce",
+      scopeKinds: ["GLOBAL"],
+      parentCode: "products",
+      kind: "destination",
+    });
+    expect(context.value.navigation).toContainEqual({
       code: "categories",
       label: "Categories",
       href: "/admin/catalog/categories",
@@ -263,6 +272,48 @@ describe("scoped admin context", () => {
     );
     expect(context.value.navigation).toContainEqual(
       expect.objectContaining({ code: "delivery", scopeKinds: ["LOCATION"] }),
+    );
+  });
+
+  it("publishes Procurement and Receiving independently with their actual permissions", async () => {
+    const reader = await staffCookie({ permissionCodes: ["procurement.read"] });
+    const readContext = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: reader.cookie },
+    });
+    expect(readContext.ok).toBe(true);
+    if (!readContext.ok) return;
+    expect(readContext.value.navigation).toContainEqual({
+      code: "procurement",
+      label: "Procurement",
+      href: "/admin/procurement",
+      section: "operations",
+      scopeKinds: ["GLOBAL", "LOCATION"],
+      parentCode: null,
+      kind: "workspace",
+    });
+    expect(readContext.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "receiving" }),
+    );
+
+    const receiver = await staffCookie({ permissionCodes: ["procurement.manage"] });
+    const manageContext = await core.getAdminContext({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: receiver.cookie },
+    });
+    expect(manageContext.ok).toBe(true);
+    if (!manageContext.ok) return;
+    expect(manageContext.value.navigation).toContainEqual({
+      code: "receiving",
+      label: "Receiving",
+      href: "/admin/receiving",
+      section: "operations",
+      scopeKinds: ["LOCATION"],
+      parentCode: null,
+      kind: "workspace",
+    });
+    expect(manageContext.value.navigation).not.toContainEqual(
+      expect.objectContaining({ code: "procurement" }),
     );
   });
 

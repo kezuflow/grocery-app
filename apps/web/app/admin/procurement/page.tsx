@@ -37,6 +37,14 @@ export default function ProcurementPage() {
   const { locationId, label } = useAdminLocation();
   const { state } = useAdminContext();
   const global = state.phase === "ready" && state.selectedScope?.kind === "GLOBAL";
+  const capabilities = state.phase === "ready" ? state.context.capabilities : [];
+  const canReceive = Boolean(locationId) && capabilities.includes("procurement.manage");
+  const canManageCycles =
+    global &&
+    (capabilities.includes("fulfillment.read") || capabilities.includes("fulfillment.manage"));
+  const canPrepare =
+    Boolean(locationId) &&
+    (capabilities.includes("fulfillment.read") || capabilities.includes("fulfillment.manage"));
   const search = useSearchParams();
   const linkedCycleId = search.get("cycleId") ?? "";
   const linkedRequirementId = search.get("requirementId") ?? "";
@@ -136,23 +144,29 @@ export default function ProcurementPage() {
         }
       />
       <div className="flex flex-wrap gap-2">
-        <Button asChild variant="outline">
-          <Link href="/admin/settings/scheduled-cycles">Manage Scheduled cycles</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link
-            href={
-              cycleId
-                ? `/admin/receiving?cycleId=${encodeURIComponent(cycleId)}`
-                : "/admin/receiving"
-            }
-          >
-            Receiving
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/admin/fulfillment">Preparation</Link>
-        </Button>
+        {canManageCycles ? (
+          <Button asChild variant="outline">
+            <Link href="/admin/settings/scheduled-cycles">Manage Scheduled cycles</Link>
+          </Button>
+        ) : null}
+        {canReceive ? (
+          <Button asChild variant="outline">
+            <Link
+              href={
+                cycleId
+                  ? `/admin/receiving?cycleId=${encodeURIComponent(cycleId)}`
+                  : "/admin/receiving"
+              }
+            >
+              Receiving
+            </Link>
+          </Button>
+        ) : null}
+        {canPrepare ? (
+          <Button asChild variant="outline">
+            <Link href="/admin/fulfillment">Preparation</Link>
+          </Button>
+        ) : null}
       </div>
       {!locationId && !global ? (
         <AdminPageState

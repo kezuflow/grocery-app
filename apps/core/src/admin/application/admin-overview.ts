@@ -195,7 +195,10 @@ export async function getAdminOverview(
   const exceptions =
     canReadExceptions && locationIds.length > 0
       ? (await listOperationalExceptionsForLocations(deps.db, { locationIds, limit: 12 })).map(
-          ({ queueKey: _queueKey, ...item }) => ({ ...item, href: "/admin/exceptions" }),
+          ({ queueKey: _queueKey, ...item }) => ({
+            ...item,
+            href: "/admin/issues/operational-exceptions",
+          }),
         )
       : [];
 
@@ -277,7 +280,7 @@ export async function getAdminOverview(
       label: "Open exceptions",
       value: canReadExceptions ? (openExceptionCount ?? 0) : null,
       unavailableReason: canReadExceptions ? null : "fulfillment.manage access is required.",
-      href: "/admin/exceptions",
+      href: "/admin/issues/operational-exceptions",
     },
     {
       code: "ACTIVE_PRODUCTS",
