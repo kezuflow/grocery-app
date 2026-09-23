@@ -26,6 +26,9 @@ unrelated Core/Web/contract/Design files during that aggregate. Treat the aggreg
 workspace evidence, not an isolated button revision or actual provider acceptance. No provider,
 production, customer-data or deployment operation occurred. Preserve the order-detail task's
 uncommitted files and Design hunk when staging this slice.
+The verified button-only source and Design hunk were committed as `58c0aa2a` and pushed to
+`origin/main`; unrelated order-detail edits remained unstaged. This push did not publish a new Web
+Worker version.
 
 Completion level: **1 of 1 requested button-color source slice implemented and locally/browser
 verified; production release remains separate and Phase 7 provider acceptance remains open**. The
