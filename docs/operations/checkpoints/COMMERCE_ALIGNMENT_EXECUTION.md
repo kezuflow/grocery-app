@@ -74,9 +74,9 @@ adding a draft code never claims a discount or eligibility.
 
 Observed synchronized `main`/`origin/main` at `7a108c3700504d552210f0fc315e036899e921ba`
 before editing, with unrelated task-owned Web/Design modifications and one temporary test already
-present. They remain untouched. The current production Web version from the prior slice is
-`51ecd0e4-28f7-4b27-89a3-f0d8582a597e`; no deployment is authorized by the present request
-unless the owner separately approves it.
+present. They remained untouched. The production Web version before this release was
+`51ecd0e4-28f7-4b27-89a3-f0d8582a597e`. The owner subsequently requested that the pushed
+promo source be deployed to production.
 
 Implemented the voucher presentation in the existing shared PromotionEntry component: dashed
 ticket border, code/icon treatment, 44px X button, pending removal spinner and no visible Remove
@@ -92,13 +92,30 @@ naming, terminology, harness, migration, commit, architecture, readiness and lin
 workspace typechecks; Web **660/660 across 157 files**, Core Worker/D1 **1714/1714 across 210
 files**, shared-package tests, Core dry-run and Web build. `git diff --check` passed. The three
 promo source/test files alone were committed and pushed to `main` as `04a77490`; unrelated
-task-owned Web/Design changes were not included. No browser or production acceptance is claimed.
-The optional Web-only deployment question is pending owner response; the prior deployment
-approval applied only to the clear-action slice. Completion level: **1 of 1 promo voucher source
-slice implemented, aggregate-verified and pushed**; production/browser acceptance remains
-separate. Next action: on explicit approval, cherry-pick only `04a77490` into the isolated Web
-release checkout, verify it there, deploy Web and inspect the voucher in the Codex in-app browser.
-Otherwise hand off the pushed source without deploying.
+task-owned Web/Design changes were not included. The source checkpoint was pushed as `efe52dad`.
+
+For the separately approved production release, synchronized clean `main`/`origin/main` was
+`d456dce3` and the clean detached Web release checkout was `7a65ed71`. Cherry-picking only
+`04a77490` produced release SHA `2777fd70`; its diff against `7a65ed71` contains only the
+three promo Web source/test files, not the later storefront visual or rail-drag commits on main.
+Release Web typecheck passed, Web tests passed **649/649 across 156 files**, Vinext compatibility
+reported **16 supported/0 issues**, and the production Web build and Wrangler dry-run passed.
+The generated config targeted `freshmarkets-web-production` on `freshmarkets.ph`, retained the
+`freshmarkets-core-production` binding and `aws:ap-southeast-1` placement. Missing local secret
+warnings at build time were expected; no secret values were read or changed. The Web-only deploy
+created version `cb2da6d6-330c-4bfc-9234-a820134193a6`. Storefront `/`, Web `/health` and
+`/api/core-health`, and Core `/health` and `/ready` each returned HTTP 200 afterward.
+
+In the owner's existing Codex in-app browser, a reload and drawer open showed the production
+cart. A temporary `WELCOME50` draft appeared as a dashed ticket with a visible X; the accessible
+removal name remained `Remove WELCOME50 promotion code`, while the redundant added/eligibility
+success line was absent. The X removed the temporary draft and restored the prior no-code state.
+No checkout, payment, provider, Core/D1 deployment or data migration occurred. This establishes
+live drawer presentation, not promo eligibility or quote acceptance. Completion level: **1 of 1
+promo voucher slice implemented, aggregate-verified, pushed and Web-deployed with live drawer
+presentation checked**. Phase 7's broader production/provider acceptance remains open. Next
+action: continue the independently authorized Phase 7 slices; deploy later storefront visual and
+rail-drag changes only under their own release scope and authorization.
 
 ## Latest owner request — CART-CLEAR-VISIBILITY-1 (2026-09-23)
 
