@@ -1,5 +1,52 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CART-CLEAR-VISIBILITY-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `CART-CLEAR-VISIBILITY-1`. Acceptance: the cart drawer's
+header `Clear All` action remains visible while a quantity update shows its spinner; it cannot
+open confirmation during that in-flight update and becomes available again on settlement. Empty
+carts and a payment-in-progress lock retain their existing behavior. The owner explicitly approved
+a Web-only production deployment after checks and requested verification in the Codex in-app
+browser. No Core, D1, provider or payment change is authorized.
+
+Observed clean synchronized `main`/`origin/main` at `118105bdea5fd24f9fcafe6b397f0def1322b656`
+before editing. The live Web release recorded above is `2d4e412f-5875-4da5-af02-984504aa1b2e`.
+No unrelated working-tree files were changed at start. The drawer previously derived visibility
+from `!quantityQueue.busy`, so pending quantity work unmounted the header action even though the
+cart still contained items. The implementation separates visibility from availability: a retained
+nonempty Cart shows the action, while loading/error/quantity/clear work disables it.
+
+Focused drawer tests passed **12/12** on the working tree, including new assertions that `Clear All`
+stays mounted and disabled alongside the quantity spinner, cannot open confirmation while disabled,
+and becomes enabled after Core accepts the quantity. Web typecheck, focused lint and `git diff
+--check` passed. The complete `pnpm check` passed on the working-tree scope: repository gates,
+lint, all workspace typechecks, Web **660/660 across 157 files**, Core Worker/D1 **1714/1714
+across 210 files**, shared-package tests, Core dry-run and Web build. Other task-owned uncommitted
+Web/Design files appeared during that aggregate; they were preserved, never staged for this slice
+and never included in its release checkout. Only the two drawer source/test files were committed
+and pushed to `main` as `36e9ba68`.
+
+The clean detached production release checkout at `d6eb0546` cherry-picked only that source
+commit to `7a65ed71`. Its diff contains those two Web files only. Release verification passed Web
+typecheck, **649/649 tests across 156 files**, Vinext compatibility **16 supported/0 issues**,
+`CLOUDFLARE_ENV=production` Web build, generated-config inspection and Wrangler dry-run. The
+generated Worker retained `freshmarkets-web-production`, `freshmarkets.ph`, the production Core
+RPC binding and `aws:ap-southeast-1` placement. The Web-only deployment created production version
+`51ecd0e4-28f7-4b27-89a3-f0d8582a597e`; Core/D1 and their bindings were unchanged. Web
+homepage, Web `/api/core-health`, Core `/health` and Core `/ready` each returned HTTP 200.
+
+In the owner's existing signed-in Codex in-app browser, the drawer initially showed Abiu quantity
+2 and **4 items / ₱147**. During a controlled increase, the quantity immediately previewed 3
+with its `Updating quantity` spinner while the header `Clear All` remained present and disabled.
+After Core confirmed, the spinner vanished, `Clear All` re-enabled and the total was **5 items /
+₱148**. A controlled decrease repeated the pending visible/disabled state and returned the cart
+to Abiu quantity 2 and **4 items / ₱147**. No clear-cart, checkout, payment or provider command
+was executed. This is live signed-in drawer acceptance, not guest or sustained performance
+acceptance. Completion level: **1 of 1 clear-action visibility slice implemented, verified,
+pushed, deployed and live-tested**. Next action: owner observes the production drawer during
+normal use; investigate any separately reported cart state without changing Core from this slice.
+
 ## Latest owner request — UI-MOTION-DEPLOY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
