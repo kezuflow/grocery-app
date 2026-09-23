@@ -70,6 +70,10 @@ export function OperationalOrderDetail({
 }) {
   const detail = item.operational;
   if (!detail) return null;
+  const receivingNeeded =
+    detail.fulfillmentMode === "SCHEDULED" &&
+    item.status === "PACKING" &&
+    !item.allowedActions.includes("MARK_PACKED");
   return (
     <aside
       aria-label={`Order ${detail.orderNumber} details`}
@@ -103,6 +107,18 @@ export function OperationalOrderDetail({
       {detail.blockers.length ? (
         <div role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-950">
           {detail.blockers.join(" · ")}
+          {receivingNeeded ? (
+            <Link
+              className="mt-2 block font-semibold underline"
+              href={
+                item.cycleId
+                  ? `/admin/receiving?cycleId=${encodeURIComponent(item.cycleId)}`
+                  : "/admin/receiving"
+              }
+            >
+              Open receiving for this delivery week
+            </Link>
+          ) : null}
         </div>
       ) : null}
       <div>
@@ -122,7 +138,11 @@ export function OperationalOrderDetail({
                 <span className="block text-[var(--fm-text-muted)]">
                   {line.goods.kind === "INSTANT_RESERVATION" ? "Reserved" : "Cycle allocated"}:{" "}
                   {line.goods.allocatedBase} {line.baseUnit ?? "base units"}
-                  {line.goods.receivedBase === null ? "" : ` · received ${line.goods.receivedBase}`}
+                  {line.goods.kind === "SCHEDULED_ALLOCATION"
+                    ? line.goods.receivedBase === null
+                      ? " · no receipt recorded"
+                      : ` · cycle received ${line.goods.receivedBase}`
+                    : ""}
                 </span>
               </span>
             </li>
@@ -131,19 +151,27 @@ export function OperationalOrderDetail({
       </div>
       {item.allowedActions.length ? (
         <div className="space-y-3">
-          <p className="text-sm font-semibold">Next preparation step</p>
-          <Input
-            aria-label="Fulfillment action reason"
-            placeholder="Describe a shortage when reporting one"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
+          <p className="text-sm font-semibold">
+            {receivingNeeded ? "Preparation actions" : "Next preparation step"}
+          </p>
+          {item.allowedActions.includes("RECORD_SHORTAGE") ? (
+            <Input
+              aria-label="Fulfillment action reason"
+              placeholder="Describe a shortage when reporting one"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {item.allowedActions.map((action) => (
               <Button
                 key={action}
                 size="sm"
-                variant={action === item.allowedActions[0] ? "default" : "outline"}
+                variant={
+                  action === item.allowedActions[0] && action !== "RECORD_SHORTAGE"
+                    ? "default"
+                    : "outline"
+                }
                 disabled={pending}
                 onClick={() => onAction(action)}
               >

@@ -256,7 +256,12 @@ export async function listAdminFulfillmentQueue(
         locationId: row.locationId,
         status: row.status,
         version: row.version,
-        allowedActions: allowedFulfillmentActions(row.status),
+        allowedActions:
+          row.status === "PACKING" &&
+          row.operational.fulfillmentMode === "SCHEDULED" &&
+          !row.packingGoodsReady
+            ? allowedFulfillmentActions(row.status).filter((action) => action !== "MARK_PACKED")
+            : allowedFulfillmentActions(row.status),
         operational: row.operational,
       })),
       nextCursor:

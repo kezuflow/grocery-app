@@ -5,7 +5,10 @@ import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { fulfillmentStates } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
-import { consumeCycleGoodsStatements } from "../../fulfillment/application/consume-cycle-goods";
+import {
+  consumeCycleGoodsStatements,
+  scheduledPackingGoodsReadyOrderIds,
+} from "../../fulfillment/application/consume-cycle-goods";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -160,6 +163,21 @@ export async function advanceFulfillment(
     command.requestId,
   );
   if (!transitionResult.ok) return transitionResult;
+  const scheduledPackingOrder =
+    command.action === "MARK_PACKED" && order.fulfillment_mode === "SCHEDULED"
+      ? [{ orderId: command.orderId, cycleId, locationId }]
+      : null;
+  if (
+    scheduledPackingOrder &&
+    !(await scheduledPackingGoodsReadyOrderIds(database, scheduledPackingOrder)).has(
+      command.orderId,
+    )
+  )
+    return failure(
+      "CONFLICT",
+      "Scheduled goods are not fully received for this order. Review receiving before finishing packing.",
+      command.requestId,
+    );
   const next = transitionResult.value;
   const result = resultSchema.parse({
     id: command.orderId,
@@ -331,6 +349,17 @@ export async function advanceFulfillment(
     if (replayed) return replayed;
     if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed"))
       throw error;
+    if (
+      scheduledPackingOrder &&
+      !(await scheduledPackingGoodsReadyOrderIds(database, scheduledPackingOrder)).has(
+        command.orderId,
+      )
+    )
+      return failure(
+        "CONFLICT",
+        "Scheduled goods are not fully received for this order. Review receiving before finishing packing.",
+        command.requestId,
+      );
     return failure(
       "STALE_VERSION",
       "Fulfillment changed; refresh before retrying",

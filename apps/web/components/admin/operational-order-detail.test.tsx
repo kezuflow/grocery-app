@@ -3,6 +3,65 @@ import { describe, expect, it, vi } from "vitest";
 import { OperationalOrderDetail } from "./operational-order-detail";
 
 describe("OperationalOrderDetail", () => {
+  it("routes a Scheduled packing blocker to receiving without offering Finish packing", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalOrderDetail
+        item={{
+          orderId: "order-scheduled",
+          cycleId: "cycle-1",
+          locationId: "location-1",
+          status: "PACKING",
+          version: 4,
+          allowedActions: ["RECORD_SHORTAGE"],
+          operational: {
+            orderNumber: "FM-1002",
+            committedAt: "2026-09-22T01:00:00.000Z",
+            fulfillmentMode: "SCHEDULED",
+            progress: "PREPARING",
+            recipient: { name: "Ana", phone: "+639171110000" },
+            timing: {
+              cycleName: "Delivery week",
+              windowName: null,
+              startsAt: null,
+              endsAt: null,
+              pickupAt: null,
+              timezone: null,
+            },
+            deliveryStatus: "UNASSIGNED",
+            blockers: ["Goods for this delivery week are not fully recorded as received."],
+            lines: [
+              {
+                lineId: "line-1",
+                source: "ORIGINAL",
+                productName: "Red onion",
+                variantName: "500 g",
+                unit: "pack",
+                quantity: 1,
+                baseQuantity: 500,
+                baseUnit: "GRAM",
+                goods: {
+                  kind: "SCHEDULED_ALLOCATION",
+                  status: "OPEN",
+                  allocatedBase: 500,
+                  receivedBase: null,
+                },
+              },
+            ],
+          },
+        }}
+        reason=""
+        setReason={vi.fn()}
+        pending={false}
+        onAction={vi.fn()}
+      />,
+    );
+    expect(markup).toContain("/admin/receiving?cycleId=cycle-1");
+    expect(markup).toContain("Open receiving for this delivery week");
+    expect(markup).toContain("Report shortage");
+    expect(markup).toContain("no receipt recorded");
+    expect(markup).not.toContain("Finish packing");
+  });
+
   it("shows the location-safe paid snapshot and automatic Instant dispatch without finance fields", () => {
     const markup = renderToStaticMarkup(
       <OperationalOrderDetail

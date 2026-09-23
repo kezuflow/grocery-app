@@ -13,7 +13,7 @@ async function fixture() {
     cycleId = crypto.randomUUID();
   await seedTestCycle(env.DB, cycleId);
   await env.DB.prepare(
-    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('procurement.manage','fulfillment.manage')",
+    "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('procurement.manage','fulfillment.manage','fulfillment.read')",
   )
     .bind(manager.id)
     .run();
@@ -165,12 +165,34 @@ describe("Scheduled receipt to packing commands", () => {
     const fx = await fixture();
     await fx.receive(0, 1000);
     const request = await fx.order();
+    const queueBefore = await core.listFulfillmentQueue({
+      headers: request.headers,
+      locationId,
+      orderId: request.orderId,
+      requestId: crypto.randomUUID(),
+      limit: 50,
+    });
+    expect(queueBefore).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          {
+            status: "PACKING",
+            allowedActions: ["RECORD_SHORTAGE"],
+            operational: { blockers: [expect.stringContaining("Review receiving")] },
+          },
+        ],
+      },
+    });
     const physicalBefore = (
       await env.DB.prepare(
         "SELECT * FROM inventory_balance ORDER BY location_id,inventory_pool_id",
       ).all()
     ).results;
-    expect(await core.advanceAdminFulfillment(request)).toMatchObject({ ok: false });
+    expect(await core.advanceAdminFulfillment(request)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", message: expect.stringContaining("Review receiving") },
+    });
     expect(
       await env.DB.prepare("SELECT status,version FROM fulfillment_record WHERE order_id=?")
         .bind(request.orderId)
@@ -187,6 +209,21 @@ describe("Scheduled receipt to packing commands", () => {
         .first(),
     ).toBeNull();
     await fx.receive(1, 6);
+    const queueAfter = await core.listFulfillmentQueue({
+      headers: request.headers,
+      locationId,
+      orderId: request.orderId,
+      requestId: crypto.randomUUID(),
+      limit: 50,
+    });
+    expect(queueAfter).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          { allowedActions: ["MARK_PACKED", "RECORD_SHORTAGE"], operational: { blockers: [] } },
+        ],
+      },
+    });
     const packed = await core.advanceAdminFulfillment(request);
     expect(packed).toMatchObject({ ok: true, value: { status: "PACKED", version: 5 } });
     expect(await core.advanceAdminFulfillment(request)).toEqual(packed);

@@ -1,3 +1,34 @@
+/** Read-only guidance; the packing command still checks these facts inside its transaction. */
+export async function scheduledPackingGoodsReadyOrderIds(
+  database: D1Database,
+  orders: readonly { orderId: string; cycleId: string | null; locationId: string }[],
+): Promise<Set<string>> {
+  if (orders.length === 0) return new Set();
+  const rows = await database
+    .prepare(`WITH wanted AS (
+      SELECT json_extract(value,'$.orderId') order_id,
+        json_extract(value,'$.cycleId') cycle_id,
+        json_extract(value,'$.locationId') location_id
+      FROM json_each(?)
+    ), needed AS (
+      SELECT d.order_id,d.inventory_pool_id,SUM(d.quantity) quantity
+      FROM committed_demand d JOIN wanted w ON w.order_id=d.order_id
+      GROUP BY d.order_id,d.inventory_pool_id
+    )
+    SELECT w.order_id FROM wanted w WHERE
+      EXISTS (SELECT 1 FROM needed n WHERE n.order_id=w.order_id)
+      AND NOT EXISTS (SELECT 1 FROM committed_demand d WHERE d.order_id=w.order_id AND
+        (d.status<>'OPEN' OR d.demand_basis<>'EXACT_PAID_LINE' OR d.delivery_cycle_id IS NOT w.cycle_id OR d.location_id<>w.location_id))
+      AND NOT EXISTS (SELECT 1 FROM needed n LEFT JOIN cycle_goods_balance b
+        ON b.cycle_id=w.cycle_id AND b.location_id=w.location_id AND b.inventory_pool_id=n.inventory_pool_id
+        WHERE n.order_id=w.order_id AND
+          (n.quantity<=0 OR b.received_base IS NULL OR
+           b.received_base-b.packed_base-b.surplus_released_base-b.disposed_base<n.quantity))`)
+    .bind(JSON.stringify(orders))
+    .all<{ order_id: string }>();
+  return new Set(rows.results.map((row) => row.order_id));
+}
+
 /** Statements join the fulfillment command's guarded transaction, including its Order lock. */
 export function consumeCycleGoodsStatements(
   database: D1Database,

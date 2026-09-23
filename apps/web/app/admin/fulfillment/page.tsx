@@ -89,6 +89,7 @@ export default function FulfillmentPage() {
           return;
         }
         setPage(payload.value);
+        if (!background) setNotice(null);
         setSelectedOrderId((current) =>
           current && payload.value.items.some((item) => item.orderId === current)
             ? current
@@ -251,15 +252,19 @@ export default function FulfillmentPage() {
                           <StatusBadge>{item.status}</StatusBadge>
                         </TableCell>
                         <TableCell>
-                          {item.allowedActions[0]
-                            ? actionLabels[item.allowedActions[0]]
-                            : item.status === "PACKED"
-                              ? item.operational?.fulfillmentMode === "INSTANT"
-                                ? item.operational.deliveryExecution?.status === "FAILED"
-                                  ? "Resolve Lalamove booking failure"
-                                  : "View Lalamove delivery"
-                                : "Choose dispatch"
-                              : "No action"}
+                          {item.status === "PACKING" &&
+                          item.operational?.fulfillmentMode === "SCHEDULED" &&
+                          !item.allowedActions.includes("MARK_PACKED")
+                            ? "Record received goods"
+                            : item.allowedActions[0]
+                              ? actionLabels[item.allowedActions[0]]
+                              : item.status === "PACKED"
+                                ? item.operational?.fulfillmentMode === "INSTANT"
+                                  ? item.operational.deliveryExecution?.status === "FAILED"
+                                    ? "Resolve Lalamove booking failure"
+                                    : "View Lalamove delivery"
+                                  : "Choose dispatch"
+                                : "No action"}
                         </TableCell>
                       </TableRow>
                     ))}
