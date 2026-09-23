@@ -1,5 +1,62 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-MOBILE-COMPAT-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-MOBILE-COMPAT-1`. Acceptance: investigate the owner's
+mobile Brave screenshot in the Codex in-app browser, verify the quick view across mobile and desktop
+widths, correct remaining responsive defects, and distinguish source acceptance from the published
+storefront. The prior request to commit and push remains in force; there is no production deployment
+authorization for this slice.
+
+Observed synchronized clean `main`/`origin/main` at `ef04115c` before editing. A read-only Wrangler
+deployment listing confirmed production Web remains version `cb2da6d6-330c-4bfc-9234-a820134193a6`,
+built from isolated release SHA
+`2777fd70` with the promo voucher changes. It excludes the already-pushed visual source `f7652293`
+and rail-drag source `717965b6`. In the Codex in-app browser at 390×700, the published Abiu dialog
+had 676px inner content and a 604px media region inside a 375px modal, with its Add control extending
+off-screen. The current local source already has the compact media tile, bounded grid columns,
+rounded frame and dark-green primary action from `STOREFRONT-VISUAL-1`; the published screenshot
+therefore does not show that source. Browser feature checks in the in-app Chromium engine supported
+`dvh`, `min()`, `minmax()`, aspect-ratio and object-fit; this observed defect is an old layout and
+release mismatch, not evidence of an unsupported CSS feature.
+
+The current source did reveal one additional 320px edge case: the full Add label clipped beside the
+quantity control. The quick-view footer now wraps below 380px and gives Add a full-width row. Mobile
+shows a short price-bearing label while its accessible name retains the full wording; desktop retains
+the full visible wording. In the Codex in-app browser against isolated local Worker/D1 data, final
+captures and DOM measurements at 320×600, 375×700, 390×700, 430×900 and 850×850 showed no page
+horizontal overflow, a 12px rounded dialog frame, bounded media (160px rendered image within the
+184px mobile tile; 196px image within the 220px desktop tile), and an in-frame, unclipped Add control.
+The isolated local catalog returned media placeholders and out-of-stock states; this verifies layout
+and accessibility, not published R2 photo appearance or a successful Add command. No Chrome browser
+skill, provider transaction, deployment or shared-state write was used.
+
+The first `pnpm check` passed formatting, conventions, harness, migrations, architecture, readiness,
+lint and all workspace typechecks, then the parallel Core Vitest process exited with Windows code
+`3221226505` without a failing test assertion while a local dev server was running. After stopping
+that server, the full `pnpm check` passed on the updated Web source: formatting, naming, terminology,
+harness, migration, commit, architecture, readiness, lint, all workspace typechecks, Web **661/661
+across 158 files**, Core Worker/D1 **1714/1714 across 210 files**, shared-package tests, Core
+dry-run and Web build. `git diff --check` passed. The Web-only source commit `b4d25a49` was pushed
+to `origin/main`; no Core, contract, schema or provider code changed.
+
+An isolated clean Web release candidate at `C:/Users/reggi/.codex/worktrees/storefront-mobile-release/freshmarkets`
+starts from the confirmed production source SHA `2777fd70`. It cherry-picks only the existing
+storefront visual source `f7652293` as `6f14b692` (retaining release-local Design documentation
+after a conflict) and the mobile source `b4d25a49` as candidate HEAD `328cfe55`. The diff from
+production contains only 13 Web presentation files, with no rail-drag, Core, D1 or provider change.
+On candidate `328cfe55`, `pnpm --filter @freshmarkets/web typecheck` passed, Web tests passed
+**649/649 across 156 files**, `pnpm --filter @freshmarkets/web check:vinext` reported **16 supported,
+0 issues**, `CLOUDFLARE_ENV=production pnpm --filter @freshmarkets/web build` passed, and Wrangler
+deployment dry-run passed. Generated configuration targets `freshmarkets-web-production` on
+`freshmarkets.ph`, retains the `freshmarkets-core-production` binding and `aws:ap-southeast-1`
+placement. Local build warnings identify missing secrets by name; no values were read or changed.
+This is a build and release configuration check, not a deployed production photo/browser acceptance.
+Completion level: **1 of 1 requested mobile source slice implemented, in-app-browser verified and
+pushed; 1 live release/photo acceptance obligation remains**. Next action: obtain owner authorization
+for the prepared Web-only candidate, then deploy and inspect the published photo and mobile dialog.
+
 ## Latest owner request — STOREFRONT-RAIL-DRAG-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
