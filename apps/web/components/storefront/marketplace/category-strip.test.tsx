@@ -1,5 +1,4 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,21 +17,6 @@ vi.mock("next/link", () => ({
 import { CategoryStrip } from "./category-strip";
 
 describe("CategoryStrip", () => {
-  it("defers pointer capture until movement establishes a drag", () => {
-    const source = readFileSync(new URL("./category-strip.tsx", import.meta.url), "utf8");
-    const pointerDown = source.match(
-      /onPointerDown=\{\(event\) => \{([\s\S]*?)\n        \}\}/,
-    )?.[1];
-    const pointerMove = source.match(
-      /onPointerMove=\{\(event\) => \{([\s\S]*?)\n        \}\}/,
-    )?.[1];
-
-    expect(pointerDown).toBeDefined();
-    expect(pointerDown).not.toContain("setPointerCapture");
-    expect(pointerMove).toContain("if (Math.abs(distance) <= 6) return");
-    expect(pointerMove).toContain("setPointerCapture");
-  });
-
   it("renders database-backed categories with their configured SVGs and fallback", () => {
     const html = renderToStaticMarkup(
       <CategoryStrip
@@ -59,6 +43,7 @@ describe("CategoryStrip", () => {
     expect(html).toContain('src="/category-icons/fruits.svg" alt=""');
     expect(html).toContain("New Category");
     expect(html).toContain('src="/category-icons/all-groceries.svg"');
+    expect(html).toContain('data-testid="storefront-category-strip"');
     expect(html).not.toContain("Meat &amp; Seafood");
   });
 });

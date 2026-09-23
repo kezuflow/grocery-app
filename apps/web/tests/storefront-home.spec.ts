@@ -1,4 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+async function dragRailLeft(page: Page, rail: Locator) {
+  await rail.scrollIntoViewIfNeeded();
+  const box = await rail.boundingBox();
+  if (!box) throw new Error("Horizontal rail is not visible");
+  const y = box.y + Math.min(24, box.height / 2);
+  await page.mouse.move(box.x + box.width * 0.8, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.2, y, { steps: 8 });
+  await page.mouse.up();
+}
 
 // These catalog tests start with a previously selected synthetic location.
 // first-visit-cart.spec.ts executes the actual first-visit confirmation/carryover.
@@ -63,6 +74,38 @@ test("a category rail advances with its browse controls", async ({ page }) => {
   await expect(previous).toBeDisabled();
   await page.getByRole("button", { name: "Next Fruits products", exact: true }).click();
   await expect(previous).toBeEnabled();
+});
+
+test("category tiles drag-scroll without selecting and still respond to a click", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const rail = page.getByTestId("storefront-category-strip");
+  const urlBeforeDrag = page.url();
+  await dragRailLeft(page, rail);
+  await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  expect(page.url()).toBe(urlBeforeDrag);
+
+  await rail.getByRole("link", { name: "Fruits", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("category")).toBe("fruits");
+});
+
+test("product rows drag-scroll without opening a product and keep quick view clickable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const rail = page.getByTestId("storefront-product-rail").first();
+  await dragRailLeft(page, rail);
+  await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await rail
+    .getByRole("link", { name: /details/ })
+    .first()
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
 });
 test("category navigation filters the catalog server-side", async ({ page }) => {
   await page.goto("/?category=fruits");

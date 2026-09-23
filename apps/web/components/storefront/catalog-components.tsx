@@ -9,6 +9,8 @@ import { ProductMedia } from "./product-media";
 export { ProductMedia } from "./product-media";
 import { AddToCartButton } from "./marketplace/add-to-cart-button";
 import { useQuickView } from "./marketplace/quick-view-context";
+import { useHorizontalDragScroll } from "./marketplace/use-horizontal-drag-scroll";
+import { cn } from "../../lib/utils";
 
 /**
  * Low-chrome product card: media tile, price, name, and a compact add control
@@ -120,6 +122,7 @@ export function ProductRail({
   products: ReadonlyArray<PresentationProduct>;
 }) {
   const railRef = useRef<HTMLDivElement>(null);
+  const dragHandlers = useHorizontalDragScroll<HTMLDivElement>();
   const [canScrollBack, setCanScrollBack] = useState(false);
   const [canScrollForward, setCanScrollForward] = useState(false);
 
@@ -195,7 +198,12 @@ export function ProductRail({
       </div>
       <div
         ref={railRef}
-        className="fm-scrollbar-none grid auto-cols-[144px] grid-flow-col gap-4 overflow-x-auto pb-2"
+        data-testid="storefront-product-rail"
+        className={cn(
+          "fm-scrollbar-none grid touch-pan-y auto-cols-[144px] grid-flow-col gap-4 overflow-x-auto pb-2",
+          (canScrollBack || canScrollForward) && "cursor-grab active:cursor-grabbing",
+        )}
+        {...dragHandlers}
       >
         {products.map((product, index) => (
           <ProductCard key={product.id} product={product} priority={priority && index < 4} />

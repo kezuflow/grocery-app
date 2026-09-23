@@ -3,15 +3,9 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CategoryNavigationView } from "@freshmarkets/contracts";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-  type PointerEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { cn } from "../../../lib/utils";
+import { useHorizontalDragScroll } from "./use-horizontal-drag-scroll";
 
 type CategoryNavigationItem = CategoryNavigationView["categories"][number];
 
@@ -29,13 +23,7 @@ export function CategoryStrip({
   className?: string;
 }) {
   const railRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startScrollLeft: number;
-    moved: boolean;
-  } | null>(null);
-  const suppressClickRef = useRef(false);
+  const dragHandlers = useHorizontalDragScroll<HTMLElement>();
   const [canScrollBack, setCanScrollBack] = useState(false);
   const [canScrollForward, setCanScrollForward] = useState(false);
 
@@ -69,23 +57,6 @@ export function CategoryStrip({
     });
   };
 
-  const finishDrag = (event: PointerEvent<HTMLElement>, suppressClick = true) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    suppressClickRef.current = suppressClick && drag.moved;
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const preventDraggedClick = (event: MouseEvent<HTMLElement>) => {
-    if (!suppressClickRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressClickRef.current = false;
-  };
-
   const itemClassName =
     "group flex h-[132px] w-[116px] shrink-0 snap-start flex-col items-center gap-2 py-1 text-center text-base leading-5 font-medium text-[var(--fm-text)] transition-transform hover:-translate-y-0.5";
   const selectCategory = (category: string) => (event: MouseEvent<HTMLAnchorElement>) => {
@@ -109,31 +80,11 @@ export function CategoryStrip({
         ref={railRef}
         aria-label="Grocery categories"
         data-testid="storefront-category-strip"
-        className="fm-scrollbar-none flex touch-pan-y cursor-grab snap-x snap-mandatory gap-3 overflow-x-auto active:cursor-grabbing"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          suppressClickRef.current = false;
-          dragRef.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startScrollLeft: event.currentTarget.scrollLeft,
-            moved: false,
-          };
-        }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag || drag.pointerId !== event.pointerId) return;
-          const distance = event.clientX - drag.startX;
-          if (!drag.moved) {
-            if (Math.abs(distance) <= 6) return;
-            drag.moved = true;
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }
-          event.currentTarget.scrollLeft = drag.startScrollLeft - distance;
-        }}
-        onPointerUp={finishDrag}
-        onPointerCancel={(event) => finishDrag(event, false)}
-        onClickCapture={preventDraggedClick}
+        className={cn(
+          "fm-scrollbar-none flex touch-pan-y snap-x snap-mandatory gap-3 overflow-x-auto",
+          (canScrollBack || canScrollForward) && "cursor-grab active:cursor-grabbing",
+        )}
+        {...dragHandlers}
       >
         <Link
           href="/"
