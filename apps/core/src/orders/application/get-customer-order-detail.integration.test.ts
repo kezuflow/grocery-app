@@ -242,6 +242,117 @@ describe("getCustomerOrderDetail", () => {
       "PAYMENT_STATUS",
       "ISSUE_STATUS",
     ]);
+    expect(
+      result.value.progress.steps.map((step) => [step.key, step.state, step.achievedAt !== null]),
+    ).toEqual([
+      ["PAYMENT", "COMPLETE", true],
+      ["PACKED", "CURRENT", false],
+      ["OUT_FOR_DELIVERY", "UPCOMING", false],
+      ["DELIVERED", "UPCOMING", false],
+    ]);
+  });
+
+  it("advances only recorded packing, handoff, and delivery milestones", async () => {
+    const fixture = await seedOrder({ mode: "INSTANT", withQuote: true });
+    const read = async () =>
+      getCustomerOrderDetail(env.DB, {
+        customerId: fixture.customerId,
+        orderId: fixture.orderId,
+        requestId: crypto.randomUUID(),
+      });
+    const first = await read();
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const base = Date.parse(first.value.committedAt);
+    const packedAt = base + 60_000;
+    const handoffAt = base + 120_000;
+    const deliveredAt = base + 180_000;
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKING',updated_at=? WHERE order_id=?",
+      ).bind(base + 30_000, fixture.orderId),
+      env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_PENDING' WHERE id=?").bind(
+        fixture.orderId,
+      ),
+    ]);
+    const packing = await read();
+    expect(packing.ok && packing.value.progress.steps.map((step) => step.state)).toEqual([
+      "COMPLETE",
+      "CURRENT",
+      "UPCOMING",
+      "UPCOMING",
+    ]);
+    expect(packing.ok && packing.value.progress.detail).toBe("Your order is being packed.");
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKED',updated_at=? WHERE order_id=?",
+      ).bind(packedAt, fixture.orderId),
+      env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_READY' WHERE id=?").bind(
+        fixture.orderId,
+      ),
+      env.DB.prepare(
+        "INSERT INTO audit_event (id,action,aggregate_type,aggregate_id,details_json,after_json,occurred_at) VALUES (?,'OPERATIONS.FULFILLMENT_ADVANCED','fulfillment_record',?,'{}',?,?)",
+      ).bind(crypto.randomUUID(), fixture.orderId, JSON.stringify({ status: "PACKED" }), packedAt),
+      env.DB.prepare(
+        "INSERT INTO audit_event (id,action,aggregate_type,aggregate_id,details_json,after_json,occurred_at) VALUES (?,'OPERATIONS.FULFILLMENT_ADVANCED','fulfillment_record',?,'{}','not-json',?)",
+      ).bind(crypto.randomUUID(), fixture.orderId, packedAt - 1),
+    ]);
+    const packed = await read();
+    expect(packed.ok && packed.value.progress.steps.map((step) => step.state)).toEqual([
+      "COMPLETE",
+      "COMPLETE",
+      "CURRENT",
+      "UPCOMING",
+    ]);
+    expect(packed.ok && packed.value.progress.steps[1]?.achievedAt).toBe(
+      new Date(packedAt).toISOString(),
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='HANDED_OFF',updated_at=? WHERE order_id=?",
+      ).bind(handoffAt, fixture.orderId),
+      env.DB.prepare("UPDATE grocery_order SET status='OUT_FOR_DELIVERY' WHERE id=?").bind(
+        fixture.orderId,
+      ),
+      env.DB.prepare(
+        "UPDATE delivery_job SET status='EN_ROUTE',updated_at=? WHERE order_id=?",
+      ).bind(handoffAt, fixture.orderId),
+    ]);
+    const onWay = await read();
+    expect(onWay.ok && onWay.value.progress.steps.map((step) => step.state)).toEqual([
+      "COMPLETE",
+      "COMPLETE",
+      "COMPLETE",
+      "CURRENT",
+    ]);
+    expect(onWay.ok && onWay.value.progress.steps[2]?.achievedAt).toBe(
+      new Date(handoffAt).toISOString(),
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='COMPLETED',updated_at=? WHERE order_id=?",
+      ).bind(deliveredAt, fixture.orderId),
+      env.DB.prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?").bind(
+        fixture.orderId,
+      ),
+      env.DB.prepare(
+        "UPDATE delivery_job SET status='DELIVERED',delivered_at=?,updated_at=? WHERE order_id=?",
+      ).bind(deliveredAt, deliveredAt, fixture.orderId),
+    ]);
+    const delivered = await read();
+    expect(delivered.ok && delivered.value.progress.steps.map((step) => step.state)).toEqual([
+      "COMPLETE",
+      "COMPLETE",
+      "COMPLETE",
+      "COMPLETE",
+    ]);
+    expect(delivered.ok && delivered.value.progress.steps[3]?.achievedAt).toBe(
+      new Date(deliveredAt).toISOString(),
+    );
   });
 
   it("returns a Core-calculated cancellation preview before the Scheduled cutoff", async () => {

@@ -115,6 +115,15 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
         occurredAt: "2026-08-30T00:00:00.000Z",
       },
     ],
+    progress: {
+      steps: [
+        { key: "PAYMENT", state: "COMPLETE", achievedAt: "2026-08-30T00:00:00.000Z" },
+        { key: "PACKED", state: "CURRENT", achievedAt: null },
+        { key: "OUT_FOR_DELIVERY", state: "UPCOMING", achievedAt: null },
+        { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
+      ],
+      detail: "Your items are being picked.",
+    },
     cancellation: {
       status: null,
       requiredRefundMinor: 28_500,
@@ -146,12 +155,12 @@ describe("customer order detail", () => {
     expect(html).not.toContain("Order follow-up");
     expect(html).not.toContain("What went wrong?");
     expect(html).toContain("Order options");
-    expect(html).toContain("Order placed");
+    expect(html).toContain("Payment successful");
     expect(html).toContain("Placed ");
     expect(html).toContain("Refund if canceled now");
     expect(html).toContain("₱285.00");
     expect(html).toContain("View transaction summary");
-    expect(html.indexOf("Order timeline")).toBeLessThan(html.indexOf("Items"));
+    expect(html.indexOf("Order progress")).toBeLessThan(html.indexOf("Items"));
   });
 
   it("shows follow-up and problem reporting after delivery", () => {

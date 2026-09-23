@@ -1,41 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const timeline = [
-  {
-    eventId: "payment",
-    type: "PAYMENT_STATUS",
-    title: "Payment successful",
-    description: "Your payment is now succeeded.",
-    status: "SUCCEEDED",
-    occurredAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    eventId: "delivery",
-    type: "DELIVERY_STATUS",
-    title: "Courier assigned",
-    description: "Your delivery is now assigned.",
-    status: "ASSIGNED",
-    occurredAt: "2026-09-21T05:00:00.000Z",
-  },
-  {
-    eventId: "confirmed",
-    type: "ORDER_COMMITTED",
-    title: "Order placed",
-    description: "Your payment was verified and your order was placed.",
-    status: "COMMITTED",
-    occurredAt: "2026-09-21T01:00:00.000Z",
-  },
-  {
-    eventId: "preparing",
-    type: "FULFILLMENT_STATUS",
-    title: "Packing order",
-    description: "Order preparation is now packing.",
-    status: "PACKING",
-    occurredAt: "2026-09-21T04:00:00.000Z",
-  },
-];
+const progress = {
+  steps: [
+    { key: "PAYMENT", state: "COMPLETE", achievedAt: "2026-09-21T00:00:00.000Z" },
+    { key: "PACKED", state: "CURRENT", achievedAt: null },
+    { key: "OUT_FOR_DELIVERY", state: "UPCOMING", achievedAt: null },
+    { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
+  ],
+  detail: "Your order is being packed.",
+};
 
-async function mockOrder(page: Page) {
+async function mockOrder(
+  page: Page,
+  scenario: { progress?: typeof progress; orderStatus?: string; fulfillmentStatus?: string } = {},
+) {
   await page.route("**/api/commerce/orders/order-layout", (route) =>
     route.fulfill({
       status: 200,
@@ -45,7 +23,7 @@ async function mockOrder(page: Page) {
         value: {
           orderId: "order-layout",
           orderNumber: "FM-LAYOUT-1",
-          status: "COMMITTED",
+          status: scenario.orderStatus ?? "COMMITTED",
           version: 1,
           committedAt: "2026-09-21T00:00:00.000Z",
           financial: {
@@ -76,8 +54,8 @@ async function mockOrder(page: Page) {
           ],
           fulfillment: {
             mode: "INSTANT",
-            status: "READY",
-            deliveryStatus: "ASSIGNED",
+            status: scenario.fulfillmentStatus ?? "PACKING",
+            deliveryStatus: "UNASSIGNED",
             cycleId: null,
             deliveryDate: null,
             promisedAt: "2026-09-21T05:00:00.000Z",
@@ -100,7 +78,8 @@ async function mockOrder(page: Page) {
           amendments: [],
           issues: [],
           invoice: { status: "NOT_AVAILABLE", invoiceIdentifier: null, issuedAt: null },
-          timeline,
+          timeline: [],
+          progress: scenario.progress ?? progress,
           cancellation: {
             status: null,
             requiredRefundMinor: 10_000,
@@ -114,9 +93,7 @@ async function mockOrder(page: Page) {
   );
 }
 
-test("places the horizontal order timeline above Items across responsive widths", async ({
-  page,
-}) => {
+test("places the four order milestones above Items across responsive widths", async ({ page }) => {
   await mockOrder(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/orders/order-layout");
@@ -135,17 +112,12 @@ test("places the horizontal order timeline above Items across responsive widths"
   );
   expect(new Set(desktopPositions.map(({ y }) => Math.round(y))).size).toBe(1);
   const progressLabels = await progress.getByRole("heading").allTextContents();
-  expect(progressLabels).toEqual([
-    "Payment successful",
-    "Order placed",
-    "Packing order",
-    "Courier assigned",
-  ]);
+  expect(progressLabels).toEqual(["Payment successful", "Packed", "Out for delivery", "Delivered"]);
   await expect(progress.getByRole("heading", { name: "Payment successful" })).toHaveClass(
-    /text-\[var\(--fm-success\)\]/,
+    /text-\[var\(--fm-storefront-accent\)\]/,
   );
-  await expect(page.getByRole("region", { name: "Order timeline" }).locator("p")).toHaveText(
-    "Your delivery is now assigned.",
+  await expect(page.getByRole("region", { name: "Order progress" }).locator("p")).toHaveText(
+    "Your order is being packed.",
   );
   const [progressBox, firstMarkerBox] = await Promise.all([
     progress.boundingBox(),
@@ -154,7 +126,7 @@ test("places the horizontal order timeline above Items across responsive widths"
   expect(firstMarkerBox?.x).toBeGreaterThanOrEqual(progressBox?.x ?? 0);
   expect(firstMarkerBox?.y).toBeGreaterThanOrEqual(progressBox?.y ?? 0);
 
-  const timelineHeading = page.getByRole("heading", { name: "Order timeline" });
+  const timelineHeading = page.getByRole("heading", { name: "Order progress" });
   const itemsHeading = page.getByRole("heading", { name: "Items" });
   expect((await timelineHeading.boundingBox())?.y).toBeLessThan(
     (await itemsHeading.boundingBox())?.y ?? 0,
@@ -169,4 +141,36 @@ test("places the horizontal order timeline above Items across responsive widths"
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     await page.evaluate(() => document.documentElement.clientWidth),
   );
+});
+
+test("completed milestones and connectors use the exact green accent", async ({ page }) => {
+  await mockOrder(page, {
+    orderStatus: "FULFILLMENT_READY",
+    fulfillmentStatus: "PACKED",
+    progress: {
+      steps: [
+        { key: "PAYMENT", state: "COMPLETE", achievedAt: "2026-09-21T00:00:00.000Z" },
+        { key: "PACKED", state: "COMPLETE", achievedAt: "2026-09-21T01:00:00.000Z" },
+        { key: "OUT_FOR_DELIVERY", state: "CURRENT", achievedAt: null },
+        { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
+      ],
+      detail: "Your order is packed and awaiting handoff.",
+    },
+  });
+  await page.goto("/orders/order-layout");
+  const steps = page.getByRole("list", { name: "Order progress" });
+  await expect(steps.locator('li[data-progress-state="COMPLETE"]')).toHaveCount(2);
+  await expect(steps.locator("li").first().locator("[data-timeline-marker]")).toHaveCSS(
+    "border-top-color",
+    "rgb(0, 177, 79)",
+  );
+  await expect(steps.getByRole("heading", { name: "Packed" })).toHaveCSS(
+    "color",
+    "rgb(0, 177, 79)",
+  );
+  const connector = steps.locator("li").first().locator(".fm-order-progress-fill").first();
+  await expect(connector).toHaveCSS("background-color", "rgb(0, 177, 79)");
+  await expect(connector).toHaveCSS("opacity", "1");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(connector).toHaveCSS("transition-duration", "0s");
 });

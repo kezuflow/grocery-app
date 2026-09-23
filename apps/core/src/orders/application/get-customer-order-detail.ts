@@ -1,6 +1,7 @@
 import type {
   CustomerOrderActionView,
   CustomerOrderDetailView,
+  CustomerOrderProgressView,
   CustomerOrderFinancialView,
   CustomerOrderLineSnapshot,
   DeliveryJobState,
@@ -187,6 +188,15 @@ export async function getCustomerOrderDetail(
                 AND CASE WHEN json_valid(event.after_json) THEN json_extract(event.after_json,'$.status') END='PACKING'
               )) AS packingStarted,
               d.id AS deliveryId, d.status AS deliveryStatus, d.updated_at AS deliveryUpdatedAt,
+              d.delivered_at AS deliveredAt,
+              checkout_attempt.status AS checkoutPaymentStatus,
+              checkout_attempt.updated_at AS checkoutPaymentUpdatedAt,
+              (SELECT MAX(a.occurred_at) FROM audit_event a
+                WHERE a.aggregate_type='fulfillment_record' AND a.aggregate_id=o.id
+                  AND a.action='OPERATIONS.FULFILLMENT_ADVANCED'
+                  AND CASE WHEN json_valid(a.after_json) THEN json_extract(a.after_json,'$.status') END='PACKED') AS packedAt,
+              (SELECT dispatch.handed_over_at FROM delivery_provider_dispatch dispatch
+                WHERE dispatch.delivery_job_id=d.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS handedOverAt,
               EXISTS(SELECT 1 FROM order_payment_reaction opr
                      WHERE opr.order_id=o.id AND opr.checkout_quote_id IS NOT NULL) AS hasQuote
        FROM grocery_order o
@@ -194,6 +204,7 @@ export async function getCustomerOrderDetail(
        LEFT JOIN order_delivery_window_snapshot window ON window.order_id=o.id
        LEFT JOIN fulfillment_record f ON f.order_id=o.id
        LEFT JOIN delivery_job d ON d.order_id=o.id
+       LEFT JOIN payment_attempt checkout_attempt ON checkout_attempt.id=o.payment_id
        WHERE o.id=? AND o.customer_id=?`,
     )
     .bind(query.orderId, query.customerId)
@@ -229,6 +240,11 @@ export async function getCustomerOrderDetail(
       deliveryId: string | null;
       deliveryStatus: string | null;
       deliveryUpdatedAt: number | null;
+      deliveredAt: number | null;
+      checkoutPaymentStatus: string | null;
+      checkoutPaymentUpdatedAt: number | null;
+      packedAt: number | null;
+      handedOverAt: number | null;
       hasQuote: number;
     }>();
   if (!row)
@@ -481,6 +497,82 @@ export async function getCustomerOrderDetail(
       }
     : { status: "NOT_AVAILABLE", invoiceIdentifier: null, issuedAt: null };
 
+  const packed = ["PACKED", "HANDED_OFF", "COMPLETED"].includes(row.fulfillmentStatus ?? "");
+  const outForDelivery =
+    ["OUT_FOR_DELIVERY", "DELIVERED"].includes(row.status) &&
+    ["EN_ROUTE", "ARRIVED", "DELIVERED"].includes(row.deliveryStatus ?? "");
+  const delivered = row.status === "DELIVERED" && row.deliveryStatus === "DELIVERED";
+  const stopped = ["CANCELED", "EXPIRED", "EXCEPTION", "CANCELLATION_REQUESTED"].includes(
+    row.status,
+  );
+  const progress: CustomerOrderProgressView = {
+    steps: [
+      {
+        key: "PAYMENT",
+        state: "COMPLETE",
+        achievedAt: iso(
+          row.checkoutPaymentStatus === "SUCCEEDED" &&
+            row.checkoutPaymentUpdatedAt !== null &&
+            row.checkoutPaymentUpdatedAt <= row.committedAt
+            ? row.checkoutPaymentUpdatedAt
+            : row.committedAt,
+        ),
+      },
+      {
+        key: "PACKED",
+        state: packed ? "COMPLETE" : stopped ? "UPCOMING" : "CURRENT",
+        achievedAt: packed
+          ? iso(
+              row.packedAt ??
+                (row.fulfillmentStatus === "PACKED" ? row.fulfillmentUpdatedAt : null),
+            )
+          : null,
+      },
+      {
+        key: "OUT_FOR_DELIVERY",
+        state: outForDelivery ? "COMPLETE" : packed && !stopped ? "CURRENT" : "UPCOMING",
+        achievedAt: outForDelivery
+          ? iso(
+              row.handedOverAt ??
+                (row.deliveryStatus === "EN_ROUTE" ? row.deliveryUpdatedAt : null),
+            )
+          : null,
+      },
+      {
+        key: "DELIVERED",
+        state: delivered ? "COMPLETE" : outForDelivery && !stopped ? "CURRENT" : "UPCOMING",
+        achievedAt: delivered ? iso(row.deliveredAt) : null,
+      },
+    ],
+    detail: stopped
+      ? row.status === "CANCELED"
+        ? "This order was canceled."
+        : row.status === "CANCELLATION_REQUESTED"
+          ? "Cancellation is being reviewed."
+          : row.status === "EXPIRED"
+            ? "This order expired."
+            : "This order needs assistance."
+      : delivered
+        ? "Your order was delivered."
+        : outForDelivery
+          ? row.deliveryStatus === "ARRIVED"
+            ? "Your rider has arrived."
+            : "Your order is on its way."
+          : packed
+            ? row.deliveryStatus === "ASSIGNED"
+              ? "Your order is packed. A rider has been assigned."
+              : "Your order is packed and awaiting handoff."
+            : row.fulfillmentStatus === "PACKING"
+              ? "Your order is being packed."
+              : row.fulfillmentStatus === "READY_TO_PACK"
+                ? "Your items are ready to pack."
+                : row.fulfillmentStatus === "PICKING"
+                  ? "Your items are being picked."
+                  : row.fulfillmentStatus === "SHORTED"
+                    ? "Your order needs a stock update."
+                    : "Your order is awaiting preparation.",
+  };
+
   const facts: CustomerTimelineFact[] = [
     { type: "ORDER_COMMITTED", id: row.orderId, status: row.status, occurredAt: row.committedAt },
     ...paymentsResult.results.map((payment) => ({
@@ -573,6 +665,7 @@ export async function getCustomerOrderDetail(
       issues,
       invoice,
       timeline: buildCustomerOrderTimeline(facts),
+      progress,
       cancellation,
       actions: actions({
         mode: row.fulfillmentMode,

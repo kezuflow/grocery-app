@@ -108,6 +108,15 @@ export type CustomerTimelineEntry = {
   occurredAt: string;
 };
 
+export type CustomerOrderProgressView = {
+  steps: readonly {
+    key: "PAYMENT" | "PACKED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+    state: "COMPLETE" | "CURRENT" | "UPCOMING";
+    achievedAt: string | null;
+  }[];
+  detail: string;
+};
+
 export type CustomerOrderActionView = {
   action:
     | "REORDER"
@@ -185,6 +194,7 @@ export type CustomerOrderDetailView = {
     issuedAt: string | null;
   };
   timeline: readonly CustomerTimelineEntry[];
+  progress: CustomerOrderProgressView;
   cancellation: {
     status: "REQUESTED" | "REFUNDS_PROCESSING" | "COMPLETED" | "EXCEPTION" | null;
     requiredRefundMinor: number | null;

@@ -117,6 +117,21 @@ body {
   font-weight: 400;
 }
 
+.fm-order-progress-fill {
+  opacity: 0;
+  transition: opacity var(--fm-motion-base) var(--fm-ease-out);
+}
+
+.fm-order-progress-fill[data-complete="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-order-progress-fill {
+    transition-duration: 0ms;
+  }
+}
+
 .fm-storefront :is(h1, h2, h3),
 .fm-admin :is(h1, h2, h3) {
   font-family: var(--fm-font-display);

@@ -1,118 +1,100 @@
-import type { CustomerTimelineEntry } from "@freshmarkets/contracts";
-import {
-  ClipboardCheck,
-  CreditCard,
-  MessageCircleWarning,
-  PackageCheck,
-  RotateCcw,
-  ShoppingBasket,
-  Truck,
-  type LucideIcon,
-} from "lucide-react";
+import type { CustomerOrderProgressView } from "@freshmarkets/contracts";
+import { Check, CreditCard, PackageCheck, Truck, House, type LucideIcon } from "lucide-react";
 
-const timelineIcons: Record<CustomerTimelineEntry["type"], LucideIcon> = {
-  PAYMENT_STATUS: CreditCard,
-  ORDER_COMMITTED: ClipboardCheck,
-  FULFILLMENT_STATUS: PackageCheck,
-  DELIVERY_STATUS: Truck,
-  AMENDMENT_STATUS: ShoppingBasket,
-  REFUND_STATUS: RotateCcw,
-  ISSUE_STATUS: MessageCircleWarning,
-};
+const milestones = {
+  PAYMENT: { title: "Payment successful", icon: CreditCard },
+  PACKED: { title: "Packed", icon: PackageCheck },
+  OUT_FOR_DELIVERY: { title: "Out for delivery", icon: Truck },
+  DELIVERED: { title: "Delivered", icon: House },
+} satisfies Record<
+  CustomerOrderProgressView["steps"][number]["key"],
+  { title: string; icon: LucideIcon }
+>;
 
-const progressOrder: Record<CustomerTimelineEntry["type"], number> = {
-  PAYMENT_STATUS: 0,
-  ORDER_COMMITTED: 1,
-  FULFILLMENT_STATUS: 2,
-  DELIVERY_STATUS: 3,
-  AMENDMENT_STATUS: 4,
-  REFUND_STATUS: 5,
-  ISSUE_STATUS: 6,
-};
-
-function orderForProgress(entries: readonly CustomerTimelineEntry[]) {
-  return entries
-    .map((entry, sourceIndex) => ({ entry, sourceIndex }))
-    .sort(
-      (left, right) =>
-        progressOrder[left.entry.type] - progressOrder[right.entry.type] ||
-        Date.parse(left.entry.occurredAt) - Date.parse(right.entry.occurredAt) ||
-        left.sourceIndex - right.sourceIndex,
-    )
-    .map(({ entry }) => entry);
-}
-
-export function OrderTimeline({ entries }: { entries: readonly CustomerTimelineEntry[] }) {
-  const progressEntries = orderForProgress(entries);
-  const currentEntry = entries.reduce<CustomerTimelineEntry | undefined>(
-    (latest, entry) =>
-      !latest || Date.parse(entry.occurredAt) > Date.parse(latest.occurredAt) ? entry : latest,
-    undefined,
-  );
-
+export function OrderTimeline({ progress }: { progress: CustomerOrderProgressView }) {
   return (
     <section aria-labelledby="order-timeline-heading">
       <h2 id="order-timeline-heading" className="text-xl font-bold">
-        Order timeline
+        Order progress
       </h2>
-      {entries.length === 0 ? (
-        <p
-          role="status"
-          className="mt-3 rounded-lg bg-[var(--fm-surface-soft)] p-4 text-sm text-[var(--fm-text-muted)]"
-        >
-          Timeline updates are not available for this historical order.
-        </p>
-      ) : (
-        <>
-          <ol aria-label="Order progress" className="mt-5 grid auto-cols-fr grid-flow-col">
-            {progressEntries.map((entry, index) => {
-              const paymentSucceeded =
-                entry.type === "PAYMENT_STATUS" && entry.status === "SUCCEEDED";
-              const Icon = timelineIcons[entry.type];
-
-              return (
-                <li key={entry.eventId} className="relative min-w-0 pr-2 sm:pr-4 last:pr-0">
-                  {index < progressEntries.length - 1 ? (
-                    <span
-                      className="absolute left-4 right-0 top-[15px] h-0.5 bg-[var(--fm-border)]"
-                      aria-hidden="true"
-                    />
-                  ) : null}
+      <ol aria-label="Order progress" className="mt-5 grid grid-cols-4">
+        {progress.steps.map((step, index) => {
+          const { title, icon: Icon } = milestones[step.key];
+          const complete = step.state === "COMPLETE";
+          return (
+            <li
+              key={step.key}
+              data-progress-state={step.state}
+              aria-current={step.state === "CURRENT" ? "step" : undefined}
+              className="relative min-w-0 pr-1.5 sm:pr-4 last:pr-0"
+            >
+              {index < progress.steps.length - 1 ? (
+                <span
+                  className="absolute left-4 right-0 top-[15px] h-0.5 bg-[var(--fm-border)]"
+                  aria-hidden="true"
+                >
                   <span
-                    className={`relative z-10 flex size-8 items-center justify-center rounded-full border-2 border-white text-white ring-1 ${
-                      paymentSucceeded
-                        ? "bg-[var(--fm-storefront-accent)] ring-[var(--fm-storefront-accent)]"
-                        : "bg-[var(--fm-primary-dark)] ring-[var(--fm-primary-dark)]"
-                    }`}
-                    data-timeline-marker
-                    aria-hidden="true"
+                    className="fm-order-progress-fill absolute inset-0 bg-[var(--fm-storefront-accent)]"
+                    data-complete={progress.steps[index + 1]?.state === "COMPLETE"}
+                  />
+                </span>
+              ) : null}
+              <span
+                data-timeline-marker
+                className={`relative z-10 flex size-8 items-center justify-center rounded-full border-2 bg-white ${
+                  complete
+                    ? "border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]"
+                    : step.state === "CURRENT"
+                      ? "border-[var(--fm-primary-dark)] text-[var(--fm-primary-dark)]"
+                      : "border-[var(--fm-border)] text-[var(--fm-text-muted)]"
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className="fm-order-progress-fill absolute inset-0 rounded-full bg-[var(--fm-storefront-accent)]"
+                  data-complete={complete}
+                />
+                {complete ? (
+                  <Check className="relative size-4 text-white" strokeWidth={2.5} />
+                ) : (
+                  <Icon className="relative size-4" strokeWidth={2} />
+                )}
+              </span>
+              <div className="mt-3 min-w-0">
+                <h3
+                  className={`break-words text-[11px] font-semibold leading-tight sm:text-sm ${
+                    complete
+                      ? "text-[var(--fm-storefront-accent)]"
+                      : step.state === "CURRENT"
+                        ? "text-[var(--fm-text)]"
+                        : "text-[var(--fm-text-muted)]"
+                  }`}
+                >
+                  {title}
+                </h3>
+                <span className="sr-only">
+                  {complete
+                    ? "Completed"
+                    : step.state === "CURRENT"
+                      ? "In progress"
+                      : "Not started"}
+                </span>
+                {step.achievedAt ? (
+                  <time
+                    className="mt-1 block break-words text-[10px] leading-tight text-[var(--fm-text-muted)] sm:text-xs"
+                    dateTime={step.achievedAt}
                   >
-                    <Icon className="size-4" strokeWidth={2.25} />
-                  </span>
-                  <div className="mt-3">
-                    <h3
-                      className={`text-sm font-semibold leading-tight break-words sm:text-base ${
-                        paymentSucceeded ? "text-[var(--fm-storefront-accent)]" : ""
-                      }`}
-                    >
-                      {entry.title}
-                    </h3>
-                    <time
-                      className="mt-1 block text-[11px] leading-tight text-[var(--fm-text-muted)] sm:text-xs"
-                      dateTime={entry.occurredAt}
-                    >
-                      {new Date(entry.occurredAt).toLocaleString()}
-                    </time>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-          <p role="status" className="mt-3 text-sm text-[var(--fm-text-muted)]">
-            {currentEntry?.description}
-          </p>
-        </>
-      )}
+                    {new Date(step.achievedAt).toLocaleString()}
+                  </time>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <p role="status" className="mt-4 text-sm text-[var(--fm-text-muted)]">
+        {progress.detail}
+      </p>
     </section>
   );
 }
