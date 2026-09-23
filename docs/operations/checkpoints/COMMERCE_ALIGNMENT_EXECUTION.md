@@ -1,5 +1,49 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ORDER-FOLLOWUP-PACKING-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `ORDER-FOLLOWUP-PACKING-1`. Acceptance: keep current cancellation
+with the active Order, disable Scheduled customer cancellation at the first Start packing transition
+or cutoff (including later shortage), show Order follow-up and What went wrong only after delivery,
+remove the customer View invoice presentation, and make the owning Admin preparation/delivery
+workflows discoverable from Admin Orders.
+
+Started on `main` at `2c6deefd` with ten unrelated unfinished customer-timeline files. That
+timeline work landed independently as `d7dee299`/`9996614b`; an independent storefront button
+release checkpoint landed as `b53c0be3`. A separate storefront green-text task has uncommitted
+files and a distinct Design hunk. Staging included only this request's Core, Web and guidance
+changes; those unrelated files and the separate Design hunk were preserved. No schema migration
+was needed.
+
+Core now derives Scheduled packing history from current Fulfillment state plus its immutable
+Start packing audit evidence, and rechecks the cutoff and packing boundary inside the guarded
+cancellation batch. A later shortage does not reopen customer cancellation; business-caused
+resolution retains its separate authority. Web places cancellation and additions in Order options,
+renders a disabled cancellation button with the packing reason, presents Buy again and What went
+wrong after delivery, keeps transaction summary with Totals and removes the invoice presentation.
+Admin Orders now links the selected Order to Fulfillment and Delivery, and the Fulfillment detail
+emphasizes its Core-provided next step, including Start packing.
+
+Read-only production in-app-browser inspection confirmed the prior customer layout on the owner's
+Order page. The same session's Admin Fulfillment route returned **Staff access required**, so live
+Admin behavior was not accepted. No live order command, provider transaction, deployment or
+customer-data write occurred. A managed local Worker/D1 browser cancellation spec passed **1/1**;
+its commerce response is routed for UI behavior, while the actual guarded command ran in Worker/D1
+tests. Focused final Core tests passed **57/57 across 3 files** and focused Web tests passed **9/9
+across 4 files**. `pnpm check` passed with formatting, naming, terminology, harness, migrations,
+architecture, readiness, lint, workspace types, **663/663 Web**, **1719/1719 Core Worker/D1**, shared
+tests and both builds. The aggregate ran during concurrent unrelated storefront edits and the
+customer-timeline commit; it is mixed workspace evidence, not isolated provider or production
+acceptance. `git diff --cached --check` passed for the intended staged source.
+
+Only the reviewed source and owning guidance were committed as `9ef25218` and pushed to
+`origin/main`; unrelated storefront files and its Design hunk stayed unstaged. Completion level:
+**1 of 1 requested source slice implemented, locally verified and pushed; 0 of 1 paired Core/Web
+production release accepted**. Phase 7 actual provider and staff operation acceptance remain open.
+Next action: obtain explicit owner authorization before a paired Core/Web production release, then
+verify the published customer page and staffed Fulfillment/Delivery workflows.
+
 ## Latest owner request — STOREFRONT-ACTION-GREEN-PROD-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
