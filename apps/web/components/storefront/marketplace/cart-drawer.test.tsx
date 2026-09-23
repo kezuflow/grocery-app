@@ -159,6 +159,11 @@ it("previews a requested quantity immediately without treating the old total as 
   await vi.waitFor(() =>
     expect(document.querySelector('[aria-label="Increase Preview fruit"]')).not.toBeNull(),
   );
+  const clearButton = () =>
+    [
+      ...(document.querySelector('[aria-label="Shopping cart"]')?.querySelectorAll("button") ?? []),
+    ].find((button) => button.textContent?.trim() === "Clear All");
+  expect(clearButton()?.disabled).toBe(false);
 
   act(() =>
     document.querySelector<HTMLButtonElement>('[aria-label="Increase Preview fruit"]')?.click(),
@@ -167,6 +172,11 @@ it("previews a requested quantity immediately without treating the old total as 
   expect(stepper?.querySelector("span")?.textContent).toBe("2");
   expect(stepper?.nextElementSibling?.getAttribute("aria-label")).toBe("Updating quantity");
   expect(document.querySelector('[role="status"][aria-label="Updating quantity"]')).not.toBeNull();
+  expect(clearButton()?.disabled).toBe(true);
+  act(() => clearButton()?.click());
+  expect(
+    document.querySelector<HTMLDialogElement>('[aria-labelledby="clear-cart-title"]')?.open,
+  ).toBe(false);
   expect(document.body.textContent).not.toContain("Updating quantity…");
   expect(document.body.textContent).toContain("Total 100");
   expect(
@@ -194,6 +204,7 @@ it("previews a requested quantity immediately without treating the old total as 
   await vi.waitFor(() =>
     expect(document.querySelector('[role="status"][aria-label="Updating quantity"]')).toBeNull(),
   );
+  expect(clearButton()?.disabled).toBe(false);
   expect(document.body.textContent).toContain("Total 200");
   expect(
     document.querySelector('[aria-label="Increase Preview fruit"]')?.hasAttribute("disabled"),

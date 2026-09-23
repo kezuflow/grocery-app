@@ -131,12 +131,8 @@ export function CartDrawer() {
   const guest = cart?.id === "guest-cart";
   const displayItems = cartItemsWithPending(cart, quantityQueue.pending);
   const hasItems = displayItems.length > 0;
-  const canClear =
-    Boolean(cart?.items.length) &&
-    !loading &&
-    !error &&
-    !quantityQueue.busy &&
-    !cart?.paymentInProgress;
+  const showClear = Boolean(cart?.items.length) && !cart?.paymentInProgress;
+  const clearDisabled = loading || Boolean(error) || quantityQueue.busy || clearing;
 
   return (
     <>
@@ -163,14 +159,15 @@ export function CartDrawer() {
         <div className="flex h-full flex-col bg-white shadow-[var(--fm-shadow-overlay)]">
           <div className="flex shrink-0 items-center justify-between border-b border-[var(--fm-border)] px-5 py-4">
             <h2 className="mt-1 text-xl font-bold">Your cart</h2>
-            {canClear ? (
+            {showClear ? (
               <button
                 type="button"
+                disabled={clearDisabled}
                 onClick={() => {
                   setClearError("");
                   setConfirmingClear(true);
                 }}
-                className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline"
+                className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-[var(--fm-destructive)] underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-50 disabled:hover:no-underline"
               >
                 Clear All
               </button>
