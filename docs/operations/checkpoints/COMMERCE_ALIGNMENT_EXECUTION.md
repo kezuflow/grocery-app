@@ -32,6 +32,43 @@ review the pushed visual source in a separately authorized Web release and
 compare its published photos with the owner's screenshot; Phase 7 provider/production acceptance
 remains open.
 
+## Latest owner request — CART-PROMO-VOUCHER-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `CART-PROMO-VOUCHER-1`. Acceptance: an entered Cart promo code
+appears as a ticket-like voucher on the drawer and `/cart`; its removal affordance is a visible X
+with a specific accessible name; the redundant `CODE added. Review the total to check eligibility.`
+status disappears. Validation failures and actual Core quote feedback stay visible, and merely
+adding a draft code never claims a discount or eligibility.
+
+Observed synchronized `main`/`origin/main` at `7a108c3700504d552210f0fc315e036899e921ba`
+before editing, with unrelated task-owned Web/Design modifications and one temporary test already
+present. They remain untouched. The current production Web version from the prior slice is
+`51ecd0e4-28f7-4b27-89a3-f0d8582a597e`; no deployment is authorized by the present request
+unless the owner separately approves it.
+
+Implemented the voucher presentation in the existing shared PromotionEntry component: dashed
+ticket border, code/icon treatment, 44px X button, pending removal spinner and no visible Remove
+label. Successful draft add/remove clears transient status instead of reporting a fabricated
+pricing outcome; errors and Core feedback retain the polite live region. The static explanation
+that eligibility is checked at checkout remains. No Core, D1, schema, quote calculation, payment
+or provider behavior changes are included. Focused Web tests passed **16/16 across 2 files**,
+covering voucher markup, accessible removal, added-code status absence and the drawer add/remove
+journey. An initial aggregate run was stopped after Web tests to preserve a mounted empty
+`aria-live` region for later validation errors; the focused tests, Web typecheck and lint passed
+again after that correction. The final `pnpm check` passed on the working-tree scope: formatting,
+naming, terminology, harness, migration, commit, architecture, readiness and lint gates; all
+workspace typechecks; Web **660/660 across 157 files**, Core Worker/D1 **1714/1714 across 210
+files**, shared-package tests, Core dry-run and Web build. `git diff --check` passed. The three
+promo source/test files alone were committed and pushed to `main` as `04a77490`; unrelated
+task-owned Web/Design changes were not included. No browser or production acceptance is claimed.
+The optional Web-only deployment question is pending owner response; the prior deployment
+approval applied only to the clear-action slice. Completion level: **1 of 1 promo voucher source
+slice implemented, aggregate-verified and pushed**; production/browser acceptance remains
+separate. Next action: on explicit approval, cherry-pick only `04a77490` into the isolated Web
+release checkout, verify it there, deploy Web and inspect the voucher in the Codex in-app browser.
+Otherwise hand off the pushed source without deploying.
+
 ## Latest owner request — CART-CLEAR-VISIBILITY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
