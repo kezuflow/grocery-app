@@ -91,6 +91,16 @@ export function ProductQuickView({
   const preview = products.find((product) => product.slug === slug);
   const variants = presentation?.variants ?? [];
   const selected = variants.find((variant) => variant.id === variantId) ?? null;
+  const total =
+    selected && selected.priceMinor !== null && selected.currency
+      ? formatMoney(selected.priceMinor * quantity, selected.currency)
+      : null;
+  const addLabel = selected?.sale
+    ? "Add to cart · Check current savings"
+    : total
+      ? `Add to cart · ${total}`
+      : "Add to cart";
+  const compactAddLabel = selected?.sale ? "Add to cart" : total ? `Add · ${total}` : "Add to cart";
   const recommendations = (
     presentation
       ? products.filter((product) => {
@@ -358,7 +368,7 @@ export function ProductQuickView({
                 </Link>
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 max-[379px]:flex-wrap sm:px-6">
               <div className="inline-flex h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)]">
                 <button
                   type="button"
@@ -386,19 +396,21 @@ export function ProductQuickView({
               <Button
                 type="button"
                 onClick={() => void add()}
+                aria-label={addLabel}
                 disabled={
                   pending ||
                   !selected ||
                   selected.priceMinor === null ||
                   selected.availability !== "AVAILABLE"
                 }
-                className="h-11 min-w-0 flex-1 px-4 font-bold sm:flex-none sm:px-6"
+                className="h-auto min-h-11 min-w-0 flex-1 whitespace-normal px-4 py-2 text-center leading-tight font-bold max-[379px]:w-full max-[379px]:flex-none sm:flex-none sm:px-6"
               >
-                {selected?.sale
-                  ? "Add to cart · Check current savings"
-                  : selected && selected.priceMinor !== null && selected.currency
-                    ? `Add to cart · ${formatMoney(selected.priceMinor * quantity, selected.currency)}`
-                    : "Add to cart"}
+                <span className="sm:hidden" aria-hidden="true">
+                  {compactAddLabel}
+                </span>
+                <span className="hidden sm:inline" aria-hidden="true">
+                  {addLabel}
+                </span>
               </Button>
             </div>
           </div>
