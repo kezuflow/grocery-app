@@ -11,9 +11,9 @@ production deployment authorization.
 
 Started on synchronized `main` at `b53c0be3` with unrelated order-follow-up source in progress.
 That work landed independently as `9ef25218`/`16eb1a71`; its Core and Web files were preserved.
-The current checkout is `main`/`origin/main` at `16eb1a71` with only this Storefront color source,
-browser test and Design hunk pending. No schema, Core command, provider or customer-data change is
-needed.
+The reviewed Storefront color source, browser test and Design hunk were committed as `1877abec`
+and pushed to synchronized `main`/`origin/main`; the working tree was clean afterward. No schema,
+Core command, provider or customer-data change was needed.
 
 Storefront text/status/link accents now use a single `--fm-storefront-accent: #00b14f` token,
 shared with the existing primary action fill. The audit covers product availability, address and
@@ -35,8 +35,9 @@ It is local presentation acceptance, not production/provider acceptance. The agg
 check` was not rerun for this presentation-only slice; separate Core suites in another worktree
 were active during this task. Phase 7 aggregate and provider/journey obligations remain open.
 
-Next action: review the final diff, then commit and push only this source slice. A separate owner
-request is required before production Web deployment and published-color acceptance.
+Completion level: **1 of 1 requested Storefront source slices implemented, locally verified and
+pushed; 0 of 1 production Web releases accepted**. Next action: wait for a separate owner request
+before production Web deployment and published-color acceptance.
 
 ## Latest owner request — ORDER-FOLLOWUP-PACKING-1 (2026-09-23)
 
