@@ -77,16 +77,13 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
         </span>
       </div>
 
-      <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="min-w-0 space-y-6">
-          <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
-            <OrderTimeline progress={order.progress} />
-          </div>
+      <div className="mt-7 space-y-6">
+        <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
+          <OrderTimeline progress={order.progress} />
+        </div>
 
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            aria-labelledby="order-items-heading"
-          >
+        <div className="divide-y divide-[var(--fm-border)] overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
+          <section className="p-5 sm:p-6" aria-labelledby="order-items-heading">
             <h2 id="order-items-heading" className="text-xl font-bold">
               Items
             </h2>
@@ -107,10 +104,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </ul>
           </section>
 
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            aria-labelledby="delivery-heading"
-          >
+          <section className="p-5 sm:p-6" aria-labelledby="delivery-heading">
             <h2 id="delivery-heading" className="text-xl font-bold">
               Delivery
             </h2>
@@ -164,10 +158,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           </section>
 
           {order.status !== "DELIVERED" ? (
-            <section
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-              aria-labelledby="order-options-heading"
-            >
+            <section className="p-5 sm:p-6" aria-labelledby="order-options-heading">
               <h2 id="order-options-heading" className="text-xl font-bold">
                 Order options
               </h2>
@@ -193,10 +184,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           ) : null}
 
           {order.status === "DELIVERED" ? (
-            <section
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-              aria-labelledby="follow-up-heading"
-            >
+            <section className="p-5 sm:p-6" aria-labelledby="follow-up-heading">
               <h2 id="follow-up-heading" className="text-xl font-bold">
                 Order follow-up
               </h2>
@@ -212,10 +200,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           ) : null}
 
           {order.amendments.length ? (
-            <section
-              aria-labelledby="amendments-heading"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            >
+            <section aria-labelledby="amendments-heading" className="p-5 sm:p-6">
               <h2 id="amendments-heading" className="text-xl font-bold">
                 Order additions
               </h2>
@@ -232,10 +217,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </section>
           ) : null}
           {order.issues.length ? (
-            <section
-              aria-labelledby="issues-heading"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            >
+            <section aria-labelledby="issues-heading" className="p-5 sm:p-6">
               <h2 id="issues-heading" className="text-xl font-bold">
                 Reported issues
               </h2>
@@ -257,13 +239,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               </ul>
             </section>
           ) : null}
-        </div>
-
-        <aside className="space-y-5 xl:sticky xl:top-24">
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5"
-            aria-labelledby="totals-heading"
-          >
+          <section className="p-5 sm:p-6" aria-labelledby="totals-heading">
             <h2 id="totals-heading" className="text-xl font-bold">
               Totals
             </h2>
@@ -293,10 +269,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               </Link>
             ) : null}
           </section>
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5"
-            aria-labelledby="payment-heading"
-          >
+          <section className="p-5 sm:p-6" aria-labelledby="payment-heading">
             <h2 id="payment-heading" className="text-xl font-bold">
               Payment
             </h2>
@@ -326,7 +299,7 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               </p>
             ) : null}
           </section>
-        </aside>
+        </div>
       </div>
     </div>
   );
