@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-VISUAL-1 (2026-09-23)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Stable ID: `STOREFRONT-VISUAL-1`. Acceptance: make the product quick view's
+image area compact rather than a full-height left panel; keep all dialog corners rounded and its
+bottom action visible; give gallery/recommendation images consistent framing; align ordinary
+Storefront primary, secondary and dark-surface action colors/radii across the affected entry points.
+
+Observed synchronized `main`/`origin/main` at `118105bd` before editing, with separate cart-drawer
+work and its checkpoint section already in progress. That work subsequently landed at `7a108c37`;
+independent promotion-entry source landed at `04a77490`. This visual slice touches only Web presentation
+and the owning Design guidance. Quick view has a 220px desktop media column with a self-sized
+square tile (184px mobile cap), a clipped 12px outer frame, internally scrolling details and a
+retained bottom action. Gallery thumbnails and same-category tiles share 8px framing. Ordinary
+primary actions use dark green with white text; outlined secondary and inverse actions preserve
+their contextual contrast. No commerce authority, Core/D1, provider or schema behavior changed.
+
+Verification on the working tree: focused quick-view/add-control tests **6/6**, Web typecheck,
+lint and `git diff --check` passed. The full `pnpm check` passed: formatting/convention/harness/
+migration/architecture/readiness gates, all workspace typechecks, Web **660/660 across 157 files**,
+Core Worker/D1 **1714/1714 across 210 files**, shared-package tests, Core dry run and Web build.
+Local managed Worker/D1 browser captures passed at **850×850** and **390×844**: 12px dialog radius,
+media and footer inside the frame, dark-green Add action, no horizontal page overflow. A transient
+mobile grid overflow found in visual review was corrected before the final passing capture. The
+isolated local Core provided image placeholders, so those captures establish tile/framing/layout
+but not the appearance of published R2 photos. No production deployment or actual provider action
+was performed. Visual source/Design commit `f7652293` was pushed to `main`. Completion level:
+**1 of 1 storefront visual source slice implemented, locally verified and pushed**. Next action:
+review the pushed visual source in a separately authorized Web release and
+compare its published photos with the owner's screenshot; Phase 7 provider/production acceptance
+remains open.
+
 ## Latest owner request — CART-CLEAR-VISIBILITY-1 (2026-09-23)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
