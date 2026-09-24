@@ -112,6 +112,18 @@ async function render(locked = false, review = false) {
     ),
   );
 }
+it("keeps the location status action when dispatch settings cannot be read", async () => {
+  route.pathname = "/admin/locations/central/fulfillment";
+  const read = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation((input, init) =>
+    String(input).includes("/location-fulfillment?")
+      ? Promise.resolve(Response.json({ ok: false }))
+      : read!(input, init),
+  );
+  await render(false, true);
+  expect(button("Activate location")).toBeTruthy();
+  expect(host.textContent).toContain("Dispatch settings could not be loaded");
+});
 it("shows saved versus incomplete steps and blocks step navigation during an unconfirmed save", async () => {
   await render();
   expect(host.textContent).toContain("Step 2 of 4");

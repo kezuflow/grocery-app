@@ -17,6 +17,8 @@ import { Label } from "../../ui/label";
 import { useAdminCommandIntent } from "../admin-command-state";
 import { notifyCommandSuccess } from "../admin-feedback";
 import { useSetupNavigationLock } from "../location-setup-state";
+import { useAdminScopeGuard } from "../../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "../use-admin-route-guard";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -65,6 +67,13 @@ export function LocationDeliveryProfilePanel({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const locked = pendingPayload !== null || command.pending;
+  useAdminScopeGuard(dirty, locked, () => {
+    setDirty(false);
+    setRefreshVersion((version) => version + 1);
+  });
+  useAdminRouteGuard(dirty, locked);
   useSetupNavigationLock(pendingPayload !== null || command.pending);
   const loadGeneration = useRef(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -185,8 +194,9 @@ export function LocationDeliveryProfilePanel({
       setPendingPayload(null);
       if (result.ok) {
         setView(result.value);
+        setDirty(false);
         notifyCommandSuccess("Courier pickup details saved");
-        onSaved?.();
+        if (onSaved) window.setTimeout(onSaved, 0);
       } else {
         setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
       }
@@ -196,14 +206,14 @@ export function LocationDeliveryProfilePanel({
   }
 
   return (
-    <section className="rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4">
+    <section className="rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
       <h1 className="text-xl font-semibold">{view?.locationName ?? "Location"} courier pickup</h1>
       <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
         Coordinates come from this location's saved pin; these fields identify the sender and pickup
         address sent to the courier.
       </p>
       {reuseLocationAddress && view && (
-        <div className="mt-3 rounded border p-3 text-sm">
+        <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
           <h2 className="font-medium">Pickup location from step 1</h2>
           <p>
             {savedLocation?.address
@@ -235,7 +245,11 @@ export function LocationDeliveryProfilePanel({
         variant="outline"
         className="mt-3"
         disabled={loading || command.pending || pendingPayload !== null}
-        onClick={() => setRefreshVersion((version) => version + 1)}
+        onClick={() => {
+          if (dirty && !window.confirm("Discard unsaved pickup details and refresh?")) return;
+          setDirty(false);
+          setRefreshVersion((version) => version + 1);
+        }}
       >
         {loading ? "Refreshing…" : "Refresh pickup details"}
       </Button>
@@ -243,6 +257,7 @@ export function LocationDeliveryProfilePanel({
         <form
           key={`${view.locationId}:${view.profile?.version ?? 0}`}
           className="mt-4 grid gap-4 sm:grid-cols-2"
+          onInput={() => setDirty(true)}
           onSubmit={submit}
         >
           {(reuseLocationAddress ? fields.slice(0, 3) : fields).map(([name, label, required]) => (

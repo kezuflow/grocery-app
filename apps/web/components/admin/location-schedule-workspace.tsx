@@ -16,6 +16,8 @@ import { TimeOfDayInput } from "./time-of-day-input";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useSetupNavigationLock } from "./location-setup-state";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 const responseSchema = z.union([
   z.object({ ok: z.literal(true), requestId: z.string(), value: adminLocationScheduleViewSchema }),
@@ -64,6 +66,17 @@ export function LocationScheduleWorkspace({
   const [loading, setLoading] = useState(false);
   const intent = useAdminCommandIntent();
   const locked = pending !== null || intent.pending || loading;
+  const dirty =
+    result.ok &&
+    result.value.canManage &&
+    (reason.trim().length > 0 ||
+      JSON.stringify(schedule) !==
+        JSON.stringify(result.value.schedule ?? { weekly: [], closures: [] }));
+  useAdminScopeGuard(dirty, locked, () => {
+    if (result.ok) setSchedule(result.value.schedule ?? { weekly: [], closures: [] });
+    setReason("");
+  });
+  useAdminRouteGuard(dirty, locked);
   useSetupNavigationLock(pending !== null || intent.pending);
   async function refresh() {
     setLoading(true);
@@ -73,11 +86,12 @@ export function LocationScheduleWorkspace({
           await fetch(`/api/admin/location-schedule?locationId=${encodeURIComponent(locationId)}`)
         ).json(),
       );
-      setResult(next);
       if (next.ok) {
+        setResult(next);
         setSchedule(next.value.schedule ?? { weekly: [], closures: [] });
+        setReason("");
         setNotice("");
-      }
+      } else setNotice(next.error.message);
     } catch {
       setNotice("Schedule could not be loaded. Retry refresh.");
     } finally {
@@ -110,8 +124,9 @@ export function LocationScheduleWorkspace({
         notifyCommandSuccess("Operating schedule saved");
         setResult(next);
         setSchedule(next.value.schedule ?? { weekly: [], closures: [] });
+        setReason("");
         setNotice("Operating schedule saved. Existing orders keep their accepted promises.");
-        onSaved?.();
+        if (onSaved) window.setTimeout(onSaved, 0);
       } else setNotice(next.error.message);
     } catch {
       setNotice("Response not confirmed. Retry the same schedule request.");
@@ -145,7 +160,14 @@ export function LocationScheduleWorkspace({
         description="Weekly hours and dated closures for new Instant checkout. Scheduled ordering follows its cycle opening and cutoff."
       />
       <p role="status">{notice || (!result.ok ? result.error.message : "")}</p>
-      <Button variant="outline" disabled={locked} onClick={() => void refresh()}>
+      <Button
+        variant="outline"
+        disabled={locked}
+        onClick={() => {
+          if (dirty && !window.confirm("Discard unsaved operating hours and refresh?")) return;
+          void refresh();
+        }}
+      >
         Refresh schedule
       </Button>
       {pending && (
@@ -162,10 +184,16 @@ export function LocationScheduleWorkspace({
           {!result.value.schedule && (
             <p>Hours are not configured; new Instant checkout remains unavailable.</p>
           )}
-          <fieldset disabled={locked || !result.value.canManage} className="space-y-4">
+          <fieldset
+            disabled={locked || !result.value.canManage}
+            className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+          >
             <legend className="font-semibold">Weekly Instant operating hours</legend>
             {schedule.weekly.map((row, index) => (
-              <div key={index} className="flex flex-wrap items-end gap-3 rounded border p-3">
+              <div
+                key={index}
+                className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3"
+              >
                 <label>
                   Day {index + 1}
                   <Select
@@ -233,14 +261,20 @@ export function LocationScheduleWorkspace({
               Add operating interval
             </Button>
           </fieldset>
-          <fieldset disabled={locked || !result.value.canManage} className="space-y-4">
+          <fieldset
+            disabled={locked || !result.value.canManage}
+            className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+          >
             <legend className="font-semibold">Dated closures</legend>
             <p>
               Closure inputs use your device timezone. Review the market local times below before
               saving.
             </p>
             {schedule.closures.map((row, index) => (
-              <div key={index} className="space-y-2 rounded border p-3">
+              <div
+                key={index}
+                className="space-y-2 rounded-lg border border-border bg-muted/30 p-3"
+              >
                 {(["startsAt", "endsAt", "reason"] as const).map((field) => (
                   <label key={field} className="block">
                     {field === "startsAt"

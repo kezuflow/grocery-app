@@ -7,6 +7,7 @@ import type { LocationDeliveryProfileView } from "@freshmarkets/contracts";
 import { LocationDeliveryProfilePanel } from "./location-delivery-profile-panel";
 
 vi.mock("../../../app/admin/admin-context-provider", () => ({
+  useAdminScopeGuard: () => {},
   useAdminContext: () => ({
     state: {
       phase: "ready",

@@ -33,7 +33,13 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
     [
       "/fulfillment",
       "Review and enable",
-      data?.readiness ? (data.readiness.dispatchReady ? "Ready" : "Not ready") : "Unavailable",
+      data?.location && data.readiness
+        ? data.location.status !== "active"
+          ? "Activation needed"
+          : data.readiness.dispatchReady
+            ? "Ready"
+            : "Dispatch not ready"
+        : "Unavailable",
     ],
   ];
   const current = Math.max(
@@ -41,30 +47,42 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
     steps.findIndex(([path]) => pathname === `${base}${path}`),
   );
   return (
-    <div className="space-y-3">
-      <Link {...guardedLink} href="/admin/locations" className="text-sm underline">
-        All locations
-      </Link>
-      <p className="font-medium">
-        {data?.location?.name ?? "Location setup"} · Step {current + 1} of 4
-      </p>
-      <p className="text-sm text-muted-foreground">
-        Save the location and pickup contact. Instant also requires operating hours; Scheduled uses
-        its cycle timing. You can return to any step to review saved settings.
-      </p>
-      <nav aria-label="Location setup steps" className="grid gap-2 border-b pb-3 sm:grid-cols-4">
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Link
+          {...guardedLink}
+          href="/admin/locations"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+        >
+          ← All locations
+        </Link>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-xl font-semibold tracking-tight">
+            {data?.location?.name ?? "Location setup"}
+          </p>
+          <span className="text-xs font-medium text-muted-foreground">Step {current + 1} of 4</span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Save each step before continuing. Instant also requires operating hours; Scheduled uses
+          its cycle timing. You can return to review saved settings.
+        </p>
+      </div>
+      <nav aria-label="Location setup steps" className="grid gap-2 sm:grid-cols-4">
         {steps.map(([path, label, status], index) => (
           <Link
             {...guardedLink}
             key={path}
             href={`${base}${path}`}
             aria-current={pathname === `${base}${path}` ? "page" : undefined}
-            className="rounded px-3 py-2 text-sm hover:bg-muted aria-[current=page]:bg-muted aria-[current=page]:font-semibold"
+            className="rounded-xl border border-border bg-[var(--fm-admin-surface)] px-3 py-3 text-sm transition-colors hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-muted aria-[current=page]:font-semibold"
           >
-            <span className="block">
-              {index + 1}. {label}
+            <span className="flex items-center gap-2">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs tabular-nums">
+                {index + 1}
+              </span>
+              {label}
             </span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="mt-2 block pl-8 text-xs text-muted-foreground">
               {loading ? "Checking…" : status}
             </span>
           </Link>
@@ -73,7 +91,7 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
       {current > 0 && (
         <Link
           {...guardedLink}
-          className="inline-block text-sm underline"
+          className="inline-block text-sm font-medium underline-offset-4 hover:underline"
           href={`${base}${steps[current - 1][0]}`}
         >
           Back to {steps[current - 1][1]}

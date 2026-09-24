@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { z, adminLocationViewSchema } from "@freshmarkets/validation";
 import { appErrorCodes } from "@freshmarkets/contracts";
@@ -9,6 +9,10 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
+import { AdminStatusPill } from "./admin-status-pill";
+import { AdminConfirmationDialog } from "./admin-controls";
 
 const responseSchema = z.union([
   z.object({ ok: z.literal(true), requestId: z.string(), value: adminLocationViewSchema }),
@@ -22,19 +26,30 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
   const intent = useAdminCommandIntent();
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState("");
+  const [dispatchDirty, setDispatchDirty] = useState(false);
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const deactivateTriggerRef = useRef<HTMLButtonElement>(null);
   const [pending, setPending] = useState<{
-    action: "ACTIVATE";
+    action: "ACTIVATE" | "DEACTIVATE";
     locationId: string;
     expectedVersion: number;
     reason: string;
   } | null>(null);
-  async function activate() {
+  const locked = pending !== null || intent.pending;
+  useAdminScopeGuard(Boolean(reason.trim()), locked, () => setReason(""));
+  useAdminRouteGuard(Boolean(reason.trim()), locked);
+  async function changeStatus(confirmedReason?: string) {
     if (!data?.location || !data.canManage || intent.pending) return;
+    if (dispatchDirty && !pending) {
+      setNotice("Save or discard dispatch changes before changing location status.");
+      return;
+    }
+    const action = data.location.status === "active" ? "DEACTIVATE" : "ACTIVATE";
     const payload = pending ?? {
-      action: "ACTIVATE" as const,
+      action,
       locationId,
       expectedVersion: data.location.version,
-      reason,
+      reason: confirmedReason ?? reason,
     };
     setPending(payload);
     setNotice("");
@@ -53,17 +68,27 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
       );
       setPending(null);
       if (response.ok) {
-        notifyCommandSuccess("Location activated");
+        notifyCommandSuccess(
+          payload.action === "ACTIVATE" ? "Location activated" : "Location deactivated",
+        );
         setReason("");
+        setConfirmDeactivate(false);
         reload();
-      } else setNotice(response.error.message);
+      } else {
+        setNotice(response.error.message);
+        if (payload.action === "DEACTIVATE") setConfirmDeactivate(false);
+      }
     } catch {
-      setNotice("Activation not confirmed. Retry to confirm this change.");
+      setNotice(
+        payload.action === "ACTIVATE"
+          ? "Activation not confirmed. Retry to confirm this change."
+          : "Deactivation not confirmed. Retry the same change to recover its result.",
+      );
     }
   }
-  useSetupNavigationLock(pending !== null || intent.pending);
+  useSetupNavigationLock(locked);
   if (loading && !pending) return <p role="status">Loading saved setup…</p>;
-  if (!data?.location || !data.readiness)
+  if (!data?.location)
     return (
       <div role="alert">
         Setup could not be loaded. <Button onClick={reload}>Retry review</Button>
@@ -78,13 +103,37 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
     },
   };
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Review {data.location.name}</h1>
-      <Button variant="outline" disabled={navigationLocked} onClick={reload}>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Review {data.location.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            Check saved details, location status and dispatch setup.
+          </p>
+        </div>
+        <AdminStatusPill
+          status={data.location.status}
+          tone={data.location.status === "active" ? "success" : "neutral"}
+        />
+      </div>
+      <Button
+        variant="outline"
+        disabled={navigationLocked}
+        onClick={() => {
+          if (
+            (dispatchDirty || reason.trim()) &&
+            !window.confirm("Discard unsaved review changes and refresh?")
+          )
+            return;
+          setReason("");
+          setDispatchDirty(false);
+          reload();
+        }}
+      >
         Refresh review
       </Button>
-      <dl className="grid gap-4 rounded border p-4 sm:grid-cols-3">
-        <div>
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
           <dt className="font-medium">Location</dt>
           <dd>
             {data.location.address
@@ -98,7 +147,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             </Link>
           </dd>
         </div>
-        <div>
+        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
           <dt className="font-medium">Pickup contact</dt>
           <dd>{data.pickup ? (data.pickup.profile?.senderName ?? "Not saved") : "Unavailable"}</dd>
           <dd>
@@ -107,7 +156,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             </Link>
           </dd>
         </div>
-        <div>
+        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
           <dt className="font-medium">Instant operating hours</dt>
           <dd>
             {data.hours
@@ -125,10 +174,10 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
       </dl>
       {data.location.status === "inactive" && (
         <form
-          className="space-y-3 rounded border p-4"
+          className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
           onSubmit={(event) => {
             event.preventDefault();
-            void activate();
+            void changeStatus();
           }}
         >
           <p>
@@ -149,21 +198,79 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             disabled={
               intent.pending ||
               !data.canManage ||
-              (!pending && (navigationLocked || !reason.trim()))
+              (!pending && (navigationLocked || !reason.trim() || dispatchDirty))
             }
           >
             {intent.pending ? "Activating…" : pending ? "Retry activation" : "Activate location"}
           </Button>
         </form>
       )}
-      {!pending && (
+      {data.location.status === "active" && data.canManage && (
+        <div className="rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5">
+          <h2 className="font-semibold">Location status</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Deactivate this location to stop new fulfillment work. Core checks existing obligations
+            before changing status.
+          </p>
+          <Button
+            ref={deactivateTriggerRef}
+            type="button"
+            variant="outline"
+            className="mt-3"
+            disabled={navigationLocked || dispatchDirty}
+            onClick={() => setConfirmDeactivate(true)}
+          >
+            Deactivate location
+          </Button>
+        </div>
+      )}
+      <AdminConfirmationDialog
+        open={confirmDeactivate}
+        title="Deactivate location"
+        resource={data.location.name}
+        scope="Location fulfillment"
+        consequence="This location will stop serving new fulfillment work. The change may be blocked while operational obligations remain."
+        confirmLabel={pending ? "Retry deactivation" : "Deactivate location"}
+        initialReason={pending?.reason ?? ""}
+        reasonLocked={pending !== null}
+        error={confirmDeactivate ? notice : undefined}
+        maxReasonLength={500}
+        restoreFocusRef={deactivateTriggerRef}
+        pending={intent.pending}
+        cancelDisabled={pending !== null}
+        onCancel={() => {
+          if (!pending) setConfirmDeactivate(false);
+        }}
+        onConfirm={(confirmedReason) => void changeStatus(confirmedReason)}
+      />
+      {data.location.status === "active" && notice && !confirmDeactivate && (
+        <p role="alert">{notice}</p>
+      )}
+      {dispatchDirty && (
+        <p className="text-sm text-muted-foreground">
+          Save or discard dispatch changes before changing location status.
+        </p>
+      )}
+      {!pending && data.readiness && (
         <LocationFulfillmentWorkspace
           key={data.readiness.version}
           initial={{ ok: true, requestId: "location-setup", value: data.readiness }}
           locationId={locationId}
           onSaved={reload}
+          onDirtyChange={setDispatchDirty}
           embedded
         />
+      )}
+      {!pending && !data.readiness && (
+        <div
+          role="alert"
+          className="rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+        >
+          Dispatch settings could not be loaded.{" "}
+          <Button variant="outline" onClick={reload}>
+            Retry review
+          </Button>
+        </div>
       )}
     </div>
   );

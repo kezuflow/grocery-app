@@ -29,6 +29,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Checkbox } from "../ui/checkbox";
 import { LocationAddressMap } from "./location-address-map";
 import { useSetupNavigationLock } from "./location-setup-state";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
+import { AdminStatusPill } from "./admin-status-pill";
 
 const failed = z.object({
   ok: z.literal(false),
@@ -105,6 +108,15 @@ export function LocationsWorkspace({
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const intent = useAdminCommandIntent();
   const locked = intent.pending || pendingPayload !== null;
+  const dirty =
+    editing !== undefined &&
+    (reason.trim().length > 0 ||
+      JSON.stringify(draft) !== JSON.stringify(draftFor(editing ?? undefined)));
+  useAdminScopeGuard(dirty, locked, () => {
+    if (editing === null) setEditing(undefined);
+    else if (editing) edit(editing);
+  });
+  useAdminRouteGuard(dirty, locked);
   useSetupNavigationLock(locked);
   async function load(cursor?: string, resetEditor = false) {
     setLoading(true);
@@ -113,9 +125,10 @@ export function LocationsWorkspace({
         `/api/admin/locations${detailLocationId ? `?locationId=${encodeURIComponent(detailLocationId)}` : cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
       );
       const next = listResult.parse(await response.json());
-      setResult(next);
-      if (resetEditor && detailLocationId && next.ok && next.value.items[0])
-        edit(next.value.items[0]);
+      if (next.ok) {
+        setResult(next);
+        if (resetEditor && detailLocationId && next.value.items[0]) edit(next.value.items[0]);
+      } else setNotice(next.error.message);
     } catch {
       setNotice("Locations could not be loaded. Retry to refresh.");
     } finally {
@@ -147,7 +160,8 @@ export function LocationsWorkspace({
         else setEditing(undefined);
         setNotice("Location saved.");
         if (onSaved && (payload.action === "UPDATE" || payload.action === "CREATE")) {
-          onSaved(response.value);
+          // Let the draft/command guards settle before the next setup step navigates.
+          window.setTimeout(() => onSaved(response.value), 0);
           return;
         }
         await load();
@@ -199,12 +213,20 @@ export function LocationsWorkspace({
         description="Set each fulfillment center's confirmed pickup address and exact map pin. Global service areas admit customer addresses, the closest active center fulfills them, and Lalamove confirms each delivery route."
       />
       {result.ok && !detailLocationId && (
-        <Link
-          href="/admin/locations/service-areas"
-          className="mb-4 inline-flex text-sm font-medium underline"
-        >
-          Manage global service areas
-        </Link>
+        <div className="mb-5 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+          <div>
+            <h2 className="font-semibold">Delivery coverage</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Service areas apply globally. Each location keeps its own pickup address and pin.
+            </p>
+          </div>
+          <Link
+            href="/admin/locations/service-areas"
+            className="mt-3 inline-flex text-sm font-semibold underline-offset-4 hover:underline sm:mt-0"
+          >
+            Manage global service areas →
+          </Link>
+        </div>
       )}
       {notice && (
         <p role="status" className="mb-4 text-sm">
@@ -220,7 +242,7 @@ export function LocationsWorkspace({
         </div>
       ) : (
         <>
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 flex flex-wrap gap-2">
             {!detailLocationId && (
               <Button disabled={!result.value.canManage || locked} onClick={() => edit(null)}>
                 Add location
@@ -229,7 +251,12 @@ export function LocationsWorkspace({
             <Button
               variant="outline"
               disabled={loading || locked}
-              onClick={() => void load(undefined, true)}
+              onClick={() => {
+                if (dirty && !window.confirm("Discard unsaved location changes and refresh?"))
+                  return;
+                if (!detailLocationId) setEditing(undefined);
+                void load(undefined, true);
+              }}
             >
               Refresh
             </Button>
@@ -237,50 +264,64 @@ export function LocationsWorkspace({
           {detailLocationId && !editing && <p role="alert">Location not found.</p>}
           {!detailLocationId && (
             <ListPageSection title="Operating locations">
-              <div className="divide-y">
+              <div className="divide-y divide-border">
                 {result.value.items.length === 0 && <p className="p-4">No locations configured.</p>}
                 {result.value.items.map((location) => (
                   <div
                     key={location.locationId}
-                    className="flex flex-wrap items-center justify-between gap-3 p-4"
+                    className="flex flex-wrap items-center justify-between gap-4 p-4 hover:bg-muted/40"
                   >
-                    <div>
-                      <h2 className="font-medium">{location.name}</h2>
-                      <Link
-                        href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
-                        className="text-sm underline"
-                      >
-                        Instant operating hours for {location.name}
-                      </Link>
-                      {location.purpose === "CUSTOMER_FULFILLMENT" && (
-                        <Link
-                          href={`/admin/locations/${encodeURIComponent(location.locationId)}/fulfillment`}
-                          className="block text-sm underline"
-                        >
-                          Fulfillment readiness for {location.name}
-                        </Link>
-                      )}
-                      <p className="text-sm">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-semibold">{location.name}</h2>
+                        <AdminStatusPill
+                          status={location.status}
+                          tone={location.status === "active" ? "success" : "neutral"}
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
                         {location.purpose === "CENTRAL_WAREHOUSE"
                           ? "Central warehouse"
                           : "Customer fulfillment"}{" "}
-                        · {location.status} · {location.marketName}
+                        · {location.marketName}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {location.address
                           ? `${location.address.addressLine1}, ${location.address.city}`
                           : "Address confirmation needed"}
                       </p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        Pickup pin · {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                      </p>
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">Pickup pin coordinates</summary>
+                        <span className="font-mono">
+                          {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                        </span>
+                      </details>
                     </div>
-                    <Link
-                      className="text-sm font-medium underline"
-                      href={`/admin/locations/${encodeURIComponent(location.locationId)}`}
-                    >
-                      Review {location.name}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <Link
+                        href={`/admin/locations/${encodeURIComponent(location.locationId)}/schedule`}
+                        aria-label={`Instant operating hours for ${location.name}`}
+                        className="text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        Instant hours
+                      </Link>
+                      {location.purpose === "CUSTOMER_FULFILLMENT" && (
+                        <Link
+                          href={`/admin/locations/${encodeURIComponent(location.locationId)}/fulfillment`}
+                          aria-label={`Fulfillment readiness for ${location.name}`}
+                          className="text-sm font-medium underline-offset-4 hover:underline"
+                        >
+                          Fulfillment
+                        </Link>
+                      )}
+                      <Link
+                        aria-label={`Review setup for ${location.name}`}
+                        className="text-sm font-semibold underline-offset-4 hover:underline"
+                        href={`/admin/locations/${encodeURIComponent(location.locationId)}`}
+                      >
+                        Review setup →
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -298,7 +339,7 @@ export function LocationsWorkspace({
           {editing !== undefined && (
             <ListPageSection title={editing ? `Review ${editing.name}` : "New location"}>
               <form
-                className="space-y-4 p-4"
+                className="space-y-5 p-5"
                 onSubmit={(event) => {
                   event.preventDefault();
                   save();
@@ -536,11 +577,11 @@ export function LocationsWorkspace({
                     />
                   </div>
                 </fieldset>
-                <p className="text-sm text-muted-foreground">
-                  Activation makes the site operational. Customer serviceability and courier pickup
-                  readiness are configured separately.
+                <p className="border-t border-border pt-4 text-sm text-muted-foreground">
+                  Save these details to continue setup. Activation and dispatch readiness are
+                  separate actions on the final review step.
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button type="submit" disabled={intent.pending || !result.value.canManage}>
                     {pendingPayload
                       ? "Retry saved command"
@@ -550,23 +591,6 @@ export function LocationsWorkspace({
                           ? "Create and continue"
                           : "Create inactive location"}
                   </Button>
-                  {editing && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={locked || !result.value.canManage || !reason.trim()}
-                      onClick={() =>
-                        void submit({
-                          action: editing.status === "active" ? "DEACTIVATE" : "ACTIVATE",
-                          locationId: editing.locationId,
-                          expectedVersion: editing.version,
-                          reason,
-                        })
-                      }
-                    >
-                      {editing.status === "active" ? "Deactivate location" : "Activate location"}
-                    </Button>
-                  )}
                   {!detailLocationId && (
                     <Button
                       type="button"

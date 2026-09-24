@@ -341,6 +341,17 @@ function createGoogleMapsAdapter(): MapAdapter {
 }
 
 const defaultAdapter = createGoogleMapsAdapter();
+const disposedControllers = new WeakSet<MapController>();
+
+function disposeController(controller: MapController): void {
+  if (disposedControllers.has(controller)) return;
+  disposedControllers.add(controller);
+  try {
+    controller.destroy();
+  } catch {
+    // A provider script may fail during teardown; the map is already leaving the page.
+  }
+}
 
 export type GoogleMapProps = Readonly<{
   browserApiKey?: string;
@@ -392,11 +403,7 @@ export function GoogleMap({
 
   const failLoadedController = (controller: MapController): void => {
     if (controllerRef.current === controller) controllerRef.current = undefined;
-    try {
-      controller.destroy();
-    } catch {
-      // Provider cleanup must not replace the safe map fallback with another render failure.
-    }
+    disposeController(controller);
     setError("load");
   };
 
@@ -434,7 +441,7 @@ export function GoogleMap({
           if (disposed || generationRef.current !== generation) return;
           failed = true;
           if (ownedController && controllerRef.current === ownedController) {
-            ownedController.destroy();
+            disposeController(ownedController);
             controllerRef.current = undefined;
           }
           setError("load");
@@ -443,7 +450,7 @@ export function GoogleMap({
       .then((controller) => {
         ownedController = controller;
         if (disposed || failed || generationRef.current !== generation) {
-          controller.destroy();
+          disposeController(controller);
           return;
         }
         controllerRef.current = controller;
@@ -462,7 +469,7 @@ export function GoogleMap({
       disposed = true;
       if (ownedController && controllerRef.current === ownedController)
         controllerRef.current = undefined;
-      ownedController?.destroy();
+      if (ownedController) disposeController(ownedController);
     };
   }, [
     browserApiKey,

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   appErrorCodes,
@@ -15,6 +15,7 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useSetupNavigationLock } from "./location-setup-state";
 import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 const responseSchema = z.union([
   z.object({
     ok: z.literal(true),
@@ -37,11 +38,13 @@ export function LocationFulfillmentWorkspace({
   initial,
   locationId,
   onSaved,
+  onDirtyChange,
   embedded = false,
 }: {
   initial: RpcResult<AdminLocationFulfillmentView>;
   locationId: string;
   onSaved?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   embedded?: boolean;
 }) {
   const [result, setResult] = useState(initial);
@@ -60,7 +63,9 @@ export function LocationFulfillmentWorkspace({
     result.ok &&
     (ready !== result.value.dispatchReady ||
       minutes !== String(result.value.instantPromiseMinutes ?? ""));
-  useAdminScopeGuard(changed || reason.trim().length > 0, locked, () => {
+  const dirty = changed || reason.trim().length > 0;
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useAdminScopeGuard(dirty, locked, () => {
     if (result.ok) {
       setReady(result.value.dispatchReady);
       setMinutes(String(result.value.instantPromiseMinutes ?? ""));
@@ -68,6 +73,7 @@ export function LocationFulfillmentWorkspace({
     setReason("");
     setNotice("");
   });
+  useAdminRouteGuard(dirty, locked);
   function accept(next: RpcResult<AdminLocationFulfillmentView>) {
     setResult(next);
     if (next.ok) {
@@ -78,17 +84,21 @@ export function LocationFulfillmentWorkspace({
   async function refresh() {
     setLoading(true);
     try {
-      accept(
-        responseSchema.parse(
-          await (
-            await fetch(
-              `/api/admin/location-fulfillment?locationId=${encodeURIComponent(locationId)}`,
-              { signal: AbortSignal.timeout(15_000) },
-            )
-          ).json(),
-        ),
+      const next = responseSchema.parse(
+        await (
+          await fetch(
+            `/api/admin/location-fulfillment?locationId=${encodeURIComponent(locationId)}`,
+            {
+              signal: AbortSignal.timeout(15_000),
+            },
+          )
+        ).json(),
       );
-      setNotice("");
+      if (next.ok) {
+        accept(next);
+        setReason("");
+        setNotice("");
+      } else setNotice(next.error.message);
     } catch {
       setNotice("Settings could not be loaded. Retry refresh.");
     } finally {
@@ -136,14 +146,20 @@ export function LocationFulfillmentWorkspace({
     }
   }
   return (
-    <div className="space-y-4">
+    <div
+      className={
+        embedded
+          ? "space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+          : "space-y-4"
+      }
+    >
       {!embedded && (
         <Link href="/admin/locations" className="underline">
           Locations
         </Link>
       )}
       {embedded ? (
-        <h2 className="font-semibold">Enable dispatch</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Enable dispatch</h2>
       ) : (
         <PageHeader
           title={
@@ -155,7 +171,14 @@ export function LocationFulfillmentWorkspace({
         />
       )}
       {!result.ok && <p role="alert">{notice || result.error.message}</p>}
-      <Button variant="outline" disabled={locked} onClick={() => void refresh()}>
+      <Button
+        variant="outline"
+        disabled={locked}
+        onClick={() => {
+          if (dirty && !window.confirm("Discard unsaved dispatch changes and refresh?")) return;
+          void refresh();
+        }}
+      >
         {loading ? "Refreshing…" : "Refresh settings"}
       </Button>
       {result.ok && (
@@ -164,7 +187,10 @@ export function LocationFulfillmentWorkspace({
             Saved dispatch status: {result.value.dispatchReady ? "Ready" : "Not ready"}
           </p>
           {result.value.blockers.length > 0 && (
-            <section className="rounded border p-3 text-sm" aria-label="Fulfillment setup">
+            <section
+              className="rounded-lg border border-border bg-muted/30 p-4 text-sm"
+              aria-label="Fulfillment setup"
+            >
               <h2 className="font-semibold">Setup requirements</h2>
               <ul className="mt-2 list-disc pl-5">
                 {result.value.blockers.map((item) => (

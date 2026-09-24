@@ -24,6 +24,8 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 const failed = z.object({
   ok: z.literal(false),
@@ -257,6 +259,7 @@ export function ServiceAreasWorkspace({
 }) {
   const [result, setResult] = useState(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [draftBaseline, setDraftBaseline] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingBody, setPendingBody] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(false);
@@ -269,6 +272,17 @@ export function ServiceAreasWorkspace({
   const [previewing, setPreviewing] = useState(false);
   const intent = useAdminCommandIntent();
   const locked = intent.pending || pendingBody !== null;
+  const dirty = draft !== null && JSON.stringify(draft) !== draftBaseline;
+  useAdminScopeGuard(dirty, locked, () => setDraft(null));
+  useAdminRouteGuard(dirty, locked);
+
+  function openDraft(next: Draft | null) {
+    if (locked || (dirty && !window.confirm("Discard unsaved service area changes?"))) return;
+    intent.reset();
+    setDraft(next);
+    setDraftBaseline(next ? JSON.stringify(next) : "");
+    setNotice("");
+  }
 
   async function refresh(cursor?: string) {
     setLoading(true);
@@ -277,17 +291,19 @@ export function ServiceAreasWorkspace({
         `/api/admin/serviceability${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
       );
       const parsed = listResult.parse(await response.json());
-      setResult((previous) =>
-        cursor && parsed.ok && previous.ok
-          ? {
-              ...parsed,
-              value: {
-                ...parsed.value,
-                areas: [...previous.value.areas, ...parsed.value.areas],
-              },
-            }
-          : parsed,
-      );
+      if (parsed.ok) {
+        setResult((previous) =>
+          cursor && previous.ok
+            ? {
+                ...parsed,
+                value: {
+                  ...parsed.value,
+                  areas: [...previous.value.areas, ...parsed.value.areas],
+                },
+              }
+            : parsed,
+        );
+      } else setNotice(parsed.error.message);
     } catch {
       setNotice("Unable to refresh service areas. Retry when connected.");
     } finally {
@@ -350,9 +366,13 @@ export function ServiceAreasWorkspace({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link className="text-sm underline" href="/admin/locations">
-          Locations
+      <div className="space-y-2">
+        <Link
+          aria-label="Locations"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+          href="/admin/locations"
+        >
+          ← Locations
         </Link>
         <PageHeader
           title="Service areas"
@@ -376,35 +396,35 @@ export function ServiceAreasWorkspace({
             {result.value.canManage && (
               <Button
                 disabled={locked}
-                onClick={() => {
-                  intent.reset();
-                  setDraft(newDraft(result.value.markets[0]?.marketId ?? ""));
-                  setNotice("");
-                }}
+                onClick={() => openDraft(newDraft(result.value.markets[0]?.marketId ?? ""))}
               >
                 Add service area
               </Button>
             )}
           </div>
-          <ol className="grid gap-3 sm:grid-cols-2">
+          <ol className="overflow-hidden rounded-xl border border-border bg-[var(--fm-admin-surface)] divide-y divide-border">
             {result.value.areas.map((area, index) => (
-              <li key={area.serviceAreaId} className="rounded-lg border p-4">
-                <p className="text-sm text-muted-foreground">Service area {index + 1}</p>
-                <h2 className="font-semibold">{area.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {result.value.markets.find((market) => market.marketId === area.marketId)?.name} ·
-                  Version {area.version}
-                </p>
+              <li
+                key={area.serviceAreaId}
+                className="flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-muted/40"
+              >
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Service area {index + 1}
+                  </p>
+                  <h2 className="mt-1 font-semibold">{area.name}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {result.value.markets.find((market) => market.marketId === area.marketId)?.name}{" "}
+                    · Published boundary
+                  </p>
+                </div>
                 {result.value.canManage && (
                   <Button
-                    className="mt-3"
                     variant="outline"
                     disabled={locked}
-                    onClick={() => {
-                      intent.reset();
-                      setDraft({ ...area, expectedVersion: area.version, reason: "" });
-                      setNotice("");
-                    }}
+                    onClick={() =>
+                      openDraft({ ...area, expectedVersion: area.version, reason: "" })
+                    }
                   >
                     Edit {area.name}
                   </Button>
@@ -426,7 +446,7 @@ export function ServiceAreasWorkspace({
           )}
           {draft && result.value.canManage && (
             <form
-              className="space-y-4 rounded-xl border p-4"
+              className="space-y-5 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!serviceAreaDefinitionSchema.safeParse(draft).success || !draft.reason.trim()) {
@@ -436,7 +456,7 @@ export function ServiceAreasWorkspace({
                 void publish(draft);
               }}
             >
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-lg font-semibold tracking-tight">
                 {draft.expectedVersion === 0 ? "Add service area" : `Edit ${draft.name}`}
               </h2>
               <fieldset disabled={locked} className="space-y-4">
@@ -497,13 +517,18 @@ export function ServiceAreasWorkspace({
                     onChange={(event) => setDraft({ ...draft, reason: event.target.value })}
                   />
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="border-t border-border pt-4 text-sm text-muted-foreground">
                   Publishing immediately supersedes unpaid checkout quotes in this market. Payments
                   already started and committed orders keep their saved terms.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="submit">Publish service area</Button>
-                  <Button type="button" variant="outline" onClick={() => setDraft(null)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    onClick={() => openDraft(null)}
+                  >
                     Cancel
                   </Button>
                 </div>
@@ -515,7 +540,7 @@ export function ServiceAreasWorkspace({
               )}
             </form>
           )}
-          <section className="space-y-3 rounded-xl border p-4">
+          <section className="space-y-3 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5">
             <h2 className="text-lg font-semibold">Preview a customer address pin</h2>
             <p className="text-sm text-muted-foreground">
               Checks the active global areas and current fulfillment readiness. Lalamove route

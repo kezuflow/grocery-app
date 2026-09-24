@@ -174,6 +174,24 @@ describe("GoogleMap", () => {
     act(() => root.unmount());
   });
 
+  it("can leave a map when provider marker cleanup throws", async () => {
+    const controller = {
+      updateScene: vi.fn(),
+      destroy: vi.fn(() => {
+        throw new Error("provider cleanup failure");
+      }),
+    } satisfies MapController;
+    const adapter: MapAdapter = {
+      async initialize() {
+        return controller;
+      },
+    };
+    const { root } = mountMap({ adapter });
+    await flushEffects();
+    expect(() => act(() => root.unmount())).not.toThrow();
+    expect(controller.destroy).toHaveBeenCalledOnce();
+  });
+
   it("updates scene data without rebuilding a loaded map", async () => {
     const adapter = new FakeMapAdapter();
     const { root } = mountMap({ adapter, scene: {} });
@@ -230,5 +248,6 @@ describe("GoogleMap", () => {
     expect(container.textContent).toContain("Enter coordinates manually");
     expect(controller.destroy).toHaveBeenCalledOnce();
     act(() => root.unmount());
+    expect(controller.destroy).toHaveBeenCalledOnce();
   });
 });

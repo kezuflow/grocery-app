@@ -176,6 +176,8 @@ export function AdminConfirmationDialog({
   initialReason = "",
   reasonRequired = true,
   maxReasonLength,
+  reasonLocked = false,
+  error,
   destructive = true,
   confirmLabel = "Confirm",
   cancelLabel = "Keep unchanged",
@@ -193,6 +195,8 @@ export function AdminConfirmationDialog({
   initialReason?: string;
   reasonRequired?: boolean;
   maxReasonLength?: number;
+  reasonLocked?: boolean;
+  error?: string;
   destructive?: boolean;
   confirmLabel?: string;
   cancelLabel?: string;
@@ -228,12 +232,18 @@ export function AdminConfirmationDialog({
         >
           {consequence}
         </AlertDialogDescription>
+        {error && (
+          <p role="alert" className="text-sm text-[var(--fm-destructive)]">
+            {error}
+          </p>
+        )}
         {reasonRequired ? (
           <label className="grid gap-1 text-sm font-medium">
             Reason
             <Input
               aria-label="Confirmation reason"
               autoFocus
+              disabled={pending || reasonLocked}
               maxLength={maxReasonLength}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
