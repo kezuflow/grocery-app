@@ -1,29 +1,43 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ScheduledSurplusView } from "@freshmarkets/contracts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
 import { useAdminCommand } from "./use-admin-command";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 export function ScheduledSurplus({
   items,
+  scopeKey,
   disabled,
   onSaved,
 }: {
   items: readonly ScheduledSurplusView[];
+  scopeKey: string;
   disabled: boolean;
   onSaved: () => void;
 }) {
   const [selected, setSelected] = useState<ScheduledSurplusView | null>(null),
+    [selectedScopeKey, setSelectedScopeKey] = useState<string | null>(null),
     [quantity, setQuantity] = useState(""),
     [reason, setReason] = useState(""),
     [inspected, setInspected] = useState(false);
   const command = useAdminCommand();
+  useAdminRouteGuard(selected !== null, command.busy || command.uncertain);
+  useEffect(() => {
+    if (selectedScopeKey && selectedScopeKey !== scopeKey && !command.busy && !command.uncertain) {
+      setSelected(null);
+      setSelectedScopeKey(null);
+      setQuantity("");
+      setReason("");
+      setInspected(false);
+    }
+  }, [scopeKey, selectedScopeKey, command.busy, command.uncertain]);
   return (
     <section aria-label="Unused received goods" className="space-y-3">
       {items.some((item) => item.availableBase > 0 || item.releasedBase > 0) ? (
         <>
-          <h2 className="font-semibold">Unused received goods</h2>
+          <h2 className="font-semibold">Unused received goods for this location</h2>
           <p className="text-sm text-muted-foreground">
             Paid Orders keep their allocated goods. Inspect any leftovers before adding them to this
             location’s stock.
@@ -49,6 +63,7 @@ export function ScheduledSurplus({
                     disabled={disabled || !!item.blockedReason || command.busy || command.uncertain}
                     onClick={() => {
                       setSelected(item);
+                      setSelectedScopeKey(scopeKey);
                       setQuantity("");
                       setReason("");
                       setInspected(false);
@@ -63,9 +78,12 @@ export function ScheduledSurplus({
         </>
       ) : null}
       <Sheet
-        open={selected !== null}
+        open={selected !== null && selectedScopeKey === scopeKey}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) setSelected(null);
+          if (!open && !command.busy && !command.uncertain) {
+            setSelected(null);
+            setSelectedScopeKey(null);
+          }
         }}
       >
         <SheetContent>
@@ -81,6 +99,7 @@ export function ScheduledSurplus({
               className="mt-6 space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (selectedScopeKey !== scopeKey) return;
                 void (async () => {
                   if (command.uncertain) {
                     if (await command.retry()) {

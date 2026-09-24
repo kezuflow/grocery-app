@@ -30,6 +30,7 @@ import { ListPageSection, PageHeader, StatusBadge } from "../../../components/ad
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
 import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -79,23 +80,50 @@ const commandResult = z.union([
   z.object({ ok: z.literal(true), requestId: z.string(), value: sessionSchema }),
 ]);
 type ReceivingIntent = { path: string; body: string; success: string };
+type ReadState = { phase: "loading" | "ready" | "error"; key: string };
+function receivingQuantity(value: number, unit: string | undefined): string {
+  const symbol =
+    unit === "GRAM"
+      ? "g"
+      : unit === "MILLILITER"
+        ? "mL"
+        : unit === "PIECE"
+          ? "pcs"
+          : (unit ?? "base units");
+  return `${value.toLocaleString("en-PH")} ${symbol}`;
+}
 export default function ReceivingPage() {
   const { locationId, label } = useAdminLocation();
   const cycleId = useSearchParams().get("cycleId");
   const [page, setPage] = useState<ReceivingSessionPage | null>(null);
-  const [state, setState] = useState("loading");
+  const [state, setState] = useState<ReadState>({ phase: "loading", key: "" });
   const [notice, setNotice] = useState<string | null>(null);
   const [unresolved, setUnresolved] = useState<ReceivingIntent | null>(null);
   const [lineValues, setLineValues] = useState<
     Record<string, { accepted: string; rejected: string; reason: string; shortage?: string }>
   >({});
   const commandIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination();
+  const hasDraft = Object.values(lineValues).some((values) =>
+    [values.accepted, values.rejected, values.shortage, values.reason].some((value) =>
+      Boolean(value?.trim()),
+    ),
+  );
+  useAdminRouteGuard(hasDraft, commandIntent.pending || commandIntent.uncertain || !!unresolved);
+  const scopeKey = JSON.stringify([locationId, cycleId]);
+  const pagination = useAdminPagination(scopeKey);
+  const pageKey = JSON.stringify([locationId, cycleId, pagination.cursor]);
+  const visibleState = state.key === pageKey ? state.phase : "loading";
+  const visiblePage = visibleState === "ready" ? page : null;
   const latestLoad = useRef(0);
+  useEffect(() => {
+    setLineValues({});
+    setNotice(null);
+  }, [pageKey]);
   const load = useCallback(
     async (cursor: string | null) => {
       const generation = ++latestLoad.current;
-      setState("loading");
+      const key = JSON.stringify([locationId, cycleId, cursor]);
+      setState({ phase: "loading", key });
       try {
         const payload = pageResult.parse(
           await (
@@ -111,15 +139,26 @@ export default function ReceivingPage() {
               ? "Receiving access is not permitted for this scope."
               : payload.error.message,
           );
-          setState("error");
+          setState({ phase: "error", key });
           return;
         }
+        if (
+          payload.value.items.some(
+            (item) => item.locationId !== locationId || (cycleId && item.cycleId !== cycleId),
+          )
+        ) {
+          setNotice("Receiving returned a different location or delivery week. Reload this scope.");
+          setState({ phase: "error", key });
+          return;
+        }
+        // A refetch may carry a newer receipt version. Require fresh inspected quantities.
+        setLineValues({});
         setPage(payload.value);
-        setState("ready");
+        setState({ phase: "ready", key });
       } catch {
         if (generation !== latestLoad.current) return;
         setNotice("Network error loading receiving sessions.");
-        setState("error");
+        setState({ phase: "error", key });
       }
     },
     [locationId, cycleId],
@@ -159,16 +198,28 @@ export default function ReceivingPage() {
     if (unresolved || commandIntent.pending) return;
     await submit({ path, body: JSON.stringify(body), success });
   }
-  async function start(requirementId: string, expectedVersion: number) {
-    if (!locationId) return;
+  function isCurrentItem(item: ReceivingSessionPage["items"][number]): boolean {
+    return (
+      !!locationId &&
+      item.locationId === locationId &&
+      (!cycleId || item.cycleId === cycleId) &&
+      visiblePage?.items.some(
+        (current) => current.receivingSessionId === item.receivingSessionId,
+      ) === true
+    );
+  }
+  async function start(item: ReceivingSessionPage["items"][number]) {
+    if (!isCurrentItem(item)) return;
     await runCommand(
       "/api/admin/receiving/start",
-      { locationId, requirementId, expectedVersion },
+      { locationId, requirementId: item.requirementId, expectedVersion: item.version },
       "Receiving session started.",
     );
   }
-  async function recordLine(sessionId: string, expectedVersion: number, replacement = false) {
-    if (!locationId || commandIntent.pending) return;
+  async function recordLine(item: ReceivingSessionPage["items"][number]) {
+    if (!isCurrentItem(item) || commandIntent.pending) return;
+    const sessionId = item.receivingSessionId;
+    const replacement = item.allowedActions?.includes("REPLACE") ?? false;
     const values = lineValues[sessionId] ?? { accepted: "", rejected: "", reason: "" };
     const acceptedBase = Number(values.accepted);
     const rejectedBase = replacement ? 0 : Number(values.rejected);
@@ -197,20 +248,20 @@ export default function ReceivingPage() {
         rejectedBase,
         ...(shortageBase > 0 ? { shortageBase } : {}),
         ...(replacement ? { receiptKind: "REPLACEMENT" } : {}),
-        expectedVersion,
+        expectedVersion: item.version,
         reason: values.reason.trim() || undefined,
       },
       "Receiving line recorded.",
     );
   }
-  async function complete(sessionId: string, expectedVersion: number) {
-    if (!locationId || commandIntent.pending) return;
+  async function complete(item: ReceivingSessionPage["items"][number]) {
+    if (!isCurrentItem(item) || commandIntent.pending) return;
     await runCommand(
       "/api/admin/receiving/complete",
       {
         locationId,
-        receivingSessionId: sessionId,
-        expectedVersion,
+        receivingSessionId: item.receivingSessionId,
+        expectedVersion: item.version,
       },
       "Receiving session completed.",
     );
@@ -219,18 +270,14 @@ export default function ReceivingPage() {
     <div className="w-full space-y-6">
       <PageHeader
         title="Receiving"
-        description={`Record accepted and rejected base-unit quantities for ${label}.`}
+        description={`Inspect supplier goods for ${label}. Accepted receipts remain allocated to paid delivery-week orders; record rejected or missing goods separately.`}
       />
       <ScheduledCountedReceiving
-        items={state === "ready" ? (page?.items ?? []) : []}
-        receipts={state === "ready" ? (page?.countedReceipts ?? []) : []}
+        items={visiblePage?.items ?? []}
+        receipts={visiblePage?.countedReceipts ?? []}
+        scopeKey={scopeKey}
         locationLabel={label}
-        disabled={state !== "ready" || commandIntent.pending || unresolved !== null}
-        onSaved={() => void load(pagination.cursor)}
-      />
-      <ScheduledSurplus
-        items={state === "ready" ? (page?.surplus ?? []) : []}
-        disabled={state !== "ready" || commandIntent.pending || unresolved !== null}
+        disabled={!visiblePage || commandIntent.pending || unresolved !== null}
         onSaved={() => void load(pagination.cursor)}
       />
       {!locationId ? (
@@ -239,13 +286,13 @@ export default function ReceivingPage() {
           title="Select a permitted location"
           message="Choose a location scope in the Admin header to inspect receiving sessions."
         />
-      ) : state === "loading" ? (
+      ) : visibleState === "loading" ? (
         <div role="status" aria-label="Loading receiving">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="mt-3 h-12 w-full" />
         </div>
       ) : null}
-      {state === "error" ? (
+      {locationId && visibleState === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Receiving could not be loaded</AlertTitle>
           <AlertDescription>
@@ -272,65 +319,72 @@ export default function ReceivingPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {state === "ready" && page ? (
+      {visiblePage ? (
         <>
-          <ListPageSection title="Receiving sessions">
+          <ListPageSection
+            title="Supplier receipts"
+            description="Expected purchase quantity and actual inspected goods for the selected location and delivery week."
+          >
             {notice ? (
               <p role="status" className="border-b p-3 text-sm">
                 {notice}
               </p>
             ) : null}
-            {page.items.length === 0 ? (
+            {visiblePage.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]">
                 No receiving sessions for this location.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table className="block sm:table" aria-label="Receiving sessions">
-                  <TableHeader className="hidden sm:table-header-group">
+              <div>
+                <Table className="block lg:table" aria-label="Receiving sessions">
+                  <TableHeader className="hidden lg:table-header-group">
                     <TableRow>
-                      <TableHead>Product / cycle</TableHead>
-                      <TableHead>Expected</TableHead>
-                      <TableHead>Accepted / Rejected</TableHead>
+                      <TableHead>Product / delivery week</TableHead>
+                      <TableHead>Expected / inspected</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Record goods</TableHead>
-                      <TableHead>Resolve</TableHead>
+                      <TableHead>Receipt actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody className="block sm:table-row-group">
-                    {page.items.map((item) => (
+                  <TableBody className="block lg:table-row-group">
+                    {visiblePage.items.map((item) => (
                       <TableRow
                         key={item.receivingSessionId}
-                        className="grid grid-cols-2 gap-3 p-4 sm:table-row sm:p-0 [&>td]:min-w-0 [&>td]:p-0 sm:[&>td]:px-4 sm:[&>td]:py-3"
+                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                       >
-                        <TableCell className="col-span-2 sm:table-cell">
+                        <TableCell className="col-span-2 lg:table-cell">
                           <p className="font-medium">{item.productName ?? "Historical product"}</p>
                           {item.variantName ? <p className="text-sm">{item.variantName}</p> : null}
                           <p className="text-xs text-[var(--fm-text-muted)]">
                             {item.cycleName ?? "Retained cycle"}
                           </p>
                         </TableCell>
-                        <TableCell>
-                          <span className="mb-1 block text-xs text-[var(--fm-text-muted)] sm:hidden">
-                            Expected
+                        <TableCell className="col-span-2 space-y-1 text-sm tabular-nums lg:col-span-1">
+                          <span className="mb-1 block text-xs text-[var(--fm-text-muted)] lg:hidden">
+                            Expected / inspected
                           </span>
-                          {item.expectedBase} {item.baseUnit ?? "base units"}
-                        </TableCell>
-                        <TableCell>
-                          <span className="mb-1 block text-xs text-[var(--fm-text-muted)] sm:hidden">
-                            Accepted / rejected
-                          </span>
-                          {item.acceptedBase} / {item.rejectedBase}
+                          <p>Expected: {receivingQuantity(item.expectedBase, item.baseUnit)}</p>
+                          <p>Accepted: {receivingQuantity(item.acceptedBase, item.baseUnit)}</p>
+                          <p>Rejected: {receivingQuantity(item.rejectedBase, item.baseUnit)}</p>
                           {(item.shortageBase ?? 0) > 0 ? (
-                            <p>Missing: {item.shortageBase}</p>
+                            <p>
+                              Missing: {receivingQuantity(item.shortageBase ?? 0, item.baseUnit)}
+                            </p>
                           ) : null}
                           {(item.replacementBase ?? 0) > 0 ? (
-                            <p>Replacements accepted: {item.replacementBase}</p>
+                            <p>
+                              Replacements accepted:{" "}
+                              {receivingQuantity(item.replacementBase ?? 0, item.baseUnit)}
+                            </p>
                           ) : null}
                           {item.allowedActions?.includes("REPLACE") ? (
                             <p className="text-sm">
-                              Still needed: {item.expectedBase - item.acceptedBase}. Contact your
-                              supplier, then record the inspected replacement goods here.
+                              Still needed:{" "}
+                              {receivingQuantity(
+                                item.expectedBase - item.acceptedBase,
+                                item.baseUnit,
+                              )}
+                              . Contact your supplier, then record the inspected replacement goods
+                              here.
                               <Link
                                 className="mt-2 block underline"
                                 href={`/admin/procurement?cycleId=${encodeURIComponent(item.cycleId)}&locationId=${encodeURIComponent(item.locationId)}&requirementId=${encodeURIComponent(item.requirementId)}`}
@@ -346,22 +400,23 @@ export default function ReceivingPage() {
                           ) : null}
                           {(item.legacyAcceptedBase ?? 0) > 0 ? (
                             <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                              {item.legacyAcceptedBase} accepted before cycle allocation tracking.
-                              Review retained stock evidence before allocating these goods.
+                              {receivingQuantity(item.legacyAcceptedBase ?? 0, item.baseUnit)}{" "}
+                              accepted before cycle allocation tracking. Review retained stock
+                              evidence before allocating these goods.
                             </p>
                           ) : null}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-sm">
                           <StatusBadge>
                             {item.resolvedByCancellation ? "resolved" : item.status}
                           </StatusBadge>
                         </TableCell>
-                        <TableCell className="col-span-2 empty:hidden sm:table-cell sm:empty:table-cell">
+                        <TableCell className="col-span-2 space-y-2 empty:hidden lg:table-cell lg:empty:table-cell">
                           {item.stockTracking !== "COUNTED_SIZES" &&
                           item.allowedActions?.includes("START") ? (
                             <Button
                               disabled={commandIntent.pending || unresolved !== null}
-                              onClick={() => void start(item.requirementId, item.version)}
+                              onClick={() => void start(item)}
                             >
                               Start receiving
                             </Button>
@@ -372,7 +427,7 @@ export default function ReceivingPage() {
                           ) ? (
                             <fieldset
                               disabled={commandIntent.pending || unresolved !== null}
-                              className="grid gap-1 sm:grid-cols-3"
+                              className="grid gap-2 sm:grid-cols-2"
                             >
                               <Input
                                 aria-label={`Accepted quantity ${item.receivingSessionId}`}
@@ -457,13 +512,7 @@ export default function ReceivingPage() {
                                 size="sm"
                                 variant="outline"
                                 disabled={commandIntent.pending}
-                                onClick={() =>
-                                  void recordLine(
-                                    item.receivingSessionId,
-                                    item.version,
-                                    item.allowedActions?.includes("REPLACE"),
-                                  )
-                                }
+                                onClick={() => void recordLine(item)}
                               >
                                 {item.allowedActions?.includes("REPLACE")
                                   ? "Receive replacement"
@@ -471,8 +520,6 @@ export default function ReceivingPage() {
                               </Button>
                             </fieldset>
                           ) : null}
-                        </TableCell>
-                        <TableCell>
                           {!item.resolvedByCancellation ? (
                             <Button
                               size="sm"
@@ -482,7 +529,7 @@ export default function ReceivingPage() {
                                 unresolved !== null ||
                                 !item.allowedActions?.includes("COMPLETE")
                               }
-                              onClick={() => void complete(item.receivingSessionId, item.version)}
+                              onClick={() => void complete(item)}
                             >
                               Complete
                             </Button>
@@ -496,13 +543,20 @@ export default function ReceivingPage() {
             )}
             <AdminCursorPagination
               pageNumber={pagination.pageNumber}
-              nextCursor={page.nextCursor}
+              nextCursor={visiblePage.nextCursor}
+              pending={commandIntent.pending || commandIntent.uncertain || unresolved !== null}
               onPrevious={pagination.previous}
               onNext={pagination.next}
             />
           </ListPageSection>
         </>
       ) : null}
+      <ScheduledSurplus
+        items={visiblePage?.surplus ?? []}
+        scopeKey={scopeKey}
+        disabled={!visiblePage || commandIntent.pending || unresolved !== null}
+        onSaved={() => void load(pagination.cursor)}
+      />
     </div>
   );
 }

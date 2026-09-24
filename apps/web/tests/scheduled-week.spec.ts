@@ -1,5 +1,6 @@
 import { z } from "@freshmarkets/validation";
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
+import { selectDeliveryWeek } from "./select-delivery-week";
 // Synthetic committed-payment/cycle history is a fixture seam, not provider or no-SQL checkout acceptance.
 // Pending/failure history below is a fixture seam; signed provider closure is tested in Core.
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
@@ -42,7 +43,7 @@ for (const width of [1440, 390])
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await expect(page.getByRole("heading", { name: "Order summary", exact: true })).toBeVisible();
     await expect(page.getByText("Paid orders", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Selling options", { exact: true }).first()).toBeVisible();
@@ -114,7 +115,7 @@ for (const width of [1440, 390])
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await expect(page.getByRole("heading", { name: "Order summary", exact: true })).toBeVisible();
     if (width >= 768)
       await expect(page.getByRole("table", { name: "Paid ordered products" })).toContainText(
@@ -132,7 +133,7 @@ for (const width of [1440, 390])
     await expect(demandTable).toContainText("not totals of this page");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
     const demand = page
@@ -161,7 +162,7 @@ for (const width of [1440, 390])
     ).toBeVisible();
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     const secondDestination = page
       .getByRole("table", { name: "Paid quantities to buy" })
@@ -187,7 +188,7 @@ for (const width of [1440, 390])
     });
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toHaveCount(1);
     const attempts: { body: string | null; key: string | undefined }[] = [];
@@ -263,8 +264,9 @@ for (const width of [1440, 390])
       .getByLabel(`Receiving reason ${receipt.receivingSessionId}`, { exact: true })
       .fill("Inspected supplier goods");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
-    await expect(row).toContainText("700 / 100");
-    await expect(row).toContainText("Missing: 200");
+    await expect(row).toContainText("Accepted: 700 g");
+    await expect(row).toContainText("Rejected: 100 g");
+    await expect(row).toContainText("Missing: 200 g");
     await row.getByRole("link", { name: "Review affected orders", exact: true }).click();
     await expect(
       page.getByText("Affected orders: Red onion · 500 g", { exact: true }),
@@ -283,7 +285,7 @@ for (const width of [1440, 390])
       .getByRole("region", { name: "Delivery week dates" })
       .getByRole("link", { name: "Receiving", exact: true })
       .click();
-    await expect(row).toContainText("Missing: 200");
+    await expect(row).toContainText("Missing: 200 g");
     const replacements: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/receiving/record-line", async (route) => {
       replacements.push({
@@ -306,12 +308,13 @@ for (const width of [1440, 390])
       page.getByText("The receiving result is unknown.", { exact: false }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Retry saved receipt", exact: true }).click();
-    await expect(row).toContainText("1000 / 100");
+    await expect(row).toContainText("Accepted: 1,000 g");
+    await expect(row).toContainText("Rejected: 100 g");
     await expect(row).toContainText("Replacements accepted: 300");
     expect(replacements).toHaveLength(2);
     expect(replacements[1]).toEqual(replacements[0]);
     await page.goto("/admin/procurement");
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toContainText("Accepted 1,000 g");
     await page.screenshot({
@@ -429,8 +432,9 @@ for (const width of [1440, 390])
     ).toBeVisible();
     await page.goto(`/admin/receiving?cycleId=${id}`);
     await expect(row).toContainText("Resolved by order cancellation");
-    await expect(row).toContainText("0 / 500");
-    await expect(row).toContainText("Missing: 1000");
+    await expect(row).toContainText("Accepted: 0 g");
+    await expect(row).toContainText("Rejected: 500 g");
+    await expect(row).toContainText("Missing: 1,000 g");
     await expect(row.getByRole("button", { name: "Receive replacement", exact: true })).toHaveCount(
       0,
     );

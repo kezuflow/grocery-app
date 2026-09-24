@@ -33,11 +33,12 @@ for (const width of [1440, 390])
       .fill("Inspected; damaged goods rejected");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
     await expect(row).toContainText("DISCREPANCY");
-    await expect(row).toContainText("900 / 100");
+    await expect(row).toContainText("Accepted: 900 g");
+    await expect(row).toContainText("Rejected: 100 g");
     await row.getByRole("button", { name: "Complete", exact: true }).click();
     await expect(row).toContainText("COMPLETED");
     await page.reload();
-    await expect(row).toContainText("900 / 100");
+    await expect(row).toContainText("Accepted: 900 g");
     await expect(row.getByRole("button", { name: "Complete", exact: true })).toBeDisabled();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))

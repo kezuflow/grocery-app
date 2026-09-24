@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReceivingSessionView, ScheduledCountedReceiptView } from "@freshmarkets/contracts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
 import { useAdminCommand } from "./use-admin-command";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 type Group = {
   productId: string;
   productName: string;
@@ -18,12 +19,14 @@ type Group = {
 export function ScheduledCountedReceiving({
   items,
   receipts,
+  scopeKey,
   locationLabel,
   disabled,
   onSaved,
 }: {
   items: readonly ReceivingSessionView[];
   receipts: readonly ScheduledCountedReceiptView[];
+  scopeKey: string;
   locationLabel: string;
   disabled: boolean;
   onSaved: () => void;
@@ -52,12 +55,23 @@ export function ScheduledCountedReceiving({
     groups.set(key, group);
   }
   const [selected, setSelected] = useState<Group | null>(null);
+  const [selectedScopeKey, setSelectedScopeKey] = useState<string | null>(null);
   const [weight, setWeight] = useState("");
   const [note, setNote] = useState("");
   const [counts, setCounts] = useState<
     Record<string, { accepted: string; rejected: string; shortage: string }>
   >({});
   const command = useAdminCommand();
+  useAdminRouteGuard(selected !== null, command.busy || command.uncertain);
+  useEffect(() => {
+    if (selectedScopeKey && selectedScopeKey !== scopeKey && !command.busy && !command.uncertain) {
+      setSelected(null);
+      setSelectedScopeKey(null);
+      setCounts({});
+      setWeight("");
+      setNote("");
+    }
+  }, [scopeKey, selectedScopeKey, command.busy, command.uncertain]);
   return (
     <section className="space-y-3" aria-label="Weighed produce receiving">
       {groups.size ? (
@@ -75,6 +89,7 @@ export function ScheduledCountedReceiving({
                 disabled={disabled || command.busy || command.uncertain}
                 onClick={() => {
                   setSelected(group);
+                  setSelectedScopeKey(scopeKey);
                   setCounts({});
                   setWeight("");
                   setNote("");
@@ -90,7 +105,7 @@ export function ScheduledCountedReceiving({
       ) : null}
       {receipts.length ? (
         <div className="space-y-2">
-          <h2 className="font-semibold">Latest weighed receipts</h2>
+          <h2 className="font-semibold">Latest weighed receipts for this location</h2>
           {receipts.map((receipt) => (
             <article key={receipt.receiptId} className="rounded-lg border p-3 text-sm">
               <p className="font-medium">
@@ -109,9 +124,12 @@ export function ScheduledCountedReceiving({
         </div>
       ) : null}
       <Sheet
-        open={selected !== null}
+        open={selected !== null && selectedScopeKey === scopeKey}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) setSelected(null);
+          if (!open && !command.busy && !command.uncertain) {
+            setSelected(null);
+            setSelectedScopeKey(null);
+          }
         }}
       >
         <SheetContent className="overflow-y-auto">
@@ -131,6 +149,7 @@ export function ScheduledCountedReceiving({
               className="mt-6 space-y-5"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (selectedScopeKey !== scopeKey) return;
                 void (async () => {
                   if (command.uncertain) {
                     if (await command.retry()) {

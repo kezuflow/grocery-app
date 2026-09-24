@@ -470,7 +470,8 @@ for (const width of [1440, 390]) {
     await row.getByLabel(/^Accepted quantity /).fill("22500");
     await row.getByLabel(/^Receiving reason /).fill("Inspected all purchased goods");
     await row.getByRole("button", { name: "Record line", exact: true }).click();
-    await expect(row).toContainText("22500 / 0");
+    await expect(row).toContainText("Accepted: 22,500 g");
+    await expect(row).toContainText("Rejected: 0 g");
     async function operationalOrderNumber(targetOrderId: string) {
       const result = z
         .object({

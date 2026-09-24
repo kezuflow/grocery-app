@@ -1,5 +1,6 @@
 import { z } from "@freshmarkets/validation";
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
+import { selectDeliveryWeek } from "./select-delivery-week";
 for (const width of [1440, 390])
   test(`Weighed Scheduled sizes to packing at ${width}px`, async ({
     adminPage: page,
@@ -19,7 +20,7 @@ for (const width of [1440, 390])
     await page.getByLabel("Variant name").fill("Small");
     await page.getByLabel("Sell unit").selectOption("Pack");
     await page.getByLabel("Approximate weight per piece/pack (grams)").fill("300");
-    await page.getByRole("button", { name: "Add variant", exact: true }).click();
+    await page.getByRole("button", { name: "Add option", exact: true }).click();
     await page
       .getByLabel("SKU", { exact: true })
       .nth(1)
@@ -61,9 +62,14 @@ for (const width of [1440, 390])
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
+    await selectDeliveryWeek(page, id);
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     for (const name of ["Small", "Large"]) {
-      const item = page.getByRole("article").filter({ hasText: `${productName} · ${name}` });
+      const item = page
+        .getByRole("table", { name: "Paid quantities to buy" })
+        .getByRole("row")
+        .filter({ hasText: productName })
+        .filter({ hasText: name });
       await item.getByRole("button", { name: "Confirm purchase", exact: true }).click();
       await page
         .getByRole("dialog")
@@ -72,7 +78,7 @@ for (const width of [1440, 390])
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(item).toContainText("ordered");
     }
-    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await page.locator(`a[href="/admin/receiving?cycleId=${id}"]`).click();
     await page
       .getByRole("button", { name: `Receive and count ${productName} · ${weekName}`, exact: true })
       .click();
@@ -118,7 +124,7 @@ for (const width of [1440, 390])
       "Start packing",
       "Finish packing",
     ]) {
-      await row.getByRole("button", { name, exact: true }).click();
+      await page.getByRole("button", { name, exact: true }).click();
     }
-    await expect(row).toContainText("PACKED");
+    await expect(row).toContainText(/packed/i);
   });
