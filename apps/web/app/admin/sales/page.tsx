@@ -1,16 +1,21 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { EllipsisVertical, Eye, Info, Pencil, Plus, Search, X } from "lucide-react";
-import type { AdminPromotionPage, AdminPromotionSummary } from "@freshmarkets/contracts";
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+  ArrowLeft,
+  BadgePercent,
+  CircleDollarSign,
+  EllipsisVertical,
+  Eye,
+  Info,
+  Pencil,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import type { AdminPromotionPage, AdminPromotionSummary } from "@freshmarkets/contracts";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -39,10 +44,6 @@ import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import {
-  ADMIN_WORKSPACE_PANEL_DEFAULT_WIDTH,
-  AdminWorkspaceResizeHandle,
-} from "../../../components/admin/admin-workspace-resize-handle";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -60,6 +61,26 @@ const saleBenefitLabels: Record<SaleBenefitType, string> = {
   ORDER_PERCENT_DISCOUNT: "Percentage off each unit",
   ORDER_FIXED_DISCOUNT: "Amount off each unit",
 };
+
+const saleBenefitOptions: ReadonlyArray<{
+  type: SaleBenefitType;
+  label: string;
+  description: string;
+  icon: typeof BadgePercent;
+}> = [
+  {
+    type: "ORDER_PERCENT_DISCOUNT",
+    label: "Percentage off each unit",
+    description: "Reduce every selected selling unit by a whole percentage.",
+    icon: BadgePercent,
+  },
+  {
+    type: "ORDER_FIXED_DISCOUNT",
+    label: "Amount off each unit",
+    description: "Reduce every selected selling unit by a fixed peso amount.",
+    icon: CircleDollarSign,
+  },
+];
 
 function isInventorySale(promotion: AdminPromotionSummary): boolean {
   return Boolean(promotion.productTargets?.length);
@@ -153,16 +174,12 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
   const [discount, setDiscount] = useState("");
   const [productTargets, setProductTargets] = useState<SaleTargetSelection[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [panelMounted, setPanelMounted] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(ADMIN_WORKSPACE_PANEL_DEFAULT_WIDTH);
-  const [panelResizing, setPanelResizing] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [query, setQuery] = useState(appliedQuery);
   const [tab, setTab] = useState<SaleListView>(appliedView);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
   const pagination = useAdminUrlPagination("/admin/sales");
-  const closeTimer = useRef<number | null>(null);
-  const openFrame = useRef<number | null>(null);
 
   const createDirty =
     benefit !== "ORDER_PERCENT_DISCOUNT" ||
@@ -170,15 +187,35 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
     discount.trim() !== "" ||
     productTargets.length > 0;
   const createLocked = createIntent.pending || createIntent.uncertain;
-  useAdminScopeGuard(canManage && createDirty, canManage && createLocked, () => {
+
+  function resetCreateDraft(): void {
     setName("");
     setBenefit("ORDER_PERCENT_DISCOUNT");
     setDiscount("");
     setProductTargets([]);
-    setCreateOpen(false);
-    setPanelMounted(false);
+    setChooserOpen(false);
+    setEditorOpen(false);
+  }
+
+  useAdminScopeGuard(canManage && createDirty, canManage && createLocked, () => {
+    resetCreateDraft();
   });
   useAdminRouteGuard(canManage && createDirty, canManage && createLocked);
+
+  function chooseBenefit(type: SaleBenefitType): void {
+    if (type !== benefit) setDiscount("");
+    setBenefit(type);
+    setChooserOpen(false);
+    setEditorOpen(true);
+    setNotice(null);
+  }
+
+  function discardCreateDraft(): void {
+    if (createLocked) return;
+    if (createDirty && !window.confirm("Discard this sale draft?")) return;
+    resetCreateDraft();
+    setNotice(null);
+  }
 
   useEffect(() => {
     setQuery(appliedQuery);
@@ -199,44 +236,6 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
       `/admin/sales${next.size ? `?${next}` : ""}`,
     );
   }
-
-  function openPanel(): void {
-    if (closeTimer.current !== null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-    if (panelMounted) {
-      setCreateOpen(true);
-      return;
-    }
-    setPanelMounted(true);
-    openFrame.current = window.requestAnimationFrame(() => {
-      openFrame.current = window.requestAnimationFrame(() => {
-        setCreateOpen(true);
-        openFrame.current = null;
-      });
-    });
-  }
-
-  function closePanel(): void {
-    if (openFrame.current !== null) {
-      window.cancelAnimationFrame(openFrame.current);
-      openFrame.current = null;
-    }
-    setCreateOpen(false);
-    closeTimer.current = window.setTimeout(() => {
-      setPanelMounted(false);
-      closeTimer.current = null;
-    }, 260);
-  }
-
-  useEffect(
-    () => () => {
-      if (openFrame.current !== null) window.cancelAnimationFrame(openFrame.current);
-      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
 
   const load = useCallback(async (cursor: string | null) => {
     const version = ++requestVersion.current;
@@ -285,6 +284,47 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
     const amount = Number(trimmed);
     return amount >= 0.01 ? { mode: "FIXED" as const, value: amount } : null;
   })();
+
+  const createSummary = useMemo(() => {
+    const trimmedDiscount = discount.trim();
+    const [whole = "", fraction = ""] = trimmedDiscount.split(".");
+    const amountMinor =
+      /^\d+(\.\d{1,2})?$/.test(trimmedDiscount) && trimmedDiscount
+        ? Number(whole) * 100 + Number(fraction.padEnd(2, "0"))
+        : null;
+    const percent = Number(trimmedDiscount);
+    const validPercent =
+      trimmedDiscount !== "" && Number.isInteger(percent) && percent >= 1 && percent <= 100;
+    const value =
+      benefit === "ORDER_PERCENT_DISCOUNT"
+        ? validPercent
+          ? `${percent}% off each unit`
+          : "Percentage off each unit"
+        : amountMinor !== null && Number.isSafeInteger(amountMinor) && amountMinor >= 1
+          ? `₱${(amountMinor / 100).toFixed(2)} off each unit`
+          : "Amount off each unit";
+    const fixedTargets = productTargets.filter((target) => target.quantityLimit !== null);
+    const wholeStockTargets = productTargets.length - fixedTargets.length;
+    const fixedUnits = fixedTargets.reduce((sum, target) => sum + (target.quantityLimit ?? 0), 0);
+    const allowance = [
+      wholeStockTargets > 0
+        ? `${wholeStockTargets} whole-stock ${wholeStockTargets === 1 ? "target" : "targets"}`
+        : null,
+      fixedTargets.length > 0
+        ? `${fixedUnits} fixed sale ${fixedUnits === 1 ? "unit" : "units"} across ${fixedTargets.length} ${fixedTargets.length === 1 ? "target" : "targets"}`
+        : null,
+    ].filter(Boolean);
+
+    return {
+      type: saleBenefitLabels[benefit],
+      value,
+      targets:
+        productTargets.length > 0
+          ? `${productTargets.length} selling ${productTargets.length === 1 ? "option" : "options"} selected`
+          : "No selling options selected",
+      allowance: allowance.length > 0 ? allowance.join(" · ") : "No sale quantity selected",
+    };
+  }, [benefit, discount, productTargets]);
 
   const activeSaleTargetKeys = new Set(
     (page?.items ?? [])
@@ -369,10 +409,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
       setNotice(payload.ok ? "Sale created as DRAFT." : payload.error.message);
       if (payload.ok) {
         notifyCommandSuccess("Sale created", "Saved as draft.");
-        setName("");
-        setBenefit("ORDER_PERCENT_DISCOUNT");
-        setDiscount("");
-        setProductTargets([]);
+        resetCreateDraft();
         const next = new URLSearchParams(searchParams.toString());
         pagination.reset(next);
         window.history.replaceState(
@@ -384,13 +421,78 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
       }
     } catch {
       setNotice(
-        "Creation could not be confirmed. Try Create draft again to check the same change.",
+        "Creation could not be confirmed. Check the same save again to resolve its outcome.",
       );
     }
   }
 
   return (
     <div className="w-full">
+      <DialogPrimitive.Root
+        open={chooserOpen}
+        onOpenChange={(open) => {
+          if (!open && !createLocked) setChooserOpen(false);
+        }}
+      >
+        <DialogPrimitive.Portal>
+          <div className="fm-admin contents">
+            <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.42)]" />
+            <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] focus:outline-none">
+              <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-4">
+                <div>
+                  <DialogPrimitive.Title className="text-lg font-semibold tracking-[-0.02em]">
+                    Select sale type
+                  </DialogPrimitive.Title>
+                  <DialogPrimitive.Description className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                    Choose how the sale reduces each selected selling unit.
+                  </DialogPrimitive.Description>
+                </div>
+                <DialogPrimitive.Close asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Close sale type chooser"
+                  >
+                    <X aria-hidden="true" />
+                  </Button>
+                </DialogPrimitive.Close>
+              </div>
+              <div className="divide-y divide-[var(--fm-border)] p-2">
+                {saleBenefitOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => chooseBenefit(option.type)}
+                      className="flex w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-3 text-left transition-colors hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)]">
+                        <Icon className="size-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{option.label}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--fm-text-muted)]">
+                          {option.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end border-t border-[var(--fm-border)] px-5 py-3">
+                <DialogPrimitive.Close asChild>
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                </DialogPrimitive.Close>
+              </div>
+            </DialogPrimitive.Content>
+          </div>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+
       {state.phase === "loading" ? (
         <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
           <PageHeader title="Promotion Sale" />
@@ -411,347 +513,411 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
         </section>
       ) : null}
 
-      {state.phase === "ready" ? (
-        <div
-          data-admin-workspace
-          style={{ "--fm-admin-workspace-panel-open-width": `${panelWidth}px` } as CSSProperties}
-          className={`grid min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)] xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)] motion-reduce:transition-none ${panelResizing ? "xl:transition-none" : "xl:transition-[grid-template-columns] xl:duration-200 xl:ease-linear"} ${createOpen ? "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]" : "xl:[--fm-admin-workspace-panel-width:0px]"}`}
+      {state.phase === "ready" && editorOpen ? (
+        <form
+          onSubmit={create}
+          aria-labelledby="admin-page-title"
+          className="min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)]"
         >
-          <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
-            <PageHeader
-              title="Promotion Sale"
-              description="Automatic discounts for selected products and locations."
-              action={
-                canManage ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    aria-expanded={createOpen}
-                    aria-controls="inventory-sale-panel"
-                    onClick={() => (createOpen ? closePanel() : openPanel())}
-                    className="fm-admin-reference-primary"
+          <header className="border-b border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4 sm:px-7">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Discard sale and return to Promotion Sale"
+                  onClick={discardCreateDraft}
+                  disabled={createLocked}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                </Button>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-[var(--fm-text-muted)]">Promotion Sale</p>
+                  <h1
+                    id="admin-page-title"
+                    className="truncate text-xl font-bold tracking-[-0.03em]"
                   >
-                    <Plus className="size-4" aria-hidden="true" />
-                    New sale
-                  </Button>
-                ) : undefined
-              }
-            />
-
-            {notice ? (
-              <p
-                role="status"
-                className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
-              >
-                {notice}
+                    Create sale
+                  </h1>
+                </div>
+              </div>
+              <p className="hidden text-sm text-[var(--fm-text-muted)] sm:block">
+                Saved sales begin as drafts.
               </p>
-            ) : null}
+            </div>
+          </header>
 
-            <section className="mt-8 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
-              <h2 className="sr-only">Promotion Sale list</h2>
-              <AdminIndexViews
-                label="Promotion Sale views"
-                views={[
-                  { label: "All sales", status: "all" },
-                  { label: "Active", status: "active" },
-                  { label: "Draft", status: "draft" },
-                ]}
-                value={tab}
-                onChange={(nextView) => {
-                  if (createDirty || createLocked) return;
-                  setTab(nextView);
-                  updateListFilters(query, nextView);
-                }}
-              />
-              <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-[var(--fm-text-muted)]" aria-live="polite">
-                  Showing {visibleSales.length} of {page?.items.length ?? 0} sales on this page.
-                  Search and status filter this page only.
-                </p>
-                <label className="relative block sm:w-72">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
-                    aria-hidden="true"
-                  />
+          <div className="mx-auto grid w-full max-w-6xl gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.8fr)] lg:items-start">
+            <div className="space-y-5">
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="sale-details-heading"
+              >
+                <h2 id="sale-details-heading" className="text-base font-semibold">
+                  Sale details
+                </h2>
+                <label className="mt-4 block text-sm font-semibold">
+                  Sale name<span className="text-red-600"> *</span>
                   <Input
-                    aria-label="Search inventory sales on this page"
-                    placeholder="Search this page"
-                    value={query}
-                    disabled={createDirty || createLocked}
-                    onChange={(event) => {
-                      const nextQuery = event.target.value;
-                      setQuery(nextQuery);
-                      updateListFilters(nextQuery, tab);
-                    }}
-                    className="h-9 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
+                    aria-label="Sale name"
+                    disabled={createLocked}
+                    placeholder="Weekend vegetables"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    className="mt-1.5 h-10"
                   />
                 </label>
-              </div>
+              </section>
 
-              <div className="overflow-x-auto">
-                {visibleSales.length === 0 ? (
-                  <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
-                    No inventory sales match this view on the current page. Other sales may appear
-                    on later pages.
-                  </p>
-                ) : (
-                  <Table aria-label="Promotion Sale list">
-                    <TableHeader>
-                      <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
-                        <TableHead>Sale</TableHead>
-                        <TableHead>Products</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Discount</TableHead>
-                        <TableHead>Allowance</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>
-                          <span className="sr-only">Manage</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visibleSales.map((promotion) => (
-                        <TableRow key={promotion.promotionId} className="align-top">
-                          <TableCell className="min-w-40 font-semibold text-[var(--fm-text)]">
-                            {promotion.name}
-                          </TableCell>
-                          <TableCell className="min-w-48 max-w-72 text-sm text-[var(--fm-text-muted)]">
-                            {saleProductsLabel(promotion)}
-                          </TableCell>
-                          <TableCell className="min-w-36 whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            {saleLocationsLabel(promotion)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            {saleDiscountLabel(promotion)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            {saleAllowance(promotion)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              {canManage ? (
-                                <PromotionStatusSwitch
-                                  promotion={promotion}
-                                  onApplied={(summary) =>
-                                    setPage((current) => {
-                                      if (!current || !summary.productTargets?.length)
-                                        return current;
-                                      return {
-                                        ...current,
-                                        items: current.items.map((item) =>
-                                          item.promotionId === summary.promotionId ? summary : item,
-                                        ),
-                                      };
-                                    })
-                                  }
-                                />
-                              ) : (
-                                <StatusBadge
-                                  tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
-                                >
-                                  {promotion.status === "ACTIVE" ? "Active" : promotion.status}
-                                </StatusBadge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Open actions for ${promotion.name}`}
-                                  className="size-8 rounded-md"
-                                >
-                                  <EllipsisVertical aria-hidden="true" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/admin/sales/${promotion.promotionId}`}
-                                    prefetch={false}
-                                  >
-                                    <Eye aria-hidden="true" />
-                                    View details
-                                  </Link>
-                                </DropdownMenuItem>
-                                {canManage ? (
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      href={`/admin/sales/${promotion.promotionId}?edit=1`}
-                                      prefetch={false}
-                                    >
-                                      <Pencil aria-hidden="true" />
-                                      Edit details
-                                    </Link>
-                                  </DropdownMenuItem>
-                                ) : null}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-              <AdminCursorPagination
-                pageNumber={pagination.pageNumber}
-                nextCursor={page?.nextCursor ?? null}
-                pending={createDirty || createLocked}
-                onPrevious={pagination.previous}
-                onNext={pagination.next}
-              />
-            </section>
-          </section>
-
-          {panelMounted ? (
-            <aside
-              id="inventory-sale-panel"
-              className={`fixed inset-0 z-50 flex h-svh min-h-0 overflow-hidden xl:sticky xl:inset-auto xl:top-0 xl:z-auto xl:h-[calc(100svh-4.5rem)] ${createOpen ? "" : "pointer-events-none"}`}
-              aria-labelledby="new-sale-title"
-            >
-              <form
-                className={`ml-auto flex h-full min-h-0 w-full flex-col bg-[var(--fm-admin-surface)] transition-[transform,opacity] [transition-duration:var(--fm-motion-panel)] [transition-timing-function:var(--fm-ease-drawer)] will-change-[transform,opacity] motion-reduce:transform-none motion-reduce:transition-[opacity] motion-reduce:[transition-duration:var(--fm-motion-fast)] motion-reduce:[transition-timing-function:var(--fm-ease-out)] xl:absolute xl:inset-y-0 xl:right-0 xl:w-[var(--fm-admin-workspace-panel-open-width)] xl:border-l xl:border-[var(--fm-border)] ${createOpen ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 xl:translate-x-0"}`}
-                onSubmit={create}
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="sale-discount-heading"
               >
-                <AdminWorkspaceResizeHandle
-                  label="Resize inventory sale workspace"
-                  width={panelWidth}
-                  onWidthChange={setPanelWidth}
-                  onResizeStateChange={setPanelResizing}
-                />
-                <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 id="new-sale-title" className="text-xl font-bold tracking-[-0.03em]">
-                      New inventory sale
+                    <h2 id="sale-discount-heading" className="text-base font-semibold">
+                      Discount
                     </h2>
                     <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                      Create a draft sale and choose the products it applies to.
+                      {saleBenefitLabels[benefit]}
                     </p>
                   </div>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={closePanel}
-                    disabled={createIntent.pending}
-                    aria-label="Close new inventory sale"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChooserOpen(true)}
+                    disabled={createLocked}
                   >
-                    <X aria-hidden="true" />
+                    Change type
                   </Button>
                 </div>
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-                  <label className="block text-sm font-semibold">
-                    Sale name
+                <label className="mt-4 block text-sm font-semibold sm:max-w-sm">
+                  {benefit === "ORDER_PERCENT_DISCOUNT" ? "Discount percentage" : "Discount amount"}
+                  <span className="text-red-600"> *</span>
+                  <div className="relative mt-1.5">
+                    {benefit === "ORDER_FIXED_DISCOUNT" ? (
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                        ₱
+                      </span>
+                    ) : null}
                     <Input
-                      aria-label="Sale name"
-                      disabled={createIntent.pending || createIntent.uncertain}
-                      placeholder="Weekend vegetables"
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      className="mt-1.5 h-10"
-                    />
-                  </label>
-                  <fieldset
-                    disabled={createIntent.pending || createIntent.uncertain}
-                    className="space-y-2"
-                  >
-                    <legend className="text-sm font-semibold">Discount type</legend>
-                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--fm-border)] p-1">
-                      <button
-                        type="button"
-                        onClick={() => setBenefit("ORDER_PERCENT_DISCOUNT")}
-                        className={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-xs font-semibold transition-colors ${benefit === "ORDER_PERCENT_DISCOUNT" ? "bg-[var(--fm-admin-accent)] text-white" : "text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"}`}
-                      >
-                        % off
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBenefit("ORDER_FIXED_DISCOUNT")}
-                        className={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-xs font-semibold transition-colors ${benefit === "ORDER_FIXED_DISCOUNT" ? "bg-[var(--fm-admin-accent)] text-white" : "text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"}`}
-                      >
-                        ₱ off
-                      </button>
-                    </div>
-                    <Select
-                      value={benefit}
-                      onValueChange={(value) =>
-                        setBenefit(
-                          value === "ORDER_FIXED_DISCOUNT" ? value : "ORDER_PERCENT_DISCOUNT",
-                        )
+                      aria-label={
+                        benefit === "ORDER_PERCENT_DISCOUNT"
+                          ? "Discount percentage"
+                          : "Amount off in pesos"
                       }
-                    >
-                      <SelectTrigger className="sr-only" aria-label="Sale discount type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(saleBenefitLabels) as SaleBenefitType[]).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {saleBenefitLabels[type]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </fieldset>
-                  <label className="block text-sm font-semibold">
-                    {benefit === "ORDER_PERCENT_DISCOUNT" ? "Percentage" : "Amount off"}
-                    <div className="relative mt-1.5">
-                      <Input
-                        aria-label={
-                          benefit === "ORDER_PERCENT_DISCOUNT"
-                            ? "Discount percentage"
-                            : "Amount off in pesos"
-                        }
-                        disabled={createIntent.pending || createIntent.uncertain}
-                        placeholder={benefit === "ORDER_PERCENT_DISCOUNT" ? "15" : "50"}
-                        value={discount}
-                        onChange={(event) => setDiscount(event.target.value)}
-                        className="h-10 pr-10"
-                      />
-                      {benefit === "ORDER_PERCENT_DISCOUNT" ? (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
-                          %
-                        </span>
-                      ) : null}
-                    </div>
-                  </label>
+                      disabled={createLocked}
+                      placeholder={benefit === "ORDER_PERCENT_DISCOUNT" ? "15" : "50.00"}
+                      inputMode="decimal"
+                      value={discount}
+                      onChange={(event) => setDiscount(event.target.value)}
+                      className={`h-10 ${benefit === "ORDER_PERCENT_DISCOUNT" ? "pr-10" : "pl-8"}`}
+                    />
+                    {benefit === "ORDER_PERCENT_DISCOUNT" ? (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                        %
+                      </span>
+                    ) : null}
+                  </div>
+                </label>
+                <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+                  The discount applies to each selected selling unit while the sale is active.
+                </p>
+              </section>
+
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="sale-targets-heading"
+              >
+                <h2 id="sale-targets-heading" className="text-base font-semibold">
+                  Products and quantities
+                </h2>
+                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                  Select the location and selling options this sale covers. Each option can use
+                  whole stock or a fixed clearance pool.
+                </p>
+                <div className="mt-4">
                   <SaleTargetsPicker
                     value={productTargets}
                     onChange={setProductTargets}
-                    disabled={createIntent.pending || createIntent.uncertain}
+                    disabled={createLocked}
                     preview={discountPreview}
                     activeOverlaps={activeSaleTargetKeys}
                   />
-                  <p className="flex gap-2 text-xs text-[var(--fm-text-muted)]">
-                    <Info className="mt-0.5 size-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-                    Sale prices apply automatically to the selected products when the sale is
-                    active.
-                  </p>
                 </div>
-                <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={closePanel}
-                    disabled={createIntent.pending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createIntent.pending}
-                    className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
-                  >
-                    {createIntent.pending ? "Creating…" : "Create draft"}
-                  </Button>
-                </div>
-              </form>
+              </section>
+            </div>
+
+            <aside className="space-y-4 lg:sticky lg:top-5" aria-labelledby="sale-summary-heading">
+              <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]">
+                <h2 id="sale-summary-heading" className="text-base font-semibold">
+                  Summary
+                </h2>
+                <p className="mt-1 break-words text-sm text-[var(--fm-text-muted)]">
+                  {name.trim() || "Sale name not entered"}
+                </p>
+                <dl className="mt-4 divide-y divide-[var(--fm-border)] text-sm" aria-live="polite">
+                  <div className="py-3 first:pt-0">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Type</dt>
+                    <dd className="mt-1 font-medium">{createSummary.type}</dd>
+                  </div>
+                  <div className="py-3">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Value</dt>
+                    <dd className="mt-1 font-medium">{createSummary.value}</dd>
+                  </div>
+                  <div className="py-3">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Targets</dt>
+                    <dd className="mt-1">{createSummary.targets}</dd>
+                  </div>
+                  <div className="py-3 last:pb-0">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Allowance</dt>
+                    <dd className="mt-1">{createSummary.allowance}</dd>
+                  </div>
+                </dl>
+              </section>
+              <p className="flex gap-2 px-1 text-xs leading-5 text-[var(--fm-text-muted)]">
+                <Info
+                  className="mt-0.5 size-3.5 shrink-0 text-[var(--fm-info)]"
+                  aria-hidden="true"
+                />
+                Sale prices apply automatically to selected products after this draft is activated.
+              </p>
             </aside>
+          </div>
+
+          {notice ? (
+            <p
+              role={createIntent.uncertain ? "alert" : "status"}
+              className="mx-auto mb-4 w-[calc(100%-2.5rem)] max-w-6xl rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm sm:w-[calc(100%-3.5rem)]"
+            >
+              {notice}
+            </p>
           ) : null}
-        </div>
+
+          <div className="sticky bottom-0 z-10 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-3 shadow-[0_-8px_24px_rgb(15_23_42_/_0.08)] sm:px-7">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+              <p className="text-sm text-[var(--fm-text-muted)]" aria-live="polite">
+                {createIntent.uncertain
+                  ? "Save outcome unknown. Keep this editor open and check the same save."
+                  : createDirty
+                    ? "Unsaved changes"
+                    : "Complete the sale details to save a draft."}
+              </p>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={discardCreateDraft}
+                  disabled={createLocked}
+                >
+                  Discard
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createIntent.pending}
+                  className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
+                >
+                  {createIntent.pending
+                    ? "Saving…"
+                    : createIntent.uncertain
+                      ? "Check save status"
+                      : "Save draft"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </form>
+      ) : null}
+
+      {state.phase === "ready" && !editorOpen ? (
+        <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
+          <PageHeader
+            title="Promotion Sale"
+            description="Automatic discounts for selected products and locations."
+            action={
+              canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setChooserOpen(true)}
+                  className="fm-admin-reference-primary"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  New sale
+                </Button>
+              ) : undefined
+            }
+          />
+
+          {notice ? (
+            <p
+              role="status"
+              className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
+            >
+              {notice}
+            </p>
+          ) : null}
+
+          <section className="mt-8 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+            <h2 className="sr-only">Promotion Sale list</h2>
+            <AdminIndexViews
+              label="Promotion Sale views"
+              views={[
+                { label: "All sales", status: "all" },
+                { label: "Active", status: "active" },
+                { label: "Draft", status: "draft" },
+              ]}
+              value={tab}
+              onChange={(nextView) => {
+                if (createDirty || createLocked) return;
+                setTab(nextView);
+                updateListFilters(query, nextView);
+              }}
+            />
+            <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-[var(--fm-text-muted)]" aria-live="polite">
+                Showing {visibleSales.length} of {page?.items.length ?? 0} sales on this page.
+                Search and status filter this page only.
+              </p>
+              <label className="relative block sm:w-72">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                  aria-hidden="true"
+                />
+                <Input
+                  aria-label="Search inventory sales on this page"
+                  placeholder="Search this page"
+                  value={query}
+                  disabled={createDirty || createLocked}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+                    setQuery(nextQuery);
+                    updateListFilters(nextQuery, tab);
+                  }}
+                  className="h-9 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
+                />
+              </label>
+            </div>
+
+            <div className="overflow-x-auto">
+              {visibleSales.length === 0 ? (
+                <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
+                  No inventory sales match this view on the current page. Other sales may appear on
+                  later pages.
+                </p>
+              ) : (
+                <Table aria-label="Promotion Sale list">
+                  <TableHeader>
+                    <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
+                      <TableHead>Sale</TableHead>
+                      <TableHead>Products</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Discount</TableHead>
+                      <TableHead>Allowance</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>
+                        <span className="sr-only">Manage</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleSales.map((promotion) => (
+                      <TableRow key={promotion.promotionId} className="align-top">
+                        <TableCell className="min-w-40 font-semibold text-[var(--fm-text)]">
+                          {promotion.name}
+                        </TableCell>
+                        <TableCell className="min-w-48 max-w-72 text-sm text-[var(--fm-text-muted)]">
+                          {saleProductsLabel(promotion)}
+                        </TableCell>
+                        <TableCell className="min-w-36 whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                          {saleLocationsLabel(promotion)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                          {saleDiscountLabel(promotion)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                          {saleAllowance(promotion)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            {canManage ? (
+                              <PromotionStatusSwitch
+                                promotion={promotion}
+                                onApplied={(summary) =>
+                                  setPage((current) => {
+                                    if (!current || !summary.productTargets?.length) return current;
+                                    return {
+                                      ...current,
+                                      items: current.items.map((item) =>
+                                        item.promotionId === summary.promotionId ? summary : item,
+                                      ),
+                                    };
+                                  })
+                                }
+                              />
+                            ) : (
+                              <StatusBadge
+                                tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
+                              >
+                                {promotion.status === "ACTIVE" ? "Active" : promotion.status}
+                              </StatusBadge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Open actions for ${promotion.name}`}
+                                className="size-8 rounded-md"
+                              >
+                                <EllipsisVertical aria-hidden="true" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/admin/sales/${promotion.promotionId}`}
+                                  prefetch={false}
+                                >
+                                  <Eye aria-hidden="true" />
+                                  View details
+                                </Link>
+                              </DropdownMenuItem>
+                              {canManage ? (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/admin/sales/${promotion.promotionId}?edit=1`}
+                                    prefetch={false}
+                                  >
+                                    <Pencil aria-hidden="true" />
+                                    Edit details
+                                  </Link>
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={page?.nextCursor ?? null}
+              pending={createDirty || createLocked}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
+          </section>
+        </section>
       ) : null}
     </div>
   );

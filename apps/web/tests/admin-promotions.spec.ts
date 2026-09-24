@@ -87,6 +87,118 @@ async function openPromotionEditor(page: Page, type: string) {
   await expect(page.getByRole("heading", { level: 1, name: "Create promo code" })).toBeVisible();
 }
 
+async function openSaleEditor(page: Page, type: string) {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await page.getByRole("button", { name: "New sale", exact: true }).click();
+  const chooser = page.getByRole("dialog", { name: "Select sale type" });
+  await expect(chooser).toBeVisible();
+  if (process.env.SAUI_CAPTURE_DISCOUNTS_EDITOR === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/sale-chooser-1440.png",
+      animations: "disabled",
+    });
+  }
+  await chooser.getByRole("button", { name: new RegExp(`^${type}`) }).click();
+  await expect(chooser).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1, name: "Create sale" })).toBeVisible();
+}
+
+async function mockSaleProducts(page: Page) {
+  await page.route("**/api/admin/catalog/products/product-sale-fixture?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "sale-product-detail-fixture",
+        value: {
+          productId: "product-sale-fixture",
+          slug: "mango-sale-fixture",
+          name: "Mango",
+          categoryCode: "produce",
+          status: "active",
+          version: 1,
+          categoryId: "category-produce",
+          categoryName: "Produce",
+          categories: [{ categoryId: "category-produce", code: "produce", name: "Produce" }],
+          description: null,
+          customerDetails: [],
+          media: [],
+          inventoryPool: {
+            inventoryPoolId: "pool-mango",
+            baseUnitId: "unit-kilogram",
+            baseUnitCode: "GRAM",
+            baseUnitSymbol: "g",
+            position: null,
+          },
+          scope: {
+            kind: "LOCATION",
+            marketId: "market-fixture",
+            marketName: "Cebu",
+            locationId: "location-fixture",
+            locationName: "Central Cebu",
+            currency: "PHP",
+          },
+          allowedActions: ["UPDATE"],
+          recentAudit: [],
+          skus: [
+            {
+              skuId: "sku-sale-fixture",
+              code: "MANGO_1KG",
+              name: "1 kilogram",
+              merchandisingLabel: null,
+              unitSymbol: "kg",
+              sellQuantity: 1,
+              consumptionBaseQuantity: 1_000,
+              estimatedShippingWeightGrams: null,
+              status: "active",
+              sortOrder: 0,
+              version: 1,
+              priceMinor: 12_000,
+              currency: "PHP",
+              priceVersion: 1,
+              availability: "AVAILABLE",
+              availabilityVersion: 1,
+              availableBase: 50_000,
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await page.route("**/api/admin/catalog/products?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "sale-product-list-fixture",
+        value: {
+          items: [
+            {
+              productId: "product-sale-fixture",
+              slug: "mango-sale-fixture",
+              categoryCode: "produce",
+              name: "Mango",
+              status: "active",
+              skuCount: 1,
+              version: 1,
+            },
+          ],
+          nextCursor: null,
+        },
+      }),
+    }),
+  );
+}
+
+async function addFixedSaleTarget(page: Page) {
+  await page.getByLabel("Search sale products", { exact: true }).fill("Mango");
+  await page.getByRole("option", { name: /Mango/ }).click();
+  await page.getByRole("button", { name: /1 kilogram/ }).click();
+  await page.getByLabel(/Fixed clearance pool/).check();
+  await page.getByLabel("Fixed pool pieces", { exact: true }).fill("5");
+  await page.getByRole("button", { name: "Add to sale", exact: true }).click();
+}
+
 test.beforeAll(async ({ request }) => {
   try {
     const response = await request.get("/");
@@ -180,6 +292,118 @@ test("a promotions reader can inspect both indexes without manage controls", asy
   await page.getByRole("button", { name: "Open actions for Needle sale" }).click();
   await expect(page.getByRole("menuitem", { name: "View details" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Edit details" })).toHaveCount(0);
+});
+
+test("the full sale editor guards a dirty route exit and explicit discard", async ({
+  adminPage: page,
+}) => {
+  await mockMixedPromotionPage(page);
+  await page.goto("/admin/sales");
+  await openSaleEditor(page, "Percentage off each unit");
+  await page.getByLabel("Sale name", { exact: true }).fill("Dirty weekend sale");
+  await page.getByLabel("Discount percentage", { exact: true }).fill("25");
+
+  page.once("dialog", async (dialog) => dialog.dismiss());
+  await page.getByRole("link", { name: "Promotion Codes", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/sales/);
+  await expect(page.getByLabel("Sale name", { exact: true })).toHaveValue("Dirty weekend sale");
+
+  page.once("dialog", async (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Create sale" })).toBeVisible();
+
+  page.once("dialog", async (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Promotion Sale" })).toBeVisible();
+});
+
+test("a sale draft summarizes and retries the identical create intent", async ({
+  adminPage: page,
+}) => {
+  const sent: { body: string | null; key: string | undefined }[] = [];
+  await mockMixedPromotionPage(page);
+  await mockSaleProducts(page);
+  await page.route("**/api/admin/promotions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    sent.push({
+      body: route.request().postData(),
+      key: route.request().headers()["idempotency-key"],
+    });
+    if (sent.length < 3) return route.abort("failed");
+    const submitted = JSON.parse(sent[0]?.body ?? "{}") as {
+      code: string;
+      productTargets: typeof listedSale.productTargets;
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "sale-create-recovered",
+        value: {
+          ...listedSale,
+          promotionId: "promotion-sale-recovered",
+          code: submitted.code,
+          name: "Recovery sale",
+          benefitType: "ORDER_FIXED_DISCOUNT",
+          discountMinor: 1_999,
+          productTargets: listedSale.productTargets.map((target) => ({
+            ...target,
+            skuId: submitted.productTargets[0]?.skuId ?? target.skuId,
+            locationId: submitted.productTargets[0]?.locationId ?? target.locationId,
+            quantityLimit: submitted.productTargets[0]?.quantityLimit ?? target.quantityLimit,
+            remainingQuantity:
+              submitted.productTargets[0]?.quantityLimit ?? target.remainingQuantity,
+          })),
+        },
+      }),
+    });
+  });
+
+  await page.goto("/admin/sales");
+  await openSaleEditor(page, "Amount off each unit");
+  await page.getByLabel("Sale name", { exact: true }).fill("Recovery sale");
+  await page.getByLabel("Amount off in pesos", { exact: true }).fill("19.99");
+  await addFixedSaleTarget(page);
+  await expect(page.getByText("₱19.99 off each unit", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 selling option selected", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 fixed sale units across 1 target", { exact: true })).toBeVisible();
+  if (process.env.SAUI_CAPTURE_DISCOUNTS_EDITOR === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/sale-editor-1440.png",
+      fullPage: true,
+      animations: "disabled",
+    });
+  }
+
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByText(/Save outcome unknown/)).toBeVisible();
+  await expect(page.getByLabel("Sale name", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Check save status", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Promotion Sale" })).toBeVisible();
+
+  expect(sent).toHaveLength(3);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2]).toEqual(sent[0]);
+  expect(sent[0]?.key).toBeTruthy();
+  const submitted = JSON.parse(sent[0]?.body ?? "{}") as Record<string, unknown>;
+  expect(submitted).toEqual({
+    code: expect.stringMatching(/^SALE_[A-Z0-9]{8}$/),
+    name: "Recovery sale",
+    description: "",
+    benefitType: "ORDER_FIXED_DISCOUNT",
+    discountMinor: 1_999,
+    minimumMinor: 0,
+    productTargets: [
+      {
+        skuId: "sku-sale-fixture",
+        locationId: expect.any(String),
+        quantityLimit: 5,
+      },
+    ],
+    automatic: true,
+    startsAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+  });
 });
 
 test("a Staff principal without capability is denied the Promotion Codes workspace", async ({

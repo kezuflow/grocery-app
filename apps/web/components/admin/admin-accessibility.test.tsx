@@ -334,21 +334,18 @@ describe("shared Admin accessibility contract", () => {
     expect(promotionsPage).toContain("promotion-summary-heading");
     expect(promotionsPage).toContain("Check save status");
     expect(promotionsPage).toContain("Discard this promotion draft?");
-    expect(salesPage).toContain(
-      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
-    );
-    expect(salesPage).toContain("xl:transition-[grid-template-columns]");
-    expect(salesPage).toContain(
-      "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]",
-    );
-    expect(salesPage).toContain("fixed inset-0 z-50 flex h-svh");
-    expect(salesPage).toContain("xl:h-[calc(100svh-4.5rem)]");
-    expect(salesPage).toContain("[transition-duration:var(--fm-motion-panel)]");
-    expect(salesPage).toContain("[transition-timing-function:var(--fm-ease-drawer)]");
-    expect(salesPage).toContain("motion-reduce:transition-[opacity]");
-    expect(salesPage).toContain('aria-label="Close new inventory sale"');
+    expect(salesPage).toContain("Select sale type");
+    expect(salesPage).toContain('<div className="fm-admin contents">');
+    expect(salesPage).toContain('type: "ORDER_PERCENT_DISCOUNT"');
+    expect(salesPage).toContain('type: "ORDER_FIXED_DISCOUNT"');
+    expect(salesPage).not.toContain('type: "DELIVERY_FEE_WAIVER"');
+    expect(salesPage).not.toContain('type: "DELIVERY_FIXED_DISCOUNT"');
+    expect(salesPage).not.toContain('type: "DELIVERY_PERCENT_DISCOUNT"');
+    expect(salesPage).toContain('state.phase === "ready" && editorOpen');
+    expect(salesPage).toContain("sale-summary-heading");
+    expect(salesPage).toContain("Check save status");
+    expect(salesPage).toContain("Discard this sale draft?");
     expect(promotionsPage).toContain('label="Resize promotion workspace"');
-    expect(salesPage).toContain('label="Resize inventory sale workspace"');
     expect(workspaceResizeHandle).toContain('role="separator"');
     expect(workspaceResizeHandle).toContain("setPointerCapture");
     expect(workspaceResizeHandle).toContain('event.key === "ArrowLeft"');
