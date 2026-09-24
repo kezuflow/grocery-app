@@ -28,7 +28,7 @@ export function catalogResultSchema<T>(schema: z.ZodType<T>) {
 }
 
 /** Catalog create, edit and status retries retain the complete accepted browser intent. */
-export function useCatalogCommand<T>(schema: z.ZodType<T>) {
+export function useCatalogCommand<T>(schema: z.ZodType<T>, options?: { retainConflict?: boolean }) {
   const resultSchema = catalogResultSchema(schema);
 
   const saved = useRef<Intent | null>(null);
@@ -50,9 +50,13 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
         body: command.body,
       });
       const result = resultSchema.parse(await response.json());
-      saved.current = null;
-      setUncertain(false);
-      setAdminScopeCommandLock(lockOwner.current, false);
+      if (options?.retainConflict && !result.ok && result.error.code === "CONFLICT") {
+        setUncertain(true);
+      } else {
+        saved.current = null;
+        setUncertain(false);
+        setAdminScopeCommandLock(lockOwner.current, false);
+      }
       if (result.ok && command.successFeedback) {
         notifyCommandSuccess(
           command.successFeedback.title,
@@ -88,5 +92,11 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
   function retry() {
     return saved.current ? execute(saved.current) : Promise.resolve(null);
   }
-  return { submit, retry, pending, uncertain };
+  function clearSavedIntent() {
+    if (active.current) return;
+    saved.current = null;
+    setUncertain(false);
+    setAdminScopeCommandLock(lockOwner.current, false);
+  }
+  return { submit, retry, clearSavedIntent, pending, uncertain };
 }
