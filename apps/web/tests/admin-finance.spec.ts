@@ -32,6 +32,178 @@ test("an unauthenticated visitor cannot open membership or issue workspaces", as
   await expect(page.getByRole("alert")).toContainText("staff account");
 });
 
+test("Membership history preserves its query and safely recovers an unconfirmed cancellation", async ({
+  adminPage,
+}) => {
+  const suffix = crypto.randomUUID();
+  const now = Date.now();
+  const userId = `membership-user-${suffix}`;
+  const principalId = `membership-principal-${suffix}`;
+  const customerId = `membership-customer-${suffix}`;
+  const subscriptionId = `membership-${suffix}`;
+  const email = `membership-${suffix}@example.com`;
+  const searchToken = `membership-${suffix.slice(0, 8)}`;
+  executeAdminE2eSql(`
+    INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
+      VALUES ('${userId}', 'Membership Customer', '${email}', 1, ${now}, ${now});
+    INSERT INTO customer_principal (id, auth_user_id, status, created_at, updated_at)
+      VALUES ('${principalId}', '${userId}', 'active', ${now}, ${now});
+    INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at)
+      VALUES ('${customerId}', '${userId}', '${principalId}', 'active', 1, ${now}, ${now});
+    INSERT INTO subscription
+      (id, customer_id, offer_id, status, starts_at, current_period_ends_at, created_at, updated_at, version)
+      VALUES ('${subscriptionId}', '${customerId}', 'offer-membership-monthly', 'ACTIVE', ${now}, ${now + 2_592_000_000}, ${now}, ${now}, 1);
+  `);
+
+  const attempts: Array<{ body: string | null; key: string | null }> = [];
+  await adminPage.route(`**/api/admin/memberships/${subscriptionId}/cancel`, async (route) => {
+    attempts.push({
+      body: route.request().postData(),
+      key: route.request().headers()["idempotency-key"] ?? null,
+    });
+    if (attempts.length === 1) {
+      const accepted = await route.fetch();
+      expect(await accepted.json()).toMatchObject({ ok: true, value: { state: "CANCELED" } });
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+
+  await adminPage.goto(`/admin/memberships?query=${encodeURIComponent(searchToken)}`);
+  await expect(adminPage.getByRole("textbox", { name: "Search membership history" })).toHaveValue(
+    searchToken,
+  );
+  if (process.env.SAUI_CAPTURE_MEMBERSHIPS === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-05/membership-list-1440.png",
+      fullPage: true,
+    });
+  }
+  await adminPage.getByRole("link", { name: email }).click();
+  await expect(adminPage.getByRole("heading", { level: 1, name: email })).toBeVisible();
+  if (process.env.SAUI_CAPTURE_MEMBERSHIPS === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-05/membership-record-1440.png",
+      fullPage: true,
+    });
+  }
+  let failedReadback = 0;
+  await adminPage.route(`**/api/admin/memberships/${subscriptionId}`, (route) => {
+    failedReadback += 1;
+    return route.abort("failed");
+  });
+  await adminPage.getByRole("textbox", { name: "Cancellation reason" }).fill("Customer request");
+  await adminPage.getByRole("button", { name: "Cancel membership" }).click();
+  const confirmation = adminPage.getByRole("alertdialog");
+  await expect(confirmation).toContainText(
+    "does not confirm cancellation of provider-owned billing",
+  );
+  await confirmation.getByRole("button", { name: "Cancel membership" }).click();
+  await expect(
+    adminPage.getByRole("button", { name: "Retry unconfirmed cancellation" }),
+  ).toBeVisible();
+  await expect(
+    adminPage.getByRole("button", { name: "Retry unconfirmed cancellation" }),
+  ).toBeFocused();
+  await expect(adminPage.getByRole("textbox", { name: "Cancellation reason" })).toBeDisabled();
+  await adminPage.getByRole("button", { name: "Retry unconfirmed cancellation" }).click();
+  await expect(adminPage.getByText("Canceled", { exact: true }).first()).toBeVisible();
+  await expect(
+    adminPage.getByText(/cancellation is confirmed, but the latest record/i),
+  ).toBeVisible();
+  expect(failedReadback).toBe(1);
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]).toEqual(attempts[0]);
+
+  await adminPage.getByRole("main").getByRole("link", { name: "Membership history" }).click();
+  await expect(adminPage.getByRole("textbox", { name: "Search membership history" })).toHaveValue(
+    searchToken,
+  );
+  const current = await adminPage.request.get(`/api/admin/memberships/${subscriptionId}`);
+  expect(await current.json()).toMatchObject({ ok: true, value: { state: "CANCELED" } });
+});
+
+test("a memberships.read-only principal cannot cancel a retained record", async ({
+  membershipsReadOnlyPage,
+}) => {
+  const suffix = crypto.randomUUID();
+  const now = Date.now();
+  const userId = `membership-reader-user-${suffix}`;
+  const principalId = `membership-reader-principal-${suffix}`;
+  const customerId = `membership-reader-customer-${suffix}`;
+  const subscriptionId = `membership-reader-${suffix}`;
+  const email = `membership-reader-${suffix}@example.com`;
+  executeAdminE2eSql(`
+    INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
+      VALUES ('${userId}', 'Membership Reader Customer', '${email}', 1, ${now}, ${now});
+    INSERT INTO customer_principal (id, auth_user_id, status, created_at, updated_at)
+      VALUES ('${principalId}', '${userId}', 'active', ${now}, ${now});
+    INSERT INTO customer (id, auth_user_id, principal_id, status, version, created_at, updated_at)
+      VALUES ('${customerId}', '${userId}', '${principalId}', 'active', 1, ${now}, ${now});
+    INSERT INTO subscription
+      (id, customer_id, offer_id, status, starts_at, created_at, updated_at, version)
+      VALUES ('${subscriptionId}', '${customerId}', 'offer-membership-monthly', 'ACTIVE', ${now}, ${now}, ${now}, 1);
+  `);
+  await membershipsReadOnlyPage.goto(`/admin/memberships/${subscriptionId}`);
+  await expect(membershipsReadOnlyPage.getByRole("heading", { level: 1, name: email })).toBeVisible(
+    { timeout: 15_000 },
+  );
+  await expect(
+    membershipsReadOnlyPage.getByText(/cancellation requires memberships\.manage/i),
+  ).toBeVisible();
+  await expect(
+    membershipsReadOnlyPage.getByRole("textbox", { name: "Cancellation reason" }),
+  ).toHaveCount(0);
+  await expect(
+    membershipsReadOnlyPage.getByRole("button", { name: "Cancel membership" }),
+  ).toHaveCount(0);
+  const denied = await membershipsReadOnlyPage.request.post(
+    `/api/admin/memberships/${subscriptionId}/cancel`,
+    {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: { reason: "Must be denied", timing: "IMMEDIATE", expectedVersion: 1 },
+    },
+  );
+  expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+});
+
+test("Membership detail keeps missing, denied, and load failures distinct", async ({
+  adminPage,
+}) => {
+  const missingId = `membership-missing-${crypto.randomUUID()}`;
+  const deniedId = `membership-denied-${crypto.randomUUID()}`;
+  const failedId = `membership-failed-${crypto.randomUUID()}`;
+  await adminPage.route(`**/api/admin/memberships/${missingId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: { code: "NOT_FOUND", message: "Membership not found", requestId: "missing" },
+      }),
+    }),
+  );
+  await adminPage.goto(`/admin/memberships/${missingId}`);
+  await expect(adminPage.getByText("Membership not found", { exact: true })).toBeVisible();
+
+  await adminPage.route(`**/api/admin/memberships/${deniedId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: { code: "FORBIDDEN", message: "Membership access denied", requestId: "denied" },
+      }),
+    }),
+  );
+  await adminPage.goto(`/admin/memberships/${deniedId}`);
+  await expect(adminPage.getByText("Membership access denied", { exact: true })).toBeVisible();
+
+  await adminPage.route(`**/api/admin/memberships/${failedId}`, (route) => route.abort("failed"));
+  await adminPage.goto(`/admin/memberships/${failedId}`);
+  await expect(adminPage.getByText("Membership record unavailable", { exact: true })).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
 test("a provisioned Staff reader opens the real Orders workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/orders");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();

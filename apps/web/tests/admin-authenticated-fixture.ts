@@ -38,6 +38,7 @@ type AdminFixtures = {
   adminPage: Page;
   catalogReadOnlyPage: Page;
   customersReadOnlyPage: Page;
+  membershipsReadOnlyPage: Page;
   deniedAdminPage: Page;
   signedInPage: Page;
 };
@@ -84,7 +85,7 @@ export function executeAdminE2eSql(sql: string): void {
 
 async function provisionAccount(
   page: Page,
-  access: "admin" | "catalog-reader" | "customers-reader" | "denied",
+  access: "admin" | "catalog-reader" | "customers-reader" | "memberships-reader" | "denied",
 ): Promise<void> {
   const suffix = crypto.randomUUID();
   const email = `admin-e2e-${access}-${suffix}@example.com`;
@@ -111,7 +112,9 @@ async function provisionAccount(
         ? `INSERT INTO role_permission (role_id, permission_id) SELECT ${roleId}, id FROM permission WHERE code='catalog.read';`
         : access === "customers-reader"
           ? `INSERT INTO role_permission (role_id, permission_id) SELECT ${roleId}, id FROM permission WHERE code='customers.read';`
-          : "";
+          : access === "memberships-reader"
+            ? `INSERT INTO role_permission (role_id, permission_id) SELECT ${roleId}, id FROM permission WHERE code='memberships.read';`
+            : "";
   executeAdminE2eSql(`
     UPDATE user SET email_verified=1, updated_at=${now} WHERE email=${emailSql};
     INSERT INTO role (id, code, name, description, status, version, created_at)
@@ -167,6 +170,17 @@ export const test = base.extend<AdminFixtures>({
     const context = await browser.newContext();
     const page = await context.newPage();
     await provisionAccount(page, "customers-reader");
+    await use(page);
+    await context.close();
+  },
+  membershipsReadOnlyPage: async ({ browser }, use) => {
+    test.skip(
+      !authenticatedFixtureEnabled,
+      "Set E2E_AUTHENTICATED=1 and start the deterministic local E2E stack.",
+    );
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await provisionAccount(page, "memberships-reader");
     await use(page);
     await context.close();
   },

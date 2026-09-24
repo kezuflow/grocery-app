@@ -5,29 +5,18 @@ import type {
   AdminMembershipSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, Eye, XCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AdminConfirmationDialog,
   AdminCursorPagination,
-  useAdminPagination,
+  useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
-import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
-import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
-import { AdminStatusPill } from "../../../components/admin/admin-status-pill";
-import { MembershipStatusBadge } from "../../../components/admin/customer-status-badges";
-import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
+import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../components/admin/admin-shell";
+import { MembershipStatusBadge } from "../../../components/admin/customer-status-badges";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -36,47 +25,15 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-
-type MembershipAction = "cancel";
+import { useAdminContext } from "../admin-context-provider";
 
 type LoadState =
   | { phase: "loading" }
   | { phase: "error"; message: string; requestId?: string }
   | { phase: "ready" };
 
-type PendingAction = {
-  membership: AdminMembershipSummary;
-  action: MembershipAction;
-};
-
-const actionPresentation: Readonly<
-  Record<
-    MembershipAction,
-    {
-      label: string;
-      title: string;
-      consequence: string;
-      icon: LucideIcon;
-      destructive: boolean;
-    }
-  >
-> = {
-  cancel: {
-    label: "Cancel membership",
-    title: "Cancel this membership immediately?",
-    consequence: "Ends the membership immediately. This lifecycle transition cannot be undone.",
-    icon: XCircle,
-    destructive: true,
-  },
-};
-
-function allowedActions(state: string): ReadonlyArray<MembershipAction> {
-  if (["CANCELED", "EXPIRED"].includes(state)) return [];
-  return ["cancel"];
-}
-
 function date(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "Not recorded";
   return new Intl.DateTimeFormat("en-PH", {
     month: "short",
     day: "numeric",
@@ -84,18 +41,84 @@ function date(value: string | null): string {
   }).format(new Date(value));
 }
 
+function cancellationLabel(membership: AdminMembershipSummary): string {
+  if (membership.state === "CANCELED") return "Canceled";
+  if (membership.cancelAtPeriodEnd) return "Scheduled for period end";
+  return "None scheduled";
+}
+
 export default function MembershipsPage() {
+  const admin = useAdminContext();
+  if (admin.state.phase !== "ready") {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Membership history" />
+        <AdminPageState state="loading" title="Loading membership access" />
+      </section>
+    );
+  }
+
+  const canRead =
+    admin.state.selectedScope?.kind === "GLOBAL" &&
+    admin.state.context.capabilities.includes("memberships.read");
+  if (!canRead) {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Membership history" />
+        <AdminPageState
+          state="error"
+          title="Membership access denied"
+          message="Retained membership records require the memberships.read capability with a Global scope."
+        />
+      </section>
+    );
+  }
+
+  const scopeKey = JSON.stringify(admin.state.selectedScope);
+  return <MembershipsWorkspace key={scopeKey} scopeKey={scopeKey} />;
+}
+
+function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
+  const requestVersion = useRef(0);
+  const searchParams = useSearchParams();
+  const appliedQuery = searchParams.get("query") ?? "";
+  const [query, setQuery] = useState(appliedQuery);
   const [page, setPage] = useState<AdminMembershipPage | null>(null);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [appliedQuery, setAppliedQuery] = useState("");
-  const commandIntent = useAdminCommandIntent();
-  const pagination = useAdminPagination(appliedQuery);
+  const pagination = useAdminUrlPagination("/admin/memberships");
+  const listUrl = `/admin/memberships${searchParams.size ? `?${searchParams}` : ""}`;
+
+  useEffect(() => setQuery(appliedQuery), [appliedQuery]);
+
+  function recordHref(membership: AdminMembershipSummary): string {
+    return `/admin/memberships/${encodeURIComponent(membership.subscriptionId)}?returnTo=${encodeURIComponent(listUrl)}&returnScope=${encodeURIComponent(scopeKey)}`;
+  }
+
+  function rememberReturn() {
+    sessionStorage.setItem(
+      `freshmarkets.admin.memberships.return:${scopeKey}`,
+      JSON.stringify({ url: listUrl, y: window.scrollY }),
+    );
+  }
+
+  useEffect(() => {
+    if (state.phase !== "ready") return;
+    const key = `freshmarkets.admin.memberships.return:${scopeKey}`;
+    const stored = sessionStorage.getItem(key);
+    if (!stored) return;
+    sessionStorage.removeItem(key);
+    try {
+      const target = JSON.parse(stored) as { url: string; y: number };
+      if (target.url === `${window.location.pathname}${window.location.search}` && target.y >= 0) {
+        window.requestAnimationFrame(() => window.scrollTo(0, target.y));
+      }
+    } catch {
+      // Invalid return state cannot change the membership list.
+    }
+  }, [scopeKey, state.phase]);
 
   const load = useCallback(async (search: string, cursor: string | null) => {
+    const version = ++requestVersion.current;
     setState({ phase: "loading" });
     try {
       const params = new URLSearchParams({ limit: "50" });
@@ -104,10 +127,14 @@ export default function MembershipsPage() {
       const payload = (await (
         await fetch(`/api/admin/memberships?${params}`)
       ).json()) as RpcResult<AdminMembershipPage>;
+      if (version !== requestVersion.current) return;
       if (!payload.ok) {
         setState({
           phase: "error",
-          message: payload.error.message,
+          message:
+            payload.error.code === "FORBIDDEN"
+              ? "Retained membership records require the memberships.read capability with a Global scope."
+              : payload.error.message,
           requestId: payload.error.requestId,
         });
         return;
@@ -115,61 +142,37 @@ export default function MembershipsPage() {
       setPage(payload.value);
       setState({ phase: "ready" });
     } catch {
-      setState({ phase: "error", message: "Network error loading memberships." });
+      if (version !== requestVersion.current) return;
+      setState({
+        phase: "error",
+        message: "The membership history could not be loaded. Check the connection and retry.",
+      });
     }
   }, []);
 
   useEffect(() => {
     void load(appliedQuery, pagination.cursor);
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [appliedQuery, load, pagination.cursor]);
 
-  async function applyAction(reason: string) {
-    if (!pendingAction) return;
-    const { membership, action } = pendingAction;
-    try {
-      const payload = await commandIntent.submit(async (idempotencyKey) => {
-        const response = await fetch(
-          `/api/admin/memberships/${encodeURIComponent(membership.subscriptionId)}/${action}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-            body: JSON.stringify({
-              reason,
-              expectedVersion: membership.version,
-              ...(action === "cancel" ? { timing: "IMMEDIATE" } : {}),
-            }),
-          },
-        );
-        return (await response.json()) as RpcResult<unknown>;
-      });
-      if (!payload.ok) {
-        setNotice(payload.error.message);
-        return;
-      }
-      setNotice(`${actionPresentation[action].label} completed.`);
-      notifyCommandSuccess(`${actionPresentation[action].label} completed`);
-      setPendingAction(null);
-      await load(appliedQuery, pagination.cursor);
-    } catch {
-      setNotice("Connection lost. Retry the lifecycle action safely.");
-    }
-  }
-
-  async function copyMembershipId(membershipId: string) {
-    await navigator.clipboard.writeText(membershipId);
-    setCopiedId(membershipId);
-    window.setTimeout(() => {
-      setCopiedId((current) => (current === membershipId ? null : current));
-    }, 2_000);
+  function applySearch(nextQuery: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    const normalized = nextQuery.trim();
+    if (normalized) next.set("query", normalized);
+    else next.delete("query");
+    pagination.reset(next);
+    window.history.pushState(null, "", `/admin/memberships${next.size ? `?${next}` : ""}`);
   }
 
   const memberships = page?.items ?? [];
-  const selectedPresentation = pendingAction ? actionPresentation[pendingAction.action] : null;
-
   return (
-    <div className="w-full space-y-6">
-      <PageHeader title="Memberships" />
-      <AdminLiveRegion message={notice} />
+    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+      <PageHeader
+        title="Membership history"
+        description="Retained membership records are available for review and supported cancellation only."
+      />
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Membership list</h2>
@@ -177,14 +180,14 @@ export default function MembershipsPage() {
           className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
           onSubmit={(event) => {
             event.preventDefault();
-            setAppliedQuery(query.trim());
-            pagination.reset();
+            applySearch(query);
           }}
         >
           <Input
-            aria-label="Search memberships"
-            placeholder="Search by email or membership ID"
+            aria-label="Search membership history"
+            placeholder="Search by customer email or membership ID"
             value={query}
+            maxLength={100}
             onChange={(event) => setQuery(event.target.value)}
             className="h-9 sm:w-80"
           />
@@ -198,29 +201,24 @@ export default function MembershipsPage() {
               variant="ghost"
               onClick={() => {
                 setQuery("");
-                setAppliedQuery("");
-                pagination.reset();
+                applySearch("");
               }}
             >
               Clear
             </Button>
           ) : null}
         </form>
-        {copiedId ? (
-          <p className="sr-only" role="status">
-            Membership ID copied.
-          </p>
-        ) : null}
+
         {state.phase === "loading" ? (
           <div className="p-4">
-            <AdminPageState state="loading" title="Loading memberships" />
+            <AdminPageState state="loading" title="Loading membership history" />
           </div>
         ) : null}
         {state.phase === "error" ? (
           <div className="p-4">
             <AdminPageState
               state="error"
-              title="Memberships could not be loaded"
+              title="Membership history could not be loaded"
               message={state.message}
               requestId={state.requestId}
               onRetry={() => void load(appliedQuery, pagination.cursor)}
@@ -231,105 +229,88 @@ export default function MembershipsPage() {
           <div className="p-4">
             <AdminPageState
               state={appliedQuery ? "filtered-empty" : "empty"}
-              message="No memberships are visible in this view."
+              message="No retained memberships are visible in this view."
             />
           </div>
         ) : null}
         {state.phase === "ready" && memberships.length > 0 ? (
-          <Table aria-label="Membership list">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Period end</TableHead>
-                <TableHead>Cancellation</TableHead>
-                <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {memberships.map((membership) => {
-                const actions = allowedActions(membership.state);
-                return (
-                  <TableRow key={membership.subscriptionId}>
-                    <TableCell>
+          <>
+            <ul
+              aria-label="Membership list"
+              className="divide-y divide-[var(--fm-border)] sm:hidden"
+            >
+              {memberships.map((membership) => (
+                <li key={membership.subscriptionId} className="space-y-3 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <Link
-                        className="font-medium hover:underline"
-                        href={`/admin/memberships/${membership.subscriptionId}`}
+                        href={recordHref(membership)}
                         prefetch={false}
+                        onClick={rememberReturn}
+                        className="break-all font-semibold hover:underline"
                       >
                         {membership.customerEmail}
                       </Link>
-                      <p className="mt-0.5 max-w-52 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                      <p className="mt-1 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
                         {membership.subscriptionId}
                       </p>
-                    </TableCell>
-                    <TableCell>
-                      <MembershipStatusBadge status={membership.state} />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                      {date(membership.currentPeriodEndsAt)}
-                    </TableCell>
-                    <TableCell>
-                      {membership.cancelAtPeriodEnd ? (
-                        <AdminStatusPill status="PERIOD_END" tone="warning" label="At period end" />
-                      ) : (
-                        <span className="text-sm text-[var(--fm-text-muted)]">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Open actions for ${membership.customerEmail}`}
-                          >
-                            <EllipsisVertical aria-hidden="true" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/admin/memberships/${membership.subscriptionId}`}
-                              prefetch={false}
-                            >
-                              <Eye aria-hidden="true" />
-                              View details
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => void copyMembershipId(membership.subscriptionId)}
-                          >
-                            <Clipboard aria-hidden="true" />
-                            {copiedId === membership.subscriptionId
-                              ? "Copied"
-                              : "Copy membership ID"}
-                          </DropdownMenuItem>
-                          {actions.length > 0 ? <DropdownMenuSeparator /> : null}
-                          {actions.map((action) => {
-                            const presentation = actionPresentation[action];
-                            const Icon = presentation.icon;
-                            return (
-                              <DropdownMenuItem
-                                key={action}
-                                onSelect={() => setPendingAction({ membership, action })}
-                              >
-                                <Icon aria-hidden="true" />
-                                {presentation.label}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                    </div>
+                    <MembershipStatusBadge status={membership.state} />
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Period end</dt>
+                      <dd>{date(membership.currentPeriodEndsAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Cancellation</dt>
+                      <dd>{cancellationLabel(membership)}</dd>
+                    </div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden sm:block">
+              <Table aria-label="Membership list">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Period end</TableHead>
+                    <TableHead>Cancellation</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {memberships.map((membership) => (
+                    <TableRow key={membership.subscriptionId}>
+                      <TableCell>
+                        <Link
+                          href={recordHref(membership)}
+                          prefetch={false}
+                          onClick={rememberReturn}
+                          className="break-all font-medium hover:underline"
+                        >
+                          {membership.customerEmail}
+                        </Link>
+                        <p className="mt-0.5 max-w-64 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                          {membership.subscriptionId}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <MembershipStatusBadge status={membership.state} />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        {date(membership.currentPeriodEndsAt)}
+                      </TableCell>
+                      <TableCell className="text-sm text-[var(--fm-text-muted)]">
+                        {cancellationLabel(membership)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : null}
 
         {state.phase === "ready" ? (
@@ -341,22 +322,6 @@ export default function MembershipsPage() {
           />
         ) : null}
       </section>
-
-      {pendingAction && selectedPresentation ? (
-        <AdminConfirmationDialog
-          open
-          title={selectedPresentation.title}
-          resource={pendingAction.membership.customerEmail}
-          scope="Customer membership"
-          consequence={selectedPresentation.consequence}
-          confirmLabel={selectedPresentation.label}
-          cancelLabel="Cancel"
-          destructive={selectedPresentation.destructive}
-          pending={commandIntent.pending}
-          onCancel={() => setPendingAction(null)}
-          onConfirm={(reason) => void applyAction(reason)}
-        />
-      ) : null}
-    </div>
+    </section>
   );
 }

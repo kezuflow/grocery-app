@@ -20,6 +20,7 @@ export function useAdminCommand() {
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<PendingAdminCommand | null>(null);
+  const lastSuccessValue = useRef<unknown>(null);
   const inFlight = useRef(false);
   const lockOwner = useRef({});
   useEffect(() => () => setAdminScopeCommandLock(lockOwner.current, false), []);
@@ -36,6 +37,7 @@ export function useAdminCommand() {
       });
       const parsed = commandResultSchema.safeParse(await response.json());
       if (!parsed.success) throw new Error("Invalid command result");
+      if (parsed.data.ok) lastSuccessValue.current = parsed.data.value;
       pending.current = null;
       setAdminScopeCommandLock(lockOwner.current, false);
       setUncertain(false);
@@ -96,5 +98,6 @@ export function useAdminCommand() {
     () => (pending.current ? execute(pending.current) : Promise.resolve(false)),
     [execute],
   );
-  return { notice, setNotice, run, retry, busy, uncertain };
+  const getLastSuccessValue = useCallback(() => lastSuccessValue.current, []);
+  return { notice, setNotice, run, retry, getLastSuccessValue, busy, uncertain };
 }
