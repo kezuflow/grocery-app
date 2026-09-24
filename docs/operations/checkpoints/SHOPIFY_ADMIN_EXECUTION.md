@@ -7,11 +7,11 @@
 - **Reference ledger:** `docs/design/SHOPIFY_ADMIN_REFERENCES.md`.
 - **Owner decision:** Approved the Shopify-inspired admin direction in this conversation; implementation uses existing routes and preserves scope/business behavior.
 - **Execution status:** IN PROGRESS, SAUI-02 — Shared shell, navigation, scope, and notifications. SAUI-00/01 and SAUI-02.1 are accepted. Existing visual snapshots encode the old shell and remain failing until the redesigned page families are inspected and baselines are intentionally updated.
-- **Observed execution branch/HEAD:** `main` synchronized with `origin/main` at `fae0d343` after verified SAUI-02.2/02.3 work was committed and pushed. Current SAUI-02.4 edits are uncommitted at this checkpoint update.
-- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. Current intended edits are Admin context/operational refresh, command lock hooks, Product create/edit/list/preview, location price/fulfillment guards, focused tests and this checkpoint. No commerce-alignment source or checkpoint was edited.
+- **Observed execution branch/HEAD:** `main` synchronized with `origin/main` at `765f06de`; the verified SAUI-02.4 foundation is committed and pushed. A small follow-up diff adds the generic Admin command scope lock and URL cursor reset.
+- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. Intended follow-up edits are `use-admin-command`, Admin context/provider test, and this checkpoint. No commerce-alignment source or checkpoint was edited.
 - **Runtime:** Node `v24.15.0`, pnpm `11.0.9`, repository hooks `.githooks`; disposable `apps/core/.wrangler/e2e-shopify-admin` state is locally provisioned. Actual lead model/effort is controlled by the active Codex session and not changed here. The authorized `gpt-5.6-sol` Medium read-only reference agent completed; the `gpt-5.6-sol` High independent reviewer hit a service usage limit before returning findings. Lead reviewed the diff directly; one writer remains the lead.
 - **Active slice:** SAUI-02.4 — scope transition safety across dirty/pending forms and scope-keyed reads.
-- **Next action:** Review/stage/commit/push the verified SAUI-02.4 foundation, then inventory and guard remaining scope-sensitive editors before accepting the phase and starting SAUI-03.1.
+- **Next action:** Inventory remaining scope-sensitive editors and add dirty/locked registrations and stale-read protection where a scope switch can leave old or unsaved data visible; then run focused browser checks for the remaining gate.
 
 ## Macro-phase ledger
 
@@ -41,11 +41,11 @@ Goal / acceptance criteria: Dirty-form confirmation and pending/unknown-command 
 Dependency evidence: SAUI-02.1–02.3 accepted; real Core navigation integration 16/16, Web grouping 16/16, contracts 2/2, local shell/navigation/notification browser 18/18, Global/Central Cebu/mobile sidebar captures inspected.
 Owner / actual model / effort: current lead session; one writer. Independent High reviewer unavailable due service usage limit; lead reviews each diff.
 Writer lock / allowed files: lead owns Core navigation metadata, shared contract, Web navigation and shell, tests, task checkpoint.
-Stable base HEAD or frozen diff: fae0d343 plus uncommitted SAUI-02.4 transition-safety diff.
+Stable base HEAD or frozen diff: 765f06de; foundation committed and pushed, remaining SAUI-02.4 coverage open.
 Reference IDs / relevant guide sections: M01–M11; PRODUCT scope/role rules; DESIGN Admin visual foundation and navigation; ENGINEERING contract/verification/Git.
 Commands / environment: local disposable `e2e-shopify-admin` Wrangler Web/Core on port 3100; no provider/production operation.
-Implemented versus verified versus accepted: 02.4 transition guard, global pending/unknown command lock, Product and location-form integration, scope-keyed operational activity, Product selection/cursor reset and invalid-scope create state implemented. Focused unit/browser checks and aggregate `pnpm check` passed. Final diff review and commit/push pending. Remaining scope-sensitive editors need coverage before 02.4 acceptance. Visual snapshot comparisons against the old shell remain failing by design.
-Next action: review/stage/commit/push the verified foundation, then inventory remaining scope-sensitive editors and register their dirty/locked state.
+Implemented versus verified versus accepted: 02.4 transition guard, global pending/unknown command lock, Product and location-form integration, scope-keyed operational activity, Product selection/cursor reset and invalid-scope create state implemented, reviewed, committed and pushed. Follow-up adds the missing generic `useAdminCommand` lock and clears URL cursors before the scope state changes. Focused unit/browser checks and aggregate `pnpm check` passed for the foundation; follow-up focused 7/7 and Web typecheck passed. Remaining scope-sensitive editors need coverage before 02.4 acceptance. Visual snapshot comparisons against the old shell remain failing by design.
+Next action: inventory remaining scope-sensitive editors and register dirty/locked state where applicable.
 ```
 
 ## Baseline and route/action coverage
@@ -76,6 +76,7 @@ SAUI-00 used a disposable local D1 state. The managed Playwright command first t
 | SAUI-02.4 | rebuilt Web/Core + disposable local D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-scope-transition.spec.ts --workers=1 --retries=0` | 2/2 passed: cancel/accept dirty draft, invalid location create state, clean return, selection/cursor reset with filter preserved | local Playwright output | Local synthetic users, mock providers |
 | SAUI-02.4 | same local stack | `product-command-recovery.spec.ts` separately at 1440px and 390px with no retries | 1/1 each passed: uncertain edit blocked scope switch, same-key recovery retained; initial run 0/2 timed out at stale `Save product` test locator before scope assertion, fixed to current `Save changes` and 120s operation timeout | local Playwright output | Local mock provider and disposable catalog writes only |
 | SAUI-02.4 | `fae0d343` + uncommitted transition diff | `pnpm check` (third run after formatting and a stale accessibility assertion were repaired) | Passed: harness 37, shared/config/validation/contracts tests 2/2/4/69, Web 159 files/668 tests, Core 210 files/1,721 tests, Web build; format/naming/terminology/architecture/lint/typecheck gates passed | `%TEMP%/saui-pnpm-check.log` | Earlier runs failed only formatting and the old 64px rail assertion; repaired. Browser coverage is the focused local evidence above, not production/provider acceptance |
+| SAUI-02.4 follow-up | `765f06de` + uncommitted generic-lock/cursor diff | `pnpm --filter @freshmarkets/web test -- admin-context-provider.test.tsx admin-command-state.test.ts admin-controls-pagination.test.tsx`; `pnpm --filter @freshmarkets/web typecheck` | 3 files/7 tests and typecheck passed. First focused test attempt failed a test-only selector, repaired; first format check identified the new test, repaired. | local command output | No fresh browser run yet; earlier Product browser tests do not cover generic-command recovery |
 
 Separate mocked/component, local Worker/D1, local browser, actual sandbox provider and production evidence. Do not overwrite a failed result with “passed” without retaining the failure and repair record.
 
@@ -99,7 +100,7 @@ No external-access blocker. The shared-chat download control failed, but the own
 
 ## Latest handoff
 
-Active SAUI-02.4 on `main` at `fae0d343` with uncommitted transition-safety changes and preserved owner ZIP. The disposable local Web/Core stack was stopped after focused browser checks. Aggregate `pnpm check` passed on this working tree, including 668 Web and 1,721 Core tests and a Web build. Next: review/stage only intended SAUI files, commit/push, then guard remaining scope-sensitive editors.
+Active SAUI-02.4 on `main` at `765f06de`, pushed to `origin/main`, with uncommitted generic-command lock/cursor follow-up and preserved owner ZIP. The disposable local Web/Core stack was stopped after focused browser checks. Aggregate `pnpm check` passed on the committed foundation, including 668 Web and 1,721 Core tests and a Web build; follow-up focused 7/7 and Web typecheck passed. Next: review/commit/push this follow-up, then inventory remaining scope-sensitive editors and add guards/old-response rejection where needed.
 
 ## History
 

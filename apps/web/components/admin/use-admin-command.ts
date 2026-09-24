@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "@freshmarkets/validation";
 import { notifyCommandSuccess, type AdminSuccessFeedback } from "./admin-feedback";
+import { setAdminScopeCommandLock } from "./admin-scope-command-lock";
 type PendingAdminCommand = {
   operationId: string;
   url: string;
@@ -20,9 +21,12 @@ export function useAdminCommand() {
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<PendingAdminCommand | null>(null);
   const inFlight = useRef(false);
+  const lockOwner = useRef({});
+  useEffect(() => () => setAdminScopeCommandLock(lockOwner.current, false), []);
   const execute = useCallback(async (command: PendingAdminCommand) => {
     if (inFlight.current) return false;
     inFlight.current = true;
+    setAdminScopeCommandLock(lockOwner.current, true);
     setBusy(true);
     try {
       const response = await fetch(command.url, {
@@ -33,6 +37,7 @@ export function useAdminCommand() {
       const parsed = commandResultSchema.safeParse(await response.json());
       if (!parsed.success) throw new Error("Invalid command result");
       pending.current = null;
+      setAdminScopeCommandLock(lockOwner.current, false);
       setUncertain(false);
       setNotice(parsed.data.ok ? "Done." : parsed.data.error.message);
       if (parsed.data.ok && command.successFeedback) {

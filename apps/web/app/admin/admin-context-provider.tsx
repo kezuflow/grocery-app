@@ -166,6 +166,12 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
     );
     sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(scope));
     persistProductScopeTarget(scope);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("cursor") || url.searchParams.has("cursorHistory")) {
+      url.searchParams.delete("cursor");
+      url.searchParams.delete("cursorHistory");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
     setState((latest) =>
       latest.phase === "ready" ? { ...latest, selectedScope: scope, overview: null } : latest,
     );
