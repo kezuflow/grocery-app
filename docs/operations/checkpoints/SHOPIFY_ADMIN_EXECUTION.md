@@ -7,11 +7,11 @@
 - **Reference ledger:** `docs/design/SHOPIFY_ADMIN_REFERENCES.md`.
 - **Owner decision:** Approved the Shopify-inspired admin direction in this conversation; implementation uses existing routes and preserves scope/business behavior.
 - **Execution status:** IN PROGRESS, SAUI-05 — Customers and customer administration. SAUI-00/01/03/04 are accepted; SAUI-02.4 remains open for remaining page-family editors and stale scoped reads. Existing visual snapshots encode the old shell and remain failing until redesigned page families are inspected and baselines are intentionally updated.
-- **Observed execution branch/HEAD at checkpoint writing:** `main` at `5728daaf`, synced with `origin/main`; the accepted SAUI-04.4 source/tests and five inspected screenshots are verified in the working tree and pending their source commit. Source route families remain at 55 Admin pages/8 redirects/118 Admin API route files.
-- **Working tree:** Eleven intended Web source/test files and this checkpoint are edited; five SAUI-04 screenshots are untracked. The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. No commerce-alignment source or checkpoint was edited.
+- **Observed execution branch/HEAD at checkpoint writing:** `main` at `6c1381b0`, one local source/evidence commit ahead of `origin/main`; this checkpoint follow-up is pending commit/push. Source route families remain at 55 Admin pages/8 redirects/118 Admin API route files.
+- **Working tree:** Only this checkpoint is an intended tracked edit. The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. No commerce-alignment source or checkpoint was edited.
 - **Runtime:** Node `v24.15.0`, pnpm `11.0.9`, repository hooks `.githooks`; disposable `apps/core/.wrangler/e2e-shopify-admin` state is locally provisioned, and the local stack is stopped. Actual lead model/effort is controlled by the active Codex session and not changed here. Bounded `gpt-5.6-sol` Medium read-only 04.4 and 05 audits and fresh High read-only 04.4 review completed; lead was sole writer.
 - **Active slice:** SAUI-05.1 — Customer list/detail. SAUI-04.1–04.4 are accepted. SAUI-02.4 remains open and must be completed before SAUI-02 acceptance; Category editor guards address part of it.
-- **Next action:** Commit/push the verified SAUI-04.4 source/evidence and checkpoint, then implement SAUI-05.1 Customer list-to-profile layout and URL-owned return state with current Core facts and permissions.
+- **Next action:** Commit/push this checkpoint follow-up, then implement SAUI-05.1 Customer list-to-profile layout and URL-owned return state with current Core facts and permissions.
 
 ## Macro-phase ledger
 
@@ -41,11 +41,11 @@ Goal / acceptance criteria: Present current Customer list and existing profile r
 Dependency evidence: SAUI-04.4 accepted in working tree at `5728daaf` base: final `pnpm check` passed Web 675/675, Core 1,721/1,721 and builds; local browser 12/14 then repaired cases 2/2; five final screenshots inspected. SAUI-02.4 foundation remains open for other page families.
 Owner / actual model / effort: current lead session, sole writer until next bounded assignment; `gpt-5.6-sol` Medium read-only 05 audit complete. Fresh High 04.4 review findings resolved and verified.
 Writer lock / allowed files: next writer owns Customer Admin list/detail/support/privacy presentation and focused tests/evidence; no Core/contracts/routes, shared shell, or commerce-alignment edits without separate justification.
-Stable base HEAD or frozen diff: `5728daaf` plus verified SAUI-04.4 working-tree source/tests/images pending commit; owner ZIP excluded.
+Stable base HEAD or frozen diff: `6c1381b0` contains verified SAUI-04.4 source/tests/images; this checkpoint alone is edited and the owner ZIP is excluded.
 Reference IDs / relevant guide sections: M06 and approved screenshot; PRODUCT customer/privacy; DESIGN Customers/scopes; ENGINEERING verification/Git.
 Commands / environment: disposable `e2e-shopify-admin` Wrangler Web/Core/D1 stack on port 3100, currently stopped; no provider/production operation.
-Implemented versus verified versus accepted: SAUI-04.4 accepted locally and awaits commit/push. SAUI-05 has read-only code audit only, no implementation or runtime acceptance yet.
-Next action: commit/push 04.4, then implement 05.1 list/profile and verify local Worker/D1/browser journeys.
+Implemented versus verified versus accepted: SAUI-04.4 accepted and committed at `6c1381b0`; push is pending with this checkpoint follow-up. SAUI-05 has read-only code audit only, no implementation or runtime acceptance yet.
+Next action: commit/push this checkpoint, then implement 05.1 list/profile and verify local Worker/D1/browser journeys.
 ```
 
 ## Baseline and route/action coverage
