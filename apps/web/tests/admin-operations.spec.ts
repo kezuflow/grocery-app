@@ -57,9 +57,11 @@ test("a signed-in account without operational capability sees the denied state",
   );
 });
 
-test("a provisioned Staff reader opens the real Procurement workspace", async ({ adminPage }) => {
+test("a provisioned Staff reader opens the real Delivery weeks workspace", async ({
+  adminPage,
+}) => {
   await adminPage.goto("/admin/procurement");
-  await expect(adminPage.getByRole("heading", { level: 1, name: "Procurement" })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Delivery weeks" })).toBeVisible();
 });
 
 test("selling pause, mode switch, and reopen succeed with capability and deny unauthorized staff", async ({

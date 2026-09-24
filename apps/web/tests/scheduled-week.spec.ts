@@ -100,7 +100,7 @@ for (const width of [1440, 390])
     INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at)
       VALUES ('pending-${id}','o-${id}','PENDING_PAYMENT','PHP',100,'pending-${id}','pending-${id}',${now},${now});
     INSERT INTO fulfillment_location(id,market_id,code,name,type,latitude,longitude,status,created_at,updated_at)
-      VALUES ('destination-${id}','market-metro-cebu','destination-${id}','Second destination ${width}','FULFILLMENT_CENTER',10,123,'active',${now},${now});
+      VALUES ('destination-${id}','market-metro-cebu','destination-${id}','Second destination ${width} ${id.slice(0, 6)}','FULFILLMENT_CENTER',10,123,'active',${now},${now});
     INSERT INTO payment_attempt(id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
       VALUES ('p2-${id}','c-${id}',30000,'PHP','SUCCEEDED','mock','p2-${id}',${now},${now});
     INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at)
@@ -216,7 +216,10 @@ for (const width of [1440, 390])
       path: testInfo.outputPath(`scheduled-week-${width}.png`),
       fullPage: true,
     });
-    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Delivery week dates" })
+      .getByRole("link", { name: "Receiving", exact: true })
+      .click();
     await expect(page).toHaveURL(new RegExp(`cycleId=${id}`));
     const row = page.getByRole("row").filter({ hasText: name });
     await row.getByRole("button", { name: "Start receiving", exact: true }).click();
@@ -263,7 +266,10 @@ for (const width of [1440, 390])
       path: testInfo.outputPath(`scheduled-shortage-orders-${width}.png`),
       fullPage: true,
     });
-    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Delivery week dates" })
+      .getByRole("link", { name: "Receiving", exact: true })
+      .click();
     await expect(row).toContainText("Missing: 200");
     const replacements: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/receiving/record-line", async (route) => {
@@ -318,7 +324,10 @@ for (const width of [1440, 390])
         })
       ).json(),
     ).toMatchObject({ ok: true });
-    await page.getByRole("link", { name: "Receiving", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Delivery week dates" })
+      .getByRole("link", { name: "Receiving", exact: true })
+      .click();
     await expect(page).toHaveURL(new RegExp(`cycleId=${id}`));
     const leftovers = page
       .getByRole("region", { name: "Unused received goods" })
@@ -364,8 +373,7 @@ for (const width of [1440, 390])
         VALUES ('paid2-${id}','intent2-${id}','reaction2-${id}','o2-${id}',${now});`);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page
-      .getByRole("option", { name: `Second destination ${width}`, exact: true })
-      .last()
+      .getByRole("option", { name: `Second destination ${width} ${id.slice(0, 6)}`, exact: true })
       .click();
     await row.getByRole("button", { name: "Start receiving", exact: true }).click();
     const secondReceipts = z

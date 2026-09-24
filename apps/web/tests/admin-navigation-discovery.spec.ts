@@ -13,7 +13,9 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
   await expect(navigation.locator('a[href="/admin/receiving"]')).toHaveCount(0);
   await navigation.getByRole("button", { name: "Products" }).click();
   await expect(navigation.getByRole("link", { name: "Catalog overview" })).toBeVisible();
-  await expect(adminPage.locator('a[href="/admin/issues/operational-exceptions"]')).toHaveCount(1);
+  await expect(
+    adminPage.locator('a[href="/admin/issues/operational-exceptions"]').first(),
+  ).toBeVisible();
 
   await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
   await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
@@ -25,5 +27,5 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
   await navigation.locator('a[href="/admin/receiving"]').click();
   await expect(adminPage.getByRole("heading", { level: 1, name: "Receiving" })).toBeVisible();
   await navigation.locator('a[href="/admin/procurement"]').click();
-  await expect(adminPage.getByRole("heading", { level: 1, name: "Delivery week" })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Delivery weeks" })).toBeVisible();
 });
