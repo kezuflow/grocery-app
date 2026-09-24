@@ -104,13 +104,17 @@ afterEach(async () => {
 const response = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
 
-async function renderPreview(onRecoveryStateChange = vi.fn(), onPriceSaved = vi.fn()) {
+async function renderPreview(
+  onRecoveryStateChange = vi.fn(),
+  onPriceSaved = vi.fn(),
+  canManagePrices = true,
+) {
   await act(async () => {
     root.render(
       <LocationProductPreviewPanel
         product={product}
         fromQuery=""
-        canManagePrices
+        canManagePrices={canManagePrices}
         onClose={vi.fn()}
         onPriceSaved={onPriceSaved}
         onRecoveryStateChange={onRecoveryStateChange}
@@ -127,6 +131,10 @@ describe("LocationProductPreviewPanel", () => {
     expect(container.textContent).toContain("Central Cebu fulfillment preview");
     expect(container.textContent).toContain("Location selling options");
     expect(container.textContent).toContain("Click a price to change it for Central Cebu only.");
+    expect(container.textContent).not.toContain("Metro Cebu");
+    expect(container.textContent).toContain("Physical stock20,000 g");
+    expect(container.textContent).toContain("Reserved stock2,000 g");
+    expect(container.textContent).toContain("Available stock18,000 g");
 
     const edit = container.querySelector<HTMLButtonElement>(
       '[aria-label="Edit price for Zucchini · 1 kg"]',
@@ -136,6 +144,34 @@ describe("LocationProductPreviewPanel", () => {
     expect(
       container.querySelector<HTMLInputElement>('[aria-label="Price for Zucchini · 1 kg"]')?.value,
     ).toBe("85.00");
+  });
+
+  it("shows static prices and ownership copy without management access", async () => {
+    await renderPreview(vi.fn(), vi.fn(), false);
+
+    expect(container.textContent).toContain(
+      "Prices for Central Cebu are view-only with your current access.",
+    );
+    expect(container.textContent).toContain("₱85.00");
+    expect(container.querySelector('[aria-label="Edit price for Zucchini · 1 kg"]')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("settles an authoritative denied price read into view-only state", async () => {
+    fetchMock.mockResolvedValue(
+      response({ ok: true, value: { ...prices, canManage: false }, requestId: "test" }),
+    );
+    await renderPreview();
+    const edit = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Edit price for Zucchini · 1 kg"]',
+    );
+    if (!edit) throw new Error("Editable price missing");
+    await act(async () => edit.click());
+
+    expect(container.textContent).toContain("You do not have price-management access");
+    expect(container.querySelector('[aria-label="Edit price for Zucchini · 1 kg"]')).toBeNull();
+    expect(container.querySelector('input[aria-label="Price for Zucchini · 1 kg"]')).toBeNull();
+    expect(container.textContent).not.toContain("Retry price");
   });
 
   it("retains the exact location command and key after a lost response", async () => {

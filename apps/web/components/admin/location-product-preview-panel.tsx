@@ -119,6 +119,7 @@ function LocationSkuPriceRow({
   const [savedPriceMinor, setSavedPriceMinor] = useState<number | null | undefined>(undefined);
   const intent = useAdminCommandIntent();
   const displayedPrice = savedPriceMinor === undefined ? sku.priceMinor : savedPriceMinor;
+  const priceEditable = canManagePrices && view?.canManage !== false;
   useAdminScopeGuard(
     editing && view !== null && amount !== priceInputValue(view.currentPriceMinor),
     loading || command !== null || intent.pending || intent.uncertain,
@@ -142,6 +143,7 @@ function LocationSkuPriceRow({
       setView(result.value);
       setAmount(priceInputValue(result.value.currentPriceMinor));
       if (!result.value.canManage) {
+        setEditing(false);
         setNotice("You do not have price-management access for this fulfillment location.");
       }
     } catch {
@@ -224,7 +226,7 @@ function LocationSkuPriceRow({
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{sku.name}</p>
-          {canManagePrices ? (
+          {priceEditable ? (
             <button
               type="button"
               className="mt-0.5 inline-flex items-center gap-1 rounded text-left text-sm font-semibold text-[var(--fm-admin-accent-strong)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
@@ -237,7 +239,7 @@ function LocationSkuPriceRow({
             </button>
           ) : (
             <p className="mt-0.5 text-sm font-semibold">
-              {money(displayedPrice, product.scope.currency)}
+              {displayedPrice === null ? "No price" : money(displayedPrice, product.scope.currency)}
             </p>
           )}
         </div>
@@ -420,7 +422,7 @@ function LocationProductPreviewPanelContent({
               {product.categoryName}
             </p>
             <p className="mt-1 truncate text-xs text-[var(--fm-text-muted)]">
-              {product.scope.locationName} · {product.scope.marketName}
+              {product.scope.locationName}
             </p>
           </div>
         </section>
@@ -435,7 +437,9 @@ function LocationProductPreviewPanelContent({
                 Location selling options
               </h3>
               <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                Click a price to change it for {product.scope.locationName} only.
+                {canManagePrices
+                  ? `Click a price to change it for ${product.scope.locationName} only.`
+                  : `Prices for ${product.scope.locationName} are view-only with your current access.`}
               </p>
             </div>
             <span className="shrink-0 text-sm text-[var(--fm-text-muted)]">
@@ -470,6 +474,18 @@ function LocationProductPreviewPanelContent({
             <dd className="font-medium">{product.scope.locationName}</dd>
             <dt className="text-[var(--fm-text-muted)]">Currency</dt>
             <dd>{product.scope.currency}</dd>
+            <dt className="text-[var(--fm-text-muted)]">Physical stock</dt>
+            <dd>
+              {product.inventoryPool.position
+                ? `${product.inventoryPool.position.onHandBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
+                : "Not recorded"}
+            </dd>
+            <dt className="text-[var(--fm-text-muted)]">Reserved stock</dt>
+            <dd>
+              {product.inventoryPool.position
+                ? `${product.inventoryPool.position.reservedBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
+                : "Not recorded"}
+            </dd>
             <dt className="text-[var(--fm-text-muted)]">Available stock</dt>
             <dd>
               {product.inventoryPool.position

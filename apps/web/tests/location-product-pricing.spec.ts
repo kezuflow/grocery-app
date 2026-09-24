@@ -209,4 +209,67 @@ for (const width of [1440, 390]) {
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   });
+
+  test(`Central Cebu view-only Product ownership at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const readOnlyContext = {
+      ...context,
+      capabilities: ["catalog.read", "inventory.read", "prices.read"],
+    } satisfies AdminContextView;
+    const pricedProduct = {
+      ...product,
+      skus: [{ ...product.skus[0], priceMinor: 2_550, priceVersion: 1 }],
+    } satisfies AdminProductDetail;
+    await page.route("**/api/admin/catalog/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const value =
+        path === "/api/admin/catalog/products"
+          ? pageResult
+          : path.endsWith("/products/price-product")
+            ? pricedProduct
+            : null;
+      await route.fulfill({
+        status: value ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify(
+          value
+            ? { ok: true, value, requestId: "browser" }
+            : {
+                ok: false,
+                error: { code: "NOT_FOUND", message: "No test route", requestId: "browser" },
+              },
+        ),
+      });
+    });
+    await installAdminBootstrapFixture(page, {
+      context: readOnlyContext,
+      scopes,
+      selectedScope: { kind: "LOCATION", marketId: "market-1", locationId: "location-1" },
+      timezone: "Asia/Manila",
+    });
+
+    await page.goto("/admin/catalog/products");
+    await page.getByRole("button", { name: "Preview Onion" }).click();
+    const preview = page.locator("#product-detail-panel");
+    await expect(preview).toContainText("Central Cebu fulfillment preview");
+    await expect(preview).toContainText("Prices for Central Cebu are view-only");
+    await expect(preview).toContainText("₱25.50");
+    await expect(preview).toContainText("Physical stock");
+    await expect(preview).toContainText("10,000 g");
+    await expect(preview).toContainText("Reserved stock");
+    await expect(preview).toContainText("500 g");
+    await expect(preview).toContainText("Available stock");
+    await expect(preview).toContainText("9,500 g");
+    await expect(preview).not.toContainText("Metro Cebu");
+    await expect(preview.getByRole("button", { name: "Edit price for 500 g" })).toHaveCount(0);
+    await expect(preview.getByRole("button", { name: "Save price" })).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    if (process.env.SAUI_CAPTURE_PRODUCT_SCOPE === "1") {
+      await preview.screenshot({
+        path: `../../docs/operations/checkpoints/evidence/saui-04/products-location-readonly-${width}.png`,
+      });
+    }
+  });
 }

@@ -243,6 +243,11 @@ export function GlobalProductPreviewPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <p className="mb-5 text-xs text-[var(--fm-text-muted)]">
+          {canManage
+            ? "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock."
+            : "This Global product is view-only with your current access. Select a fulfillment location to see its price and stock."}
+        </p>
         <section className="flex items-center gap-4" aria-label="Product identity">
           {image ? (
             <img
@@ -457,7 +462,9 @@ export function GlobalProductPreviewPanel({
               Categories
             </h3>
             <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-              Choose one or more. The first category is primary.
+              {canManage
+                ? "Choose one or more. The first category is primary."
+                : "Assigned categories for this product."}
             </p>
           </div>
           {canManage ? (

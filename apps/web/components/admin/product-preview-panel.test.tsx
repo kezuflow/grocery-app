@@ -67,6 +67,9 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain('id="product-panel-title"');
     expect(html).toContain("Global product preview");
     expect(html).toContain(
+      "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock.",
+    );
+    expect(html).toContain(
       'class="mt-6 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] pt-5"',
     );
     expect(html).not.toContain("min-h-11 items-center rounded-lg border");
@@ -91,5 +94,24 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain("Last recorded change");
     expect(html).toContain("/media/media-1/content?v=2");
     expect(html).not.toContain("Date added");
+  });
+
+  it("explains view-only Global ownership without mutation controls", () => {
+    const html = renderToStaticMarkup(
+      <GlobalProductPreviewPanel
+        product={{ ...product, allowedActions: [] }}
+        fromQuery=""
+        onClose={() => {}}
+      />,
+    );
+
+    expect(html).toContain("This Global product is view-only with your current access.");
+    expect(html).toContain("Assigned categories for this product.");
+    expect(html).not.toContain("Choose one or more.");
+    expect(html).toContain("Zucchini");
+    expect(html).not.toContain('aria-label="Product name"');
+    expect(html).not.toContain('aria-label="Product status"');
+    expect(html).not.toContain('aria-label="Product categories"');
+    expect(html).not.toContain("₱85.00");
   });
 });
