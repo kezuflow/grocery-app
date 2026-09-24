@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminDeliveryOperationView, ManualDeliveryAction } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../../ui/button";
@@ -27,9 +27,11 @@ const responseSchema = z.discriminatedUnion("ok", [
 export function ManualDeliveryControls({
   item,
   onChanged,
+  onInteractionState,
 }: {
   item: AdminDeliveryOperationView;
   onChanged: () => void;
+  onInteractionState?: (dirty: boolean, locked: boolean) => void;
 }) {
   const [action, setAction] = useState<ManualDeliveryAction | null>(null);
   const [personName, setName] = useState("");
@@ -40,6 +42,12 @@ export function ManualDeliveryControls({
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const manual = item.manualDelivery;
+  const interaction = useRef(onInteractionState);
+  interaction.current = onInteractionState;
+  useEffect(() => {
+    interaction.current?.(action !== null, pending || saved !== null);
+  }, [action, pending, saved]);
+  useEffect(() => () => interaction.current?.(false, false), []);
 
   async function submit() {
     if (!action || pending) return;

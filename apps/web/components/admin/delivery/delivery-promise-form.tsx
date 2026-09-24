@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../../ui/button";
@@ -14,9 +14,11 @@ const responseSchema = z.discriminatedUnion("ok", [
 export function DeliveryPromiseForm({
   item,
   onChanged,
+  onInteractionState,
 }: {
   item: AdminDeliveryOperationView;
   onChanged: () => void;
+  onInteractionState?: (dirty: boolean, locked: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [time, setTime] = useState("");
@@ -26,6 +28,12 @@ export function DeliveryPromiseForm({
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const interaction = useRef(onInteractionState);
+  interaction.current = onInteractionState;
+  useEffect(() => {
+    interaction.current?.(open, pending || saved !== null);
+  }, [open, pending, saved]);
+  useEffect(() => () => interaction.current?.(false, false), []);
   if (!item.canRevisePromise && !item.canInspectReturnedGoods) return null;
   async function submit(event: React.FormEvent) {
     event.preventDefault();

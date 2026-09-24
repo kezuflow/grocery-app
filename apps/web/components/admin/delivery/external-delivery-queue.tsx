@@ -5,7 +5,7 @@ import type {
   ExternalDeliveryDispatchView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
@@ -20,16 +20,22 @@ import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
 import { notifyCommandSuccess } from "../admin-feedback";
+import { AdminCursorPagination, useAdminPagination } from "../admin-controls";
+import { useAdminContext, useAdminScopeGuard } from "../../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "../use-admin-route-guard";
 
 export function externalStatusLabel(
   dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
 ) {
   if (dispatch.status === "OUTCOME_UNKNOWN" || dispatch.status === "RECONCILIATION_REQUIRED")
     return "Awaiting provider confirmation";
-  if (dispatch.status === "PENDING" || dispatch.status === "CREATING") return "Booking Lalamove…";
-  if (dispatch.status === "RETRY_REQUIRED") return "Retrying Lalamove booking…";
-  if (dispatch.status === "FAILED") return "Booking failed";
-  if (dispatch.status === "CANCELED") return "Booking canceled";
+  if (dispatch.status === "PENDING" || dispatch.status === "CREATING")
+    return "Booking in progress…";
+  if (dispatch.status === "RETRY_REQUIRED") return "Booking retry required";
+  if (dispatch.status === "FAILED")
+    return dispatch.providerDeliveryId ? "Delivery failed" : "Booking failed";
+  if (dispatch.status === "CANCELED")
+    return dispatch.providerDeliveryId ? "Delivery canceled" : "Booking canceled";
   switch (dispatch.providerStatus) {
     case "ALLOCATING":
       return "Finding rider";
@@ -46,71 +52,190 @@ export function externalStatusLabel(
   }
 }
 
+export function deliveryJobStatusLabel(status: string) {
+  switch (status) {
+    case "UNASSIGNED":
+      return "Awaiting assignment";
+    case "ASSIGNED":
+      return "Assigned";
+    case "EN_ROUTE":
+      return "Out for delivery";
+    case "FAILED":
+      return "Delivery failed";
+    case "RETRY_SCHEDULED":
+      return "Retry scheduled";
+    case "DELIVERED":
+      return "Delivered";
+    default:
+      return status.toLowerCase().replaceAll("_", " ");
+  }
+}
+
 export function ExternalDeliveryQueue() {
+  const admin = useAdminContext();
+  const canManage =
+    admin.state.phase === "ready" && admin.state.context.capabilities.includes("delivery.manage");
   const { locationId, label } = useAdminLocation();
   const orderId = useSearchParams().get("orderId");
-  const [summary, setSummary] = useState<DeliveryOperationsSummary | null>(null);
+  const pagination = useAdminPagination(`${locationId}:${orderId}`);
+  const readKey = JSON.stringify([locationId, orderId, pagination.cursor]);
+  const currentReadKey = useRef(readKey);
+  currentReadKey.current = readKey;
+  const readController = useRef<AbortController | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; value: DeliveryOperationsSummary } | null>(
+    null,
+  );
+  const summary = loaded?.key === readKey ? loaded.value : null;
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const loading = loadingKey === readKey;
+  const [readError, setReadError] = useState<{ key: string; message: string } | null>(null);
+  const [commandNotice, setCommandNotice] = useState<{ key: string; message: string } | null>(null);
+  const message = [readError, commandNotice]
+    .filter((entry) => entry?.key === readKey)
+    .map((entry) => entry!.message)
+    .join(" ");
   const operationalRefresh = useAdminOperationalRefresh();
+  const [interactionStates, setInteractionStates] = useState<
+    Record<string, { dirty: boolean; locked: boolean }>
+  >({});
+  const setInteraction = useCallback((id: string, dirty: boolean, locked: boolean) => {
+    setInteractionStates((current) => {
+      if (!dirty && !locked && !current[id]) return current;
+      if (current[id]?.dirty === dirty && current[id]?.locked === locked) return current;
+      const next = { ...current };
+      if (dirty || locked) next[id] = { dirty, locked };
+      else delete next[id];
+      return next;
+    });
+  }, []);
+  const providerIntent = useRef<{
+    dispatchId: string;
+    operation: "refresh" | "cancel";
+    key: string;
+    body: string;
+  } | null>(null);
+  const [providerLocked, setProviderLocked] = useState(false);
+  const [providerPending, setProviderPending] = useState(false);
+  const dirty = Object.values(interactionStates).some((state) => state.dirty);
+  const locked = providerLocked || Object.values(interactionStates).some((state) => state.locked);
+  const blockedRef = useRef(false);
+  blockedRef.current = dirty || locked;
+  const refreshDeferred = useRef(false);
+  useAdminScopeGuard(dirty, locked);
+  useAdminRouteGuard(dirty, locked);
 
   const load = useCallback(
     async (background = false) => {
-      if (!locationId) return;
-      if (!background) setLoading(true);
+      if (!locationId || readKey !== currentReadKey.current) return;
+      if (blockedRef.current) {
+        refreshDeferred.current = true;
+        return;
+      }
+      readController.current?.abort();
+      const controller = new AbortController();
+      readController.current = controller;
+      if (!background) setLoadingKey(readKey);
+      const params = new URLSearchParams({ locationId, limit: "100" });
+      if (orderId) params.set("orderId", orderId);
+      if (pagination.cursor) params.set("cursor", pagination.cursor);
       try {
         const result = (await (
-          await fetch(
-            `/api/admin/delivery?locationId=${encodeURIComponent(locationId)}&limit=100${orderId ? `&orderId=${encodeURIComponent(orderId)}` : ""}`,
-          )
+          await fetch(`/api/admin/delivery?${params}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          })
         ).json()) as RpcResult<DeliveryOperationsSummary>;
-        if (result.ok) setSummary(result.value);
-        else setMessage(result.error.message);
-      } catch {
-        setMessage("External delivery work could not be loaded.");
+        if (controller.signal.aborted || readKey !== currentReadKey.current) return;
+        if (blockedRef.current) {
+          refreshDeferred.current = true;
+          return;
+        }
+        if (!result.ok) throw new Error(result.error.message);
+        if (result.value.locationId !== locationId)
+          throw new Error("Delivery scope changed. Refresh the queue.");
+        setLoaded({ key: readKey, value: result.value });
+        setReadError(null);
+      } catch (error: unknown) {
+        if (!controller.signal.aborted && readKey === currentReadKey.current && !blockedRef.current)
+          setReadError({
+            key: readKey,
+            message: error instanceof Error ? error.message : "Delivery work could not be loaded.",
+          });
       } finally {
-        if (!background) setLoading(false);
+        if (readKey === currentReadKey.current && !controller.signal.aborted) setLoadingKey(null);
       }
     },
-    [locationId, orderId],
+    [locationId, orderId, pagination.cursor, readKey],
   );
 
   useEffect(() => {
-    setSummary(null);
-    setMessage(null);
     void load();
+    return () => readController.current?.abort();
   }, [load]);
   useEffect(() => {
     if (locationId && operationalRefresh.revision > 0) void load(true);
     // The location refresh provider is the sole polling owner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operationalRefresh.revision]);
+  useEffect(() => {
+    if (!dirty && !locked && refreshDeferred.current) {
+      refreshDeferred.current = false;
+      void load(true);
+    }
+  }, [dirty, locked, load]);
+
+  function changePage(move: () => void) {
+    if (locked) return;
+    if (dirty && !window.confirm("Discard this delivery draft and change page?")) return;
+    move();
+  }
 
   async function mutate(
     dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
     operation: "refresh" | "cancel",
   ) {
-    if (!locationId) return;
-    if (operation === "cancel" && !window.confirm("Cancel this provider delivery?")) return;
+    if (!locationId || !canManage || providerPending || dispatch.provider !== "lalamove") return;
+    const previous = providerIntent.current;
+    if (
+      previous &&
+      (previous.dispatchId !== dispatch.dispatchId || previous.operation !== operation)
+    )
+      return;
+    if (!previous && operation === "cancel" && !window.confirm("Cancel this provider delivery?"))
+      return;
+    const request = previous ?? {
+      dispatchId: dispatch.dispatchId,
+      operation,
+      key: crypto.randomUUID(),
+      body: JSON.stringify({
+        locationId,
+        expectedVersion: dispatch.version,
+        ...(!dispatch.providerDeliveryId && operation === "refresh"
+          ? { providerDeliveryId: providerReferences[dispatch.dispatchId]?.trim() }
+          : {}),
+      }),
+    };
+    providerIntent.current = request;
+    setProviderLocked(true);
+    setProviderPending(true);
     try {
       const result = (await (
         await fetch(
           `/api/admin/external-deliveries/${encodeURIComponent(dispatch.dispatchId)}/${operation}`,
           {
             method: "POST",
-            headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-            body: JSON.stringify({
-              locationId,
-              expectedVersion: dispatch.version,
-              ...(!dispatch.providerDeliveryId && operation === "refresh"
-                ? { providerDeliveryId: providerReferences[dispatch.dispatchId]?.trim() }
-                : {}),
-            }),
+            headers: { "content-type": "application/json", "idempotency-key": request.key },
+            body: request.body,
           },
         )
       ).json()) as RpcResult<ExternalDeliveryDispatchView>;
-      setMessage(result.ok ? `Provider delivery ${operation} completed.` : result.error.message);
+      providerIntent.current = null;
+      setProviderLocked(false);
+      setCommandNotice({
+        key: readKey,
+        message: result.ok ? `Provider delivery ${operation} completed.` : result.error.message,
+      });
       if (
         result.ok &&
         operation === "cancel" &&
@@ -118,9 +243,14 @@ export function ExternalDeliveryQueue() {
       ) {
         notifyCommandSuccess("Lalamove cancellation requested");
       }
-      void load();
+      refreshDeferred.current = true;
     } catch {
-      setMessage(`Provider delivery ${operation} outcome is unknown. Refresh before retrying.`);
+      setCommandNotice({
+        key: readKey,
+        message: `Provider delivery ${operation} outcome is unknown. Retry the saved request.`,
+      });
+    } finally {
+      setProviderPending(false);
     }
   }
 
@@ -141,7 +271,13 @@ export function ExternalDeliveryQueue() {
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
-      {loading ? <Skeleton className="h-32 w-full" /> : null}
+      {!locationId ? <p>Select a permitted location scope to view delivery work.</p> : null}
+      {loading && !summary ? <Skeleton className="h-32 w-full" /> : null}
+      {readError?.key === readKey ? (
+        <Button variant="outline" onClick={() => void load()}>
+          Refresh delivery queue
+        </Button>
+      ) : null}
       {summary ? (
         <ListPageSection
           title="Delivery queue"
@@ -150,9 +286,9 @@ export function ExternalDeliveryQueue() {
           {summary.items.length === 0 ? (
             <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open courier work.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <div>
+              <Table className="block lg:table" aria-label="Delivery queue">
+                <TableHeader className="hidden lg:table-header-group">
                   <TableRow>
                     <TableHead>Order</TableHead>
                     <TableHead>Mode</TableHead>
@@ -161,20 +297,46 @@ export function ExternalDeliveryQueue() {
                     <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="block lg:table-row-group">
                   {summary.items.map((item) => (
-                    <TableRow key={item.jobId}>
-                      <TableCell className="font-mono text-xs">{item.orderId}</TableCell>
-                      <TableCell>{item.fulfillmentMode}</TableCell>
-                      <TableCell>
-                        <StatusBadge>{item.status}</StatusBadge>
+                    <TableRow
+                      key={item.jobId}
+                      className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                    >
+                      <TableCell className="col-span-2 whitespace-normal">
+                        <Link
+                          className="font-medium underline underline-offset-2"
+                          href={`/admin/orders/${encodeURIComponent(item.orderId)}`}
+                        >
+                          Order {item.orderId.slice(0, 8)}
+                        </Link>
+                        <span className="block break-all font-mono text-xs text-[var(--fm-text-muted)]">
+                          {item.orderId}
+                        </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-sm">
+                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                          Mode
+                        </span>
+                        {item.fulfillmentMode === "INSTANT" ? "Instant" : "Scheduled"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                          FreshMarkets status
+                        </span>
+                        <StatusBadge>{deliveryJobStatusLabel(item.status)}</StatusBadge>
+                      </TableCell>
+                      <TableCell className="col-span-2 whitespace-normal text-sm lg:col-span-1">
+                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                          Delivery progress
+                        </span>
                         {item.externalDispatch ? (
                           <div className="space-y-1 text-xs">
                             <p>
-                              {item.externalDispatch.provider} ·{" "}
-                              {externalStatusLabel(item.externalDispatch)}
+                              {item.externalDispatch.provider === "lalamove"
+                                ? "Lalamove"
+                                : "GrabExpress"}{" "}
+                              · {externalStatusLabel(item.externalDispatch)}
                             </p>
                             {item.externalDispatch.trackingUrl ? (
                               <a
@@ -195,8 +357,11 @@ export function ExternalDeliveryQueue() {
                           "Not booked"
                         )}
                       </TableCell>
-                      <TableCell className="min-w-72">
-                        {item.externalDispatch ? (
+                      <TableCell className="col-span-2 whitespace-normal lg:col-span-1">
+                        <span className="mb-2 block text-sm text-[var(--fm-text-muted)] lg:hidden">
+                          Next action
+                        </span>
+                        {item.externalDispatch?.provider === "lalamove" && canManage ? (
                           <div className="flex flex-wrap gap-2">
                             {!item.externalDispatch.providerDeliveryId &&
                             ["CREATING", "OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(
@@ -213,6 +378,7 @@ export function ExternalDeliveryQueue() {
                                     }))
                                   }
                                   maxLength={200}
+                                  disabled={providerLocked}
                                   placeholder="Order number from Lalamove"
                                 />
                               </label>
@@ -224,22 +390,46 @@ export function ExternalDeliveryQueue() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                disabled={
+                                  providerPending ||
+                                  (providerLocked &&
+                                    (providerIntent.current?.dispatchId !==
+                                      item.externalDispatch.dispatchId ||
+                                      providerIntent.current?.operation !== "refresh"))
+                                }
                                 onClick={() => void mutate(item.externalDispatch!, "refresh")}
                               >
-                                Refresh provider
+                                {providerLocked &&
+                                providerIntent.current?.dispatchId ===
+                                  item.externalDispatch.dispatchId &&
+                                providerIntent.current?.operation === "refresh"
+                                  ? "Retry saved refresh"
+                                  : "Refresh provider"}
                               </Button>
                             ) : null}
                             {item.externalDispatch.status === "ACTIVE" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
+                                disabled={
+                                  providerPending ||
+                                  (providerLocked &&
+                                    (providerIntent.current?.dispatchId !==
+                                      item.externalDispatch.dispatchId ||
+                                      providerIntent.current?.operation !== "cancel"))
+                                }
                                 onClick={() => void mutate(item.externalDispatch!, "cancel")}
                               >
-                                Cancel
+                                {providerLocked &&
+                                providerIntent.current?.dispatchId ===
+                                  item.externalDispatch.dispatchId &&
+                                providerIntent.current?.operation === "cancel"
+                                  ? "Retry saved cancellation"
+                                  : "Cancel"}
                               </Button>
                             ) : null}
                           </div>
-                        ) : item.manualDelivery ? null : (
+                        ) : item.externalDispatch || item.manualDelivery ? null : (
                           <ExternalDeliveryBooking
                             locationId={item.locationId}
                             fulfillmentMode={item.fulfillmentMode}
@@ -251,9 +441,12 @@ export function ExternalDeliveryQueue() {
                             disabled={false}
                             readiness={item.courierPickup}
                             onBooked={(notice) => {
-                              setMessage(notice);
+                              setCommandNotice({ key: readKey, message: notice });
                               void load();
                             }}
+                            onInteractionState={(draft, command) =>
+                              setInteraction(`${item.jobId}:booking`, draft, command)
+                            }
                           />
                         )}
                         {(item.externalDispatch || item.manualDelivery) &&
@@ -269,13 +462,28 @@ export function ExternalDeliveryQueue() {
                             disabled={false}
                             readiness={item.courierPickup}
                             onBooked={(notice) => {
-                              setMessage(notice);
+                              setCommandNotice({ key: readKey, message: notice });
                               void load();
                             }}
+                            onInteractionState={(draft, command) =>
+                              setInteraction(`${item.jobId}:booking`, draft, command)
+                            }
                           />
                         ) : null}
-                        <DeliveryPromiseForm item={item} onChanged={() => void load()} />
-                        <ManualDeliveryControls item={item} onChanged={() => void load()} />
+                        <DeliveryPromiseForm
+                          item={item}
+                          onChanged={() => void load()}
+                          onInteractionState={(draft, command) =>
+                            setInteraction(`${item.jobId}:promise`, draft, command)
+                          }
+                        />
+                        <ManualDeliveryControls
+                          item={item}
+                          onChanged={() => void load()}
+                          onInteractionState={(draft, command) =>
+                            setInteraction(`${item.jobId}:manual`, draft, command)
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -283,6 +491,15 @@ export function ExternalDeliveryQueue() {
               </Table>
             </div>
           )}
+          <AdminCursorPagination
+            pageNumber={pagination.pageNumber}
+            nextCursor={summary.nextCursor}
+            pending={loading || locked}
+            onPrevious={() => changePage(pagination.previous)}
+            onNext={() => {
+              if (summary.nextCursor) changePage(() => pagination.next(summary.nextCursor!));
+            }}
+          />
         </ListPageSection>
       ) : null}
     </div>
