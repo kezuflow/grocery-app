@@ -6,7 +6,7 @@ import type {
   AdminOrderSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, Eye, X } from "lucide-react";
+import { Clipboard, EllipsisVertical, Eye } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,7 +22,6 @@ import { PageHeader } from "../../../components/admin/admin-shell";
 import { OrderProgressStatus } from "../../../components/admin/order-progress-status";
 import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
 import { Button } from "../../../components/ui/button";
-import { Checkbox } from "../../../components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,7 +81,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   const searchParams = useSearchParams();
   const requestedStatus = searchParams.get("status") ?? "";
   const status = orderViews.some((view) => view.status === requestedStatus) ? requestedStatus : "";
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderSummary | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -141,7 +139,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
         return;
       }
       setPage(payload.value);
-      setSelectedIds(new Set());
       setState({ phase: "ready" });
     } catch {
       if (version !== requestVersion.current) return;
@@ -157,18 +154,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   }, [status, load, pagination.cursor]);
 
   const visibleOrders = page?.items ?? [];
-  const allSelected = visibleOrders.length > 0 && selectedIds.size === visibleOrders.length;
-  const someSelected = selectedIds.size > 0 && !allSelected;
-
-  function selectOrder(orderId: string, checked: boolean) {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(orderId);
-      else next.delete(orderId);
-      return next;
-    });
-  }
-
   async function copyOrderId(order: AdminOrderSummary) {
     const value = order.orderNumber ?? order.orderId;
     await navigator.clipboard.writeText(value);
@@ -212,23 +197,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
           onChange={selectView}
         />
 
-        {selectedIds.size > 0 ? (
-          <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
-            <p className="text-sm font-medium" role="status" aria-live="polite">
-              {selectedIds.size} selected
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setSelectedIds(new Set())}
-            >
-              <X aria-hidden="true" />
-              Clear selection
-            </Button>
-          </div>
-        ) : null}
-
         {copiedId ? (
           <p className="sr-only" role="status">
             Order ID copied.
@@ -264,11 +232,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
               {visibleOrders.map((order) => (
                 <li key={order.orderId} className="space-y-3 p-4">
                   <div className="flex min-w-0 items-start gap-3">
-                    <Checkbox
-                      aria-label={`Select order ${orderLabel(order)}`}
-                      checked={selectedIds.has(order.orderId)}
-                      onCheckedChange={(checked) => selectOrder(order.orderId, checked === true)}
-                    />
                     <div className="min-w-0 flex-1">
                       <Link
                         href={recordHref(order)}
@@ -283,7 +246,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     </div>
                     <OrderProgressStatus order={order} />
                   </div>
-                  <div className="flex items-center justify-between gap-3 pl-7 text-sm">
+                  <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-[var(--fm-text-muted)]">
                       {date(order.committedAt)} · {order.fulfillmentMode.toLowerCase()}
                     </span>
@@ -293,7 +256,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="ml-7"
                     onClick={() => openOrderPreview(order)}
                   >
                     Preview order
@@ -305,19 +267,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
               <Table aria-label="Order list">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-11">
-                      <Checkbox
-                        aria-label="Select all orders on this page"
-                        checked={someSelected ? "indeterminate" : allSelected}
-                        onCheckedChange={(checked) =>
-                          setSelectedIds(
-                            checked === true
-                              ? new Set(visibleOrders.map((order) => order.orderId))
-                              : new Set(),
-                          )
-                        }
-                      />
-                    </TableHead>
                     <TableHead>Order ID</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Type</TableHead>
@@ -333,7 +282,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                   {visibleOrders.map((order) => (
                     <TableRow
                       key={order.orderId}
-                      data-state={selectedIds.has(order.orderId) ? "selected" : undefined}
                       tabIndex={0}
                       aria-label={`Preview order ${orderLabel(order)}`}
                       className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-focus)]"
@@ -352,15 +300,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                         }
                       }}
                     >
-                      <TableCell>
-                        <Checkbox
-                          aria-label={`Select order ${orderLabel(order)}`}
-                          checked={selectedIds.has(order.orderId)}
-                          onCheckedChange={(checked) =>
-                            selectOrder(order.orderId, checked === true)
-                          }
-                        />
-                      </TableCell>
                       <TableCell>
                         <Link
                           href={recordHref(order)}

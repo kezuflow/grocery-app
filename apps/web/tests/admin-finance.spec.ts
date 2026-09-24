@@ -59,6 +59,135 @@ test("shared index views preserve the Problems status filter", async ({ adminPag
   await expect.poll(() => statuses.includes("CLAIMED")).toBe(true);
 });
 
+test("Orders shows loading, retryable error, and a truthful empty result", async ({
+  adminPage,
+}) => {
+  let attempts = 0;
+  await adminPage.route("**/api/admin/orders?**", async (route) => {
+    attempts += 1;
+    if (attempts === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          error: { code: "UNAVAILABLE", message: "Local read unavailable", requestId: "test-read" },
+        }),
+      });
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "test-empty",
+        value: { items: [], nextCursor: null },
+      }),
+    });
+  });
+  await adminPage.goto("/admin/orders");
+  await expect(adminPage.getByRole("status").filter({ hasText: "Loading orders" })).toBeVisible();
+  await expect(adminPage.getByRole("alert")).toContainText("Local read unavailable");
+  await adminPage.getByRole("button", { name: "Retry" }).click();
+  await expect(
+    adminPage.getByRole("status").filter({ hasText: "No orders are visible" }),
+  ).toBeVisible();
+});
+
+test("Orders rejects a late response from the previous scope", async ({ adminPage }) => {
+  let requestCount = 0;
+  await adminPage.route("**/api/admin/orders?**", async (route) => {
+    requestCount += 1;
+    const old = requestCount === 1;
+    if (old) await new Promise((resolve) => setTimeout(resolve, 700));
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "scope-read-test",
+        value: {
+          items: [
+            {
+              orderId: old ? "old-scope-order" : "new-scope-order",
+              orderNumber: old ? "FM-OLD-SCOPE" : "FM-NEW-SCOPE",
+              customerName: "Fixture Customer",
+              customerEmail: "fixture@example.test",
+              fulfillmentMode: "INSTANT",
+              status: "COMMITTED",
+              totalMinor: 10000,
+              currency: "PHP",
+              paymentStatus: "SUCCEEDED",
+              fulfillmentStatus: "NOT_STARTED",
+              deliveryStatus: null,
+              deliveryDispatchStatus: null,
+              deliveryProviderStatus: null,
+              committedAt: "2026-09-21T08:00:00.000Z",
+              version: 1,
+            },
+          ],
+          nextCursor: null,
+        },
+      }),
+    });
+  });
+  await adminPage.goto("/admin/orders");
+  const selector = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  await selector.click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await expect(selector).toContainText("Central Cebu");
+  await expect(adminPage.getByRole("link", { name: "FM-NEW-SCOPE" })).toBeVisible();
+  await expect(adminPage.getByRole("link", { name: "FM-OLD-SCOPE" })).toHaveCount(0);
+  expect(requestCount).toBeGreaterThanOrEqual(2);
+});
+
+test("Orders Back restores the list scroll position within the same scope", async ({
+  adminPage,
+}) => {
+  const items = Array.from({ length: 40 }, (_, index) => ({
+    orderId: `scroll-order-${index}`,
+    orderNumber: `FM-SCROLL-${index}`,
+    customerName: "Fixture Customer",
+    customerEmail: "fixture@example.test",
+    fulfillmentMode: "INSTANT",
+    status: "COMMITTED",
+    totalMinor: 10000,
+    currency: "PHP",
+    paymentStatus: "SUCCEEDED",
+    fulfillmentStatus: "NOT_STARTED",
+    deliveryStatus: null,
+    deliveryDispatchStatus: null,
+    deliveryProviderStatus: null,
+    committedAt: "2026-09-21T08:00:00.000Z",
+    version: 1,
+  }));
+  await adminPage.route("**/api/admin/orders?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "scroll-test",
+        value: { items, nextCursor: null },
+      }),
+    }),
+  );
+  await adminPage.route("**/api/admin/orders/scroll-order-39", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: false, error: { code: "NOT_FOUND", message: "Fixture detail" } }),
+    }),
+  );
+  await adminPage.goto("/admin/orders");
+  const last = adminPage.getByRole("link", { name: "FM-SCROLL-39" });
+  await last.scrollIntoViewIfNeeded();
+  const before = await adminPage.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(100);
+  await last.click();
+  await adminPage.getByRole("link", { name: "Orders", exact: true }).last().click();
+  await expect(last).toBeVisible();
+  await expect
+    .poll(async () => Math.abs((await adminPage.evaluate(() => window.scrollY)) - before))
+    .toBeLessThan(50);
+});
+
 test("Order number opens the record and Back restores the filtered cursor page", async ({
   adminPage,
 }) => {
@@ -205,6 +334,7 @@ test("Order number opens the record and Back restores the filtered cursor page",
   }
   await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
   await expect(adminPage.getByRole("alertdialog")).toHaveCount(0);
+  await expect(adminPage.getByRole("button", { name: "Cancel order" })).toBeFocused();
   await adminPage.setViewportSize({ width: 390, height: 844 });
   expect(
     await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -558,18 +688,23 @@ test("order cancellation succeeds with capability and is denied without it", asy
     INSERT INTO grocery_order (id, customer_id, cycle_id, fulfillment_mode, address_snapshot_json, status, total_minor, currency, payment_id, version, created_at)
       VALUES ('${orderId}', '${customerId}', 'cycle-next-cebu', 'SCHEDULED', '{}', 'PENDING_PAYMENT', 500, 'PHP', '${paymentId}', 1, ${now});
   `);
-  const data = { reason: "E2E cancellation", expectedVersion: 1 };
-  const allowed = await adminPage.request.post(`/api/admin/orders/${orderId}/cancel`, {
-    data,
-    headers: { "idempotency-key": crypto.randomUUID() },
-  });
-  const allowedBody = await allowed.json();
-  expect(allowedBody, JSON.stringify(allowedBody)).toMatchObject({
-    ok: true,
-    value: { state: "CANCELED", cancellation: null },
-  });
+  await adminPage.goto("/admin/orders");
+  await adminPage.getByRole("link", { name: orderId }).click();
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: `Order ${orderId}` }),
+  ).toBeVisible();
+  await adminPage.getByRole("button", { name: "Cancel order" }).click();
+  await adminPage.getByLabel("Confirmation reason").fill("E2E cancellation");
+  await adminPage.getByRole("button", { name: "Confirm" }).click();
+  await expect(adminPage.getByRole("status").filter({ hasText: "Order canceled" })).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Cancel order" })).toHaveCount(0);
+  await expect(adminPage.getByText("Canceled", { exact: true }).first()).toBeVisible();
+  const updated = await adminPage.request.get(`/api/admin/orders/${orderId}`);
+  expect(await updated.json()).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+  await adminPage.getByRole("link", { name: "Orders", exact: true }).last().click();
+  await expect(adminPage.getByRole("link", { name: orderId })).toBeVisible();
   const denied = await deniedAdminPage.request.post(`/api/admin/orders/${orderId}/cancel`, {
-    data: { ...data, expectedVersion: 2 },
+    data: { reason: "E2E denied cancellation", expectedVersion: 2 },
     headers: { "idempotency-key": crypto.randomUUID() },
   });
   expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });

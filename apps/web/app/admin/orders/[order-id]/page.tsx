@@ -5,7 +5,7 @@ import type { AdminOrderDetail, RpcResult } from "@freshmarkets/contracts";
 import { ArrowLeft, Clipboard, Phone } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
 import { useAdminContext } from "../../admin-context-provider";
 import {
@@ -99,6 +99,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const cancelTrigger = useRef<HTMLButtonElement>(null);
   const cancelIntent = useAdminCommandIntent();
   const [savedCancellation, setSavedCancellation] = useState<{
     orderId: string;
@@ -231,12 +232,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
         <>
           <PageHeader
             title={`Order ${order.orderNumber ?? order.orderId}`}
-            description={`Placed ${dateTime(order.committedAt)} · ${order.fulfillmentMode === "INSTANT" ? "Instant" : "Scheduled"}`}
+            description={`${order.committedAt ? `Placed ${dateTime(order.committedAt)}` : "Not yet committed"} · ${order.fulfillmentMode === "INSTANT" ? "Instant" : "Scheduled"}`}
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <OrderStatusBadge status={order.status} />
                 {order.allowedActions.includes("CANCEL") ? (
                   <Button
+                    ref={cancelTrigger}
                     type="button"
                     variant="destructive"
                     disabled={cancelIntent.pending || savedCancellation !== null}
@@ -667,6 +669,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             resource={`Order ${order.orderNumber ?? order.orderId} · ${money(order.totalMinor, order.currency)}`}
             scope="FreshMarkets order"
             consequence="This cancels the whole order and requests refunds for its original payment and paid additions. Refunds remain pending until confirmed by the payment provider."
+            restoreFocusRef={cancelTrigger}
             pending={cancelIntent.pending}
             onCancel={() => setConfirming(false)}
             onConfirm={(confirmedReason) => void cancel(confirmedReason)}
