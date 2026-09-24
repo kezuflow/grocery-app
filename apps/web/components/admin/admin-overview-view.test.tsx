@@ -33,11 +33,14 @@ const overview: AdminOverviewView = {
 
 describe("AdminOverviewViewContent", () => {
   it("renders authoritative zeroes while preserving unavailable values", () => {
-    const html = renderToStaticMarkup(<AdminOverviewViewContent overview={overview} />);
+    const html = renderToStaticMarkup(
+      <AdminOverviewViewContent overview={overview} navigation={[]} scopeOptions={[]} />,
+    );
     expect(html).toContain("Open orders");
     expect(html).toContain(">0<");
     expect(html).toContain("Global payments.read access is required.");
-    expect(html).toContain("Operational workload");
+    expect(html).toContain("Fulfillment by status");
+    expect(html).not.toContain('href="/admin/payments"');
     expect(html).not.toContain("₱");
   });
 });

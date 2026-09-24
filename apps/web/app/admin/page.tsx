@@ -3,7 +3,7 @@
 import { lazy, Suspense } from "react";
 import { AdminPageState } from "@/components/admin/admin-page-state";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAdminContext } from "./admin-context-provider";
 import { useAdminOverview } from "./admin-overview-provider";
 
@@ -22,11 +22,13 @@ export default function AdminPage() {
     <div className="space-y-5">
       <PageHeader
         title="Overview"
-        description="Authoritative workload, exceptions, and material operations for the selected scope."
+        description="Operational work and attention for the selected scope."
         action={
-          <Badge variant="secondary">
-            {selectedScope ? selectedScope.kind.toLowerCase() : "scope required"}
-          </Badge>
+          selectedScope ? (
+            <Button onClick={refresh} size="sm" variant="outline">
+              Refresh
+            </Button>
+          ) : null
         }
       />
       {context.phase === "ready" && selectedScope === null ? (
@@ -47,7 +49,12 @@ export default function AdminPage() {
       ) : null}
       {visibleOverview?.ok ? (
         <Suspense fallback={<AdminPageState state="loading" />}>
-          <AdminOverviewViewContent overview={visibleOverview.value} onSelectScope={selectScope} />
+          <AdminOverviewViewContent
+            overview={visibleOverview.value}
+            navigation={context.phase === "ready" ? context.context.navigation : []}
+            scopeOptions={context.phase === "ready" ? context.scopes : []}
+            onSelectScope={selectScope}
+          />
         </Suspense>
       ) : null}
     </div>

@@ -127,3 +127,21 @@ it("does not reuse a previous staff member's loaded overview", async () => {
   await render();
   expect(host.textContent).toBe("loadingRefreshloadingRefresh");
 });
+
+it("hides a loaded overview while the same staff member's access changes", async () => {
+  await render();
+  fetchMock.mockResolvedValueOnce({
+    json: async () => ({ ok: true, value: overview(globalScope), requestId: "old-access" }),
+  });
+  await act(async () => host.querySelector("button")?.click());
+  expect(host.textContent).toBe("GLOBALRefreshGLOBALRefresh");
+  if (fixture.state.phase !== "ready") throw new Error("Missing fixture");
+  fixture.state = {
+    ...fixture.state,
+    context: { ...fixture.state.context, capabilities: ["fulfillment.read"] },
+    overview: null,
+  };
+  fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+  await render();
+  expect(host.textContent).toBe("loadingRefreshloadingRefresh");
+});

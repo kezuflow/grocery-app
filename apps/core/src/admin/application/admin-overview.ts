@@ -250,9 +250,13 @@ export async function getAdminOverview(
            SELECT rr.id FROM receiving_record rr
            JOIN procurement_requirement pr ON pr.id=rr.procurement_requirement_id
            JOIN selected_locations sl ON sl.location_id=pr.location_id
-           WHERE (rr.rejected_quantity>0
+         WHERE (rr.rejected_quantity>0
                   OR rr.accepted_quantity+rr.rejected_quantity NOT IN (0, rr.expected_quantity))
              AND rr.status!='NOT_STARTED'
+             AND (NOT EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id
+                    AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':')
+               OR EXISTS(SELECT 1 FROM supply_exception se WHERE se.requirement_id=pr.id AND se.status NOT IN ('RESOLVED','CLOSED')
+                    AND substr(se.id,1,length('receipt:'||rr.id||':'))='receipt:'||rr.id||':'))
          ) SELECT COUNT(*) AS count FROM open_exceptions`,
       )
       .bind(JSON.stringify([...new Set(locationIds)]))

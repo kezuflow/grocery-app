@@ -155,6 +155,47 @@ describe("Admin operational overview", () => {
       value: null,
     });
   });
+  it("excludes resolved receipt discrepancies from the open exception count", async () => {
+    const cookie = await seedStaff({
+      capabilities: ["fulfillment.read", "fulfillment.manage"],
+      scope: "location",
+    });
+    const selectedScope = {
+      kind: "LOCATION" as const,
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+    };
+    const readCount = async () => {
+      const result = await core.getAdminOverview({
+        requestId: crypto.randomUUID(),
+        headers: { cookie },
+        selectedScope,
+        timezone: "Asia/Manila",
+      });
+      if (!result.ok) throw new Error(JSON.stringify(result.error));
+      return result.value.cards.find((card) => card.code === "OPEN_EXCEPTIONS")?.value;
+    };
+    const baseline = await readCount();
+    const suffix = crypto.randomUUID();
+    const requirementId = `overview-requirement-${suffix}`;
+    const receiptId = `overview-receipt-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO procurement_requirement (id, delivery_cycle_id, location_id, inventory_pool_id, required_quantity, status, version) VALUES (?, 'cycle-next-cebu', 'location-cebu-central', 'pool-red-onion', 10, 'ORDERED', 1)",
+      ).bind(requirementId),
+      env.DB.prepare(
+        "INSERT INTO receiving_record (id, procurement_requirement_id, expected_quantity, accepted_quantity, rejected_quantity, status, version) VALUES (?, ?, 10, 8, 2, 'COMPLETED', 1)",
+      ).bind(receiptId, requirementId),
+      env.DB.prepare(
+        "INSERT INTO supply_exception (id, requirement_id, kind, affected_quantity, status, created_at, version) VALUES (?, ?, 'QUALITY', 2, 'OPEN', ?, 1)",
+      ).bind(`receipt:${receiptId}:rejected`, requirementId, Date.now()),
+    ]);
+    expect(await readCount()).toBe((baseline ?? 0) + 2);
+    await env.DB.prepare("UPDATE supply_exception SET status='RESOLVED' WHERE requirement_id=?")
+      .bind(requirementId)
+      .run();
+    expect(await readCount()).toBe(baseline);
+  });
   it("scopes dashboard notifications and their completed-order links without exposing administrator problems", async () => {
     const otherLocation = `notice-location-${crypto.randomUUID()}`;
     await env.DB.prepare(

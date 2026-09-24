@@ -20,7 +20,10 @@ export function AdminOverviewProvider({ children }: { children: ReactNode }) {
   const scope = state.phase === "ready" ? state.selectedScope : null;
   const scopeKey = scope ? JSON.stringify(scope) : null;
   const staffId = state.phase === "ready" ? state.context.staffId : null;
-  const readKey = scope ? JSON.stringify([staffId, scope]) : null;
+  const readKey =
+    scope && state.phase === "ready"
+      ? JSON.stringify([staffId, scope, state.context.capabilities, state.context.scopes])
+      : null;
   const bootstrap = state.phase === "ready" ? state.overview : null;
   const timezone = useMemo(() => {
     if (state.phase !== "ready" || !scope) return "UTC";
