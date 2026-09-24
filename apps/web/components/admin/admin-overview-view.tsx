@@ -176,7 +176,7 @@ export function AdminOverviewViewContent({
                       </Badge>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{label(exception.kind)}</p>
-                        <p className="truncate text-xs text-[var(--fm-text-muted)]">
+                        <p className="break-words text-xs text-[var(--fm-text-muted)]">
                           {exception.detail}
                         </p>
                         {isGlobal ? (
@@ -268,9 +268,14 @@ export function AdminOverviewViewContent({
                       timeZone: overview.timezone,
                     })}
                   </time>
-                  <span className="font-mono text-xs text-[var(--fm-text-muted)]">
-                    {operation.resourceType} · {operation.resourceId}
-                  </span>
+                  <details className="text-xs sm:col-span-2">
+                    <summary className="w-fit cursor-pointer text-[var(--fm-text-muted)]">
+                      Technical details
+                    </summary>
+                    <p className="mt-1 break-all font-mono text-[var(--fm-text-muted)]">
+                      {operation.resourceType} · {operation.resourceId}
+                    </p>
+                  </details>
                 </li>
               ))}
             </ul>

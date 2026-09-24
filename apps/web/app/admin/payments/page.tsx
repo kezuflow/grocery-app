@@ -56,6 +56,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       initialPayments={plain(payments as RpcResult<AdminPaymentPage>)}
       initialAttention={plain(attention as RpcResult<AdminPaymentAttentionPage>)}
       initialDetail={plain(detail as RpcResult<AdminPaymentDetail> | null)}
+      initialPaymentId={params.payment ?? null}
       initialIssue={params.issue ?? null}
     />
   );

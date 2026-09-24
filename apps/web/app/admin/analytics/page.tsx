@@ -8,17 +8,23 @@ import type {
   MetricDefinitionView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 import { AdminDashboardGrid, MetricCard } from "../../../components/admin/admin-compositions";
+import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { useAdminContext } from "../admin-context-provider";
 
 type ReportState =
   | { phase: "loading"; key: string }
-  | { phase: "error"; key: string; message: string }
+  | {
+      phase: "input";
+      key: string;
+      kind: "permission-empty" | "unavailable";
+      title: string;
+      message: string;
+    }
+  | { phase: "error"; key: string; message: string; requestId: string | null }
   | {
       phase: "ready";
       key: string;
@@ -147,15 +153,25 @@ export default function AnalyticsPage() {
     if (preparedScopeKey !== scopeKey) return;
     if (timezone && initializedDateZone !== timezone) return;
     if (!scope || !period) {
-      setState({
-        phase: "error",
-        key: queryKey,
-        message: !scope
-          ? "Select an Admin location or scope to view reports."
-          : !timezone
-            ? "Select a reporting timezone."
-            : "Choose a valid start and end date.",
-      });
+      setState(
+        !scope
+          ? {
+              phase: "input",
+              key: queryKey,
+              kind: "permission-empty",
+              title: "Select an Admin scope",
+              message: "Choose a permitted scope in the header to view reports.",
+            }
+          : {
+              phase: "input",
+              key: queryKey,
+              kind: "unavailable",
+              title: !timezone ? "Select a reporting timezone" : "Check the date range",
+              message: !timezone
+                ? "Choose one of the available reporting timezones."
+                : "Choose a valid start and end date, with From on or before Through.",
+            },
+      );
       return;
     }
     const query = new URLSearchParams({ ...period, scopeKind: scope.kind });
@@ -181,8 +197,21 @@ export default function AnalyticsPage() {
           ReadonlyArray<MetricDefinitionView>
         >;
         const overview = (await overviewResponse.json()) as RpcResult<AnalyticsOverviewView>;
-        if (!definitions.ok) throw new Error(definitions.error.message);
-        if (!overview.ok) throw new Error(overview.error.message);
+        if (!definitions.ok || !overview.ok) {
+          const failure = !definitions.ok
+            ? definitions.error
+            : !overview.ok
+              ? overview.error
+              : null;
+          if (!controller.signal.aborted && failure)
+            setState({
+              phase: "error",
+              key: queryKey,
+              message: failure.message,
+              requestId: failure.requestId,
+            });
+          return;
+        }
         if (!controller.signal.aborted)
           setState({
             phase: "ready",
@@ -196,6 +225,7 @@ export default function AnalyticsPage() {
             phase: "error",
             key: queryKey,
             message: error instanceof Error ? error.message : "Reports could not be loaded.",
+            requestId: null,
           });
       }
     })();
@@ -369,19 +399,40 @@ export default function AnalyticsPage() {
                 </Button>
               ) : null}
             </div>
+            {options?.items.length === 0 ? (
+              <div className="sm:col-span-2">
+                <AdminPageState
+                  state={productSearch ? "filtered-empty" : "empty"}
+                  title={productSearch ? "No matching Products" : "No purchased Product options"}
+                  message={
+                    productSearch
+                      ? "Try another Product or selling option search."
+                      : "Purchased Product options will appear here when available in this scope."
+                  }
+                />
+              </div>
+            ) : null}
           </div>
         </details>
       </section>
       {visibleState.phase === "loading" ? (
-        <div role="status" aria-label="Loading Analytics">
-          <Skeleton className="h-40 w-full" />
-        </div>
+        <AdminPageState state="loading" title="Loading Analytics" />
+      ) : null}
+      {visibleState.phase === "input" ? (
+        <AdminPageState
+          state={visibleState.kind}
+          title={visibleState.title}
+          message={visibleState.message}
+        />
       ) : null}
       {visibleState.phase === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Reports could not be loaded</AlertTitle>
-          <AlertDescription>{visibleState.message}</AlertDescription>
-        </Alert>
+        <AdminPageState
+          state="error"
+          title="Reports could not be loaded"
+          message={visibleState.message}
+          requestId={visibleState.requestId ?? undefined}
+          onRetry={() => setAttempt((value) => value + 1)}
+        />
       ) : null}
       {visibleState.phase === "ready" ? (
         <>

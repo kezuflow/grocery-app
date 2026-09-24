@@ -43,7 +43,7 @@ export function AdminPageState({
   const description = `${defaultMessages[state]}${message ? ` ${message}` : ""}`;
   if (state === "loading") {
     return (
-      <div aria-live="polite" className="space-y-3" role="status">
+      <div aria-label={title ?? description} aria-live="polite" className="space-y-3" role="status">
         <span className="sr-only">{title ?? description}</span>
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-24 w-full" />

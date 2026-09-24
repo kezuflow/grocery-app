@@ -157,7 +157,7 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
 
   await page.clock.setFixedTime(new Date("2026-09-24T17:00:00Z"));
   await page.goto("/admin/analytics");
-  await expect(page.getByText("Select a reporting timezone.")).toBeVisible();
+  await expect(page.getByText("Select a reporting timezone", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Timezone", exact: true }).selectOption("UTC");
   await expect(page.getByLabel("Through")).toHaveValue("2026-09-24");
   await page.getByRole("combobox", { name: "Timezone", exact: true }).selectOption("Asia/Manila");
@@ -214,6 +214,69 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
   expect(utcQuery.get("startAt")).toBe("2026-09-01T00:00:00Z");
   expect(utcQuery.get("endAt")).toBe("2026-09-04T00:00:00Z");
   await expect(page.getByText(/2026-09-01 through 2026-09-03 · Global · UTC/)).toBeVisible();
+});
+
+test("Analytics separates missing inputs from read failures and retries the same report", async ({
+  adminPage: page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let recoverDefinitions = false;
+  await page.route("**/api/admin/analytics/definitions**", (route) => {
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        !recoverDefinitions
+          ? {
+              ok: false,
+              error: {
+                code: "INTERNAL_ERROR",
+                message: "Report definitions are temporarily unavailable.",
+                requestId: "analytics-read-failed",
+              },
+            }
+          : { ok: true, requestId: "analytics-recovered", value: [] },
+      ),
+    });
+  });
+  await page.route("**/api/admin/analytics/overview**", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "analytics-overview",
+        value: {
+          window: {
+            startAt: query.get("startAt"),
+            endAt: query.get("endAt"),
+            timezone: query.get("timezone"),
+          },
+          scope: { kind: "global" },
+          definitions: [],
+          productOptions: { items: [], nextCursor: null },
+          freshness: { computedAt: "2026-09-25T01:00:00.000Z", sourceWatermark: null },
+          metrics: [],
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/analytics");
+  const timezone = page.getByRole("combobox", { name: "Timezone", exact: true });
+  if ((await timezone.inputValue()) === "") await timezone.selectOption({ index: 1 });
+  await expect(page.getByText("Report definitions are temporarily unavailable.")).toBeVisible();
+  await expect(page.getByText("Request reference: analytics-read-failed")).toBeVisible();
+  recoverDefinitions = true;
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("How these figures are counted")).toBeVisible();
+  await page.getByText("Product breakdown", { exact: true }).click();
+  await expect(page.getByText("No purchased Product options")).toBeVisible();
+  await page.getByPlaceholder("Product or selling option").fill("no matching option");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("No matching Products")).toBeVisible();
+  await page.getByLabel("From").fill("2026-09-26");
+  await page.getByLabel("Through").fill("2026-09-25");
+  await expect(page.getByText("Check the date range")).toBeVisible();
+  await expect(page.getByText("Reports could not be loaded")).toHaveCount(0);
 });
 
 test("Analytics clears prior scope and currency figures before the next report", async ({

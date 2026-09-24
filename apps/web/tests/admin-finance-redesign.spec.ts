@@ -245,3 +245,105 @@ test("Finance ignores a delayed Refresh after switching to Needs attention", asy
   await expect(page.getByRole("heading", { name: "Alpha order" })).toHaveCount(0);
   await expect(page).toHaveURL(/tab=attention/);
 });
+
+test("Finance keeps the paid list while payment details fail and recover", async ({
+  adminPage: page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/admin/payments?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { items: [payment("finance-alpha", "Alpha")], nextCursor: null },
+      }),
+    }),
+  );
+  let reads = 0;
+  let releaseRead!: () => void;
+  const heldRead = new Promise<void>((resolve) => (releaseRead = resolve));
+  await page.route("**/api/admin/payments/finance-alpha", async (route) => {
+    reads += 1;
+    if (reads === 1) {
+      await heldRead;
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Payment details are outside current access.",
+            requestId: "finance-detail-denied",
+          },
+        }),
+      });
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, value: detail("finance-alpha", "Alpha") }),
+    });
+  });
+  await page.goto("/admin/payments");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  const row = page.getByRole("row", { name: /Alpha Customer/ });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Payment details" })).toBeVisible();
+  await expect(page.getByText("Loading payment details")).toBeVisible();
+  await expect(row).toBeVisible();
+  releaseRead();
+  await expect(page.getByText("Payment details are outside current access.")).toBeVisible();
+  await expect(page.getByText("Request reference: finance-detail-denied")).toBeVisible();
+  await expect(row).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payments could not be loaded" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "Alpha order" })).toBeVisible();
+  await expect(row).toBeVisible();
+});
+
+test("Finance removes stale refund actions when a detail refresh is denied", async ({
+  adminPage: page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/admin/payments?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { items: [payment("finance-alpha", "Alpha")], nextCursor: null },
+      }),
+    }),
+  );
+  let denyDetail = false;
+  await page.route("**/api/admin/payments/finance-alpha", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        denyDetail
+          ? {
+              ok: false,
+              error: {
+                code: "FORBIDDEN",
+                message: "Payment detail access has changed.",
+                requestId: "finance-access-changed",
+              },
+            }
+          : { ok: true, value: detail("finance-alpha", "Alpha") },
+      ),
+    }),
+  );
+  await page.goto("/admin/payments");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await page.getByRole("row", { name: /Alpha Customer/ }).click();
+  await expect(page.getByRole("textbox", { name: "Refund amount" })).toBeVisible();
+  denyDetail = true;
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(page.getByText("Payment detail access has changed.")).toBeVisible();
+  await expect(page.getByText("Request reference: finance-access-changed")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Refund amount" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refund", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Alpha Customer/ })).toBeVisible();
+  denyDetail = false;
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("textbox", { name: "Refund amount" })).toBeVisible();
+});

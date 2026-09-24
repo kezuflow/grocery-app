@@ -32,6 +32,7 @@ import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 type Tab = "payments" | "attention";
 type StatusFilter = "all" | "paid" | "partially-refunded" | "refunded";
+type ReadError = { message: string; requestId: string | null };
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(value / 100);
@@ -62,6 +63,7 @@ export function PaymentsWorkspace({
   initialPayments,
   initialAttention,
   initialDetail,
+  initialPaymentId,
   initialIssue,
 }: {
   initialTab: Tab;
@@ -69,6 +71,7 @@ export function PaymentsWorkspace({
   initialPayments: RpcResult<AdminPaymentPage>;
   initialAttention: RpcResult<AdminPaymentAttentionPage>;
   initialDetail: RpcResult<AdminPaymentDetail> | null;
+  initialPaymentId: string | null;
   initialIssue: string | null;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -80,15 +83,20 @@ export function PaymentsWorkspace({
   const [payments, setPayments] = useState(initialPayments.ok ? initialPayments.value : null);
   const [attention, setAttention] = useState(initialAttention.ok ? initialAttention.value : null);
   const [detail, setDetail] = useState(initialDetail?.ok ? initialDetail.value : null);
+  const [detailTarget, setDetailTarget] = useState(initialPaymentId);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<ReadError | null>(
+    initialDetail && !initialDetail.ok
+      ? { message: initialDetail.error.message, requestId: initialDetail.error.requestId }
+      : null,
+  );
   const [selectedIssue, setSelectedIssue] = useState(initialIssue);
-  const [error, setError] = useState<string | null>(
-    !initialPayments.ok
-      ? initialPayments.error.message
-      : !initialAttention.ok
-        ? initialAttention.error.message
-        : initialDetail && !initialDetail.ok
-          ? initialDetail.error.message
-          : null,
+  const [listError, setListError] = useState<ReadError | null>(
+    initialTab === "payments" && !initialPayments.ok
+      ? { message: initialPayments.error.message, requestId: initialPayments.error.requestId }
+      : initialTab === "attention" && !initialAttention.ok
+        ? { message: initialAttention.error.message, requestId: initialAttention.error.requestId }
+        : null,
   );
   const [loading, setLoading] = useState(false);
   const [refundAmount, setRefundAmount] = useState("");
@@ -162,7 +170,7 @@ export function PaymentsWorkspace({
   const loadPayments = useCallback(async (nextStatus: StatusFilter, cursor: string | null) => {
     const serial = ++listRequestSerial.current;
     setLoading(true);
-    setError(null);
+    setListError(null);
     const query = new URLSearchParams({ limit: "50" });
     const coreStatus =
       nextStatus === "paid"
@@ -180,13 +188,14 @@ export function PaymentsWorkspace({
       ).json()) as RpcResult<AdminPaymentPage>;
       if (serial !== listRequestSerial.current) return false;
       if (!payload.ok) {
-        setError(payload.error.message);
+        setListError({ message: payload.error.message, requestId: payload.error.requestId });
         return false;
       }
       setPayments(payload.value);
       return true;
     } catch {
-      if (serial === listRequestSerial.current) setError("Network error loading payments.");
+      if (serial === listRequestSerial.current)
+        setListError({ message: "Network error loading payments.", requestId: null });
       return false;
     } finally {
       if (serial === listRequestSerial.current) setLoading(false);
@@ -196,7 +205,7 @@ export function PaymentsWorkspace({
   const loadAttention = useCallback(async (cursor: string | null) => {
     const serial = ++listRequestSerial.current;
     setLoading(true);
-    setError(null);
+    setListError(null);
     const query = new URLSearchParams({ limit: "50" });
     if (cursor) query.set("cursor", cursor);
     try {
@@ -205,13 +214,14 @@ export function PaymentsWorkspace({
       ).json()) as RpcResult<AdminPaymentAttentionPage>;
       if (serial !== listRequestSerial.current) return false;
       if (!payload.ok) {
-        setError(payload.error.message);
+        setListError({ message: payload.error.message, requestId: payload.error.requestId });
         return false;
       }
       setAttention(payload.value);
       return true;
     } catch {
-      if (serial === listRequestSerial.current) setError("Network error loading payment issues.");
+      if (serial === listRequestSerial.current)
+        setListError({ message: "Network error loading payment issues.", requestId: null });
       return false;
     } finally {
       if (serial === listRequestSerial.current) setLoading(false);
@@ -220,7 +230,9 @@ export function PaymentsWorkspace({
 
   const loadDetail = useCallback(async (paymentIntentId: string, preserveCurrent = false) => {
     const serial = ++detailRequestSerial.current;
-    setError(null);
+    setDetailTarget(paymentIntentId);
+    setDetailError(null);
+    setDetailLoading(!preserveCurrent);
     if (!preserveCurrent) setDetail(null);
     try {
       const payload = (await (
@@ -228,14 +240,20 @@ export function PaymentsWorkspace({
       ).json()) as RpcResult<AdminPaymentDetail>;
       if (serial !== detailRequestSerial.current) return false;
       if (!payload.ok) {
-        setError(payload.error.message);
+        setDetail(null);
+        setDetailError({ message: payload.error.message, requestId: payload.error.requestId });
         return false;
       }
       setDetail(payload.value);
       return true;
     } catch {
-      if (serial === detailRequestSerial.current) setError("Network error loading this payment.");
+      if (serial === detailRequestSerial.current) {
+        setDetail(null);
+        setDetailError({ message: "Network error loading this payment.", requestId: null });
+      }
       return false;
+    } finally {
+      if (serial === detailRequestSerial.current) setDetailLoading(false);
     }
   }, []);
 
@@ -262,6 +280,9 @@ export function PaymentsWorkspace({
       else {
         detailRequestSerial.current += 1;
         setDetail(null);
+        setDetailTarget(null);
+        setDetailError(null);
+        setDetailLoading(false);
       }
       if (restoredTab === "attention") void loadAttention(params.get("cursor"));
       else void loadPayments(restoredStatus, params.get("cursor"));
@@ -277,7 +298,7 @@ export function PaymentsWorkspace({
         ? await loadAttention(pages.cursor)
         : await loadPayments(status, pages.cursor);
     if (window.location.href !== requestedUrl) return false;
-    const detailLoaded = detail ? await loadDetail(detail.paymentIntentId, true) : true;
+    const detailLoaded = detailTarget ? await loadDetail(detailTarget, Boolean(detail)) : true;
     return Boolean(listLoaded && detailLoaded);
   }
   function choosePayment(paymentIntentId: string) {
@@ -293,6 +314,9 @@ export function PaymentsWorkspace({
     if (locked) return;
     detailRequestSerial.current += 1;
     setDetail(null);
+    setDetailTarget(null);
+    setDetailError(null);
+    setDetailLoading(false);
     setRefundAmount("");
     setConfirmRefund(false);
     setNotice(null);
@@ -304,6 +328,9 @@ export function PaymentsWorkspace({
     setTab(next);
     detailRequestSerial.current += 1;
     setDetail(null);
+    setDetailTarget(null);
+    setDetailError(null);
+    setDetailLoading(false);
     setRefundAmount("");
     setConfirmRefund(false);
     setSelectedIssue(null);
@@ -474,22 +501,23 @@ export function PaymentsWorkspace({
             Refresh
           </Button>
         </div>
-        {error ? (
+        {listError ? (
           <div className="p-4">
             <AdminPageState
               state="error"
               title="Payments could not be loaded"
-              message={error}
+              message={listError.message}
+              requestId={listError.requestId ?? undefined}
               onRetry={() => void refresh()}
             />
           </div>
         ) : null}
-        {loading && !error ? (
+        {loading && !listError ? (
           <div className="p-4">
             <AdminPageState state="loading" title="Loading payments" />
           </div>
         ) : null}
-        {!loading && !error && tab === "payments" && payments?.items.length === 0 ? (
+        {!loading && !listError && tab === "payments" && payments?.items.length === 0 ? (
           <div className="p-4">
             <AdminPageState
               state={status === "all" ? "empty" : "filtered-empty"}
@@ -499,12 +527,12 @@ export function PaymentsWorkspace({
             />
           </div>
         ) : null}
-        {!loading && !error && tab === "attention" && attention?.items.length === 0 ? (
+        {!loading && !listError && tab === "attention" && attention?.items.length === 0 ? (
           <div className="p-4">
             <AdminPageState state="empty" message="No payments need attention" />
           </div>
         ) : null}
-        {!loading && !error && tab === "payments" && payments?.items.length ? (
+        {!loading && !listError && tab === "payments" && payments?.items.length ? (
           <Table aria-label="Payments">
             <TableHeader>
               <TableRow>
@@ -580,7 +608,7 @@ export function PaymentsWorkspace({
             </TableBody>
           </Table>
         ) : null}
-        {!loading && !error && tab === "attention" && attention?.items.length ? (
+        {!loading && !listError && tab === "attention" && attention?.items.length ? (
           <Table aria-label="Payments needing attention">
             <TableHeader>
               <TableRow>
@@ -628,7 +656,7 @@ export function PaymentsWorkspace({
             </TableBody>
           </Table>
         ) : null}
-        {tab === "payments" && payments ? (
+        {!listError && !loading && tab === "payments" && payments ? (
           <AdminCursorPagination
             pageNumber={pages.pageNumber}
             nextCursor={payments.nextCursor}
@@ -645,7 +673,7 @@ export function PaymentsWorkspace({
             }}
           />
         ) : null}
-        {tab === "attention" && attention ? (
+        {!listError && !loading && tab === "attention" && attention ? (
           <AdminCursorPagination
             pageNumber={pages.pageNumber}
             nextCursor={attention.nextCursor}
@@ -666,50 +694,87 @@ export function PaymentsWorkspace({
     </section>
   );
 
-  const detailPanel = detail ? (
-    <PaymentPanel
-      key={detail.paymentIntentId}
-      payment={detail}
-      locked={locked}
-      onInteractionState={setChildCommand}
-      notice={notice}
-      refundAmount={refundAmount}
-      setRefundAmount={setRefundAmount}
-      onClose={() => {
-        if (!locked) {
-          detailRequestSerial.current += 1;
-          setDetail(null);
-          setRefundAmount("");
-          setConfirmRefund(false);
-          replaceUrl({ payment: null });
+  const closePayment = () => {
+    if (locked) return;
+    detailRequestSerial.current += 1;
+    setDetail(null);
+    setDetailTarget(null);
+    setDetailError(null);
+    setDetailLoading(false);
+    setRefundAmount("");
+    setConfirmRefund(false);
+    replaceUrl({ payment: null });
+  };
+  const detailPanel =
+    detail && detailTarget === detail.paymentIntentId ? (
+      <PaymentPanel
+        key={detail.paymentIntentId}
+        payment={detail}
+        locked={locked}
+        onInteractionState={setChildCommand}
+        notice={notice}
+        refundAmount={refundAmount}
+        setRefundAmount={setRefundAmount}
+        onClose={closePayment}
+        readError={detailError}
+        onRetryRead={() => void loadDetail(detail.paymentIntentId, true)}
+        onRefresh={async () => {
+          if (!(await loadDetail(detail.paymentIntentId, true)))
+            throw new Error("Payment detail refresh failed");
+        }}
+        onRefund={() => setConfirmRefund(true)}
+      />
+    ) : detailTarget ? (
+      <>
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+          <h2 id="payment-panel-title" className="text-xl font-bold">
+            Payment details
+          </h2>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={locked}
+            aria-label="Close payment details"
+            onClick={closePayment}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="p-5">
+          {detailLoading ? (
+            <AdminPageState state="loading" title="Loading payment details" />
+          ) : null}
+          {detailError ? (
+            <AdminPageState
+              state="error"
+              title="Payment details could not be loaded"
+              message={detailError.message}
+              requestId={detailError.requestId ?? undefined}
+              onRetry={() => void loadDetail(detailTarget)}
+            />
+          ) : null}
+        </div>
+      </>
+    ) : selectedAttention ? (
+      <IssuePanel
+        key={selectedAttention.groupKey}
+        item={selectedAttention}
+        locked={locked}
+        notice={notice}
+        onViewPayment={
+          selectedAttention.paymentIntentId
+            ? () => choosePayment(selectedAttention.paymentIntentId!)
+            : undefined
         }
-      }}
-      onRefresh={async () => {
-        if (!(await loadDetail(detail.paymentIntentId, true)))
-          throw new Error("Payment detail refresh failed");
-      }}
-      onRefund={() => setConfirmRefund(true)}
-    />
-  ) : selectedAttention ? (
-    <IssuePanel
-      key={selectedAttention.groupKey}
-      item={selectedAttention}
-      locked={locked}
-      notice={notice}
-      onViewPayment={
-        selectedAttention.paymentIntentId
-          ? () => choosePayment(selectedAttention.paymentIntentId!)
-          : undefined
-      }
-      onClose={() => {
-        if (!locked) {
-          setSelectedIssue(null);
-          replaceUrl({ issue: null });
-        }
-      }}
-      onRun={(url, body) => void sendSaved(url, body, crypto.randomUUID())}
-    />
-  ) : null;
+        onClose={() => {
+          if (!locked) {
+            setSelectedIssue(null);
+            replaceUrl({ issue: null });
+          }
+        }}
+        onRun={(url, body) => void sendSaved(url, body, crypto.randomUUID())}
+      />
+    ) : null;
   return (
     <>
       <AdminMasterDetailWorkspace
@@ -766,6 +831,8 @@ function PaymentPanel({
   onClose,
   onRefresh,
   onRefund,
+  readError,
+  onRetryRead,
 }: {
   payment: AdminPaymentDetail;
   locked: boolean;
@@ -776,6 +843,8 @@ function PaymentPanel({
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onRefund: () => void;
+  readError: ReadError | null;
+  onRetryRead: () => void;
 }) {
   const received = ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(
     payment.canonicalStatus,
@@ -812,6 +881,15 @@ function PaymentPanel({
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        {readError ? (
+          <AdminPageState
+            state="error"
+            title="Payment details could not be refreshed"
+            message={readError.message}
+            requestId={readError.requestId ?? undefined}
+            onRetry={onRetryRead}
+          />
+        ) : null}
         <StatusBadge>{displayLabel(payment.displayStatus)}</StatusBadge>
         {payment.displayStatus === "PAYMENT_OUTCOME_UNKNOWN" ? (
           <p className="text-sm">

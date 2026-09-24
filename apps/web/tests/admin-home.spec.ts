@@ -65,7 +65,22 @@ function overview(
               href: "/admin/issues/operational-exceptions",
             },
           ],
-    recentOperations: [],
+    recentOperations: global
+      ? [
+          {
+            auditEventId: "home-audit-1",
+            action: "ORDER.COMMITTED",
+            resourceType: "order",
+            resourceId: "home-order-technical-id",
+            occurredAt: updatedAt,
+            actorId: null,
+            marketId: "market-metro-cebu",
+            locationId: "location-cebu-central",
+            reason: null,
+            correlationId: "home-request-1",
+          },
+        ]
+      : [],
     deniedSections: global ? [] : ["orders", "payments", "catalog", "audit"],
   };
 }
@@ -99,6 +114,10 @@ test("Global Home prioritizes real operational cards and authorized links", asyn
     page.getByText("Select a location in the queue to inspect its exceptions."),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Select location" })).toBeVisible();
+  const technicalDetails = page.getByText("Technical details", { exact: true });
+  await expect(page.getByText("order · home-order-technical-id")).toBeHidden();
+  await technicalDetails.click();
+  await expect(page.getByText("order · home-order-technical-id")).toBeVisible();
   const metricTop = (await metrics.boundingBox())?.y ?? 0;
   const notificationTop = (await page.locator("#notifications").boundingBox())?.y ?? 0;
   expect(metricTop).toBeLessThan(notificationTop);
