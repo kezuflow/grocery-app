@@ -14,19 +14,19 @@ Use this for the dark full-width header, pale expanded sidebar, light workspace,
 
 Representative preview images were inspected in the preceding conversation; a returned flow was not a browser-executed Shopify interaction. Use actual Freshmarkets browser tests to establish dynamic behavior.
 
-| ID | Canonical reference | Observed pattern | Adaptation / explicit exclusion |
-|---|---|---|---|
-| M01 | [Shopify Orders list](https://mobbin.com/screens/b0f99f43-2fe4-4c9c-867a-1da5cedbdfab) | Compact order index, sidebar, summary band, table and separate status columns | Preserve only supported filters/fields/aggregates; no invented Create order or bulk operations |
-| M02 | [Orders display-controls popover](https://mobbin.com/screens/fb87b68d-8192-495b-913b-e103e73aa7bb) | Compact sorting/column controls in a popover | Use only if existing data/state supports the behavior; not a requirement to add saved views or batch APIs |
-| M03 | [Creating an order — flow](https://mobbin.com/flows/2fa86b5f-c569-4a24-9cc7-679122d762b8) | Product picker, focused delivery dialog, customer support column, resulting order record and timeline | Copy composition/dialog discipline; exclude unsupported draft orders, Mark as paid and invoice sending |
-| M04 | [Product picker](https://mobbin.com/screens/9be1cd16-65dc-458d-b09b-82d316a69d96) | Searchable selectable product/variant rows and an explicit selection footer | Reuse for existing supported resource selection; preserve exact units and inventory meaning |
-| M05 | [Adding a product — flow](https://mobbin.com/flows/9e256ffd-d5a3-4fd2-88bd-a239d491a91b) | Main form cards, status/organization support column, contextual save bar | Existing product routes and commands; no arbitrary additional product fields |
-| M06 | [Customer profile](https://mobbin.com/screens/0923dee6-44f2-4b31-8fa2-ef202f0548ae) | Customer summary, order context/activity, contact sidebar, contextual menu | Use currently returned customer facts; no invented spend, segmentation, store credit or messaging |
-| M07 | [Discount type chooser](https://mobbin.com/screens/6c95bdc1-1836-4d21-a827-1347a2f242e2) | Compact modal option rows with supporting descriptions | Options derive from Freshmarkets' supported benefit types, not Shopify's complete menu |
-| M08 | [Creating a discount — flow](https://mobbin.com/flows/97e8b9c0-d21c-4ee5-976d-1266f9aab926) | Grouped rules form plus plain-language summary | Existing targets, limits, amounts, dates and eligibility; same-route editor where no detail route exists |
-| M09 | [Finance overview](https://mobbin.com/screens/8e44cfcf-3e62-4891-a722-ab16c2f0bbd0) | Restrained financial cards and section hierarchy | Existing Payments/Needs attention functionality; not Shopify Balance, credit or payout-account features |
-| M10 | [Analytics](https://mobbin.com/screens/7483aa3e-31eb-470c-bbe2-477a81106422) | Compact date controls and metric/chart card hierarchy | Existing aggregates/time series only; never invent trends or interpret unavailable as zero |
-| M11 | [Point of Sale settings](https://mobbin.com/screens/fb60bc7a-4d41-48ee-9db2-8cafc9303462) | POS positioned within sales-channel hierarchy | Navigation reference only: Freshmarkets POS remains disabled, with no new route |
+| ID  | Canonical reference                                                                                | Observed pattern                                                                                      | Adaptation / explicit exclusion                                                                           |
+| --- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| M01 | [Shopify Orders list](https://mobbin.com/screens/b0f99f43-2fe4-4c9c-867a-1da5cedbdfab)             | Compact order index, sidebar, summary band, table and separate status columns                         | Preserve only supported filters/fields/aggregates; no invented Create order or bulk operations            |
+| M02 | [Orders display-controls popover](https://mobbin.com/screens/fb87b68d-8192-495b-913b-e103e73aa7bb) | Compact sorting/column controls in a popover                                                          | Use only if existing data/state supports the behavior; not a requirement to add saved views or batch APIs |
+| M03 | [Creating an order — flow](https://mobbin.com/flows/2fa86b5f-c569-4a24-9cc7-679122d762b8)          | Product picker, focused delivery dialog, customer support column, resulting order record and timeline | Copy composition/dialog discipline; exclude unsupported draft orders, Mark as paid and invoice sending    |
+| M04 | [Product picker](https://mobbin.com/screens/9be1cd16-65dc-458d-b09b-82d316a69d96)                  | Searchable selectable product/variant rows and an explicit selection footer                           | Reuse for existing supported resource selection; preserve exact units and inventory meaning               |
+| M05 | [Adding a product — flow](https://mobbin.com/flows/9e256ffd-d5a3-4fd2-88bd-a239d491a91b)           | Main form cards, status/organization support column, contextual save bar                              | Existing product routes and commands; no arbitrary additional product fields                              |
+| M06 | [Customer profile](https://mobbin.com/screens/0923dee6-44f2-4b31-8fa2-ef202f0548ae)                | Customer summary, order context/activity, contact sidebar, contextual menu                            | Use currently returned customer facts; no invented spend, segmentation, store credit or messaging         |
+| M07 | [Discount type chooser](https://mobbin.com/screens/6c95bdc1-1836-4d21-a827-1347a2f242e2)           | Compact modal option rows with supporting descriptions                                                | Options derive from Freshmarkets' supported benefit types, not Shopify's complete menu                    |
+| M08 | [Creating a discount — flow](https://mobbin.com/flows/97e8b9c0-d21c-4ee5-976d-1266f9aab926)        | Grouped rules form plus plain-language summary                                                        | Existing targets, limits, amounts, dates and eligibility; same-route editor where no detail route exists  |
+| M09 | [Finance overview](https://mobbin.com/screens/8e44cfcf-3e62-4891-a722-ab16c2f0bbd0)                | Restrained financial cards and section hierarchy                                                      | Existing Payments/Needs attention functionality; not Shopify Balance, credit or payout-account features   |
+| M10 | [Analytics](https://mobbin.com/screens/7483aa3e-31eb-470c-bbe2-477a81106422)                       | Compact date controls and metric/chart card hierarchy                                                 | Existing aggregates/time series only; never invent trends or interpret unavailable as zero                |
+| M11 | [Point of Sale settings](https://mobbin.com/screens/fb60bc7a-4d41-48ee-9db2-8cafc9303462)          | POS positioned within sales-channel hierarchy                                                         | Navigation reference only: Freshmarkets POS remains disabled, with no new route                           |
 
 ## Precise MCP queries when evidence is insufficient
 
@@ -38,20 +38,24 @@ The approved PNG is a Shopify Create order screen. Its Global/location selector 
 
 Discover the connected tool schema before use. Current tools: `search_screens`, `search_flows`; platform `web`. Use one question per query, start small, and inspect the image. Screen search supports `standard`/`deep`; flow search has no such field.
 
-| Task/question | Tool | Query |
-|---|---|---|
-| Shell/index density | search_screens | Shopify admin Orders list showing the expanded left navigation, dark header, status views and compact table |
-| Order composition/transition | search_flows | Shopify creating an order by selecting products, choosing a customer, reviewing totals and opening the saved order |
-| Product editor | search_flows | Shopify adding a product with title, description, media, price, variants and a contextual Save and Discard bar |
-| Product selection | search_screens | Shopify Select products modal with a search field, selectable product and variant rows, selected count and Add button |
-| Customer profile | search_screens | Shopify customer profile detail for one customer with summary metrics, activity, contact information and contextual actions |
-| Discount chooser | search_screens | Shopify Select discount type modal with option rows, descriptions and a cancel button |
-| Discount editor | search_flows | Shopify creating a discount by choosing its type, configuring eligibility and active dates, reviewing a summary and saving |
-| Notifications | search_screens | Shopify admin notification popover anchored to the header bell with contextual notification rows |
-| Finance | search_screens | Shopify Finance page showing restrained cards, financial navigation and payment-related context |
-| Analytics | search_screens | Shopify Analytics dashboard with date range controls, metric cards and sales charts |
-| Settings | search_screens | Shopify admin Settings with category navigation and grouped configuration cards |
-| Dangerous action | search_screens | Shopify confirmation dialog for a destructive admin action with a clear consequence, cancel and confirm buttons |
+### SAUI-05 Customer profile refinement — 2026-09-24
+
+A focused deep Mobbin screen search inspected the [Shopify customer profile](https://mobbin.com/screens/eab9622f-019c-4caa-a070-0f05c28e8b44) (screen `eab9622f-019c-4caa-a070-0f05c28e8b44`). Its preview shows compact identity and summary facts at the top, activity in the main column, and contact/contextual actions in a narrower right column. Freshmarkets uses that hierarchy for the existing Customer record, with only the order count, joined/last-order, contact, access, privacy, support and sanitized activity facts already returned by Core. Shopify spend, per-order detail, store credit, segmentation and messaging are excluded. The image does not establish responsive, keyboard or asynchronous behavior; those require Freshmarkets browser evidence. This refines M06's composition without replacing the approved reference or adding authority to its features.
+
+| Task/question                | Tool           | Query                                                                                                                       |
+| ---------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Shell/index density          | search_screens | Shopify admin Orders list showing the expanded left navigation, dark header, status views and compact table                 |
+| Order composition/transition | search_flows   | Shopify creating an order by selecting products, choosing a customer, reviewing totals and opening the saved order          |
+| Product editor               | search_flows   | Shopify adding a product with title, description, media, price, variants and a contextual Save and Discard bar              |
+| Product selection            | search_screens | Shopify Select products modal with a search field, selectable product and variant rows, selected count and Add button       |
+| Customer profile             | search_screens | Shopify customer profile detail for one customer with summary metrics, activity, contact information and contextual actions |
+| Discount chooser             | search_screens | Shopify Select discount type modal with option rows, descriptions and a cancel button                                       |
+| Discount editor              | search_flows   | Shopify creating a discount by choosing its type, configuring eligibility and active dates, reviewing a summary and saving  |
+| Notifications                | search_screens | Shopify admin notification popover anchored to the header bell with contextual notification rows                            |
+| Finance                      | search_screens | Shopify Finance page showing restrained cards, financial navigation and payment-related context                             |
+| Analytics                    | search_screens | Shopify Analytics dashboard with date range controls, metric cards and sales charts                                         |
+| Settings                     | search_screens | Shopify admin Settings with category navigation and grouped configuration cards                                             |
+| Dangerous action             | search_screens | Shopify confirmation dialog for a destructive admin action with a clear consequence, cancel and confirm buttons             |
 
 Use the constant task intent from the implementation plan. Refine incorrect results with the exact missing screen state; do not describe an irrelevant result as the desired screen. Do not send customer data, repository contents, or unrelated personal context in query fields.
 

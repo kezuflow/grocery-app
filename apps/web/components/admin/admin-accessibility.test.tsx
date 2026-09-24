@@ -310,7 +310,8 @@ describe("shared Admin accessibility contract", () => {
     expect(orderPreviewPanel).toContain("Order Preview");
     expect(orderPreviewPanel).toContain('aria-label="Order status"');
     expect(orderPreviewPanel).toContain("<Table");
-    expect(customersPage).toContain('aria-controls="customer-detail-panel"');
+    expect(customersPage).toContain('aria-controls="customer-invitation-panel"');
+    expect(customersPage).toContain("href={recordHref(customer)}");
     expect(bannersPage).toContain('aria-controls="banner-detail-panel"');
     expect(promotionsPage).toContain(
       "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",

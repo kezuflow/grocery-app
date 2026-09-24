@@ -9,6 +9,8 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
+import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 const failure = z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) });
 const profileResult = z.discriminatedUnion("ok", [
   z.object({
@@ -47,10 +49,12 @@ const notesResult = z.discriminatedUnion("ok", [
 export function CustomerSupportPanel({
   customerId,
   command,
+  canManage,
   onChanged,
 }: {
   customerId: string;
   command: ReturnType<typeof useAdminCommand>;
+  canManage: boolean;
   onChanged: () => void;
 }) {
   const [profile, setProfile] = useState<CustomerProfileView | null>(null);
@@ -117,6 +121,19 @@ export function CustomerSupportPanel({
     };
   }, [load]);
   const disabled = loading || command.busy || command.uncertain;
+  const profileDirty =
+    profile !== null &&
+    (language !== (profile.preferredLanguage ?? "") ||
+      promotions !== profile.promotionalEmails ||
+      reason.trim().length > 0);
+  const dirty = canManage && (profileDirty || body.trim().length > 0);
+  useAdminScopeGuard(dirty, command.busy || command.uncertain, () => {
+    setLanguage(profile?.preferredLanguage ?? "");
+    setPromotions(profile?.promotionalEmails ?? false);
+    setReason("");
+    setBody("");
+  });
+  useAdminRouteGuard(dirty, command.busy || command.uncertain);
   return (
     <>
       <ListPageSection
@@ -133,7 +150,7 @@ export function CustomerSupportPanel({
             </div>
           ) : null}
           {loading ? <p role="status">Loading preferences and notes…</p> : null}
-          {profile && !error ? (
+          {profile && !error && canManage ? (
             <fieldset disabled={disabled} className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="support-language">Preferred language</label>
@@ -188,6 +205,21 @@ export function CustomerSupportPanel({
                 Save customer preferences
               </Button>
             </fieldset>
+          ) : profile && !error ? (
+            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Preferred language</dt>
+                <dd>{profile.preferredLanguage ?? "None recorded"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--fm-text-muted)]">Promotional emails</dt>
+                <dd>{profile.promotionalEmails ? "Opted in" : "Not opted in"}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-[var(--fm-text-muted)]">Access</dt>
+                <dd>You can review these preferences. Changes require customers.manage.</dd>
+              </div>
+            </dl>
           ) : null}
         </div>
       </ListPageSection>
@@ -196,32 +228,38 @@ export function CustomerSupportPanel({
         description="Private staff notes. Corrections are new notes; saved notes cannot be edited or deleted."
       >
         <div className="space-y-5 p-5">
-          <fieldset disabled={disabled || !!error} className="space-y-3">
-            <label htmlFor="customer-support-note">New support note</label>
-            <Textarea
-              id="customer-support-note"
-              maxLength={2000}
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-            />
-            <Button
-              disabled={!body.trim()}
-              onClick={async () => {
-                if (
-                  await command.run(
-                    "customer-note",
-                    `${base}/notes`,
-                    { body: body.trim() },
-                    "POST",
-                    { title: "Support note added" },
+          {canManage ? (
+            <fieldset disabled={disabled || !!error} className="space-y-3">
+              <label htmlFor="customer-support-note">New support note</label>
+              <Textarea
+                id="customer-support-note"
+                maxLength={2000}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+              />
+              <Button
+                disabled={!body.trim()}
+                onClick={async () => {
+                  if (
+                    await command.run(
+                      "customer-note",
+                      `${base}/notes`,
+                      { body: body.trim() },
+                      "POST",
+                      { title: "Support note added" },
+                    )
                   )
-                )
-                  onChanged();
-              }}
-            >
-              Add support note
-            </Button>
-          </fieldset>
+                    onChanged();
+                }}
+              >
+                Add support note
+              </Button>
+            </fieldset>
+          ) : (
+            <p className="text-sm text-[var(--fm-text-muted)]">
+              Support notes are read-only without customers.manage.
+            </p>
+          )}
           {notes?.items.length === 0 ? <p>No support notes yet.</p> : null}
           {notes?.items.map((note) => (
             <article key={note.noteId} className="space-y-2 border-t pt-4">

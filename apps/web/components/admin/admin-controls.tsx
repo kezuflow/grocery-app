@@ -171,6 +171,7 @@ export function AdminConfirmationDialog({
   consequence,
   initialReason = "",
   reasonRequired = true,
+  maxReasonLength,
   destructive = true,
   confirmLabel = "Confirm",
   cancelLabel = "Keep unchanged",
@@ -187,6 +188,7 @@ export function AdminConfirmationDialog({
   consequence: string;
   initialReason?: string;
   reasonRequired?: boolean;
+  maxReasonLength?: number;
   destructive?: boolean;
   confirmLabel?: string;
   cancelLabel?: string;
@@ -228,6 +230,7 @@ export function AdminConfirmationDialog({
             <Input
               aria-label="Confirmation reason"
               autoFocus
+              maxLength={maxReasonLength}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />

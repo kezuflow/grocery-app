@@ -37,7 +37,9 @@ for (const width of [1440, 390]) {
     await adminPage.getByRole("button", { name: "Create invitation", exact: true }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
-    await expect(adminPage.getByText(session.user.email, { exact: true })).toBeVisible();
+    await expect(
+      adminPage.getByRole("link", { name: session.user.email, exact: true }),
+    ).toBeVisible();
     expect(creations).toHaveLength(2);
     expect(creations[1]).toEqual(creations[0]);
     const acceptedInvitationId = invitationId;
@@ -68,6 +70,30 @@ for (const width of [1440, 390]) {
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
     expect(requests[0]?.key).toBeTruthy();
+    await adminPage.goto(`/admin/customers?query=${encodeURIComponent(session.user.email)}`);
+    await expect(adminPage.getByRole("textbox", { name: "Search customers" })).toHaveValue(
+      session.user.email,
+    );
+    const customerLink = adminPage
+      .getByRole(width < 640 ? "list" : "table", { name: "Customer list" })
+      .getByRole("link", { name: session.user.email, exact: true });
+    await expect(customerLink).toBeVisible();
+    if (process.env.SAUI_CAPTURE_CUSTOMERS === "1") {
+      await adminPage.screenshot({
+        path: `../../docs/operations/checkpoints/evidence/saui-05/customers-index-${width}.png`,
+        fullPage: true,
+      });
+    }
+    await customerLink.click();
+    await expect(adminPage).toHaveURL(new RegExp(`/admin/customers/${acceptedCustomerId}\\?`));
+    await adminPage.getByRole("main").getByRole("link", { name: "Customers", exact: true }).click();
+    await expect(adminPage).toHaveURL(
+      `/admin/customers?query=${encodeURIComponent(session.user.email)}`,
+    );
+    await expect(adminPage.getByRole("textbox", { name: "Search customers" })).toHaveValue(
+      session.user.email,
+    );
+    await adminPage.getByRole("button", { name: "Invite customer" }).click();
     expect(
       await signedInPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -123,6 +149,15 @@ for (const width of [1440, 390]) {
     expect(revocations).toHaveLength(2);
     expect(revocations[1]).toEqual(revocations[0]);
     await adminPage.goto(`/admin/customers/${acceptedCustomerId}`);
+    await expect(
+      adminPage.getByRole("heading", { level: 1, name: session.user.email }),
+    ).toBeVisible();
+    if (process.env.SAUI_CAPTURE_CUSTOMERS === "1") {
+      await adminPage.screenshot({
+        path: `../../docs/operations/checkpoints/evidence/saui-05/customer-record-${width}.png`,
+        fullPage: true,
+      });
+    }
     await adminPage
       .getByRole("textbox", { name: "Reason", exact: true })
       .fill("Customer access review");
@@ -138,7 +173,21 @@ for (const width of [1440, 390]) {
       else await route.fulfill({ response });
     });
     await adminPage.getByRole("button", { name: "Disable access" }).click();
+    const accessDialog = adminPage.getByRole("alertdialog");
+    await expect(accessDialog).toContainText(
+      "Existing Orders and financial records stay unchanged",
+    );
+    await expect(
+      accessDialog.getByRole("textbox", { name: "Confirmation reason" }),
+    ).toHaveAttribute("maxlength", "500");
+    await accessDialog
+      .getByRole("textbox", { name: "Confirmation reason" })
+      .fill("Access review confirmed in dialog");
+    await accessDialog.getByRole("button", { name: "Disable access" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await expect(adminPage.getByRole("textbox", { name: "Reason", exact: true })).toHaveValue(
+      "Access review confirmed in dialog",
+    );
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByRole("button", { name: "Restore access" })).toBeVisible();
     expect(accessRequests).toHaveLength(2);
@@ -147,11 +196,21 @@ for (const width of [1440, 390]) {
       ok: false,
       error: { code: "FORBIDDEN" },
     });
+    await adminPage
+      .getByRole("textbox", { name: "Reason", exact: true })
+      .fill("Restore after access review");
     await adminPage.getByRole("button", { name: "Restore access" }).click();
+    await adminPage
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Restore access" })
+      .click();
     await expect(adminPage.getByRole("button", { name: "Disable access" })).toBeVisible();
     expect(await (await signedInPage.request.get("/api/commerce/address")).json()).toMatchObject({
       ok: true,
     });
+    await adminPage
+      .getByRole("textbox", { name: "Reason", exact: true })
+      .fill("End all reviewed sessions");
     const sessionRequests: { key: string | undefined; body: string | null }[] = [];
     await adminPage.route(
       `**/api/admin/customers/${acceptedCustomerId}/sessions/revoke`,
@@ -167,6 +226,10 @@ for (const width of [1440, 390]) {
       },
     );
     await adminPage.getByRole("button", { name: "Revoke sessions" }).click();
+    await adminPage
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Revoke sessions" })
+      .click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toHaveCount(
@@ -174,12 +237,8 @@ for (const width of [1440, 390]) {
     );
     expect(sessionRequests).toHaveLength(2);
     expect(sessionRequests[1]).toEqual(sessionRequests[0]);
-    await expect(
-      adminPage.getByRole("cell", { name: "CUSTOMER.SESSIONS_REVOKED", exact: true }),
-    ).toBeVisible();
-    await expect(
-      adminPage.getByRole("cell", { name: "CUSTOMER.ACCESS_CHANGED", exact: true }),
-    ).toHaveCount(2);
+    await expect(adminPage.getByText("CUSTOMER.SESSIONS_REVOKED", { exact: true })).toBeVisible();
+    await expect(adminPage.getByText("CUSTOMER.ACCESS_CHANGED", { exact: true })).toHaveCount(2);
     expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -234,15 +293,27 @@ for (const width of [1440, 390]) {
       })
       .fill("Customer confirmed closure; retained history preserved");
     await privacy.getByRole("button", { name: "Close commerce access" }).click();
+    const closureDialog = adminPage.getByRole("alertdialog");
+    await expect(closureDialog).toContainText(
+      "does not cancel Orders or initiate financial effects",
+    );
+    await expect(
+      closureDialog.getByRole("textbox", { name: "Confirmation reason" }),
+    ).toHaveAttribute("maxlength", "500");
+    await closureDialog
+      .getByRole("textbox", { name: "Confirmation reason" })
+      .fill("Closure completion confirmed in dialog");
+    await closureDialog.getByRole("button", { name: "Close commerce access" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
+    await expect(
+      privacy.getByRole("textbox", { name: "Action reason for Commerce access closure request" }),
+    ).toHaveValue("Closure completion confirmed in dialog");
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(privacy).toContainText("Status: COMPLETED");
     expect(completions).toHaveLength(2);
     expect(completions[1]).toEqual(completions[0]);
     await expect(adminPage.getByRole("button", { name: "Restore access" })).toBeVisible();
-    await expect(
-      adminPage.getByRole("cell", { name: "CUSTOMER.CLOSED", exact: true }),
-    ).toBeVisible();
+    await expect(adminPage.getByText("CUSTOMER.CLOSED", { exact: true })).toBeVisible();
     expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
     await adminPage.screenshot({
       path: testInfo.outputPath("customer-closure-completed.png"),
@@ -305,4 +376,140 @@ test("customer invitation succeeds with capability and is denied without it", as
     headers: { "idempotency-key": crypto.randomUUID() },
   });
   expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+});
+
+test("a customers.read-only Staff member sees the list without invitation controls", async ({
+  customersReadOnlyPage,
+}) => {
+  await customersReadOnlyPage.goto("/admin/customers");
+  await expect(
+    customersReadOnlyPage.getByRole("heading", { level: 1, name: "Customers" }),
+  ).toBeVisible();
+  await expect(customersReadOnlyPage.getByRole("button", { name: "Invite customer" })).toHaveCount(
+    0,
+  );
+  await expect(
+    customersReadOnlyPage.getByRole("textbox", { name: "Search customers" }),
+  ).toBeVisible();
+  await customersReadOnlyPage.goto("/admin/customers?query=example.com");
+  await expect(
+    customersReadOnlyPage.getByRole("textbox", { name: "Search customers" }),
+  ).toHaveValue("example.com");
+  await expect(customersReadOnlyPage.getByRole("button", { name: "Invite customer" })).toHaveCount(
+    0,
+  );
+  const result = await (
+    await customersReadOnlyPage.request.get("/api/admin/customers?limit=1")
+  ).json();
+  expect(result).toMatchObject({ ok: true });
+  const customer = result.value.items[0] as { customerId: string; email: string } | undefined;
+  expect(customer).toBeTruthy();
+  await customersReadOnlyPage.goto(`/admin/customers/${customer?.customerId}`);
+  await expect(
+    customersReadOnlyPage.getByRole("heading", { level: 1, name: customer?.email }),
+  ).toBeVisible();
+  await expect(
+    customersReadOnlyPage.getByText(/review this record.*customers\.manage/i),
+  ).toBeVisible();
+  await expect(customersReadOnlyPage.getByRole("button", { name: "Disable access" })).toHaveCount(
+    0,
+  );
+  await expect(
+    customersReadOnlyPage.getByRole("button", { name: "Open privacy request" }),
+  ).toHaveCount(0);
+  await expect(
+    customersReadOnlyPage.getByRole("button", { name: "Save customer preferences" }),
+  ).toHaveCount(0);
+  await expect(customersReadOnlyPage.getByRole("button", { name: "Add support note" })).toHaveCount(
+    0,
+  );
+});
+
+test("Customer detail keeps missing, denied, and load failures distinct", async ({ adminPage }) => {
+  const missingId = crypto.randomUUID();
+  const deniedId = crypto.randomUUID();
+  const failedId = crypto.randomUUID();
+  await adminPage.route(`**/api/admin/customers/${missingId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: { code: "NOT_FOUND", message: "Customer not found", requestId: "missing" },
+      }),
+    }),
+  );
+  await adminPage.goto(`/admin/customers/${missingId}`);
+  await expect(adminPage.getByText("Customer not found", { exact: true })).toBeVisible();
+
+  await adminPage.route(`**/api/admin/customers/${deniedId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: { code: "FORBIDDEN", message: "Customer access denied", requestId: "denied" },
+      }),
+    }),
+  );
+  await adminPage.goto(`/admin/customers/${deniedId}`);
+  await expect(adminPage.getByText("Customer access denied", { exact: true })).toBeVisible();
+
+  await adminPage.route(`**/api/admin/customers/${failedId}`, (route) => route.abort("failed"));
+  await adminPage.goto(`/admin/customers/${failedId}`);
+  await expect(adminPage.getByText("Customer record unavailable", { exact: true })).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
+test("Customers ignores an older failed query after a newer search succeeds", async ({
+  adminPage,
+}) => {
+  await adminPage.goto("/admin/customers");
+  await expect(adminPage.getByRole("textbox", { name: "Search customers" })).toBeVisible();
+  let releaseOld: (() => void) | undefined;
+  const oldGate = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  let oldStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    oldStarted = resolve;
+  });
+  let oldFinished: (() => void) | undefined;
+  const finished = new Promise<void>((resolve) => {
+    oldFinished = resolve;
+  });
+  await adminPage.route("**/api/admin/customers?**", async (route) => {
+    const query = new URL(route.request().url()).searchParams.get("query");
+    if (query === "old@example.com") {
+      oldStarted?.();
+      await oldGate;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          error: { code: "INTERNAL_ERROR", message: "Old query failed", requestId: "old" },
+        }),
+      });
+      oldFinished?.();
+      return;
+    }
+    if (query === "new@example.com") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, value: { items: [], nextCursor: null } }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await adminPage.getByRole("textbox", { name: "Search customers" }).fill("old@example.com");
+  await adminPage.getByRole("button", { name: "Search", exact: true }).click();
+  await started;
+  await adminPage.getByRole("textbox", { name: "Search customers" }).fill("new@example.com");
+  await adminPage.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(adminPage.getByText("No customers are visible in this view.")).toBeVisible();
+  releaseOld?.();
+  await finished;
+  await expect(adminPage.getByText("Old query failed")).toHaveCount(0);
+  await expect(adminPage.getByRole("textbox", { name: "Search customers" })).toHaveValue(
+    "new@example.com",
+  );
 });

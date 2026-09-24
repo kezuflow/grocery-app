@@ -6,7 +6,7 @@ for (const width of [1440, 390]) {
     signedInPage,
   }, testInfo) => {
     await signedInPage.goto("/account/profile");
-    await expect(signedInPage.getByRole("heading", { name: "Your account details" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Account details" })).toBeVisible();
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
     await adminPage.setViewportSize({ width, height: 900 });
     await adminPage.goto("/admin/customers");
@@ -48,9 +48,10 @@ for (const width of [1440, 390]) {
     expect(edits).toHaveLength(2);
     expect(edits[1]).toEqual(edits[0]);
     await signedInPage.reload();
-    await expect(signedInPage.getByRole("textbox", { name: "Preferred language" })).toHaveValue(
-      "Cebuano",
-    );
+    expect(await (await signedInPage.request.get("/api/commerce/profile")).json()).toMatchObject({
+      ok: true,
+      value: { preferredLanguage: "Cebuano" },
+    });
     await expect(
       signedInPage.getByRole("checkbox", { name: "Receive promotional emails" }),
     ).toBeChecked();

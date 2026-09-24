@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { groupAdminNavigation, type AdminNavigationEntry } from "./admin-navigation";
+import { tryNavigateAdminRoute } from "./use-admin-route-guard";
 
 /**
  * Keyboard palette (Ctrl/Cmd+K) over the authorized workspaces. It only
@@ -24,8 +25,10 @@ export function AdminCommandPalette({
   const groups = groupAdminNavigation(items);
 
   function select(href: string) {
-    onOpenChange(false);
-    router.push(href);
+    tryNavigateAdminRoute(() => {
+      onOpenChange(false);
+      router.push(href);
+    });
   }
 
   return (

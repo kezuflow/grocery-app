@@ -6,29 +6,24 @@ import type {
   CustomerInvitationPage,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { z } from "@freshmarkets/validation";
 import { invitationEmailStatuses } from "@freshmarkets/contracts";
-import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
-import { Clipboard, EllipsisVertical, ExternalLink, Eye, MailPlus, X } from "lucide-react";
+import { z } from "@freshmarkets/validation";
+import { MailPlus, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AdminCursorPagination,
-  useAdminPagination,
+  useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
-import { useAdminCommand } from "../../../components/admin/use-admin-command";
-import { CustomerAccessStatusBadge } from "../../../components/admin/customer-status-badges";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
+import { CustomerAccessStatusBadge } from "../../../components/admin/customer-status-badges";
+import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
+import { useAdminCommand } from "../../../components/admin/use-admin-command";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { Button } from "../../../components/ui/button";
-import { Checkbox } from "../../../components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import {
   Table,
@@ -38,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 
 type LoadState =
   | { phase: "loading" }
@@ -75,67 +71,189 @@ function date(value: string | null): string {
   }).format(new Date(value));
 }
 
-function customerLabel(customer: AdminCustomerSummary): string {
-  return customer.email || customer.customerId;
+export default function CustomersPage() {
+  const admin = useAdminContext();
+  if (admin.state.phase !== "ready") {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Customers" />
+        <AdminPageState state="loading" title="Loading customers" />
+      </section>
+    );
+  }
+
+  const scopeKey = JSON.stringify(admin.state.selectedScope);
+  const canRead =
+    admin.state.selectedScope?.kind === "GLOBAL" &&
+    admin.state.context.capabilities.includes("customers.read");
+  if (!canRead) {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Customers" />
+        <AdminPageState
+          state="error"
+          title="Customers are unavailable"
+          message="Customer administration requires the customers.read capability with a Global scope."
+        />
+      </section>
+    );
+  }
+
+  return (
+    <CustomersWorkspace
+      key={scopeKey}
+      scopeKey={scopeKey}
+      canManage={admin.state.context.capabilities.includes("customers.manage")}
+    />
+  );
 }
 
-export default function CustomersPage() {
+function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canManage: boolean }) {
+  const requestVersion = useRef(0);
+  const searchParams = useSearchParams();
+  const appliedQuery = searchParams.get("query") ?? "";
+  const [query, setQuery] = useState(appliedQuery);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [customers, setCustomers] = useState<AdminCustomerPage | null>(null);
   const [invitations, setInvitations] = useState<CustomerInvitationPage | null>(null);
   const [invitationLoading, setInvitationLoading] = useState(false);
-  const [query, setQuery] = useState("");
-  const [appliedQuery, setAppliedQuery] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
-  const [panelMode, setPanelMode] = useState<"invite" | "customer">("invite");
-  const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerSummary | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const invitationCommand = useAdminCommand();
   const [revokeReasons, setRevokeReasons] = useState<Record<string, string>>({});
-  const pagination = useAdminPagination(appliedQuery);
+  const invitationCommand = useAdminCommand();
+  const pagination = useAdminUrlPagination("/admin/customers");
+  const listUrl = `/admin/customers${searchParams.size ? `?${searchParams}` : ""}`;
+  const invitationDirty =
+    inviteEmail.trim() !== "" ||
+    Object.values(revokeReasons).some((reason) => reason.trim() !== "");
+  const invitationLocked = invitationCommand.busy || invitationCommand.uncertain;
+  useAdminScopeGuard(canManage && invitationDirty, canManage && invitationLocked, () => {
+    setInviteEmail("");
+    setRevokeReasons({});
+    setPanelOpen(false);
+  });
+  useAdminRouteGuard(canManage && invitationDirty, canManage && invitationLocked);
 
-  const load = useCallback(async (search: string, cursor: string | null) => {
-    setState({ phase: "loading" });
-    try {
-      const params = new URLSearchParams({ limit: "50" });
-      if (search.trim()) params.set("query", search.trim());
-      if (cursor) params.set("cursor", cursor);
-      const [customerResponse, invitationResponse] = await Promise.all([
-        fetch(`/api/admin/customers?${params}`),
-        fetch("/api/admin/customers/invitations"),
-      ]);
-      const customerPayload = (await customerResponse.json()) as RpcResult<AdminCustomerPage>;
-      if (!customerPayload.ok) {
-        setState({
-          phase: "error",
-          message:
-            customerPayload.error.code === "FORBIDDEN"
-              ? "Customer administration requires the customers.read capability with a global scope."
-              : customerPayload.error.message,
-          requestId: customerPayload.error.requestId,
-        });
-        return;
-      }
-      const invitationPayload = invitationResultSchema.parse(await invitationResponse.json());
-      setCustomers(customerPayload.value);
-      setInvitations(invitationPayload.ok ? invitationPayload.value : null);
-      if (!invitationPayload.ok) setNotice(invitationPayload.error.message);
-      setSelectedIds(new Set());
-      setState({ phase: "ready" });
-    } catch {
-      setState({ phase: "error", message: "Network error loading customers." });
+  useEffect(() => setQuery(appliedQuery), [appliedQuery]);
+
+  function recordHref(customer: AdminCustomerSummary) {
+    return `/admin/customers/${encodeURIComponent(customer.customerId)}?returnTo=${encodeURIComponent(listUrl)}&returnScope=${encodeURIComponent(scopeKey)}`;
+  }
+
+  function canLeaveInvitation() {
+    if (!panelOpen) return true;
+    if (invitationLocked) return false;
+    return !invitationDirty || window.confirm("Discard the unsaved invitation changes?");
+  }
+
+  function closeInvitation() {
+    if (!canLeaveInvitation()) return;
+    setPanelOpen(false);
+    setInviteEmail("");
+    setRevokeReasons({});
+  }
+
+  function openCustomer(event: React.MouseEvent) {
+    if (invitationLocked) {
+      event.preventDefault();
+      return;
     }
-  }, []);
+    rememberReturn();
+  }
+
+  function rememberReturn() {
+    sessionStorage.setItem(
+      `freshmarkets.admin.customers.return:${scopeKey}`,
+      JSON.stringify({ url: listUrl, y: window.scrollY }),
+    );
+  }
+
+  useEffect(() => {
+    if (state.phase !== "ready") return;
+    const key = `freshmarkets.admin.customers.return:${scopeKey}`;
+    const stored = sessionStorage.getItem(key);
+    if (!stored) return;
+    sessionStorage.removeItem(key);
+    try {
+      const target = JSON.parse(stored) as { url: string; y: number };
+      if (target.url === `${window.location.pathname}${window.location.search}` && target.y >= 0) {
+        window.requestAnimationFrame(() => window.scrollTo(0, target.y));
+      }
+    } catch {
+      // Invalid return state cannot change the customer list.
+    }
+  }, [scopeKey, state.phase]);
+
+  const load = useCallback(
+    async (search: string, cursor: string | null) => {
+      const version = ++requestVersion.current;
+      setState({ phase: "loading" });
+      try {
+        const params = new URLSearchParams({ limit: "50" });
+        if (search.trim()) params.set("query", search.trim());
+        if (cursor) params.set("cursor", cursor);
+        const customerResponse = await fetch(`/api/admin/customers?${params}`);
+        const customerPayload = (await customerResponse.json()) as RpcResult<AdminCustomerPage>;
+        if (version !== requestVersion.current) return;
+        if (!customerPayload.ok) {
+          setState({
+            phase: "error",
+            message:
+              customerPayload.error.code === "FORBIDDEN"
+                ? "Customer administration requires the customers.read capability with a Global scope."
+                : customerPayload.error.message,
+            requestId: customerPayload.error.requestId,
+          });
+          return;
+        }
+        setCustomers(customerPayload.value);
+        setState({ phase: "ready" });
+        if (canManage) {
+          try {
+            const invitationResponse = await fetch("/api/admin/customers/invitations");
+            const invitationPayload = invitationResultSchema.parse(await invitationResponse.json());
+            if (version !== requestVersion.current) return;
+            setInvitations(invitationPayload.ok ? invitationPayload.value : null);
+            setNotice(invitationPayload.ok ? null : invitationPayload.error.message);
+          } catch {
+            if (version === requestVersion.current) {
+              setInvitations(null);
+              setNotice("Customer invitations could not be loaded. Retry the Customer page.");
+            }
+          }
+        } else {
+          setInvitations(null);
+          setNotice(null);
+        }
+      } catch {
+        if (version !== requestVersion.current) return;
+        setState({ phase: "error", message: "Network error loading customers." });
+      }
+    },
+    [canManage],
+  );
 
   useEffect(() => {
     void load(appliedQuery, pagination.cursor);
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [appliedQuery, load, pagination.cursor]);
+
+  function applySearch(nextQuery: string) {
+    if (panelOpen) return;
+    const next = new URLSearchParams(searchParams.toString());
+    const normalized = nextQuery.trim();
+    if (normalized) next.set("query", normalized);
+    else next.delete("query");
+    pagination.reset(next);
+    window.history.pushState(null, "", `/admin/customers${next.size ? `?${next}` : ""}`);
+  }
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
+    if (!canManage) return;
     if (!inviteEmail.trim()) {
       setNotice("An email is required.");
       return;
@@ -144,9 +262,7 @@ export default function CustomersPage() {
       await invitationCommand.run(
         "create-invitation",
         "/api/admin/customers/invitations",
-        {
-          email: inviteEmail.trim(),
-        },
+        { email: inviteEmail.trim() },
         "POST",
         { title: "Customer invitation created" },
       )
@@ -156,18 +272,9 @@ export default function CustomersPage() {
     }
   }
 
-  function selectCustomer(customerId: string, checked: boolean) {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(customerId);
-      else next.delete(customerId);
-      return next;
-    });
-  }
-
   async function loadMoreInvitations() {
     const cursor = invitations?.nextCursor;
-    if (!cursor || invitationLoading) return;
+    if (!canManage || !cursor || invitationLoading) return;
     setInvitationLoading(true);
     try {
       const response = await fetch(
@@ -186,6 +293,7 @@ export default function CustomersPage() {
             }
           : previous,
       );
+      setNotice(null);
     } catch {
       setNotice("More invitations could not be loaded. Please retry.");
     } finally {
@@ -193,110 +301,67 @@ export default function CustomersPage() {
     }
   }
 
-  async function copyCustomerId(customer: AdminCustomerSummary) {
-    await navigator.clipboard.writeText(customer.customerId);
-    setCopiedId(customer.customerId);
-    window.setTimeout(() => {
-      setCopiedId((current) => (current === customer.customerId ? null : current));
-    }, 2_000);
-  }
-
   const visibleCustomers = customers?.items ?? [];
-  const allSelected = visibleCustomers.length > 0 && selectedIds.size === visibleCustomers.length;
-  const someSelected = selectedIds.size > 0 && !allSelected;
-
   const master = (
     <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader
         title="Customers"
         action={
-          <Button
-            type="button"
-            size="sm"
-            className="fm-admin-reference-primary"
-            aria-expanded={panelOpen && panelMode === "invite"}
-            aria-controls="customer-detail-panel"
-            onClick={() => {
-              setPanelMode("invite");
-              setPanelOpen((open) => (panelMode === "invite" ? !open : true));
-            }}
-          >
-            <MailPlus aria-hidden="true" />
-            Invite customer
-          </Button>
-        }
-      />
-      <AdminLiveRegion message={notice} />
-      <AdminLiveRegion message={invitationCommand.notice} />
-      {invitationCommand.uncertain ? (
-        <Button
-          disabled={invitationCommand.busy}
-          onClick={async () => {
-            if (await invitationCommand.retry()) await load(appliedQuery, pagination.cursor);
-          }}
-        >
-          Retry unconfirmed action
-        </Button>
-      ) : null}
-
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
-        <h2 className="sr-only">Customer list</h2>
-        {selectedIds.size > 0 ? (
-          <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
-            <p className="text-sm font-medium" role="status" aria-live="polite">
-              {selectedIds.size} selected
-            </p>
+          canManage ? (
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              onClick={() => setSelectedIds(new Set())}
+              className="fm-admin-reference-primary"
+              aria-expanded={panelOpen}
+              aria-controls="customer-invitation-panel"
+              disabled={panelOpen && invitationLocked}
+              onClick={() => (panelOpen ? closeInvitation() : setPanelOpen(true))}
             >
-              <X aria-hidden="true" />
-              Clear selection
+              <MailPlus aria-hidden="true" />
+              Invite customer
             </Button>
-          </div>
-        ) : (
-          <form
-            className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setAppliedQuery(query.trim());
-              pagination.reset();
-            }}
-          >
-            <Input
-              aria-label="Search customers"
-              placeholder="Search by email"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              className="h-9 sm:w-72"
-            />
-            <Button type="submit" size="sm" variant="outline">
-              Search
-            </Button>
-            {query || appliedQuery ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setQuery("");
-                  setAppliedQuery("");
-                  pagination.reset();
-                }}
-              >
-                Clear
-              </Button>
-            ) : null}
-          </form>
-        )}
+          ) : undefined
+        }
+      />
+      <AdminLiveRegion message={notice} />
+      <AdminLiveRegion message={panelOpen ? null : invitationCommand.notice} />
 
-        {copiedId ? (
-          <p className="sr-only" role="status">
-            Customer ID copied.
-          </p>
-        ) : null}
+      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+        <h2 className="sr-only">Customer list</h2>
+        <form
+          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applySearch(query);
+          }}
+        >
+          <Input
+            aria-label="Search customers"
+            placeholder="Search by email"
+            value={query}
+            disabled={panelOpen}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 sm:w-72"
+          />
+          <Button type="submit" size="sm" variant="outline" disabled={panelOpen}>
+            Search
+          </Button>
+          {query || appliedQuery ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={panelOpen}
+              onClick={() => {
+                setQuery("");
+                applySearch("");
+              }}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </form>
+
         {state.phase === "loading" ? (
           <div className="p-4">
             <AdminPageState state="loading" title="Loading customers" />
@@ -322,125 +387,93 @@ export default function CustomersPage() {
           </div>
         ) : null}
         {state.phase === "ready" && visibleCustomers.length > 0 ? (
-          <Table aria-label="Customer list">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-11">
-                  <Checkbox
-                    aria-label="Select all customers on this page"
-                    checked={someSelected ? "indeterminate" : allSelected}
-                    onCheckedChange={(checked) =>
-                      setSelectedIds(
-                        checked === true
-                          ? new Set(visibleCustomers.map((customer) => customer.customerId))
-                          : new Set(),
-                      )
-                    }
-                  />
-                </TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Access</TableHead>
-                <TableHead>Membership</TableHead>
-                <TableHead>Orders</TableHead>
-                <TableHead>Last order</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            <ul aria-label="Customer list" className="divide-y divide-[var(--fm-border)] sm:hidden">
               {visibleCustomers.map((customer) => (
-                <TableRow
-                  key={customer.customerId}
-                  data-state={selectedIds.has(customer.customerId) ? "selected" : undefined}
-                >
-                  <TableCell>
-                    <Checkbox
-                      aria-label={`Select customer ${customerLabel(customer)}`}
-                      checked={selectedIds.has(customer.customerId)}
-                      onCheckedChange={(checked) =>
-                        selectCustomer(customer.customerId, checked === true)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      aria-expanded={
-                        panelOpen &&
-                        panelMode === "customer" &&
-                        selectedCustomer?.customerId === customer.customerId
-                      }
-                      aria-controls="customer-detail-panel"
-                      className="font-medium hover:underline"
-                      onClick={() => {
-                        setSelectedCustomer(customer);
-                        setPanelMode("customer");
-                        setPanelOpen(true);
-                      }}
-                    >
-                      {customer.email}
-                    </button>
-                    <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
-                      {customer.phone ?? customer.customerId}
-                    </p>
-                  </TableCell>
-                  <TableCell>
+                <li key={customer.customerId} className="space-y-3 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        href={recordHref(customer)}
+                        prefetch={false}
+                        onClick={openCustomer}
+                        className="break-all font-semibold text-[var(--fm-text)] hover:underline"
+                      >
+                        {customer.email}
+                      </Link>
+                      <p className="mt-0.5 break-all text-sm text-[var(--fm-text-muted)]">
+                        {customer.phone ?? "No phone number"}
+                      </p>
+                    </div>
                     <CustomerAccessStatusBadge status={customer.accessStatus} />
-                  </TableCell>
-                  <TableCell className="text-sm capitalize text-[var(--fm-text-muted)]">
-                    {customer.subscriptionState
-                      ? customer.subscriptionState.toLowerCase().replaceAll("_", " ")
-                      : "No membership"}
-                  </TableCell>
-                  <TableCell className="font-medium">{customer.orderCount}</TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                    {date(customer.lastOrderAt)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                    {date(customer.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Open actions for ${customerLabel(customer)}`}
-                        >
-                          <EllipsisVertical aria-hidden="true" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSelectedCustomer(customer);
-                            setPanelMode("customer");
-                            setPanelOpen(true);
-                          }}
-                        >
-                          <Eye aria-hidden="true" />
-                          View details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => void copyCustomerId(customer)}>
-                          <Clipboard aria-hidden="true" />
-                          {copiedId === customer.customerId ? "Copied" : "Copy customer ID"}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  <dl className="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Orders</dt>
+                      <dd className="mt-0.5 font-medium">{customer.orderCount}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Last order</dt>
+                      <dd className="mt-0.5">{date(customer.lastOrderAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Joined</dt>
+                      <dd className="mt-0.5">{date(customer.createdAt)}</dd>
+                    </div>
+                  </dl>
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+            <div className="hidden sm:block">
+              <Table aria-label="Customer list">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Access</TableHead>
+                    <TableHead>Orders</TableHead>
+                    <TableHead>Last order</TableHead>
+                    <TableHead>Joined</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleCustomers.map((customer) => (
+                    <TableRow key={customer.customerId}>
+                      <TableCell>
+                        <Link
+                          href={recordHref(customer)}
+                          prefetch={false}
+                          onClick={openCustomer}
+                          className="break-all font-medium hover:underline"
+                        >
+                          {customer.email}
+                        </Link>
+                        <p className="mt-0.5 break-all text-xs text-[var(--fm-text-muted)]">
+                          {customer.phone ?? "No phone number"}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <CustomerAccessStatusBadge status={customer.accessStatus} />
+                      </TableCell>
+                      <TableCell className="font-medium">{customer.orderCount}</TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        {date(customer.lastOrderAt)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        {date(customer.createdAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : null}
 
         {state.phase === "ready" ? (
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}
             nextCursor={customers?.nextCursor ?? null}
+            pending={panelOpen}
             onPrevious={pagination.previous}
             onNext={pagination.next}
           />
@@ -449,11 +482,11 @@ export default function CustomersPage() {
     </section>
   );
 
-  const inviteDetail = (
+  const inviteDetail = canManage ? (
     <>
       <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
         <div>
-          <h2 id="customer-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+          <h2 id="customer-invitation-title" className="text-xl font-bold tracking-[-0.03em]">
             Invite customer
           </h2>
           <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
@@ -465,12 +498,24 @@ export default function CustomersPage() {
           variant="ghost"
           size="icon-sm"
           aria-label="Close customer invitation"
-          onClick={() => setPanelOpen(false)}
+          disabled={invitationLocked}
+          onClick={closeInvitation}
         >
           <X aria-hidden="true" />
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <AdminLiveRegion message={invitationCommand.notice} />
+        {invitationCommand.uncertain ? (
+          <Button
+            disabled={invitationCommand.busy}
+            onClick={async () => {
+              if (await invitationCommand.retry()) await load(appliedQuery, pagination.cursor);
+            }}
+          >
+            Retry unconfirmed action
+          </Button>
+        ) : null}
         <form className="space-y-4" onSubmit={invite}>
           <label className="grid gap-1.5 text-sm font-medium">
             Email address
@@ -543,8 +588,14 @@ export default function CustomersPage() {
                             "POST",
                             { title: "Customer invitation revoked" },
                           )
-                        )
+                        ) {
+                          setRevokeReasons((previous) => {
+                            const next = { ...previous };
+                            delete next[invitation.invitationId];
+                            return next;
+                          });
                           await load(appliedQuery, pagination.cursor);
+                        }
                       }}
                     >
                       Revoke invitation
@@ -566,72 +617,13 @@ export default function CustomersPage() {
         ) : null}
       </div>
       <div className="flex shrink-0 justify-end border-t border-[var(--fm-border)] px-5 py-4">
-        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
-          Close
-        </Button>
-      </div>
-    </>
-  );
-
-  const customerDetail = selectedCustomer ? (
-    <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Customer details
-          </p>
-          <h2
-            id="customer-panel-title"
-            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
-          >
-            {selectedCustomer.email}
-          </h2>
-          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-            {selectedCustomer.phone ?? selectedCustomer.customerId}
-          </p>
-        </div>
         <Button
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close customer details"
-          onClick={() => setPanelOpen(false)}
+          variant="outline"
+          disabled={invitationLocked}
+          onClick={closeInvitation}
         >
-          <X aria-hidden="true" />
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-5">
-          <CustomerAccessStatusBadge status={selectedCustomer.accessStatus} />
-        </div>
-        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
-          {[
-            ["Orders", String(selectedCustomer.orderCount)],
-            ["Last order", date(selectedCustomer.lastOrderAt)],
-            ["Joined", date(selectedCustomer.createdAt)],
-            [
-              "Membership",
-              selectedCustomer.subscriptionState?.toLowerCase().replaceAll("_", " ") ??
-                "No membership",
-            ],
-            ["Customer ID", selectedCustomer.customerId],
-          ].map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
-              <dd className="max-w-64 break-all text-right font-medium capitalize">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
-        <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
           Close
-        </Button>
-        <Button asChild>
-          <Link href={`/admin/customers/${selectedCustomer.customerId}`} prefetch={false}>
-            <ExternalLink aria-hidden="true" />
-            Full customer
-          </Link>
         </Button>
       </div>
     </>
@@ -639,13 +631,13 @@ export default function CustomersPage() {
 
   return (
     <AdminMasterDetailWorkspace
-      open={panelOpen}
+      open={canManage && panelOpen}
       master={master}
-      detail={panelMode === "invite" ? inviteDetail : customerDetail}
-      detailKey={panelMode === "invite" ? "invite" : selectedCustomer?.customerId}
-      panelId="customer-detail-panel"
-      labelledBy="customer-panel-title"
-      resizeLabel="Resize customer workspace"
+      detail={inviteDetail}
+      detailKey="invite"
+      panelId="customer-invitation-panel"
+      labelledBy="customer-invitation-title"
+      resizeLabel="Resize customer invitation workspace"
     />
   );
 }
