@@ -19,9 +19,15 @@ import { DispatchActions } from "./dispatch-actions";
 import { DeliveryPromiseForm } from "./delivery-promise-form";
 import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
 import { notifyCommandSuccess } from "../admin-feedback";
-import { AdminCursorPagination, useAdminPagination } from "../admin-controls";
+import {
+  AdminConfirmationDialog,
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../admin-controls";
 import { useAdminContext, useAdminScopeGuard } from "../../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "../use-admin-route-guard";
+
+type DeliveryDispatch = NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>;
 
 export function externalStatusLabel(
   dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
@@ -116,8 +122,22 @@ export function ExternalDeliveryQueue() {
   } | null>(null);
   const [providerLocked, setProviderLocked] = useState(false);
   const [providerPending, setProviderPending] = useState(false);
+  const providerPendingRef = useRef(false);
+  const [cancelTarget, setCancelTarget] = useState<{
+    dispatch: DeliveryDispatch;
+    orderId: string;
+    readKey: string;
+  } | null>(null);
+  const [discardPageDraft, setDiscardPageDraft] = useState(false);
+  const pendingPageMove = useRef<(() => void) | null>(null);
+  const pendingPageReadKey = useRef<string | null>(null);
+  const restoreDialogFocus = useRef<HTMLElement | null>(null);
   const dirty = Object.values(interactionStates).some((state) => state.dirty);
-  const locked = providerLocked || Object.values(interactionStates).some((state) => state.locked);
+  const locked =
+    providerLocked ||
+    cancelTarget !== null ||
+    discardPageDraft ||
+    Object.values(interactionStates).some((state) => state.locked);
   const blockedRef = useRef(false);
   blockedRef.current = dirty || locked;
   const refreshDeferred = useRef(false);
@@ -186,22 +206,25 @@ export function ExternalDeliveryQueue() {
 
   function changePage(move: () => void) {
     if (locked) return;
-    if (dirty && !window.confirm("Discard this delivery draft and change page?")) return;
+    if (dirty) {
+      pendingPageMove.current = move;
+      pendingPageReadKey.current = readKey;
+      restoreDialogFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setDiscardPageDraft(true);
+      return;
+    }
     move();
   }
 
-  async function mutate(
-    dispatch: NonNullable<DeliveryOperationsSummary["items"][number]["externalDispatch"]>,
-    operation: "refresh" | "cancel",
-  ) {
-    if (!locationId || !canManage || providerPending || dispatch.provider !== "lalamove") return;
+  async function mutate(dispatch: DeliveryDispatch, operation: "refresh" | "cancel") {
+    if (!locationId || !canManage || providerPendingRef.current || dispatch.provider !== "lalamove")
+      return;
     const previous = providerIntent.current;
     if (
       previous &&
       (previous.dispatchId !== dispatch.dispatchId || previous.operation !== operation)
     )
-      return;
-    if (!previous && operation === "cancel" && !window.confirm("Cancel this provider delivery?"))
       return;
     const request = previous ?? {
       dispatchId: dispatch.dispatchId,
@@ -216,6 +239,7 @@ export function ExternalDeliveryQueue() {
       }),
     };
     providerIntent.current = request;
+    providerPendingRef.current = true;
     setProviderLocked(true);
     setProviderPending(true);
     try {
@@ -249,6 +273,7 @@ export function ExternalDeliveryQueue() {
         message: `Provider delivery ${operation} outcome is unknown. Retry the saved request.`,
       });
     } finally {
+      providerPendingRef.current = false;
       setProviderPending(false);
     }
   }
@@ -436,7 +461,18 @@ export function ExternalDeliveryQueue() {
                                       item.externalDispatch.dispatchId ||
                                       providerIntent.current?.operation !== "cancel"))
                                 }
-                                onClick={() => void mutate(item.externalDispatch!, "cancel")}
+                                onClick={(event) => {
+                                  const dispatch = item.externalDispatch!;
+                                  if (
+                                    providerIntent.current?.dispatchId === dispatch.dispatchId &&
+                                    providerIntent.current.operation === "cancel"
+                                  ) {
+                                    void mutate(dispatch, "cancel");
+                                    return;
+                                  }
+                                  restoreDialogFocus.current = event.currentTarget;
+                                  setCancelTarget({ dispatch, orderId: item.orderId, readKey });
+                                }}
                               >
                                 {providerLocked &&
                                 providerIntent.current?.dispatchId ===
@@ -484,6 +520,62 @@ export function ExternalDeliveryQueue() {
           />
         </ListPageSection>
       ) : null}
+      <AdminConfirmationDialog
+        open={cancelTarget !== null}
+        title="Cancel Lalamove delivery?"
+        resource={cancelTarget ? `Order ${cancelTarget.orderId}` : "Delivery"}
+        scope={label}
+        consequence="Request cancellation of this active courier delivery. Wait for provider confirmation before assigning a replacement."
+        reasonRequired={false}
+        confirmLabel="Request cancellation"
+        cancelLabel="Keep delivery"
+        restoreFocusRef={restoreDialogFocus}
+        pending={providerPending}
+        onCancel={() => {
+          if (!providerPending) setCancelTarget(null);
+        }}
+        onConfirm={() => {
+          const target = cancelTarget;
+          if (!target) return;
+          if (target.readKey !== currentReadKey.current) {
+            setCancelTarget(null);
+            return;
+          }
+          void mutate(target.dispatch, "cancel").finally(() => setCancelTarget(null));
+        }}
+      />
+      <AdminConfirmationDialog
+        open={discardPageDraft}
+        title="Discard delivery draft?"
+        resource="Delivery queue draft"
+        scope={label}
+        consequence="Unsaved delivery form entries on this page will be lost when you change pages."
+        reasonRequired={false}
+        destructive={false}
+        confirmLabel="Discard and change page"
+        cancelLabel="Keep draft"
+        restoreFocusRef={restoreDialogFocus}
+        onCancel={() => {
+          pendingPageMove.current = null;
+          pendingPageReadKey.current = null;
+          setDiscardPageDraft(false);
+        }}
+        onConfirm={() => {
+          const move = pendingPageMove.current;
+          const sameRead = pendingPageReadKey.current === currentReadKey.current;
+          pendingPageMove.current = null;
+          pendingPageReadKey.current = null;
+          if (sameRead && move) {
+            const heading = document.getElementById("admin-page-title");
+            if (heading instanceof HTMLElement) {
+              heading.tabIndex = -1;
+              restoreDialogFocus.current = heading;
+            }
+          }
+          setDiscardPageDraft(false);
+          if (sameRead) move?.();
+        }}
+      />
     </div>
   );
 }

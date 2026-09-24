@@ -487,3 +487,128 @@ test("An older queue read cannot unmount an unknown manual request", async ({ pa
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Order stale-or" })).toBeVisible();
 });
+
+test("Provider cancellation asks accessibly and retries one saved request after an unknown result", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installDeliveryScopes(page);
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const item = {
+      ...deliveryItem(firstLocation, "cancel-order", "SCHEDULED"),
+      externalDispatch: {
+        dispatchId: "cancel-dispatch",
+        provider: "lalamove",
+        status: "ACTIVE",
+        providerStatus: "PENDING_PICKUP",
+        trackingUrl: null,
+        providerDeliveryId: "provider-cancel",
+        version: 4,
+      },
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { ...deliveryPage(firstLocation, "cancel-order", "next").value, items: [item] },
+      }),
+    });
+  });
+  const requests: { key: string | undefined; body: string | null; url: string }[] = [];
+  let releaseFirst!: () => void;
+  const heldFirst = new Promise<void>((resolve) => (releaseFirst = resolve));
+  await page.route("**/api/admin/external-deliveries/cancel-dispatch/cancel", async (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postData(),
+      url: route.request().url(),
+    });
+    if (requests.length === 1) {
+      await heldFirst;
+      return route.abort("failed");
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, value: { status: "CANCELED" } }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const cancel = page
+    .getByRole("row", { name: /cancel-order/ })
+    .getByRole("button", { name: "Cancel" });
+  await cancel.click();
+  const dialog = page.getByRole("alertdialog", { name: "Cancel Lalamove delivery?" });
+  await expect(dialog).toContainText("Order cancel-order");
+  await page.waitForTimeout(250);
+  await page.screenshot({
+    path: testInfo.outputPath("delivery-cancel-dialog-1440.png"),
+    fullPage: true,
+  });
+  expect(requests).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(cancel).toBeFocused();
+  await cancel.click();
+  await dialog.getByRole("button", { name: "Request cancellation" }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(JSON.parse(requests[0]!.body!)).toEqual({
+    locationId: firstLocation,
+    expectedVersion: 4,
+  });
+  await expect(dialog.getByRole("button", { name: "Submitting…" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  releaseFirst();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry saved cancellation" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Results pagination" })
+      .getByRole("button", { name: "Next" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Retry saved cancellation" }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toEqual(requests[0]);
+});
+
+test("Delivery pagination asks before discarding a manual draft and restores focus", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    const item = cursor
+      ? deliveryItem(firstLocation, "second-draft-page", "SCHEDULED")
+      : {
+          ...deliveryItem(firstLocation, "first-draft-page", "SCHEDULED"),
+          manualActions: ["ASSIGN"],
+        };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          ...deliveryPage(firstLocation, item.orderId, cursor ? null : "next").value,
+          items: [item],
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  await page.getByRole("button", { name: "Assign manual delivery" }).click();
+  await page.getByRole("textbox", { name: "Person delivering" }).fill("Draft rider");
+  const next = page
+    .getByRole("navigation", { name: "Results pagination" })
+    .getByRole("button", { name: "Next" });
+  await next.click();
+  const dialog = page.getByRole("alertdialog", { name: "Discard delivery draft?" });
+  await expect(dialog).toContainText("Unsaved delivery form entries");
+  await dialog.getByRole("button", { name: "Keep draft" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(next).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Person delivering" })).toHaveValue("Draft rider");
+  await next.click();
+  await dialog.getByRole("button", { name: "Discard and change page" }).click();
+  await expect(page.getByRole("link", { name: "Order second-d" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Delivery" })).toBeFocused();
+});
