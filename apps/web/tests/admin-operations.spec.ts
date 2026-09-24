@@ -165,7 +165,7 @@ test("exception workspace renders typed source fields and unavailable actions", 
   await expect(page.getByText("Age unavailable")).toBeVisible();
 });
 
-test("location staff inspect paid snapshots and reach either dispatch choice from both modes", async ({
+test("location staff inspect paid snapshots and mode-specific dispatch from both modes", async ({
   page,
 }) => {
   await installAdminBootstrapFixture(page, {
@@ -305,13 +305,11 @@ test("location staff inspect paid snapshots and reach either dispatch choice fro
   await page.goto("/admin/fulfillment");
   await expect(page.getByRole("heading", { name: "Order FM-INSTANT" })).toBeVisible();
   await expect(page.getByText("Reserved: 1000 GRAM")).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Choose Manual or Lalamove dispatch" }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "View Lalamove delivery" })).toBeVisible();
   await page.getByRole("row", { name: /FM-SCHEDULED/ }).click();
   await expect(page.getByRole("heading", { name: "Order FM-SCHEDULED" })).toBeVisible();
   await expect(page.getByText("Paid addition")).toBeVisible();
-  await expect(page.getByText(/Cycle allocated: 2000 GRAM · received 2000/)).toBeVisible();
+  await expect(page.getByText(/Cycle allocated: 2000 GRAM · cycle received 2000/)).toBeVisible();
   await expect(page.getByText(/payment|refund|total/i)).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Choose Manual or Lalamove dispatch" }),

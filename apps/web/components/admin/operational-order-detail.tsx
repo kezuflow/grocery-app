@@ -17,13 +17,22 @@ const actionLabels: Record<string, string> = {
   ESCALATE: "Escalate shortage",
 };
 
-const date = (value: string | null) =>
+const date = (value: string | null, timezone: string | null) =>
   value
-    ? new Intl.DateTimeFormat("en-PH", {
+    ? `${new Intl.DateTimeFormat("en-PH", {
         dateStyle: "medium",
         timeStyle: "short",
-      }).format(new Date(value))
+        timeZone: timezone ?? "UTC",
+      }).format(new Date(value))} ${timezone ?? "UTC"}`
     : "Not scheduled";
+
+export function preparationStatus(status: string): string {
+  if (status === "NOT_STARTED") return "New";
+  return status
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^./, (first) => first.toUpperCase());
+}
 
 function deliveryLabel(detail: NonNullable<FulfillmentQueueView["operational"]>): string {
   const execution = detail.deliveryExecution;
@@ -86,17 +95,18 @@ export function OperationalOrderDetail({
           </p>
           <h2 className="text-xl font-semibold">Order {detail.orderNumber}</h2>
           <p className="text-sm text-[var(--fm-text-muted)]">
-            Paid {date(detail.committedAt)} · {detail.recipient.name} · {detail.recipient.phone}
+            Paid {date(detail.committedAt, detail.timing.timezone)} · {detail.recipient.name} ·{" "}
+            <span>{detail.recipient.phone}</span>
           </p>
         </div>
-        <StatusBadge>{item.status}</StatusBadge>
+        <StatusBadge>{preparationStatus(item.status)}</StatusBadge>
       </div>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="font-semibold">Delivery timing</dt>
           <dd>
             {detail.timing.windowName ?? detail.timing.cycleName ?? "Instant"} ·{" "}
-            {date(detail.timing.startsAt ?? detail.timing.pickupAt)}
+            {date(detail.timing.startsAt ?? detail.timing.pickupAt, detail.timing.timezone)}
           </dd>
         </div>
         <div>
