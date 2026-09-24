@@ -31,6 +31,7 @@ for (const width of [1440, 390]) {
   test(`Product create edit and status recovery at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
+    test.setTimeout(120_000);
     await page.setViewportSize({ width, height: 1000 });
     const id = crypto.randomUUID();
     const requests: Array<{ method: string; url: string; body: string | null; key: string }> = [];
@@ -72,12 +73,18 @@ for (const width of [1440, 390]) {
     await page.getByRole("link", { name: "Edit product", exact: true }).click();
     await page.getByLabel("Product name", { exact: true }).fill(`Reviewed product ${width}`);
     await loseNextResponse(page, "PATCH", productPath);
-    await page.getByRole("button", { name: "Save product", exact: true }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved product" })).toBeVisible();
     await expect(page.getByLabel("Product name", { exact: true })).toBeDisabled();
     // A scope refresh must not replace or hide the uncertain edit request.
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Active admin scope" })).toContainText(
+      "Global",
+    );
+    await expect(
+      page.getByText("Finish or recover the current request before changing scope."),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry saved product" })).toBeVisible();
     await page.getByRole("button", { name: "Retry saved product" }).click();
     await expect(

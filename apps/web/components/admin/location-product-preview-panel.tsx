@@ -16,6 +16,7 @@ import { Input } from "../ui/input";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
+import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 
 type LocationScope = Extract<AdminProductDetail["scope"], { kind: "LOCATION" }>;
 type LocationProductDetail = AdminProductDetail & { scope: LocationScope };
@@ -118,6 +119,10 @@ function LocationSkuPriceRow({
   const [savedPriceMinor, setSavedPriceMinor] = useState<number | null | undefined>(undefined);
   const intent = useAdminCommandIntent();
   const displayedPrice = savedPriceMinor === undefined ? sku.priceMinor : savedPriceMinor;
+  useAdminScopeGuard(
+    editing && view !== null && amount !== priceInputValue(view.currentPriceMinor),
+    loading || command !== null || intent.pending || intent.uncertain,
+  );
 
   useEffect(() => {
     onRecoveryStateChange(sku.skuId, command !== null || intent.pending);

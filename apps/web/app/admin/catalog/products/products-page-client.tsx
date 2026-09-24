@@ -3,7 +3,7 @@
 import type { AdminProductPage, AdminProductSummary, RpcResult } from "@freshmarkets/contracts";
 import { Plus, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminCursorPagination, useAdminUrlPagination } from "@/components/admin/admin-controls";
 import {
@@ -11,7 +11,7 @@ import {
   type BulkProductDeactivationResult,
   type BulkProductSelection,
 } from "@/components/admin/product-list-view";
-import { useAdminContext } from "../../admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { GlobalProductPreviewPanel } from "@/components/admin/product-preview-panel";
@@ -95,6 +95,25 @@ export function ProductsPageClient({
     adminContext.state.selectedScope?.kind === "LOCATION" &&
     adminContext.state.context.capabilities.includes("prices.manage");
   const scopeKey = scopeTarget ? serializeProductScope(scopeTarget) : "unresolved";
+  useAdminScopeGuard(false, bulkPending || priceRecoveryActive);
+  const previousScopeKey = useRef(scopeKey);
+  useEffect(() => {
+    if (previousScopeKey.current === scopeKey) return;
+    previousScopeKey.current = scopeKey;
+    setSelectedProduct(null);
+    setPanelOpen(false);
+    setPanelMode("detail");
+    setWorkspaceScopeKey(null);
+    if (searchParams.has("cursor") || searchParams.has("cursorHistory")) {
+      const next = new URLSearchParams(searchParams.toString());
+      pagination.reset(next);
+      window.history.replaceState(
+        null,
+        "",
+        `/admin/catalog/products${next.size ? `?${next}` : ""}`,
+      );
+    }
+  }, [scopeKey, searchParams, pagination]);
   const serverPayloadMatches =
     initialPayload !== null &&
     !pagination.cursor &&

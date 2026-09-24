@@ -7,11 +7,11 @@
 - **Reference ledger:** `docs/design/SHOPIFY_ADMIN_REFERENCES.md`.
 - **Owner decision:** Approved the Shopify-inspired admin direction in this conversation; implementation uses existing routes and preserves scope/business behavior.
 - **Execution status:** IN PROGRESS, SAUI-02 — Shared shell, navigation, scope, and notifications. SAUI-00/01 and SAUI-02.1 are accepted. Existing visual snapshots encode the old shell and remain failing until the redesigned page families are inspected and baselines are intentionally updated.
-- **Observed execution branch/HEAD:** `main` synchronized with `origin/main` at `f016015c` after verified SAUI-00/01/02.1 work was committed and pushed. Current SAUI-02.2/02.3 edits are uncommitted at this checkpoint update.
-- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. Current intended edits are Core navigation metadata and tests, shared section contract, Web navigation/shell/tests, API_CONTRACTS navigation text, this checkpoint and three navigation images. No commerce-alignment source or checkpoint was edited.
+- **Observed execution branch/HEAD:** `main` synchronized with `origin/main` at `fae0d343` after verified SAUI-02.2/02.3 work was committed and pushed. Current SAUI-02.4 edits are uncommitted at this checkpoint update.
+- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. Current intended edits are Admin context/operational refresh, command lock hooks, Product create/edit/list/preview, location price/fulfillment guards, focused tests and this checkpoint. No commerce-alignment source or checkpoint was edited.
 - **Runtime:** Node `v24.15.0`, pnpm `11.0.9`, repository hooks `.githooks`; disposable `apps/core/.wrangler/e2e-shopify-admin` state is locally provisioned. Actual lead model/effort is controlled by the active Codex session and not changed here. The authorized `gpt-5.6-sol` Medium read-only reference agent completed; the `gpt-5.6-sol` High independent reviewer hit a service usage limit before returning findings. Lead reviewed the diff directly; one writer remains the lead.
 - **Active slice:** SAUI-02.4 — scope transition safety across dirty/pending forms and scope-keyed reads.
-- **Next action:** Audit current scope-change callers and high-risk forms, add a single transition guard without changing Core authority, then verify no old-scope data or pending intent appears under the new scope.
+- **Next action:** Review/stage/commit/push the verified SAUI-02.4 foundation, then inventory and guard remaining scope-sensitive editors before accepting the phase and starting SAUI-03.1.
 
 ## Macro-phase ledger
 
@@ -41,11 +41,11 @@ Goal / acceptance criteria: Dirty-form confirmation and pending/unknown-command 
 Dependency evidence: SAUI-02.1–02.3 accepted; real Core navigation integration 16/16, Web grouping 16/16, contracts 2/2, local shell/navigation/notification browser 18/18, Global/Central Cebu/mobile sidebar captures inspected.
 Owner / actual model / effort: current lead session; one writer. Independent High reviewer unavailable due service usage limit; lead reviews each diff.
 Writer lock / allowed files: lead owns Core navigation metadata, shared contract, Web navigation and shell, tests, task checkpoint.
-Stable base HEAD or frozen diff: f016015c plus uncommitted SAUI-02.2/02.3 navigation/header scope diff.
+Stable base HEAD or frozen diff: fae0d343 plus uncommitted SAUI-02.4 transition-safety diff.
 Reference IDs / relevant guide sections: M01–M11; PRODUCT scope/role rules; DESIGN Admin visual foundation and navigation; ENGINEERING contract/verification/Git.
 Commands / environment: local disposable `e2e-shopify-admin` Wrangler Web/Core on port 3100; no provider/production operation.
-Implemented versus verified versus accepted: 02.2/02.3 accepted with Core-owned sections/order, Web grouping, pinned Settings, disabled future labels, fixed selector width and unchanged notification behavior. 02.4 not implemented. Visual snapshot comparisons against the old shell remain failing by design.
-Next action: implement transition guard and read-key checks, then run scoped browser journeys.
+Implemented versus verified versus accepted: 02.4 transition guard, global pending/unknown command lock, Product and location-form integration, scope-keyed operational activity, Product selection/cursor reset and invalid-scope create state implemented. Focused unit/browser checks and aggregate `pnpm check` passed. Final diff review and commit/push pending. Remaining scope-sensitive editors need coverage before 02.4 acceptance. Visual snapshot comparisons against the old shell remain failing by design.
+Next action: review/stage/commit/push the verified foundation, then inventory remaining scope-sensitive editors and register their dirty/locked state.
 ```
 
 ## Baseline and route/action coverage
@@ -72,6 +72,10 @@ SAUI-00 used a disposable local D1 state. The managed Playwright command first t
 | SAUI-02.2/02.3 | same working tree | `pnpm format:check`; Web/Core typecheck; `pnpm --filter @freshmarkets/web build` | Passed; no page/API route added | local command output | Compilation alone does not prove interaction |
 | SAUI-02.2/02.3 | rebuilt local Web/Core + disposable D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-foundation.spec.ts admin-navigation-discovery.spec.ts admin-readiness.spec.ts notifications.spec.ts --workers=1 --retries=0` | 18/18 passed after fixing a test locator that selected the header brand instead of the sidebar Home link; stable bell position measured on Global→Central Cebu | local Playwright output | Synthetic users, mock providers |
 | SAUI-02.2 | same local stack | temporary read-only navigation capture Playwright spec; desktop Global/Central Cebu and mobile Central Cebu | 1/1 passed; all three sidebar/sheet images inspected; temporary spec removed | `evidence/saui-02/navigation-{global-desktop,cebu-desktop,cebu-mobile}.png` | UI capture, not authorization proof by itself |
+| SAUI-02.4 | `fae0d343` + uncommitted transition diff | Web typecheck; `pnpm --filter @freshmarkets/web test -- admin-context-provider.test.tsx admin-command-state.test.ts admin-operational-refresh-provider.test.tsx location-fulfillment-workspace.test.tsx` | Passed; focused provider/command/old-location tests | local test output | UI transition mechanism, not all later family editors |
+| SAUI-02.4 | rebuilt Web/Core + disposable local D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-scope-transition.spec.ts --workers=1 --retries=0` | 2/2 passed: cancel/accept dirty draft, invalid location create state, clean return, selection/cursor reset with filter preserved | local Playwright output | Local synthetic users, mock providers |
+| SAUI-02.4 | same local stack | `product-command-recovery.spec.ts` separately at 1440px and 390px with no retries | 1/1 each passed: uncertain edit blocked scope switch, same-key recovery retained; initial run 0/2 timed out at stale `Save product` test locator before scope assertion, fixed to current `Save changes` and 120s operation timeout | local Playwright output | Local mock provider and disposable catalog writes only |
+| SAUI-02.4 | `fae0d343` + uncommitted transition diff | `pnpm check` (third run after formatting and a stale accessibility assertion were repaired) | Passed: harness 37, shared/config/validation/contracts tests 2/2/4/69, Web 159 files/668 tests, Core 210 files/1,721 tests, Web build; format/naming/terminology/architecture/lint/typecheck gates passed | `%TEMP%/saui-pnpm-check.log` | Earlier runs failed only formatting and the old 64px rail assertion; repaired. Browser coverage is the focused local evidence above, not production/provider acceptance |
 
 Separate mocked/component, local Worker/D1, local browser, actual sandbox provider and production evidence. Do not overwrite a failed result with “passed” without retaining the failure and repair record.
 
@@ -95,7 +99,7 @@ No external-access blocker. The shared-chat download control failed, but the own
 
 ## Latest handoff
 
-Active SAUI-02.4 on `main` at `f016015c` with uncommitted navigation/header scope changes and preserved owner ZIP. Local disposable Web/Core stack runs on port 3100. Next: audit scope-switch safety and add transition guard/read-key protection, then stage only intended SAUI files, commit/push.
+Active SAUI-02.4 on `main` at `fae0d343` with uncommitted transition-safety changes and preserved owner ZIP. The disposable local Web/Core stack was stopped after focused browser checks. Aggregate `pnpm check` passed on this working tree, including 668 Web and 1,721 Core tests and a Web build. Next: review/stage only intended SAUI files, commit/push, then guard remaining scope-sensitive editors.
 
 ## History
 
@@ -104,3 +108,4 @@ Active SAUI-02.4 on `main` at `f016015c` with uncommitted navigation/header scop
 - 2026-09-24: SAUI-00 accepted with source route/action inventory and six inspected local screenshots. Browser visual snapshots drifted before redesign; 3/3 existing comparisons failed after a recovered local D1 setup, while the scoped capture passed 1/1. SAUI-01 visual and interaction contract entered DESIGN; independent review remains open. No application code or provider/production state changed.
 - 2026-09-24: SAUI-01 guide conflicts reconciled and lead-reviewed. Independent High reviewer failed due service usage limit; lead accepted the guide contract with that assurance limit. SAUI-02.1 shell geometry, neutral Admin tokens, header scope placement and focused browser tests implemented. Web typecheck/lint/build passed; 8/8 focused browser checks passed; three current visual images inspected and saved while old snapshots failed as expected. No business/API route/provider change.
 - 2026-09-24: Committed and pushed verified baseline/shell as `f016015c` on `main`. SAUI-02.2 Core-ordered Shopify sections, Settings pinning and noninteractive future labels implemented without new routes. SAUI-02.3 fixed selector width and preserved bell behavior. Contracts/Core/Web focused tests and 18 local browser checks passed; three current navigation images inspected. SAUI-02.4 is the next active safety slice.
+- 2026-09-24: Committed and pushed SAUI-02.2/02.3 as `fae0d343`. SAUI-02.4 added a central dirty/pending transition guard and global command lock, Product/location guard registrations, stale activity protection, Product cursor/selection reset, and honest invalid-scope creation state. Unit and local browser checks passed; aggregate gate remains. Subsequent page-family slices must connect their editor dirtiness to the shared guard before acceptance.

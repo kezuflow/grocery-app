@@ -52,7 +52,11 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
     state.phase === "ready" && state.selectedScope?.kind === "LOCATION"
       ? state.selectedScope.locationId
       : null;
-  const [activity, setActivity] = useState<OperationalActivityView | null>(null);
+  const [activity, setActivity] = useState<{
+    locationId: string;
+    value: OperationalActivityView;
+  } | null>(null);
+  const visibleActivity = activity?.locationId === locationId ? activity.value : null;
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [stale, setStale] = useState(false);
@@ -89,7 +93,9 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
         const stored = new Set(
           noticeIdsByLocation.current.get(locationId) ?? storedNoticeIds(storageKey),
         );
-        const priorIds = new Set(activity?.notifications.map((notice) => notice.id) ?? stored);
+        const priorIds = new Set(
+          visibleActivity?.notifications.map((notice) => notice.id) ?? stored,
+        );
         if (initialized.current) {
           const newOrder = result.value.notifications.find(
             (notice) => notice.id.startsWith("order:") && !priorIds.has(notice.id),
@@ -107,7 +113,7 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
         }
         failures.current = 0;
         setStale(false);
-        setActivity(result.value);
+        setActivity({ locationId, value: result.value });
         setRevision((value) => value + 1);
       })
       .catch(() => {
@@ -152,7 +158,7 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
 
   return (
     <OperationalRefreshContext.Provider
-      value={{ enabled: true, activity, revision, refreshing, stale, refresh }}
+      value={{ enabled: true, activity: visibleActivity, revision, refreshing, stale, refresh }}
     >
       {children}
     </OperationalRefreshContext.Provider>

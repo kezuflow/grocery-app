@@ -1,8 +1,9 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { appErrorCodes } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { notifyCommandSuccess, type AdminSuccessFeedback } from "./admin-feedback";
+import { setAdminScopeCommandLock } from "./admin-scope-command-lock";
 
 export const catalogErrorSchema = z.object({
   ok: z.literal(false),
@@ -32,12 +33,15 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
 
   const saved = useRef<Intent | null>(null);
   const active = useRef(false);
+  const lockOwner = useRef({});
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  useEffect(() => () => setAdminScopeCommandLock(lockOwner.current, false), []);
   async function execute(command: Intent) {
     if (active.current) return null;
     saved.current = command;
     active.current = true;
+    setAdminScopeCommandLock(lockOwner.current, true);
     setPending(true);
     try {
       const response = await fetch(command.url, {
@@ -48,6 +52,7 @@ export function useCatalogCommand<T>(schema: z.ZodType<T>) {
       const result = resultSchema.parse(await response.json());
       saved.current = null;
       setUncertain(false);
+      setAdminScopeCommandLock(lockOwner.current, false);
       if (result.ok && command.successFeedback) {
         notifyCommandSuccess(
           command.successFeedback.title,

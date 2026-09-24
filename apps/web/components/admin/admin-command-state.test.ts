@@ -23,6 +23,7 @@ describe("Admin command intent", () => {
     await expect(first).resolves.toMatchObject({ ok: true, value: "done" });
     await expect(second).resolves.toMatchObject({ ok: true, value: "done" });
     expect(intent.pending).toBe(false);
+    expect(intent.uncertain).toBe(false);
     expect(intent.idempotencyKey).toBe("key-2");
   });
 
@@ -32,8 +33,10 @@ describe("Admin command intent", () => {
       intent.submit(async () => Promise.reject(new Error("connection lost"))),
     ).rejects.toThrow("connection lost");
     expect(intent.idempotencyKey).toBe("key-1");
+    expect(intent.uncertain).toBe(true);
     await intent.submit(async (key) => ({ ok: true, value: key, requestId: "request-2" }));
     expect(intent.idempotencyKey).toBe("key-2");
+    expect(intent.uncertain).toBe(false);
   });
 
   it("rotates after a definitive typed rejection", async () => {

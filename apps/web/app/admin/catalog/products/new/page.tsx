@@ -28,6 +28,7 @@ import { ProductDraftPreview } from "@/components/admin/product-draft-preview";
 import { X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
+import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
 
 const CREATE_PRODUCT_FORM_ID = "create-product-form";
 
@@ -84,6 +85,7 @@ export function NewProductWorkspace({
   embedded?: boolean;
 } = {}) {
   const router = useRouter();
+  const admin = useAdminContext();
   const queryClient = useQueryClient();
   const intent = useAdminCommandIntent();
   const savedSetup = useRef<ProductFormValue | null>(null);
@@ -116,6 +118,11 @@ export function NewProductWorkspace({
       },
     ],
   });
+  const initialSnapshot = useRef(JSON.stringify(value));
+  useAdminScopeGuard(
+    JSON.stringify(value) !== initialSnapshot.current || savedSetup.current !== null,
+    intent.pending || recovering,
+  );
   useEffect(() => {
     let current = true;
     setUnitsLoading(true);
@@ -313,6 +320,16 @@ export function NewProductWorkspace({
       );
     }
   }
+  if (admin.state.phase === "ready" && admin.state.selectedScope?.kind !== "GLOBAL") {
+    return (
+      <Alert variant="warning">
+        <AlertDescription>
+          Select Global scope to create a product. The current location scope can view its catalog
+          and prices. <Link href="/admin/catalog/products">Open Products</Link>.
+        </AlertDescription>
+      </Alert>
+    );
+  }
   const actions = (
     <div className="flex items-center gap-2">
       {onCancel ? (
@@ -419,5 +436,7 @@ export function NewProductWorkspace({
 }
 
 export default function NewProductPage() {
-  return <NewProductWorkspace />;
+  const { state } = useAdminContext();
+  const scopeKey = state.phase === "ready" ? JSON.stringify(state.selectedScope) : "loading";
+  return <NewProductWorkspace key={scopeKey} />;
 }

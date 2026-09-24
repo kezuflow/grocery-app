@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -16,6 +17,8 @@ import type {
   AdminSelectedScope,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { toast } from "sonner";
+import { hasAdminScopeCommandLock } from "@/components/admin/admin-scope-command-lock";
 import {
   ADMIN_PRODUCT_SCOPE_TARGET_COOKIE,
   resolveAdminProductScopeTarget,
@@ -39,7 +42,10 @@ type AdminContextValue = {
   state: AdminContextState;
   retry: () => void;
   selectScope: (scope: AdminSelectedScope) => void;
+  registerScopeGuard: (guard: () => ScopeGuardState) => () => void;
 };
+
+type ScopeGuardState = { dirty: boolean; locked: boolean; discard?: () => void };
 
 const AdminContextContext = createContext<AdminContextValue | null>(null);
 const PREFERRED_SCOPE_KEY = "freshmarkets.admin.preferred-scope";
@@ -125,21 +131,44 @@ function bootstrapUrl(scope: AdminSelectedScope | null): string {
  */
 export function AdminContextProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AdminContextState>({ phase: "loading" });
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const scopeGuards = useRef(new Set<() => ScopeGuardState>());
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  const registerScopeGuard = useCallback((guard: () => ScopeGuardState) => {
+    scopeGuards.current.add(guard);
+    return () => scopeGuards.current.delete(guard);
+  }, []);
   const selectScope = useCallback((scope: AdminSelectedScope) => {
-    setState((current) => {
-      if (current.phase !== "ready") return current;
-      const permitted = adminSelectableScopes(current.context, current.scopes);
-      if (!permitted.some((candidate) => sameScope(candidate, scope))) return current;
-      sessionStorage.setItem(
-        `freshmarkets.admin.scope:${current.context.staffId}`,
-        JSON.stringify(scope),
-      );
-      sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(scope));
-      persistProductScopeTarget(scope);
-      return { ...current, selectedScope: scope, overview: null };
-    });
+    const current = stateRef.current;
+    if (
+      current.phase !== "ready" ||
+      (current.selectedScope && sameScope(current.selectedScope, scope))
+    )
+      return;
+    const permitted = adminSelectableScopes(current.context, current.scopes);
+    if (!permitted.some((candidate) => sameScope(candidate, scope))) return;
+    const guards = [...scopeGuards.current].map((guard) => guard());
+    if (hasAdminScopeCommandLock() || guards.some((guard) => guard.locked)) {
+      toast.error("Finish or recover the current request before changing scope.");
+      return;
+    }
+    if (
+      guards.some((guard) => guard.dirty) &&
+      !window.confirm("Discard unsaved changes and change the Admin scope?")
+    )
+      return;
+    for (const guard of guards) if (guard.dirty) guard.discard?.();
+    sessionStorage.setItem(
+      `freshmarkets.admin.scope:${current.context.staffId}`,
+      JSON.stringify(scope),
+    );
+    sessionStorage.setItem(PREFERRED_SCOPE_KEY, JSON.stringify(scope));
+    persistProductScopeTarget(scope);
+    setState((latest) =>
+      latest.phase === "ready" ? { ...latest, selectedScope: scope, overview: null } : latest,
+    );
   }, []);
 
   useEffect(() => {
@@ -200,7 +229,10 @@ export function AdminContextProvider({ children }: { children: ReactNode }) {
     };
   }, [attempt]);
 
-  const value = useMemo(() => ({ state, retry, selectScope }), [state, retry, selectScope]);
+  const value = useMemo(
+    () => ({ state, retry, selectScope, registerScopeGuard }),
+    [state, retry, selectScope, registerScopeGuard],
+  );
   return <AdminContextContext.Provider value={value}>{children}</AdminContextContext.Provider>;
 }
 
@@ -210,4 +242,12 @@ export function useAdminContext(): AdminContextValue {
     throw new Error("useAdminContext must be used inside AdminContextProvider");
   }
   return value;
+}
+
+/** A form may declare unsaved edits or a separate pending/unknown operation. */
+export function useAdminScopeGuard(dirty: boolean, locked: boolean, discard?: () => void): void {
+  const registerScopeGuard = useContext(AdminContextContext)?.registerScopeGuard;
+  const latest = useRef({ dirty, locked, discard });
+  latest.current = { dirty, locked, discard };
+  useEffect(() => registerScopeGuard?.(() => latest.current), [registerScopeGuard]);
 }

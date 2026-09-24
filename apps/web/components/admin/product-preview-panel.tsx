@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { AdminStatusPill } from "./admin-status-pill";
 import { useCategoryOptions } from "./category-authoring-state";
 import { useCatalogCommand } from "./catalog-command-state";
+import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 
 function date(value: string | null): string {
   if (!value) return "Not recorded";
@@ -82,6 +83,10 @@ export function GlobalProductPreviewPanel({
     categoryCommand.uncertain;
   const hasDraft = nameChanged;
   const commandLocked = frozen || hasDraft;
+  const categoriesChanged =
+    JSON.stringify(categoryIds) !==
+    JSON.stringify(product.categories.map((item) => item.categoryId));
+  useAdminScopeGuard(hasDraft || categoriesChanged, frozen);
   const selectedCategoryNames = categoryIds.map((categoryId) => {
     const category =
       categoryOptions.items.find((item) => item.categoryId === categoryId) ??

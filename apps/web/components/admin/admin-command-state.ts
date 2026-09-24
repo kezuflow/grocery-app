@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RpcResult } from "@freshmarkets/contracts";
+import { setAdminScopeCommandLock } from "./admin-scope-command-lock";
 
 export type AdminCommandIntent = {
   readonly idempotencyKey: string;
   readonly pending: boolean;
+  readonly uncertain: boolean;
   submit<T>(run: (idempotencyKey: string) => Promise<RpcResult<T>>): Promise<RpcResult<T>>;
   reset(): void;
 };
@@ -17,6 +19,7 @@ export function createAdminCommandIntent(
 ): AdminCommandIntent {
   let idempotencyKey = keyFactory();
   let active: Promise<RpcResult<unknown>> | null = null;
+  let uncertain = false;
 
   return {
     get idempotencyKey() {
@@ -24,6 +27,9 @@ export function createAdminCommandIntent(
     },
     get pending() {
       return active !== null;
+    },
+    get uncertain() {
+      return uncertain;
     },
     submit<T>(run: (key: string) => Promise<RpcResult<T>>): Promise<RpcResult<T>> {
       if (active) return active as Promise<RpcResult<T>>;
@@ -34,7 +40,12 @@ export function createAdminCommandIntent(
           // Any typed Core response is definitive. Transport/parse failures reject
           // and intentionally retain the key for an operator retry.
           idempotencyKey = keyFactory();
+          uncertain = false;
           return result;
+        })
+        .catch((error: unknown) => {
+          uncertain = true;
+          throw error;
         })
         .finally(() => {
           active = null;
@@ -47,6 +58,7 @@ export function createAdminCommandIntent(
     reset() {
       if (active) return;
       idempotencyKey = keyFactory();
+      uncertain = false;
       notify();
     },
   };
@@ -56,8 +68,16 @@ export function createAdminCommandIntent(
 export function useAdminCommandIntent(): AdminCommandIntent {
   const [, render] = useState(0);
   const intent = useRef<AdminCommandIntent | null>(null);
+  const lockOwner = useRef({});
   if (intent.current === null) {
-    intent.current = createAdminCommandIntent(() => render((version) => version + 1));
+    intent.current = createAdminCommandIntent(() => {
+      setAdminScopeCommandLock(
+        lockOwner.current,
+        Boolean(intent.current?.pending || intent.current?.uncertain),
+      );
+      render((version) => version + 1);
+    });
   }
+  useEffect(() => () => setAdminScopeCommandLock(lockOwner.current, false), []);
   return intent.current;
 }

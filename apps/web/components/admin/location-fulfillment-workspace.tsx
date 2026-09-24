@@ -14,6 +14,7 @@ import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useSetupNavigationLock } from "./location-setup-state";
+import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 const responseSchema = z.union([
   z.object({
     ok: z.literal(true),
@@ -59,6 +60,14 @@ export function LocationFulfillmentWorkspace({
     result.ok &&
     (ready !== result.value.dispatchReady ||
       minutes !== String(result.value.instantPromiseMinutes ?? ""));
+  useAdminScopeGuard(changed || reason.trim().length > 0, locked, () => {
+    if (result.ok) {
+      setReady(result.value.dispatchReady);
+      setMinutes(String(result.value.instantPromiseMinutes ?? ""));
+    }
+    setReason("");
+    setNotice("");
+  });
   function accept(next: RpcResult<AdminLocationFulfillmentView>) {
     setResult(next);
     if (next.ok) {

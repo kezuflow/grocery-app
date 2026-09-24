@@ -46,6 +46,7 @@ function Probe() {
 let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  fixture.state.selectedScope.locationId = "location";
   sessionStorage.clear();
   vi.mocked(toast.info).mockReset();
   const host = document.createElement("div");
@@ -118,4 +119,34 @@ it("publishes valid activity and deduplicates notices when session storage throw
   expect(document.querySelector("p")?.dataset.stale).toBe("false");
   expect(document.body.textContent).toContain("order:second,order:first");
   expect(toast.info).toHaveBeenCalledOnce();
+});
+
+it("hides prior-location activity immediately while the next location loads", async () => {
+  let finishSecond: ((value: ReturnType<typeof result>) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => result(["order:first"]) })
+      .mockResolvedValueOnce({
+        json: () =>
+          new Promise<ReturnType<typeof result>>((resolve) => {
+            finishSecond = resolve;
+          }),
+      }),
+  );
+  const render = () =>
+    root.render(
+      <AdminOperationalRefreshProvider>
+        <Probe />
+      </AdminOperationalRefreshProvider>,
+    );
+  await act(async () => render());
+  expect(document.body.textContent).toContain("order:first");
+  fixture.state.selectedScope.locationId = "other";
+  await act(async () => render());
+  expect(document.body.textContent).toContain("empty");
+  expect(document.body.textContent).not.toContain("order:first");
+  await act(async () => finishSecond?.(result(["order:other"])));
+  expect(document.body.textContent).toContain("order:other");
 });
