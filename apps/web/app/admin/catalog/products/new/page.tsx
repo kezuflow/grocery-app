@@ -330,17 +330,38 @@ export function NewProductWorkspace({
       </Alert>
     );
   }
+  if (
+    admin.state.phase === "ready" &&
+    !admin.state.context.capabilities.includes("catalog.manage")
+  ) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Catalog management is required to create a product.</AlertDescription>
+      </Alert>
+    );
+  }
+  const creationLocked = intent.pending || recovering;
   const actions = (
     <div className="flex items-center gap-2">
       {onCancel ? (
-        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={creationLocked}
+          onClick={onCancel}
+        >
           Cancel
         </Button>
       ) : (
-        <Button asChild size="sm" variant="outline">
-          <Link href="/admin/catalog/products" prefetch={false}>
-            Cancel
-          </Link>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={creationLocked}
+          onClick={() => router.push("/admin/catalog/products")}
+        >
+          Cancel
         </Button>
       )}
       <Button
@@ -374,6 +395,7 @@ export function NewProductWorkspace({
             variant="ghost"
             size="icon-sm"
             aria-label="Close product creation"
+            disabled={creationLocked}
             onClick={onCancel}
           >
             <X aria-hidden="true" />

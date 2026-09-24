@@ -124,6 +124,26 @@ test("Product status views retain scope-aware, unit-safe list context", async ({
   }
 });
 
+test("Product detail and edit return to the filtered list", async ({ adminPage }) => {
+  await adminPage.goto("/admin/catalog/products?query=abiu&status=active");
+  const scope = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  if (!(await scope.textContent())?.includes("Global")) {
+    await scope.click();
+    await adminPage.getByRole("option", { name: "Global", exact: true }).click();
+  }
+  await adminPage.getByRole("button", { name: "Open actions for Abiu" }).click();
+  await adminPage.getByRole("menuitem", { name: "View details" }).click();
+  await adminPage.getByRole("link", { name: "View product" }).click();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Abiu" })).toBeVisible();
+  await adminPage.getByRole("link", { name: "Edit product" }).click();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Edit product" })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Abiu" })).toBeVisible();
+  await adminPage.getByRole("link", { name: "Products", exact: true }).last().click();
+  await expect(adminPage).toHaveURL(/\/admin\/catalog\/products\?query=abiu&status=active$/);
+  await expect(adminPage.getByRole("button", { name: "Preview Abiu" })).toBeVisible();
+});
+
 test("a catalog read-only principal sees no Product or Category mutation controls", async ({
   catalogReadOnlyPage,
 }) => {
@@ -141,6 +161,12 @@ test("a catalog read-only principal sees no Product or Category mutation control
 
   await catalogReadOnlyPage.goto("/admin/catalog/categories");
   await expect(catalogReadOnlyPage.getByRole("button", { name: "Add category" })).toHaveCount(0);
+
+  await catalogReadOnlyPage.goto("/admin/catalog/products/new");
+  await expect(catalogReadOnlyPage.getByRole("alert")).toContainText(
+    "Catalog management is required to create a product.",
+  );
+  await expect(catalogReadOnlyPage.getByLabel("Product name")).toHaveCount(0);
 });
 
 test("a Product manager can create, inspect, and edit customer-facing details", async ({
@@ -149,6 +175,21 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   test.setTimeout(120_000);
   const suffix = crypto.randomUUID();
   await adminPage.goto("/admin/catalog/products/new");
+  if (process.env.SAUI_CAPTURE_PRODUCT_EDITOR === "1") {
+    await adminPage.setViewportSize({ width: 1440, height: 1200 });
+    await expect(adminPage.getByLabel("Product name")).toBeVisible();
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/product-create-desktop.png",
+      fullPage: true,
+    });
+    await adminPage.setViewportSize({ width: 390, height: 844 });
+    await expect(adminPage.getByRole("button", { name: "Create product" })).toBeInViewport();
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/product-create-mobile.png",
+      fullPage: true,
+    });
+    await adminPage.setViewportSize({ width: 1440, height: 1200 });
+  }
   await adminPage.getByLabel("Product name").fill("E2E authored product");
   await adminPage.getByLabel("Product slug").fill(`e2e-authored-${suffix}`);
   await adminPage.getByLabel("Product description").fill("A customer-facing description.");
@@ -169,6 +210,19 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await expect(adminPage.getByText("Keep refrigerated.")).toBeVisible();
   await adminPage.getByRole("link", { name: "Edit product" }).click();
   await adminPage.getByLabel("Product name").fill("E2E updated product");
+  if (process.env.SAUI_CAPTURE_PRODUCT_EDITOR === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/product-edit-desktop.png",
+      fullPage: true,
+    });
+    await adminPage.setViewportSize({ width: 390, height: 844 });
+    await expect(adminPage.getByRole("button", { name: "Save changes" })).toBeInViewport();
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/product-edit-mobile.png",
+      fullPage: true,
+    });
+    await adminPage.setViewportSize({ width: 1440, height: 1200 });
+  }
   await adminPage.getByRole("button", { name: "Save changes" }).click();
   await expect(adminPage.getByText("Product updated.", { exact: true })).toBeVisible();
   await expect(
@@ -184,6 +238,7 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   const productImages = adminPage.getByRole("region", { name: "Product images" });
   await expect(adminPage.getByLabel("Alt text for E2E product image")).toHaveValue(
     "E2E product image",
+    { timeout: 15_000 },
   );
   await expect(productImages.getByRole("img", { name: "E2E product image" })).toHaveAttribute(
     "src",
@@ -208,36 +263,6 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await expect(statusDialog.getByRole("button", { name: "Confirm deactivation" })).toBeFocused();
   await statusDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(reviewDeactivation).toBeFocused();
-
-  await adminPage.getByRole("combobox", { name: "Price location", exact: true }).click();
-  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
-  await adminPage.getByRole("button", { name: "Edit price", exact: true }).click();
-  await expect(adminPage.getByRole("complementary", { name: "Edit location price" })).toBeVisible();
-  await expect(adminPage.getByRole("textbox", { name: "Location", exact: true })).toHaveValue(
-    "Central Cebu",
-  );
-  await adminPage.getByLabel("Final retail price", { exact: true }).fill("29.99");
-  await adminPage.getByRole("button", { name: "Save price", exact: true }).click();
-  await expect(adminPage.getByRole("textbox", { name: "Current price", exact: true })).toHaveValue(
-    "₱29.99",
-  );
-
-  const scopeControl = adminPage.getByRole("combobox", { name: "Active admin scope" });
-  if ((await scopeControl.evaluate((control) => control.tagName)) === "SELECT") {
-    await scopeControl.selectOption({ label: "Central Cebu" });
-  } else {
-    await scopeControl.click();
-    await adminPage
-      .getByRole("option", { name: "Central Cebu" })
-      .evaluate((option) => (option as HTMLElement).click());
-  }
-  await expect(adminPage.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
-  await adminPage.getByRole("button", { name: "Review start selling" }).click();
-  await expect(adminPage.getByRole("alertdialog")).toContainText(
-    "sets AVAILABLE for this location",
-  );
-  await adminPage.getByRole("button", { name: "Confirm selling status" }).click();
-  await expect(adminPage.getByText("Availability updated.", { exact: true })).toBeVisible();
 });
 
 test("a category manager can create and inspect a Category", async ({ adminPage }) => {

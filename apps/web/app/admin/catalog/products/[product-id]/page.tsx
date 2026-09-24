@@ -4,6 +4,7 @@ import { catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import type { AdminProductDetail, AdminUnitSummary } from "@freshmarkets/contracts";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
@@ -262,6 +263,8 @@ export default function ProductDetailPage({
     state.readIdentity,
   );
   const from = searchParams.get("from");
+  const returnQuery = from ? new URLSearchParams(from).toString() : "";
+  const listHref = `/admin/catalog/products${returnQuery ? `?${returnQuery}` : ""}`;
   const countedSizes = product.inventoryPool.stockTracking === "COUNTED_SIZES";
   const variantBaseUnitCode = countedSizes ? "PIECE" : product.inventoryPool.baseUnitCode;
   const canManageProduct = product.allowedActions.includes("UPDATE");
@@ -287,6 +290,13 @@ export default function ProductDetailPage({
 
   const master = (
     <section className="w-full space-y-6 p-5 sm:p-7">
+      <Link
+        href={listHref}
+        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+      >
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Products
+      </Link>
       <PageHeader
         title={product.name}
         description={`${product.categoryName} · ${product.skus.length} sell variant${product.skus.length === 1 ? "" : "s"} · ${countedSizes ? "actual counted sizes" : `shared ${product.inventoryPool.baseUnitCode} inventory`}`}

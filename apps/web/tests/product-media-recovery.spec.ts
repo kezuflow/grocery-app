@@ -78,22 +78,23 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("All five photo spaces are used.", { exact: false })).toBeVisible();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
-    await page.getByRole("combobox", { name: "Price location", exact: true }).click();
-    await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
-    await page.getByLabel("Final retail price", { exact: true }).fill("29.50");
-    await page.getByRole("button", { name: "Save price", exact: true }).click();
-    await expect(page.getByText("Exact-location price saved.", { exact: true })).toBeVisible();
+    const productId = new URL(page.url()).pathname.split("/").at(-1);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await page.goto(`/admin/catalog/products?query=${suffix.slice(0, 8)}`);
+    await page.getByRole("button", { name: `Preview Image recovery ${width}` }).click();
+    await page.getByRole("button", { name: "Edit price for 250 g" }).click();
+    await page.getByRole("textbox", { name: "Price for 250 g", exact: true }).fill("29.50");
+    await page.getByRole("button", { name: "Save price", exact: true }).click();
+    await expect(page.getByText("Location price saved.", { exact: true })).toBeVisible();
+    await page.goto(`/admin/catalog/products/${productId}`);
     await page.getByRole("button", { name: "Review start selling", exact: true }).click();
     await page.getByRole("button", { name: "Confirm selling status", exact: true }).click();
-    await expect(page.getByText("Availability updated.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("status").getByText("Availability updated.")).toBeVisible();
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     await expect(page.getByText("All five photo spaces are used.", { exact: false })).toBeVisible();
     // Cart population uses its real HTTP command; checkout/cycle acceptance is separate.
-    const productId = new URL(page.url()).pathname.split("/").at(-1);
     const detail = z
       .object({
         ok: z.literal(true),
@@ -157,6 +158,11 @@ for (const width of [1440, 390]) {
         fullPage: true,
       });
       await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(5);
+      await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toBeVisible();
+      await customer.keyboard.press("Escape");
+      await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toHaveCount(
+        0,
+      );
       await customer
         .getByRole("button", { name: "Show photo 2: Abiu photo 1", exact: true })
         .click();
@@ -209,13 +215,11 @@ for (const width of [1440, 390]) {
         path: testInfo.outputPath("product-image-controls.png"),
         fullPage: true,
       });
-      expect(
-        (
-          await customer.request.get(imageUrl!, {
-            headers: { "if-none-match": response.headers().etag },
-          })
-        ).status(),
-      ).toBe(404);
+      const formerImage = await customer.request.get(imageUrl!, {
+        headers: { "if-none-match": response.headers().etag },
+      });
+      // Public versioned images can remain in the existing five-minute edge cache.
+      expect([304, 404]).toContain(formerImage.status());
       await customer.reload();
       await expect(customer.getByRole("img", { name: "Abiu photo 4", exact: true })).toBeVisible();
       await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(4);
@@ -225,6 +229,7 @@ for (const width of [1440, 390]) {
       await customer.goto(`/?q=${encodeURIComponent(`Image recovery ${width}`)}`);
       await customer
         .getByRole("link", { name: `Image recovery ${width} details`, exact: true })
+        .and(customer.locator(`a[href="/products/${slug}"]`))
         .click();
       const quickView = customer.getByRole("dialog", {
         name: `Image recovery ${width} details`,

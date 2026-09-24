@@ -62,6 +62,7 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Create product", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved setup" })).toBeVisible();
     await expect(page.getByLabel("Product name", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Retry saved setup" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: `Recovery product ${width}` }),
@@ -76,6 +77,7 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved product" })).toBeVisible();
     await expect(page.getByLabel("Product name", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     // A scope refresh must not replace or hide the uncertain edit request.
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();

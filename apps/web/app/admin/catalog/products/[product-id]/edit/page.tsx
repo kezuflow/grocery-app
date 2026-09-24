@@ -275,7 +275,12 @@ export default function EditProductPage() {
           </Button>
         ) : null}
         <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <Button type="button" variant="outline" onClick={() => router.push(detailHref)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={intent.pending || intent.uncertain || imageBusy}
+            onClick={() => router.push(detailHref)}
+          >
             Cancel
           </Button>
           {intent.uncertain ? (
