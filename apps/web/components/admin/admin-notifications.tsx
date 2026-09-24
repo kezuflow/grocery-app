@@ -90,10 +90,27 @@ export function AdminNotifications() {
               Select an Admin scope to see notifications.
             </p>
           );
-        const useOperationalFeed = state.selectedScope.kind === "LOCATION" && operational.enabled;
+        const selectedScope = state.selectedScope;
+        const useOperationalFeed = selectedScope.kind === "LOCATION" && operational.enabled;
         const locationActivity = useOperationalFeed ? operational.activity : null;
+        const selectedTimezone =
+          selectedScope.kind === "LOCATION"
+            ? state.scopes.find(
+                (scope) =>
+                  scope.kind === "location" && scope.locationId === selectedScope.locationId,
+              )?.timezone
+            : result && result.ok
+              ? result.value.timezone
+              : undefined;
         if (useOperationalFeed && !locationActivity)
-          return (
+          return operational.stale ? (
+            <div role="alert" className="p-4 text-sm">
+              <p>We couldn’t load your notifications.</p>
+              <button className="min-h-11 underline" onClick={operational.refresh}>
+                Try again
+              </button>
+            </div>
+          ) : (
             <p role="status" className="p-4 text-sm">
               Loading notifications…
             </p>
@@ -120,7 +137,7 @@ export function AdminNotifications() {
                 locationActivity?.notifications ??
                 (result && result.ok ? result.value.notifications : [])
               }
-              timezone={result && result.ok ? result.value.timezone : undefined}
+              timezone={selectedTimezone}
               onSelectScope={selectScope}
               onNavigate={close}
             />

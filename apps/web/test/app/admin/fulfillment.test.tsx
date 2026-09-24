@@ -13,6 +13,16 @@ vi.mock("next/link", () => ({
 vi.mock("@/components/admin/use-admin-location", () => ({
   useAdminLocation: () => ({ locationId: "cebu", label: "Cebu" }),
 }));
+vi.mock("@/app/admin/admin-context-provider", () => ({
+  useAdminContext: () => ({
+    state: {
+      phase: "ready",
+      selectedScope: { kind: "LOCATION", marketId: "market", locationId: "cebu" },
+      context: { capabilities: ["fulfillment.read", "fulfillment.manage"] },
+    },
+  }),
+  useAdminScopeGuard: () => undefined,
+}));
 vi.mock("@/components/admin/admin-shell", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
   ListPageSection: ({ children }: { children: ReactNode }) => <section>{children}</section>,
@@ -33,6 +43,7 @@ vi.mock("@/components/admin/operational-order-detail", () => ({
   OperationalOrderDetail: ({ item }: { item: { orderId: string } }) => (
     <aside data-selected-order={item.orderId}>{item.orderId}</aside>
   ),
+  preparationStatus: (status: string) => status,
 }));
 
 function item(orderId: string, progress: "NEW" | "PREPARING") {
@@ -120,7 +131,7 @@ describe("Fulfillment queue filters", () => {
     expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("cursor=all-next");
 
     const preparing = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "PREPARING",
+      (button) => button.textContent === "Preparing",
     );
     if (!preparing) throw new Error("Preparing filter missing");
     await act(async () => preparing.click());

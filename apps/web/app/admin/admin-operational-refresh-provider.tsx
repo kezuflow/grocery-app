@@ -17,6 +17,8 @@ type OperationalRefresh = {
   enabled: boolean;
   activity: OperationalActivityView | null;
   revision: number;
+  /** Shared owner's fetch attempt, including a failed activity read. */
+  refreshAttempt: number;
   refreshing: boolean;
   stale: boolean;
   refresh: () => void;
@@ -29,6 +31,7 @@ const INERT_OPERATIONAL_REFRESH: OperationalRefresh = {
   enabled: false,
   activity: null,
   revision: 0,
+  refreshAttempt: 0,
   refreshing: false,
   stale: false,
   refresh: () => undefined,
@@ -158,7 +161,15 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
 
   return (
     <OperationalRefreshContext.Provider
-      value={{ enabled: true, activity: visibleActivity, revision, refreshing, stale, refresh }}
+      value={{
+        enabled: true,
+        activity: visibleActivity,
+        revision,
+        refreshAttempt: attempt,
+        refreshing,
+        stale,
+        refresh,
+      }}
     >
       {children}
     </OperationalRefreshContext.Provider>

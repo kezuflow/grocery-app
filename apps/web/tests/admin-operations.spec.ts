@@ -160,7 +160,7 @@ test("exception workspace renders typed source fields and unavailable actions", 
     }),
   );
   await page.goto("/admin/issues/operational-exceptions");
-  await expect(page.getByText("RECEIVING").first()).toBeVisible();
+  await expect(page.getByText("Receiving").first()).toBeVisible();
   await expect(page.getByText("Source-owned; unavailable here")).toBeVisible();
   await expect(page.getByText("Age unavailable")).toBeVisible();
 });

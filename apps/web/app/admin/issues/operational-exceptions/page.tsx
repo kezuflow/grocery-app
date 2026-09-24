@@ -1,6 +1,12 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import type { OperationalExceptionPage, RpcResult } from "@freshmarkets/contracts";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  AdminNavigationItem,
+  OperationalExceptionItem,
+  OperationalExceptionPage,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
 import { Skeleton } from "../../../../components/ui/skeleton";
@@ -19,47 +25,103 @@ import {
   useAdminPagination,
 } from "../../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
+import { adminNavigationItemsForScope } from "../../../../components/admin/admin-navigation";
+import { useAdminContext } from "../../admin-context-provider";
+import { useAdminOperationalRefresh } from "../../admin-operational-refresh-provider";
+
+function sourceHref(
+  item: OperationalExceptionItem,
+  locationId: string,
+  navigation: ReadonlyArray<AdminNavigationItem>,
+): string | null {
+  if (item.locationId !== locationId) return null;
+  const code = item.source.toLowerCase();
+  const destination = navigation.find((entry) => entry.code === code && entry.kind === "workspace");
+  if (!destination) return null;
+  if (item.source === "FULFILLMENT" || item.source === "DELIVERY") {
+    return item.orderId ? `${destination.href}?orderId=${encodeURIComponent(item.orderId)}` : null;
+  }
+  return destination.href;
+}
+
+function displayCode(value: string): string {
+  if (!/^[A-Z_]+$/.test(value)) return value;
+  const words = value.replaceAll("_", " ").toLowerCase();
+  return words[0].toUpperCase() + words.slice(1);
+}
+
 export default function OperationalExceptionsPage() {
+  const admin = useAdminContext();
   const { locationId, label } = useAdminLocation();
+  const operationalRefresh = useAdminOperationalRefresh();
   const [page, setPage] = useState<OperationalExceptionPage | null>(null);
+  const [pageKey, setPageKey] = useState<string | null>(null);
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
-  const pagination = useAdminPagination();
+  const pagination = useAdminPagination(locationId);
+  const requestSequence = useRef(0);
+  const pageKeyRef = useRef<string | null>(null);
+  const observedRefreshAttempt = useRef(operationalRefresh.refreshAttempt);
+  const queryKey = `${locationId}:${pagination.cursor}`;
+  const navigation =
+    admin.state.phase === "ready"
+      ? adminNavigationItemsForScope(admin.state.context.navigation, admin.state.selectedScope)
+      : [];
   const load = useCallback(
-    async (cursor: string | null) => {
-      setState("loading");
+    async (cursor: string | null, background = false) => {
+      if (!locationId) return;
+      const sequence = ++requestSequence.current;
+      const key = `${locationId}:${cursor}`;
+      if (!background) {
+        setState("loading");
+        setNotice(null);
+      }
       try {
         const payload = (await (
           await fetch(
-            `/api/admin/exceptions?locationId=${locationId ?? ""}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            `/api/admin/exceptions?locationId=${encodeURIComponent(locationId)}&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
           )
         ).json()) as RpcResult<OperationalExceptionPage>;
+        if (sequence !== requestSequence.current) return;
         if (!payload.ok) {
           setNotice(
             payload.error.code === "FORBIDDEN"
               ? "Operational exception access is not permitted for this scope."
               : payload.error.message,
           );
-          setState("error");
+          if (!background || pageKeyRef.current !== key) setState("error");
           return;
         }
         setPage(payload.value);
+        pageKeyRef.current = key;
+        setPageKey(key);
+        setNotice(null);
         setState("ready");
       } catch {
+        if (sequence !== requestSequence.current) return;
         setNotice("Network error loading operational exceptions.");
-        setState("error");
+        if (!background || pageKeyRef.current !== key) setState("error");
       }
     },
     [locationId],
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
+    return () => {
+      requestSequence.current += 1;
+    };
   }, [load, locationId, pagination.cursor]);
+  useEffect(() => {
+    if (observedRefreshAttempt.current === operationalRefresh.refreshAttempt) return;
+    observedRefreshAttempt.current = operationalRefresh.refreshAttempt;
+    if (locationId && pageKeyRef.current === queryKey) void load(pagination.cursor, true);
+  }, [operationalRefresh.refreshAttempt, load, locationId, pagination.cursor, queryKey]);
+  const currentPage = pageKey === queryKey ? page : null;
   return (
     <div className="w-full space-y-6">
       <PageHeader
         title="Operational exceptions"
-        description={`Cross-domain exception visibility for ${label}, with source-owned resolution commands.`}
+        description={`Review exceptions for ${label} and open the relevant workspace to resolve them.`}
       />
       {!locationId ? (
         <AdminPageState
@@ -90,7 +152,7 @@ export default function OperationalExceptionsPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {locationId && state === "ready" && page ? (
+      {locationId && state === "ready" && currentPage ? (
         <ListPageSection
           title="Exception queue"
           description="Open the source workspace to resolve an exception with its current aggregate version."
@@ -100,7 +162,7 @@ export default function OperationalExceptionsPage() {
               {notice}
             </p>
           ) : null}
-          {page.items.length === 0 ? (
+          {currentPage.items.length === 0 ? (
             <p className="p-5 text-sm text-[var(--fm-text-muted)]">
               No operational exceptions for this location.
             </p>
@@ -118,29 +180,48 @@ export default function OperationalExceptionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {page.items.map((item) => (
+                  {currentPage.items.map((item) => (
                     <TableRow key={`${item.kind}-${item.referenceId}`}>
                       <TableCell>
                         <div className="space-y-1">
-                          <StatusBadge>{item.source}</StatusBadge>
-                          <div className="text-xs text-[var(--fm-text-muted)]">{item.severity}</div>
+                          <StatusBadge>{displayCode(item.source)}</StatusBadge>
+                          <div className="text-xs text-[var(--fm-text-muted)]">
+                            {displayCode(item.severity)}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.referenceId}</TableCell>
-                      <TableCell>{item.locationId ?? "—"}</TableCell>
+                      <TableCell className="break-all font-mono text-xs">
+                        <div>{item.referenceId}</div>
+                        {sourceHref(item, locationId, navigation) ? (
+                          <Link
+                            className="font-sans font-medium underline underline-offset-2"
+                            href={sourceHref(item, locationId, navigation)!}
+                            prefetch={false}
+                          >
+                            Open {item.source.toLowerCase()}
+                          </Link>
+                        ) : (
+                          <span className="font-sans text-[var(--fm-text-muted)]">
+                            Source link unavailable
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.locationId === locationId ? label : (item.locationId ?? "—")}
+                      </TableCell>
                       <TableCell className="text-xs">
                         {item.ageMinutes === null ? "Age unavailable" : `${item.ageMinutes}m old`} ·{" "}
                         {item.ownerId ?? "Unassigned"}
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{item.reason}</div>
+                        <div className="font-medium">{displayCode(item.reason)}</div>
                         <div>{item.detail}</div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {item.permittedActions.length > 0 ? (
                             item.permittedActions.map((action) => (
-                              <StatusBadge key={action}>{action}</StatusBadge>
+                              <StatusBadge key={action}>{displayCode(action)}</StatusBadge>
                             ))
                           ) : (
                             <span className="text-xs text-[var(--fm-text-muted)]">
@@ -157,7 +238,7 @@ export default function OperationalExceptionsPage() {
           )}
           <AdminCursorPagination
             pageNumber={pagination.pageNumber}
-            nextCursor={page.nextCursor}
+            nextCursor={currentPage.nextCursor}
             onPrevious={pagination.previous}
             onNext={pagination.next}
           />
