@@ -59,25 +59,27 @@ test("the authenticated mobile navigation is keyboard and screen-reader accessib
   await expect(trigger).toBeFocused();
 });
 
-test("the desktop shell defaults to the rail and persists an explicit expanded preference", async ({
+test("the desktop shell defaults to an expanded sidebar and persists an explicit collapse preference", async ({
   adminPage,
 }) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
-  const expand = adminPage.getByRole("button", { name: "Expand admin navigation" });
-  await expect(expand).toBeVisible();
-  await expand.click();
   await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Collapse admin navigation" }).click();
+  await adminPage.reload();
+  await expect(adminPage.getByRole("button", { name: "Expand admin navigation" })).toBeVisible();
+  await adminPage.getByRole("button", { name: "Expand admin navigation" }).click();
   await adminPage.reload();
   await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
 });
 
-test("Core-authorized workspaces expose hierarchical breadcrumbs", async ({ adminPage }) => {
+test("a legacy Payments deep link opens the authorized canonical workspace", async ({
+  adminPage,
+}) => {
   await adminPage.goto("/admin/payments/transactions");
-  const breadcrumb = adminPage.getByRole("navigation", { name: "Breadcrumb" });
-  await expect(breadcrumb).toBeVisible();
-  await expect(breadcrumb).toContainText("Payments");
-  await expect(breadcrumb).toContainText("Transactions");
+  await expect(adminPage).toHaveURL(/\/admin\/payments$/);
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
+  await expect(adminPage.getByRole("tablist", { name: "Payment views" })).toBeVisible();
 });
 
 test("admin accent tokens stay isolated from the storefront", async ({ adminPage, page }) => {
@@ -89,7 +91,7 @@ test("admin accent tokens stay isolated from the storefront", async ({ adminPage
   const storefrontAccent = await page
     .locator(".fm-storefront")
     .evaluate((element) => getComputedStyle(element).getPropertyValue("--fm-admin-accent").trim());
-  expect(adminAccent).toBe("#f97316");
+  expect(adminAccent).toBe("#005bd3");
   expect(storefrontAccent).toBe("");
 });
 

@@ -79,7 +79,7 @@ export function AdminShell({
   scopeLabel: string;
   environment: string;
 }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
   const productDetailWorkspace =
@@ -91,7 +91,7 @@ export function AdminShell({
 
   useEffect(() => {
     const savedPreference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
-    setCollapsed(savedPreference === null ? true : savedPreference === "true");
+    setCollapsed(savedPreference === "true");
   }, []);
 
   useEffect(() => {
@@ -111,29 +111,24 @@ export function AdminShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
+    <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
       <AdminCommandPalette items={items} open={commandOpen} onOpenChange={setCommandOpen} />
-      <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
-      <div
-        className={cn(
-          "min-w-0 flex-1 bg-[var(--fm-admin-content)] md:my-2 md:mr-2 md:overflow-clip md:rounded-xl md:shadow-[var(--fm-shadow-shell)]",
-          collapsed && "md:ml-2",
-        )}
-      >
-        <AdminHeader
-          items={items}
-          scopeLabel={scopeLabel}
-          environment={environment}
-          collapsed={collapsed}
-          onCollapsedChange={changeCollapsed}
-          onOpenSearch={() => setCommandOpen(true)}
-        />
+      <AdminHeader
+        items={items}
+        scopeLabel={scopeLabel}
+        environment={environment}
+        collapsed={collapsed}
+        onCollapsedChange={changeCollapsed}
+        onOpenSearch={() => setCommandOpen(true)}
+      />
+      <div className="flex min-h-[calc(100vh-3.5rem)]">
+        <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
         <main
           id="main-content"
           aria-labelledby="admin-page-title"
           tabIndex={-1}
           className={cn(
-            "min-w-0 flex-1 bg-[var(--fm-admin-content)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+            "min-w-0 flex-1 bg-[var(--fm-admin-canvas)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
             fullBleedWorkspace ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8",
           )}
         >
@@ -164,7 +159,7 @@ function AdminHeader({
   return (
     <header
       data-admin-environment={environment}
-      className="sticky top-0 z-30 border-b border-[var(--fm-border)] bg-[var(--fm-admin-content)]/90 backdrop-blur-md md:rounded-t-xl"
+      className="sticky top-0 z-30 bg-[var(--fm-admin-header)] text-white"
     >
       <div className="flex h-14 items-center justify-between gap-1 px-2 min-[430px]:gap-4 min-[430px]:px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
@@ -173,7 +168,7 @@ function AdminHeader({
             href="/admin"
             prefetch={false}
             aria-label="freshmarkets admin home"
-            className="flex h-9 select-none items-center gap-2 rounded-lg text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:hidden"
+            className="flex h-9 select-none items-center gap-2 rounded-lg text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-brand-mark-surface)] shadow-sm ring-1 ring-black/5">
               <FreshMarketsMark className="size-6" />
@@ -187,7 +182,7 @@ function AdminHeader({
             variant="ghost"
             size="icon-sm"
             aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
-            className="hidden size-9 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-sm hover:bg-[var(--fm-admin-surface-muted)] md:inline-flex"
+            className="hidden size-9 rounded-lg text-white hover:bg-white/10 md:inline-flex"
             onClick={() => onCollapsedChange(!collapsed)}
           >
             {collapsed ? (
@@ -196,21 +191,18 @@ function AdminHeader({
               <PanelLeftClose className="size-4" aria-hidden="true" />
             )}
           </Button>
-          <AdminScopeSelector fallbackLabel={scopeLabel} />
           <AdminSearchTrigger onOpen={onOpenSearch} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-[var(--fm-text-muted)]">
+        <div className="flex items-center gap-1.5 text-xs text-white/80">
           <Link
             href="/"
             prefetch={false}
-            className="hidden rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-[var(--fm-hover)] sm:inline-flex"
+            className="hidden rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-white/10 xl:inline-flex"
           >
             Marketplace
           </Link>
-          <span
-            className="mx-1 hidden h-5 w-px bg-[var(--fm-border)] sm:block"
-            aria-hidden="true"
-          />
+          <span className="mx-1 hidden h-5 w-px bg-white/25 xl:block" aria-hidden="true" />
+          <AdminScopeSelector fallbackLabel={scopeLabel} />
           <AdminNotifications />
           <AdminThemeToggle />
           <AdminIdentity />
@@ -231,11 +223,11 @@ function AdminSearchTrigger({ onOpen }: { onOpen: () => void }) {
       aria-label="Open admin search"
       aria-keyshortcuts="Control+K Meta+K"
       onClick={onOpen}
-      className="hidden h-8 items-center gap-2 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] pl-2.5 pr-1.5 text-xs text-[var(--fm-text-muted)] shadow-sm hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:inline-flex"
+      className="hidden h-8 w-36 items-center gap-2 rounded-md border border-white/20 bg-white/10 pl-2.5 pr-1.5 text-xs text-white/80 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:inline-flex lg:w-72"
     >
       <Search className="size-3.5" aria-hidden="true" />
       <span className="min-w-0">Search</span>
-      <kbd className="shrink-0 rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] px-1 py-0.5 text-[10px] font-medium">
+      <kbd className="ml-auto shrink-0 rounded border border-white/20 bg-white/10 px-1 py-0.5 text-[10px] font-medium">
         {shortcutLabel}
       </kbd>
     </button>
@@ -250,7 +242,7 @@ function AdminThemeToggle() {
       type="button"
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       aria-pressed={dark}
-      className="relative inline-flex size-9 items-center justify-center rounded-lg hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+      className="relative inline-flex size-9 items-center justify-center rounded-lg hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
       onClick={toggleTheme}
     >
       <Sun
@@ -305,7 +297,7 @@ function AdminIdentity() {
         <button
           type="button"
           aria-label={`Open account menu for ${label}`}
-          className="ml-0.5 flex items-center gap-1 rounded-lg p-1 hover:bg-[var(--fm-admin-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+          className="ml-0.5 flex items-center gap-1 rounded-lg p-1 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           <span className="flex size-8 items-center justify-center rounded-full bg-[var(--fm-admin-accent-soft)] text-xs font-semibold text-[var(--fm-admin-accent-strong)] ring-1 ring-inset ring-[var(--fm-admin-accent)]/20">
             {initial}
@@ -399,17 +391,14 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
     >
       <SelectTrigger
         aria-label="Active admin scope"
-        className="h-7 max-w-52 gap-2 rounded-lg border-transparent px-2.5 text-[0.8rem] font-medium shadow-none hover:bg-[var(--fm-hover)] focus-visible:border-[var(--fm-border)] focus-visible:ring-[var(--fm-focus)]/20 [&>svg:last-child]:hidden"
+        className="h-8 max-w-28 gap-2 rounded-md border-white/20 bg-white/10 px-2.5 text-[0.8rem] font-medium text-white shadow-none hover:bg-white/15 focus-visible:ring-white sm:max-w-36 lg:max-w-52 [&>svg:last-child]:hidden"
       >
         <span
           className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
           aria-hidden="true"
         />
         <span className="truncate">{selectedLabel ?? "Select scope…"}</span>
-        <ChevronsUpDown
-          className="size-3.5 shrink-0 text-[var(--fm-text-muted)]"
-          aria-hidden="true"
-        />
+        <ChevronsUpDown className="size-3.5 shrink-0 text-white/70" aria-hidden="true" />
       </SelectTrigger>
       <SelectContent
         position="popper"
@@ -441,7 +430,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
       <SheetTrigger
         ref={triggerRef}
         aria-label="Open admin navigation"
-        className="rounded-[var(--fm-radius-control)] p-2 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] md:hidden"
+        className="rounded-[var(--fm-radius-control)] p-2 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:hidden"
       >
         <Menu className="size-5" />
       </SheetTrigger>
@@ -588,7 +577,7 @@ function AdminSidebar({
     <TooltipProvider disableHoverableContent>
       <aside
         className={cn(
-          "relative hidden shrink-0 bg-transparent transition-[width] duration-200 ease-linear md:block",
+          "relative hidden shrink-0 border-r border-[var(--fm-border)] bg-[var(--fm-admin-sidebar)] transition-[width] duration-200 ease-linear md:block",
           collapsed
             ? "w-[var(--fm-admin-sidebar-collapsed)]"
             : "w-[var(--fm-admin-sidebar-expanded)]",
@@ -596,36 +585,14 @@ function AdminSidebar({
       >
         <div
           className={cn(
-            "fixed inset-y-0 z-20 hidden h-svh transition-[width,padding] duration-200 ease-linear md:flex",
-            collapsed ? "w-[66px] py-2 pl-3 pr-1" : "w-[var(--fm-admin-sidebar-expanded)] p-2",
+            "sticky top-14 z-20 hidden h-[calc(100vh-3.5rem)] transition-[width,padding] duration-200 ease-linear md:flex",
+            collapsed
+              ? "w-[var(--fm-admin-sidebar-collapsed)] p-2"
+              : "w-[var(--fm-admin-sidebar-expanded)] p-2",
           )}
         >
-          <div className="flex size-full flex-col bg-[var(--fm-admin-canvas)] text-[var(--fm-admin-sidebar-text)]">
+          <div className="flex size-full flex-col bg-[var(--fm-admin-sidebar)] text-[var(--fm-admin-sidebar-text)]">
             <div className="flex shrink-0 flex-col gap-2 p-2">
-              <Link
-                href="/admin"
-                prefetch={false}
-                aria-label="freshmarkets admin home"
-                className={cn(
-                  "flex shrink-0 items-center overflow-hidden rounded-lg font-semibold tracking-[-0.02em] text-[var(--fm-text)] transition-[width,height,padding] duration-150 ease-in-out hover:bg-[var(--fm-admin-sidebar-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
-                  collapsed ? "size-8 p-0" : "h-10 w-full px-2",
-                )}
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-brand-mark-surface)] shadow-sm ring-1 ring-black/5">
-                  <FreshMarketsMark className="size-6" />
-                </span>
-                <span
-                  aria-hidden={collapsed}
-                  className={cn(
-                    "block overflow-hidden whitespace-nowrap text-sm transition-[max-width,margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
-                    collapsed
-                      ? "invisible ml-0 max-w-0 opacity-0"
-                      : "visible ml-2 max-w-40 opacity-100",
-                  )}
-                >
-                  freshmarkets
-                </span>
-              </Link>
               {collapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>

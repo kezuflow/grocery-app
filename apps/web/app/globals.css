@@ -178,16 +178,18 @@ body {
 
 .fm-admin {
   color-scheme: light;
-  --fm-admin-canvas: lab(96.9618% 0.344366 0.0810146);
+  --fm-admin-header: #1b1b1b;
+  --fm-admin-sidebar: #f7f7f8;
+  --fm-admin-canvas: #f6f6f7;
   --fm-admin-content: lab(100% 0 0);
   --fm-admin-surface: lab(100% 0 0);
-  --fm-admin-surface-muted: lab(96.52% -0.0000298023 0.0000119209);
-  --fm-admin-sidebar-text: lab(42.3743% 0.000625849 -0.0228286);
-  --fm-admin-sidebar-active: lab(89.5304% 0.00107288 -0.0380397);
+  --fm-admin-surface-muted: #f6f6f7;
+  --fm-admin-sidebar-text: #303030;
+  --fm-admin-sidebar-active: #e9e9ea;
   --fm-admin-sidebar-active-text: lab(0% 0 0);
-  --fm-admin-accent: #f97316;
-  --fm-admin-accent-strong: #c2410c;
-  --fm-admin-accent-soft: #fff7ed;
+  --fm-admin-accent: #005bd3;
+  --fm-admin-accent-strong: #005bd3;
+  --fm-admin-accent-soft: #e8f1ff;
   --fm-admin-chart-1: #ffedd5;
   --fm-admin-chart-2: #fdba74;
   --fm-admin-chart-3: #fb923c;
@@ -198,20 +200,20 @@ body {
   --fm-cycle-preparation: #d9a300;
   --fm-cycle-pickup: #f97316;
   --fm-cycle-delivery: #16a36a;
-  --fm-admin-sidebar-expanded: 256px;
+  --fm-admin-sidebar-expanded: 232px;
   --fm-admin-sidebar-collapsed: 64px;
   --fm-background: var(--fm-admin-surface);
   --fm-surface-soft: var(--fm-admin-canvas);
   --fm-surface-muted: var(--fm-admin-surface-muted);
   --fm-primary-lime: var(--fm-admin-accent);
-  --fm-primary-dark: #7c2d12;
-  --fm-primary-hover: #6a250e;
+  --fm-primary-dark: #303030;
+  --fm-primary-hover: #1b1b1b;
   --fm-primary-foreground: #ffffff;
   --fm-text: lab(2.75381% 0 0);
   --fm-text-muted: lab(48.496% 0 0);
-  --fm-focus: lab(66.128% -0.0000298023 0.0000119209);
-  --fm-hover: lab(96.52% -0.0000298023 0.0000119209);
-  --fm-border: lab(90.952% 0 -0.0000119209);
+  --fm-focus: #005bd3;
+  --fm-hover: #f1f1f2;
+  --fm-border: #e3e3e3;
   --fm-shadow-card: 0 8px 24px rgb(15 23 42 / 6%);
   --fm-shadow-header: 0 1px 0 rgb(15 23 42 / 8%);
   --fm-shadow-shell: 0 1px 3px rgb(15 23 42 / 10%), 0 1px 2px -1px rgb(15 23 42 / 10%);
@@ -220,9 +222,22 @@ body {
   font-family: var(--fm-font-body);
 }
 
+.fm-admin header[data-admin-environment] [aria-label^="Open notifications"] {
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  border-radius: 8px;
+}
+
+.fm-admin header[data-admin-environment] [aria-label^="Open notifications"]:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
 html.fm-admin-dark,
 html.fm-admin-dark .fm-admin {
   color-scheme: dark;
+  --fm-admin-header: #151515;
+  --fm-admin-sidebar: #1b1b1b;
   --fm-admin-canvas: lab(7.78201% -0.0000149012 0);
   --fm-admin-content: lab(2.75381% 0 0);
   --fm-admin-surface: lab(7.78201% -0.0000149012 0);
@@ -230,9 +245,9 @@ html.fm-admin-dark .fm-admin {
   --fm-admin-sidebar-text: lab(71.8359% 0.000983477 -0.0342488);
   --fm-admin-sidebar-active: lab(18.0029% 0.000312924 -0.0114143);
   --fm-admin-sidebar-active-text: lab(99.9994% 0.00113249 -0.0418425);
-  --fm-admin-accent: #f97316;
-  --fm-admin-accent-strong: #fb923c;
-  --fm-admin-accent-soft: #2b1b12;
+  --fm-admin-accent: #78a9ff;
+  --fm-admin-accent-strong: #a8c6ff;
+  --fm-admin-accent-soft: #172941;
   --fm-cycle-ordering: #a78bfa;
   --fm-cycle-procurement: #60a5fa;
   --fm-cycle-preparation: #facc15;
@@ -242,12 +257,12 @@ html.fm-admin-dark .fm-admin {
   --fm-surface-soft: var(--fm-admin-canvas);
   --fm-surface-muted: var(--fm-admin-surface-muted);
   --fm-primary-lime: var(--fm-admin-accent);
-  --fm-primary-dark: #fdba74;
-  --fm-primary-hover: #fed7aa;
-  --fm-primary-foreground: #431407;
+  --fm-primary-dark: #e3e3e3;
+  --fm-primary-hover: #ffffff;
+  --fm-primary-foreground: #1b1b1b;
   --fm-text: lab(98.26% 0 0);
   --fm-text-muted: lab(66.128% -0.0000298023 0.0000119209);
-  --fm-focus: lab(48.496% 0 0);
+  --fm-focus: #78a9ff;
   --fm-hover: lab(15.204% 0 -0.00000596046);
   --fm-border: lab(100% 0 0 / 10%);
   --fm-danger-soft: #35191b;
