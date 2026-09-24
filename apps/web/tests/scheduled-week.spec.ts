@@ -125,15 +125,22 @@ for (const width of [1440, 390])
         "2.5 kg",
       );
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
-    await expect(page.getByRole("article")).toHaveCount(2);
-    await expect(page.getByText("All destinations: 5 sold units · 2,500 g")).toHaveCount(2);
+    const demandTable = page.getByRole("table", { name: "Paid quantities to buy" });
+    await expect(demandTable.locator("tbody tr")).toHaveCount(2);
+    await expect(demandTable.getByText("5 sold units")).toHaveCount(2);
+    await expect(demandTable.getByText("2,500 g")).toHaveCount(2);
+    await expect(demandTable).toContainText("not totals of this page");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
-    const demand = page.getByRole("article").filter({ hasText: "Red onion" });
-    await expect(demand).toContainText("2 sold units · 1,000 g");
+    const demand = page
+      .getByRole("table", { name: "Paid quantities to buy" })
+      .locator("tbody tr")
+      .filter({ hasText: "Red onion" });
+    await expect(demand.locator("td").nth(2)).toContainText("2");
+    await expect(demand.locator("td").nth(3)).toContainText("1,000 g");
     const pending = page.getByText("Payments for this week are still being confirmed.", {
       exact: false,
     });
@@ -156,7 +163,10 @@ for (const width of [1440, 390])
     await page.getByRole("option", { name: "Global", exact: true }).click();
     await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
-    const secondDestination = page.getByRole("article").filter({ hasText: "Second destination" });
+    const secondDestination = page
+      .getByRole("table", { name: "Paid quantities to buy" })
+      .locator("tbody tr")
+      .filter({ hasText: "Second destination" });
     await secondDestination.getByRole("button", { name: "Confirm purchase", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Second destination");
     await page
@@ -165,9 +175,12 @@ for (const width of [1440, 390])
       .click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(secondDestination).toContainText("ordered");
-    await expect(page.getByRole("article").filter({ hasText: "Central Cebu" })).toContainText(
-      "not purchased",
-    );
+    await expect(
+      page
+        .getByRole("table", { name: "Paid quantities to buy" })
+        .locator("tbody tr")
+        .filter({ hasText: "Central Cebu" }),
+    ).toContainText("not purchased");
     await page.screenshot({
       path: testInfo.outputPath(`scheduled-week-global-${width}.png`),
       fullPage: true,

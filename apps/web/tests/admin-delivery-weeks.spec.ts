@@ -384,3 +384,91 @@ test("uncertain purchase blocks Back and confirmed purchase suppresses stale act
   await expect(page.getByText("Purchase recorded. Refreshing current quantities.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirm purchase", exact: true })).toHaveCount(0);
 });
+
+test("Global Demand keeps Core full-cycle totals on each destination page", async ({
+  page,
+}, testInfo) => {
+  await bootstrap(page);
+  const item = {
+    locationId,
+    locationName: "Central Cebu",
+    totalQuantityBase: 2500,
+    totalQuantitySellable: 5,
+    skuId: "sku-onion",
+    inventoryPoolId: "pool-onion",
+    productName: "Red onion",
+    variantName: "500 g",
+    quantitySellable: 2,
+    quantityBase: 1000,
+    baseUnit: "GRAM",
+    shippingGrams: 1000,
+    requirementId: "requirement-onion",
+    requirementVersion: 1,
+    status: "NOT_PURCHASED",
+    acceptedBase: 0,
+    rejectedBase: 0,
+    shortageBase: 0,
+    replacementBase: 0,
+    receivingStatus: null,
+    canConfirmPurchase: true,
+  };
+  await page.route("**/api/admin/procurement/week?**", (route) => {
+    const url = new URL(route.request().url());
+    const section = url.searchParams.get("section") ?? "ORDER_SUMMARY";
+    const cursor = url.searchParams.get("cursor");
+    const value = week(url.searchParams.get("cycleId") ?? "", section);
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        success(
+          section === "DEMAND"
+            ? {
+                ...value,
+                page: {
+                  kind: "DEMAND",
+                  items: [
+                    cursor
+                      ? {
+                          ...item,
+                          locationId: "location-cebu-harbor",
+                          locationName: "Harbor Cebu",
+                          quantitySellable: 3,
+                          quantityBase: 1500,
+                        }
+                      : item,
+                  ],
+                  nextCursor: cursor ? null : "next-destination",
+                },
+              }
+            : value,
+        ),
+      ),
+    });
+  });
+  await page.goto("/admin/procurement");
+  await page.getByRole("combobox", { name: "Delivery week", exact: true }).selectOption(cycleA);
+  await page.getByRole("button", { name: "Quantities to buy" }).click();
+  const table = page.getByRole("table", { name: "Paid quantities to buy" });
+  await expect(table.getByRole("columnheader", { name: "All destinations" })).toBeVisible();
+  await expect(table).toContainText("not totals of this page");
+  await expect(table.locator("tbody tr")).toHaveCount(1);
+  await expect(table.locator("tbody tr")).toContainText("Central Cebu");
+  await expect(table.locator("tbody tr")).toContainText("5 sold units");
+  await expect(table.locator("tbody tr")).toContainText("2,500 g");
+  await page.screenshot({ path: testInfo.outputPath("demand-global-1440.png"), fullPage: true });
+  await page
+    .getByRole("navigation", { name: "Results pagination" })
+    .getByRole("button", { name: "Next" })
+    .click();
+  await expect(table.locator("tbody tr")).toContainText("Harbor Cebu");
+  await expect(table.locator("tbody tr")).toContainText("5 sold units");
+  await expect(table.locator("tbody tr")).toContainText("2,500 g");
+  await expect(page.getByRole("navigation", { name: "Results pagination" })).toContainText(
+    "Page 2",
+  );
+  await page
+    .getByRole("navigation", { name: "Results pagination" })
+    .getByRole("button", { name: "Previous" })
+    .click();
+  await expect(table.locator("tbody tr")).toContainText("Central Cebu");
+});

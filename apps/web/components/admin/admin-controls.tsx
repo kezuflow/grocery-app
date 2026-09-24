@@ -70,7 +70,7 @@ export function AdminCursorPagination({
   return (
     <nav
       aria-label="Results pagination"
-      className="flex items-center justify-end gap-2 border-t p-3"
+      className="flex items-center justify-end gap-2 border-t border-[var(--fm-border)] p-3"
     >
       <Button
         type="button"

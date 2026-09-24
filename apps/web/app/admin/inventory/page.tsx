@@ -22,6 +22,7 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import {
@@ -31,9 +32,9 @@ import {
 } from "../../../components/admin/admin-controls";
 
 type LoadState =
-  | { phase: "loading" }
-  | { phase: "error"; message: string; requestId: string | null }
-  | { phase: "ready"; page: AdminInventoryPage };
+  | { phase: "loading"; key: string }
+  | { phase: "error"; key: string; message: string; requestId: string | null }
+  | { phase: "ready"; key: string; page: AdminInventoryPage };
 
 type LedgerLoadState =
   | { phase: "idle" }
@@ -77,12 +78,21 @@ function formatActivityDate(value: string): string {
   }).format(new Date(value));
 }
 
+function stockQuantity(value: number | null | undefined, unit: string): string {
+  return value == null ? "Unavailable" : `${value.toLocaleString("en-PH")} ${unit}`;
+}
+
+function signedStockQuantity(value: number, unit: string): string {
+  return `${value > 0 ? "+" : ""}${value.toLocaleString("en-PH")} ${unit}`;
+}
+
 export default function InventoryPage() {
-  const [state, setState] = useState<LoadState>({ phase: "loading" });
+  const [state, setState] = useState<LoadState>({ phase: "loading", key: "" });
   const loadRequest = useRef(0);
   const ledgerRequest = useRef(0);
   const { locationId, label: locationLabel } = useAdminLocation();
   const [ledgerFor, setLedgerFor] = useState<{
+    locationId: string;
     poolId: string;
     name: string;
     baseUnitSymbol: string;
@@ -91,6 +101,7 @@ export default function InventoryPage() {
   const [ledgerReloadVersion, setLedgerReloadVersion] = useState(0);
   const [adjustQuantity, setAdjustQuantity] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<{
+    locationId: string;
     poolId: string;
     productName: string;
     baseUnitSymbol: string;
@@ -99,16 +110,30 @@ export default function InventoryPage() {
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adjustmentIntent = useAdminCommandIntent();
+  useAdminRouteGuard(false, adjustmentIntent.pending || adjustmentIntent.uncertain);
   const [unresolved, setUnresolved] = useState<StockCommand | null>(null);
   const pagination = useAdminPagination(locationId);
+  const pageKey = JSON.stringify([locationId, pagination.cursor]);
+  const visibleState: LoadState =
+    state.key === pageKey ? state : { phase: "loading", key: pageKey };
+  const activeLedgerFor = ledgerFor?.locationId === locationId ? ledgerFor : null;
   const ledgerPagination = useAdminPagination(
-    `${locationId ?? "no-location"}:${ledgerFor?.poolId ?? "no-pool"}`,
+    `${locationId ?? "no-location"}:${activeLedgerFor?.poolId ?? "no-pool"}`,
   );
+
+  useEffect(() => {
+    ledgerRequest.current += 1;
+    setLedgerFor(null);
+    setConfirming(null);
+    setAdjustQuantity({});
+    setNotice(null);
+  }, [locationId]);
 
   const load = useCallback((location: string, cursor: string | null) => {
     const requestNumber = loadRequest.current + 1;
+    const key = JSON.stringify([location, cursor]);
     loadRequest.current = requestNumber;
-    setState({ phase: "loading" });
+    setState({ phase: "loading", key });
     void (async () => {
       try {
         const response = await fetch(
@@ -119,6 +144,7 @@ export default function InventoryPage() {
         if (!payload.ok) {
           setState({
             phase: "error",
+            key,
             message:
               payload.error.code === "FORBIDDEN"
                 ? "Inventory reads require the inventory.read capability and scope over this location."
@@ -127,10 +153,24 @@ export default function InventoryPage() {
           });
           return;
         }
-        setState({ phase: "ready", page: payload.value });
+        if (payload.value.items.some((item) => item.locationId !== location)) {
+          setState({
+            phase: "error",
+            key,
+            message: "Inventory returned a different location. Reload this scope.",
+            requestId: null,
+          });
+          return;
+        }
+        setState({ phase: "ready", key, page: payload.value });
       } catch {
         if (loadRequest.current !== requestNumber) return;
-        setState({ phase: "error", message: "Network error loading inventory.", requestId: null });
+        setState({
+          phase: "error",
+          key,
+          message: "Network error loading inventory.",
+          requestId: null,
+        });
       }
     })();
   }, []);
@@ -140,24 +180,27 @@ export default function InventoryPage() {
   }, [load, locationId, pagination.cursor]);
 
   function loadLedger(poolId: string, name: string, baseUnitSymbol: string) {
-    setLedgerFor({ poolId, name, baseUnitSymbol });
+    if (!locationId) return;
+    setLedgerFor({ locationId, poolId, name, baseUnitSymbol });
     setLedgerState({ phase: "idle" });
     ledgerPagination.reset();
   }
 
   useEffect(() => {
-    if (!ledgerFor || !locationId) return;
-    const key = `${locationId}:${ledgerFor.poolId}:${ledgerPagination.cursor ?? ""}`;
+    if (!activeLedgerFor || !locationId) return;
+    const controller = new AbortController();
+    const key = `${locationId}:${activeLedgerFor.poolId}:${ledgerPagination.cursor ?? ""}`;
     const requestNumber = ledgerRequest.current + 1;
     ledgerRequest.current = requestNumber;
     setLedgerState({ phase: "loading", key });
     void (async () => {
       try {
         const response = await fetch(
-          `/api/admin/inventory/${encodeURIComponent(ledgerFor.poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20${ledgerPagination.cursor ? `&cursor=${encodeURIComponent(ledgerPagination.cursor)}` : ""}`,
+          `/api/admin/inventory/${encodeURIComponent(activeLedgerFor.poolId)}/ledger?locationId=${encodeURIComponent(locationId)}&limit=20${ledgerPagination.cursor ? `&cursor=${encodeURIComponent(ledgerPagination.cursor)}` : ""}`,
+          { signal: controller.signal },
         );
         const payload = (await response.json()) as RpcResult<AdminInventoryLedgerPage>;
-        if (ledgerRequest.current !== requestNumber) return;
+        if (controller.signal.aborted || ledgerRequest.current !== requestNumber) return;
         if (!payload.ok) {
           setLedgerState({
             phase: "error",
@@ -169,7 +212,7 @@ export default function InventoryPage() {
         }
         setLedgerState({ phase: "ready", key, page: payload.value });
       } catch {
-        if (ledgerRequest.current === requestNumber) {
+        if (!controller.signal.aborted && ledgerRequest.current === requestNumber) {
           setLedgerState({
             phase: "error",
             key,
@@ -179,11 +222,12 @@ export default function InventoryPage() {
         }
       }
     })();
-  }, [ledgerFor, ledgerPagination.cursor, ledgerReloadVersion, locationId]);
+    return () => controller.abort();
+  }, [activeLedgerFor, ledgerPagination.cursor, ledgerReloadVersion, locationId]);
 
   const ledgerKey =
-    ledgerFor && locationId
-      ? `${locationId}:${ledgerFor.poolId}:${ledgerPagination.cursor ?? ""}`
+    activeLedgerFor && locationId
+      ? `${locationId}:${activeLedgerFor.poolId}:${ledgerPagination.cursor ?? ""}`
       : null;
   const visibleLedgerState: LedgerLoadState =
     ledgerKey && "key" in ledgerState && ledgerState.key === ledgerKey
@@ -219,6 +263,7 @@ export default function InventoryPage() {
         if (payload.ok) {
           notifyCommandSuccess("Stock adjusted");
           setLedgerFor({
+            locationId: command.locationId,
             poolId: command.poolId,
             name: command.productName,
             baseUnitSymbol: command.baseUnitSymbol,
@@ -240,7 +285,14 @@ export default function InventoryPage() {
     movement: StockMovement,
     reason: string,
   ) {
-    if (!locationId || !confirming || unresolved || adjustmentIntent.pending) return;
+    if (
+      !locationId ||
+      !confirming ||
+      confirming.locationId !== locationId ||
+      unresolved ||
+      adjustmentIntent.pending
+    )
+      return;
     const quantity = Number(adjustQuantity[poolId]);
     if (!Number.isSafeInteger(quantity) || quantity <= 0) {
       setNotice("Enter a whole-number quantity greater than zero.");
@@ -267,7 +319,7 @@ export default function InventoryPage() {
     <div className="w-full space-y-6">
       <PageHeader
         title="Inventory"
-        description="Add or remove stock for the selected location. Every change records its date, reason, and staff actor."
+        description="Review physical, reserved, held, and available stock at the selected location. Adjustments record a date, reason, and staff actor."
       />
 
       {unresolved ? (
@@ -290,29 +342,31 @@ export default function InventoryPage() {
         </Alert>
       ) : null}
 
-      {locationId && state.phase === "loading" ? (
+      {locationId && visibleState.phase === "loading" ? (
         <div className="space-y-3" role="status" aria-label="Loading inventory">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
       ) : null}
 
-      {locationId && state.phase === "error" ? (
+      {locationId && visibleState.phase === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Inventory could not be loaded</AlertTitle>
           <AlertDescription>
-            {state.message}
-            {state.requestId ? (
+            {visibleState.message}
+            {visibleState.requestId ? (
               <>
                 <br />
-                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
+                <span className="font-mono text-xs">
+                  Request reference: {visibleState.requestId}
+                </span>
               </>
             ) : null}
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {locationId && state.phase === "ready" ? (
+      {locationId && visibleState.phase === "ready" ? (
         <>
           {notice ? (
             <p
@@ -325,30 +379,32 @@ export default function InventoryPage() {
 
           <ListPageSection
             title="Stock levels"
-            description={`${locationLabel}. Enter a positive quantity, then choose Add stock or Remove stock.`}
+            description={`${locationLabel}. Available is physical stock after reservations and checkout holds. Enter a positive quantity to adjust stock.`}
           >
-            {state.page.items.length === 0 ? (
+            {visibleState.page.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
                 No inventory records for this location.
               </p>
             ) : (
               <>
-                <Table className="block sm:table" aria-label="Stock levels">
-                  <TableHeader className="hidden sm:table-header-group">
+                <Table className="block lg:table" aria-label="Stock levels">
+                  <TableHeader className="hidden lg:table-header-group">
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      <TableHead>On hand</TableHead>
+                      <TableHead>Physical</TableHead>
+                      <TableHead>Reserved</TableHead>
+                      <TableHead>Checkout holds</TableHead>
                       <TableHead>Available</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Update stock</TableHead>
                       <TableHead>Activity</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody className="block sm:table-row-group">
-                    {state.page.items.map((item) => (
+                  <TableBody className="block lg:table-row-group">
+                    {visibleState.page.items.map((item) => (
                       <TableRow
                         key={item.inventoryPoolId}
-                        className="grid grid-cols-2 gap-3 p-4 sm:table-row sm:p-0 [&>td]:min-w-0 [&>td]:p-0 sm:[&>td]:px-4 sm:[&>td]:py-3"
+                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-3 lg:[&>td]:py-3"
                       >
                         <TableCell className="col-span-2 whitespace-normal font-medium">
                           <span>{item.productName}</span>
@@ -358,22 +414,34 @@ export default function InventoryPage() {
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          <span className="block text-[var(--fm-text-muted)] sm:hidden">
-                            On hand
+                        <TableCell className="text-sm tabular-nums">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                            Physical
                           </span>
-                          {item.onHandBase} {item.baseUnitSymbol}
-                          <span className="block text-[var(--fm-text-muted)]">
-                            {item.reservedBase} reserved · {item.heldBase ?? "Unknown"} held
-                          </span>
+                          {stockQuantity(item.onHandBase, item.baseUnitSymbol)}
                         </TableCell>
-                        <TableCell className="text-xs font-medium">
-                          <span className="block text-[var(--fm-text-muted)] sm:hidden">
+                        <TableCell className="text-sm tabular-nums">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                            Reserved
+                          </span>
+                          {stockQuantity(item.reservedBase, item.baseUnitSymbol)}
+                        </TableCell>
+                        <TableCell className="text-sm tabular-nums">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                            Checkout holds
+                          </span>
+                          {stockQuantity(item.heldBase, item.baseUnitSymbol)}
+                        </TableCell>
+                        <TableCell className="text-sm font-semibold tabular-nums">
+                          <span className="block font-normal text-[var(--fm-text-muted)] lg:hidden">
                             Available
                           </span>
-                          {item.availableBase ?? "Unavailable"} {item.baseUnitSymbol}
+                          {stockQuantity(item.availableBase, item.baseUnitSymbol)}
                         </TableCell>
-                        <TableCell className="col-span-2">
+                        <TableCell className="col-span-2 lg:col-span-1">
+                          <span className="mb-1 block text-sm text-[var(--fm-text-muted)] lg:hidden">
+                            Adjustment quantity
+                          </span>
                           <Input
                             aria-label={`Stock quantity for ${item.productName}`}
                             type="number"
@@ -392,7 +460,7 @@ export default function InventoryPage() {
                             className="w-24"
                           />
                         </TableCell>
-                        <TableCell className="col-span-2">
+                        <TableCell className="col-span-2 lg:col-span-1">
                           <span className="flex flex-wrap items-center gap-2">
                             {item.stockKind !== "COUNTED_SIZE" ? (
                               <Button
@@ -405,6 +473,7 @@ export default function InventoryPage() {
                                     return;
                                   }
                                   setConfirming({
+                                    locationId: item.locationId,
                                     poolId: item.inventoryPoolId,
                                     productName: item.productName,
                                     baseUnitSymbol: item.baseUnitSymbol,
@@ -433,6 +502,7 @@ export default function InventoryPage() {
                                   return;
                                 }
                                 setConfirming({
+                                  locationId: item.locationId,
                                   poolId: item.inventoryPoolId,
                                   productName: item.productName,
                                   baseUnitSymbol: item.baseUnitSymbol,
@@ -445,7 +515,7 @@ export default function InventoryPage() {
                             </Button>
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="col-span-2 lg:col-span-1">
                           <Button
                             size="sm"
                             variant="outline"
@@ -470,7 +540,7 @@ export default function InventoryPage() {
                 </p>
                 <AdminCursorPagination
                   pageNumber={pagination.pageNumber}
-                  nextCursor={state.page.nextCursor}
+                  nextCursor={visibleState.page.nextCursor}
                   onPrevious={pagination.previous}
                   onNext={pagination.next}
                 />
@@ -478,9 +548,9 @@ export default function InventoryPage() {
             )}
           </ListPageSection>
 
-          {ledgerFor ? (
+          {activeLedgerFor ? (
             <ListPageSection
-              title={`Stock activity — ${ledgerFor.name}`}
+              title={`Stock activity — ${activeLedgerFor.name}`}
               description={`Dated stock movements for ${locationLabel}. History cannot be edited.`}
             >
               {visibleLedgerState.phase === "loading" ? (
@@ -506,33 +576,56 @@ export default function InventoryPage() {
                 visibleLedgerState.page.items.length === 0 ? (
                 <p className="p-5 text-sm text-[var(--fm-text-muted)]">No ledger entries yet.</p>
               ) : visibleLedgerState.phase === "ready" ? (
-                <Table>
-                  <TableHeader>
+                <Table className="block lg:table" aria-label="Stock activity">
+                  <TableHeader className="hidden lg:table-header-group">
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Quantity</TableHead>
+                      <TableHead>Physical change</TableHead>
+                      <TableHead>Reservation / hold change</TableHead>
                       <TableHead>Reason</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="block lg:table-row-group">
                     {visibleLedgerState.page.items.map((entry) => (
-                      <TableRow key={entry.entryId}>
-                        <TableCell className="whitespace-nowrap text-xs">
+                      <TableRow
+                        key={entry.entryId}
+                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                      >
+                        <TableCell className="col-span-2 text-sm lg:whitespace-nowrap">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">Date</span>
                           {formatActivityDate(entry.createdAt)}
                         </TableCell>
-                        <TableCell className="text-xs">
+                        <TableCell className="text-sm">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">Type</span>
                           {entry.movementType === "MANUAL_ADJUSTMENT"
                             ? entry.quantityDeltaBase >= 0
                               ? "Stock added"
                               : "Stock removed"
                             : entry.movementType.replaceAll("_", " ").toLowerCase()}
                         </TableCell>
-                        <TableCell className="text-xs font-semibold">
-                          {entry.quantityDeltaBase > 0 ? "+" : ""}
-                          {entry.quantityDeltaBase} {ledgerFor.baseUnitSymbol}
+                        <TableCell className="text-sm font-semibold tabular-nums">
+                          <span className="block font-normal text-[var(--fm-text-muted)] lg:hidden">
+                            Physical change
+                          </span>
+                          {signedStockQuantity(
+                            entry.quantityDeltaBase,
+                            activeLedgerFor.baseUnitSymbol,
+                          )}
                         </TableCell>
-                        <TableCell className="max-w-64 truncate text-xs">
+                        <TableCell className="text-sm tabular-nums">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                            Reservation / hold change
+                          </span>
+                          {signedStockQuantity(
+                            entry.reservationDeltaBase,
+                            activeLedgerFor.baseUnitSymbol,
+                          )}
+                        </TableCell>
+                        <TableCell className="col-span-2 whitespace-normal break-words text-sm">
+                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                            Reason
+                          </span>
                           {entry.reasonCode ?? "—"}
                         </TableCell>
                       </TableRow>
@@ -551,7 +644,7 @@ export default function InventoryPage() {
             </ListPageSection>
           ) : null}
           <AdminConfirmationDialog
-            open={confirming !== null}
+            open={confirming !== null && confirming.locationId === locationId}
             title={
               confirming?.movement === "ADD" ? "Confirm stock addition" : "Confirm stock removal"
             }

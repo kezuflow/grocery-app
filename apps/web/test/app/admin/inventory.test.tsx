@@ -82,8 +82,8 @@ it("retains exact stock details after an unknown result and shows Core's hold-ad
     });
   });
   await act(async () => root.render(<InventoryPage />));
-  expect(container.textContent).toContain("2 held");
-  expect(container.textContent).toContain("8 g");
+  expect(container.textContent).toContain("Checkout holds2 g");
+  expect(container.textContent).toContain("Available8 g");
   const input = container.querySelector<HTMLInputElement>(
     '[aria-label="Stock quantity for Red onion"]',
   );

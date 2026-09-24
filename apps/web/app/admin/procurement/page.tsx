@@ -21,6 +21,11 @@ import { useAdminContext } from "../admin-context-provider";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { ScheduledOrderSummary } from "../../../components/admin/scheduled-order-summary";
+import {
+  formatDemandQuantity,
+  purchaseVersionKey,
+  ScheduledDemand,
+} from "../../../components/admin/scheduled-demand";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: scheduledWeekViewSchema }),
@@ -33,16 +38,6 @@ const sectionNames = {
   OFFERS: "Offered products",
 } as const;
 const plain = (value: string) => value.toLowerCase().replaceAll("_", " ");
-const amount = (quantity: number, unit: string) =>
-  `${quantity.toLocaleString("en-PH")} ${unit === "GRAM" ? "g" : unit === "MILLILITER" ? "mL" : "pcs"}`;
-const purchaseVersionKey = (cycleId: string, item: ScheduledDemandItem) =>
-  JSON.stringify([
-    cycleId,
-    item.locationId,
-    item.skuId,
-    item.inventoryPoolId,
-    item.requirementVersion,
-  ]);
 export default function ProcurementPage() {
   const { locationId, label } = useAdminLocation();
   const { state } = useAdminContext();
@@ -372,78 +367,17 @@ export default function ProcurementPage() {
                           Contact your supplier outside FreshMarkets, then confirm what you bought.
                           Physical stock is not subtracted from this list.
                         </p>
-                        {view.page.items.length === 0 ? (
-                          <p>No paid quantities to buy for this week.</p>
-                        ) : (
-                          view.page.items.map((item) => (
-                            <article
-                              key={JSON.stringify([
-                                item.skuId,
-                                item.inventoryPoolId,
-                                item.locationId,
-                              ])}
-                              className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto]"
-                            >
-                              <div>
-                                <h3 className="font-semibold">
-                                  {item.productName} · {item.variantName}
-                                </h3>
-                                {global ? (
-                                  <p className="text-sm">
-                                    All destinations:{" "}
-                                    {item.totalQuantitySellable.toLocaleString("en-PH")} sold units
-                                    · {amount(item.totalQuantityBase, item.baseUnit)}
-                                  </p>
-                                ) : null}
-                                <p className="mt-2 font-medium">{item.locationName}</p>
-                                <p>
-                                  {item.quantitySellable.toLocaleString("en-PH")} sold units ·{" "}
-                                  {amount(item.quantityBase, item.baseUnit)}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  Recorded shipping weight:{" "}
-                                  {item.shippingGrams.toLocaleString("en-PH")} g
-                                </p>
-                                <p className="mt-2 text-sm">
-                                  Accepted {amount(item.acceptedBase, item.baseUnit)} · rejected{" "}
-                                  {amount(item.rejectedBase, item.baseUnit)}
-                                </p>
-                                <StatusBadge>{plain(item.status)}</StatusBadge>
-                                {item.shortageBase > 0 ? (
-                                  <p className="text-sm">
-                                    Reported missing: {amount(item.shortageBase, item.baseUnit)}
-                                  </p>
-                                ) : null}
-                                {item.replacementBase > 0 ? (
-                                  <p className="text-sm">
-                                    Replacement goods accepted:{" "}
-                                    {amount(item.replacementBase, item.baseUnit)}
-                                  </p>
-                                ) : null}
-                                {item.receivingStatus ? (
-                                  <span className="ml-2 text-sm">
-                                    Receiving: {plain(item.receivingStatus)}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {confirmedPurchaseKey === purchaseVersionKey(cycleId, item) ? (
-                                <p role="status" className="text-sm">
-                                  Purchase recorded. Refreshing current quantities.
-                                </p>
-                              ) : item.canConfirmPurchase ? (
-                                <Button
-                                  disabled={command.busy || command.uncertain}
-                                  onClick={() => {
-                                    setNote("");
-                                    setPurchase({ item, locationId: item.locationId, cycleId });
-                                  }}
-                                >
-                                  Confirm purchase
-                                </Button>
-                              ) : null}
-                            </article>
-                          ))
-                        )}
+                        <ScheduledDemand
+                          items={view.page.items}
+                          global={global}
+                          cycleId={cycleId}
+                          pending={command.busy || command.uncertain}
+                          confirmedPurchaseKey={confirmedPurchaseKey}
+                          onConfirm={(item) => {
+                            setNote("");
+                            setPurchase({ item, locationId: item.locationId, cycleId });
+                          }}
+                        />
                       </>
                     ) : view.page.kind === "ORDERS" ? (
                       view.page.denied ? (
@@ -473,7 +407,7 @@ export default function ProcurementPage() {
                                 <span className="block">
                                   {order.openQuantityBase === 0
                                     ? "Quantity released by cancellation"
-                                    : `Order quantity: ${amount(order.openQuantityBase, view.page.requirement.baseUnit)}`}
+                                    : `Order quantity: ${formatDemandQuantity(order.openQuantityBase, view.page.requirement.baseUnit)}`}
                                 </span>
                               ) : null}
                               {order.cancellationStatus ? (
@@ -604,7 +538,7 @@ export default function ProcurementPage() {
               <p>{purchase.item.locationName}</p>
               <p>
                 {purchase.item.quantitySellable} sold units ·{" "}
-                {amount(purchase.item.quantityBase, purchase.item.baseUnit)}
+                {formatDemandQuantity(purchase.item.quantityBase, purchase.item.baseUnit)}
               </p>
               <label className="grid gap-2 text-sm">
                 Purchase note (optional)
