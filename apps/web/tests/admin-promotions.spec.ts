@@ -1,4 +1,5 @@
 import { expect, test } from "./admin-authenticated-fixture";
+import type { Page } from "@playwright/test";
 
 /**
  * Promotion Codes workspace flows against a provisioned local stack. Skips when
@@ -6,6 +7,70 @@ import { expect, test } from "./admin-authenticated-fixture";
  * Staff fixture configured by Playwright.
  */
 let stackUp = false;
+
+const listedPromotion = {
+  promotionId: "promotion-code-1",
+  code: "READ10",
+  name: "Needle code",
+  description: "",
+  status: "DRAFT",
+  benefitType: "ORDER_FIXED_DISCOUNT",
+  discountMinor: 1_000,
+  percent: null,
+  minimumMinor: 0,
+  startsAt: "2026-09-01T00:00:00.000Z",
+  endsAt: null,
+  globalUsageLimit: null,
+  perCustomerUsageLimit: null,
+  automatic: false,
+  priority: 0,
+  version: 1,
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+} as const;
+
+const listedSale = {
+  ...listedPromotion,
+  promotionId: "promotion-sale-1",
+  code: "SALE_LISTED",
+  name: "Needle sale",
+  automatic: true,
+  productTargets: [
+    {
+      skuId: "sku-1",
+      locationId: "location-1",
+      quantityLimit: 10,
+      remainingQuantity: 8,
+      productName: "Mango",
+      skuName: "1 kg",
+      locationName: "Central Cebu",
+    },
+  ],
+} as const;
+
+async function mockMixedPromotionPage(page: Page, nextCursor: string | null = null) {
+  const requests: URL[] = [];
+  await page.route("**/api/admin/promotions?**", (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    const later = url.searchParams.get("cursor") === "promotion-page-2";
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "promotion-list-fixture",
+        value: {
+          items: later
+            ? [{ ...listedPromotion, promotionId: "promotion-code-2", name: "Later Needle code" }]
+            : [listedPromotion, listedSale],
+          nextCursor: later ? null : nextCursor,
+        },
+      }),
+    });
+  });
+  return requests;
+}
+
 test.beforeAll(async ({ request }) => {
   try {
     const response = await request.get("/");
@@ -28,6 +93,77 @@ test("a provisioned Staff reader opens the real Promotion Codes workspace", asyn
 }) => {
   await adminPage.goto("/admin/promotions");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Promotion Codes" })).toBeVisible();
+});
+
+test("discount indexes keep filters and cursors in the URL and label mixed-page counts", async ({
+  adminPage: page,
+}) => {
+  const requests = await mockMixedPromotionPage(page, "promotion-page-2");
+  await page.goto("/admin/promotions?query=Needle&status=draft");
+
+  await expect(page.getByLabel("Search promo codes on this page")).toHaveValue("Needle");
+  await expect(page.getByRole("button", { name: "Draft", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByText(/Showing 1 of 1 promotion codes on this page/)).toContainText(
+    "Search and status filter this page only",
+  );
+  if (process.env.SAUI_CAPTURE_DISCOUNTS === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/promotion-codes-1440.png",
+      fullPage: true,
+    });
+  }
+  expect(requests[0]?.searchParams.get("query")).toBeNull();
+  expect(requests[0]?.searchParams.get("status")).toBeNull();
+
+  await page.getByLabel("Search promo codes on this page").fill("unmatched");
+  await expect(
+    page.getByText(/No promotion codes match this view on the current page/),
+  ).toContainText("may appear on later pages");
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
+  await page.getByLabel("Search promo codes on this page").fill("Needle");
+
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page).toHaveURL(/query=Needle/);
+  await expect(page).toHaveURL(/status=draft/);
+  await expect(page).toHaveURL(/cursor=promotion-page-2/);
+  await expect(page.getByText("Later Needle code", { exact: true })).toBeVisible();
+  expect(requests.at(-1)?.searchParams.get("cursor")).toBe("promotion-page-2");
+  expect(requests.at(-1)?.searchParams.get("query")).toBeNull();
+
+  await page.goto("/admin/sales?query=Needle&status=draft");
+  await expect(page.getByLabel("Search inventory sales on this page")).toHaveValue("Needle");
+  await expect(page.getByText(/Showing 1 of 1 sales on this page/)).toContainText(
+    "Search and status filter this page only",
+  );
+  if (process.env.SAUI_CAPTURE_DISCOUNTS === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/promotion-sale-1440.png",
+      fullPage: true,
+    });
+  }
+});
+
+test("a promotions reader can inspect both indexes without manage controls", async ({
+  promotionsReadOnlyPage: page,
+}) => {
+  await mockMixedPromotionPage(page);
+
+  await page.goto("/admin/promotions");
+  await expect(page.getByRole("button", { name: "Create promo code" })).toHaveCount(0);
+  await expect(page.getByRole("switch")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open actions for READ10" }).click();
+  await expect(page.getByRole("menuitem", { name: "View details" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Edit details" })).toHaveCount(0);
+
+  await page.goto("/admin/sales");
+  await expect(page.getByRole("button", { name: "New sale" })).toHaveCount(0);
+  await expect(page.getByRole("switch")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open actions for Needle sale" }).click();
+  await expect(page.getByRole("menuitem", { name: "View details" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Edit details" })).toHaveCount(0);
 });
 
 test("a Staff principal without capability is denied the Promotion Codes workspace", async ({
@@ -60,6 +196,8 @@ test("promotion creation succeeds with capability and is denied without it", asy
     ok: true,
     value: { code: data.code },
   });
+  await adminPage.goto("/admin/promotions");
+  await expect(adminPage.getByText(data.code, { exact: true })).toBeVisible();
   const denied = await deniedAdminPage.request.post("/api/admin/promotions", {
     data: { ...data, code: `DENIED_${codeSuffix}` },
     headers: { "idempotency-key": crypto.randomUUID() },

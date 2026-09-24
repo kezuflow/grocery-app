@@ -24,7 +24,10 @@ async function installPaginationBootstrap(page: Page, selectedScope: AdminSelect
         "payments.read",
         "procurement.read",
       ],
-      scopes: [{ kind: "location", locationId: "location-cebu-central" }],
+      scopes:
+        selectedScope.kind === "GLOBAL"
+          ? [{ kind: "global" }]
+          : [{ kind: "location", locationId: "location-cebu-central" }],
       navigation: [
         {
           code: "customers",
@@ -74,18 +77,21 @@ async function installPaginationBootstrap(page: Page, selectedScope: AdminSelect
       ],
       environment: "test",
     },
-    scopes: [
-      {
-        kind: "location",
-        marketId: "market-metro-cebu",
-        marketCode: "CEBU",
-        locationId: "location-cebu-central",
-        locationCode: "CENTRAL",
-        locationName: "Central Cebu",
-        currency: "PHP",
-        timezone: "Asia/Manila",
-      },
-    ],
+    scopes:
+      selectedScope.kind === "GLOBAL"
+        ? []
+        : [
+            {
+              kind: "location",
+              marketId: "market-metro-cebu",
+              marketCode: "CEBU",
+              locationId: "location-cebu-central",
+              locationCode: "CENTRAL",
+              locationName: "Central Cebu",
+              currency: "PHP",
+              timezone: "Asia/Manila",
+            },
+          ],
     selectedScope,
     timezone: "Asia/Manila",
   });
@@ -154,32 +160,49 @@ test("customer search reaches its second cursor page without losing the filter",
   expect(new URL(secondRequest.url()).searchParams.get("query")).toBe("example.com");
 });
 
-test("promotion, finance, and operations queues expose later cursor records", async ({ page }) => {
+test("Global promotion list exposes a later cursor record", async ({ page }) => {
+  await installPaginationBootstrap(page, { kind: "GLOBAL" });
+  const base = {
+    code: "FIRST",
+    description: "",
+    status: "DRAFT",
+    benefitType: "ORDER_FIXED_DISCOUNT",
+    discountMinor: 100,
+    percent: null,
+    minimumMinor: 0,
+    startsAt: "2026-08-01T00:00:00.000Z",
+    endsAt: null,
+    globalUsageLimit: null,
+    perCustomerUsageLimit: null,
+    automatic: false,
+    priority: 0,
+    version: 1,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  await page.route("**/api/admin/promotions?**", (route) => {
+    const later = new URL(route.request().url()).searchParams.get("cursor") === "promotions-next";
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        result({
+          items: [
+            later
+              ? { ...base, promotionId: "promotion-2", code: "LATER", name: "Later promotion" }
+              : { ...base, promotionId: "promotion-1", name: "First promotion" },
+          ],
+          nextCursor: later ? null : "promotions-next",
+        }),
+      ),
+    });
+  });
+  await page.goto("/admin/promotions");
+  await next(page);
+  await expect(page.getByText("Later promotion")).toBeVisible();
+});
+
+test("finance and operations queues expose later cursor records", async ({ page }) => {
   const fixtures = [
-    {
-      path: "/admin/promotions",
-      api: "/api/admin/promotions",
-      cursor: "promotions-next",
-      first: {
-        promotionId: "promotion-1",
-        code: "FIRST",
-        name: "First",
-        status: "DRAFT",
-        benefitType: "ORDER_FIXED_DISCOUNT",
-        discountMinor: 100,
-        percent: null,
-      },
-      later: {
-        promotionId: "promotion-2",
-        code: "LATER",
-        name: "Later promotion",
-        status: "DRAFT",
-        benefitType: "ORDER_FIXED_DISCOUNT",
-        discountMinor: 100,
-        percent: null,
-      },
-      text: "Later promotion",
-    },
     {
       path: "/admin/payments/transactions",
       api: "/api/admin/payments",

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { EllipsisVertical, Eye, Info, Pencil, Percent, Plus, Search, X } from "lucide-react";
 import {
   manageableBenefitTypes,
@@ -17,8 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,9 +37,14 @@ import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catal
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
 import {
+  AdminIndexViews,
   AdminCursorPagination,
-  useAdminPagination,
+  useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
+import { AdminPageState } from "../../../components/admin/admin-page-state";
+import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
+import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import {
   ADMIN_WORKSPACE_PANEL_DEFAULT_WIDTH,
   AdminWorkspaceResizeHandle,
@@ -51,7 +55,53 @@ type LoadState =
   | { phase: "error"; message: string; requestId: string | null }
   | { phase: "ready" };
 
+type PromotionListView = "all" | "active" | "draft";
+
+function promotionListView(value: string | null): PromotionListView {
+  return value === "active" || value === "draft" ? value : "all";
+}
+
 export default function PromotionsPage() {
+  const admin = useAdminContext();
+  if (admin.state.phase !== "ready") {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Promotion Codes" />
+        <AdminPageState state="loading" title="Loading promotion codes" />
+      </section>
+    );
+  }
+
+  const canRead =
+    admin.state.selectedScope?.kind === "GLOBAL" &&
+    admin.state.context.capabilities.includes("promotions.read");
+  if (!canRead) {
+    return (
+      <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <PageHeader title="Promotion Codes" />
+        <AdminPageState
+          state="error"
+          title="Promotion Codes are unavailable"
+          message="Promotion code administration requires the promotions.read capability with a Global scope."
+        />
+      </section>
+    );
+  }
+
+  const scopeKey = JSON.stringify(admin.state.selectedScope);
+  return (
+    <PromotionsWorkspace
+      key={scopeKey}
+      canManage={admin.state.context.capabilities.includes("promotions.manage")}
+    />
+  );
+}
+
+function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
+  const requestVersion = useRef(0);
+  const searchParams = useSearchParams();
+  const appliedQuery = searchParams.get("query") ?? "";
+  const appliedView = promotionListView(searchParams.get("status"));
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [page, setPage] = useState<AdminPromotionPage | null>(null);
   const [code, setCode] = useState("");
@@ -69,12 +119,54 @@ export default function PromotionsPage() {
   const [panelWidth, setPanelWidth] = useState(ADMIN_WORKSPACE_PANEL_DEFAULT_WIDTH);
   const [panelResizing, setPanelResizing] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<AdminPromotionSummary | null>(null);
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"all" | "active" | "draft">("all");
+  const [query, setQuery] = useState(appliedQuery);
+  const [tab, setTab] = useState<PromotionListView>(appliedView);
   const createIntent = useCatalogCommand(adminPromotionSummarySchema);
-  const pagination = useAdminPagination();
+  const pagination = useAdminUrlPagination("/admin/promotions");
   const closeTimer = useRef<number | null>(null);
   const openFrame = useRef<number | null>(null);
+
+  const createDirty =
+    benefit !== "ORDER_FIXED_DISCOUNT" ||
+    [code, name, discount, minimum, startsAt, endsAt, globalLimit, perCustomerLimit].some(
+      (value) => value.trim() !== "",
+    );
+  const createLocked = createIntent.pending || createIntent.uncertain;
+  useAdminScopeGuard(canManage && createDirty, canManage && createLocked, () => {
+    setCode("");
+    setName("");
+    setBenefit("ORDER_FIXED_DISCOUNT");
+    setDiscount("");
+    setMinimum("");
+    setStartsAt("");
+    setEndsAt("");
+    setGlobalLimit("");
+    setPerCustomerLimit("");
+    setCreateOpen(false);
+    setPanelMounted(false);
+    setSelectedPromotion(null);
+  });
+  useAdminRouteGuard(canManage && createDirty, canManage && createLocked);
+
+  useEffect(() => {
+    setQuery(appliedQuery);
+    setTab(appliedView);
+  }, [appliedQuery, appliedView]);
+
+  function updateListFilters(nextQuery: string, nextView: PromotionListView): void {
+    const next = new URLSearchParams(searchParams.toString());
+    const normalized = nextQuery.trim();
+    if (normalized) next.set("query", normalized);
+    else next.delete("query");
+    if (nextView === "all") next.delete("status");
+    else next.set("status", nextView);
+    pagination.reset(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `/admin/promotions${next.size ? `?${next}` : ""}`,
+    );
+  }
 
   function openPanel(promotion: AdminPromotionSummary | null = null): void {
     if (closeTimer.current !== null) {
@@ -155,44 +247,51 @@ export default function PromotionsPage() {
     return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
   }
 
-  const load = useCallback((cursor: string | null) => {
+  const load = useCallback(async (cursor: string | null) => {
+    const version = ++requestVersion.current;
     setState({ phase: "loading" });
-    void (async () => {
-      try {
-        const params = new URLSearchParams({ limit: "50" });
-        if (cursor) params.set("cursor", cursor);
-        const response = await fetch(`/api/admin/promotions?${params}`);
-        const payload = catalogResultSchema(adminPromotionPageSchema).parse(await response.json());
-        if (!payload.ok) {
-          setState({
-            phase: "error",
-            message:
-              payload.error.code === "FORBIDDEN"
-                ? "Promotion code administration requires the promotions.read capability with a global scope."
-                : payload.error.message,
-            requestId: payload.error.requestId,
-          });
-          return;
-        }
-        setPage({
-          ...payload.value,
-          items: payload.value.items.filter((item) => !item.productTargets?.length),
-        });
-        setState({ phase: "ready" });
-      } catch {
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (cursor) params.set("cursor", cursor);
+      const response = await fetch(`/api/admin/promotions?${params}`);
+      const payload = catalogResultSchema(adminPromotionPageSchema).parse(await response.json());
+      if (version !== requestVersion.current) return;
+      if (!payload.ok) {
         setState({
           phase: "error",
-          message: "Network error loading promotion codes.",
-          requestId: null,
+          message:
+            payload.error.code === "FORBIDDEN"
+              ? "Promotion code administration requires the promotions.read capability with a Global scope."
+              : payload.error.message,
+          requestId: payload.error.requestId,
         });
+        return;
       }
-    })();
+      setPage({
+        ...payload.value,
+        items: payload.value.items.filter((item) => !item.productTargets?.length),
+      });
+      setState({ phase: "ready" });
+    } catch {
+      if (version !== requestVersion.current) return;
+      setState({
+        phase: "error",
+        message: "Network error loading promotion codes.",
+        requestId: null,
+      });
+    }
   }, []);
 
-  useEffect(() => load(pagination.cursor), [load, pagination.cursor]);
+  useEffect(() => {
+    void load(pagination.cursor);
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [load, pagination.cursor]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
+    if (!canManage) return;
     if (code.trim() === "" || name.trim() === "" || Number.isNaN(Number(discount))) {
       setNotice("A code, name, and numeric discount are required.");
       return;
@@ -267,13 +366,21 @@ export default function PromotionsPage() {
         notifyCommandSuccess("Promotion created", "Saved as draft.");
         setCode("");
         setName("");
+        setBenefit("ORDER_FIXED_DISCOUNT");
         setDiscount("");
         setMinimum("");
+        setStartsAt("");
         setEndsAt("");
         setGlobalLimit("");
         setPerCustomerLimit("");
-        pagination.reset();
-        load(null);
+        const next = new URLSearchParams(searchParams.toString());
+        pagination.reset(next);
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `/admin/promotions${next.size ? `?${next}` : ""}`,
+        );
+        void load(null);
       }
     } catch {
       setNotice(
@@ -285,25 +392,23 @@ export default function PromotionsPage() {
   return (
     <div className="w-full">
       {state.phase === "loading" ? (
-        <div className="space-y-3 p-5 sm:p-7" role="status" aria-label="Loading promotion codes">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-72 w-full" />
-        </div>
+        <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+          <PageHeader title="Promotion Codes" />
+          <AdminPageState state="loading" title="Loading promotion codes" />
+        </section>
       ) : null}
 
       {state.phase === "error" ? (
-        <Alert variant="destructive" className="m-5 w-auto sm:m-7">
-          <AlertTitle>Promotion Codes could not be loaded</AlertTitle>
-          <AlertDescription>
-            {state.message}
-            {state.requestId ? (
-              <>
-                <br />
-                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
-              </>
-            ) : null}
-          </AlertDescription>
-        </Alert>
+        <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+          <PageHeader title="Promotion Codes" />
+          <AdminPageState
+            state="error"
+            title="Promotion Codes could not be loaded"
+            message={state.message}
+            requestId={state.requestId ?? undefined}
+            onRetry={() => void load(pagination.cursor)}
+          />
+        </section>
       ) : null}
 
       {state.phase === "ready" ? (
@@ -313,29 +418,25 @@ export default function PromotionsPage() {
           className={`grid min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)] xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)] motion-reduce:transition-none ${panelResizing ? "xl:transition-none" : "xl:transition-[grid-template-columns] xl:duration-200 xl:ease-linear"} ${createOpen ? "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]" : "xl:[--fm-admin-workspace-panel-width:0px]"}`}
         >
           <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1
-                  id="admin-page-title"
-                  className="text-[2rem] font-bold tracking-[-0.04em] text-[var(--fm-text)]"
-                >
-                  Promotion Codes
-                </h1>
-                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                  Create and manage promo codes for your store.
-                </p>
-              </div>
-              <Button
-                type="button"
-                aria-expanded={createOpen}
-                aria-controls="promotion-side-panel"
-                onClick={() => (createOpen ? closePanel() : openPanel())}
-                className="h-10 shrink-0 rounded-lg bg-[var(--fm-admin-accent)] px-4 font-semibold text-white shadow-sm hover:bg-[var(--fm-admin-accent-strong)] active:scale-[0.98]"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                Create promo code
-              </Button>
-            </div>
+            <PageHeader
+              title="Promotion Codes"
+              description="Discount codes customers enter at checkout."
+              action={
+                canManage ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-expanded={createOpen}
+                    aria-controls="promotion-side-panel"
+                    onClick={() => (createOpen ? closePanel() : openPanel())}
+                    className="fm-admin-reference-primary"
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Create promo code
+                  </Button>
+                ) : undefined
+              }
+            />
 
             {notice ? (
               <p
@@ -346,195 +447,200 @@ export default function PromotionsPage() {
               </p>
             ) : null}
 
-            <div className="mt-8 flex flex-col gap-3 border-b border-[var(--fm-border)] pb-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-6" role="tablist" aria-label="Promotion status">
-                {(
-                  [
-                    ["all", "All codes", page?.items.length ?? 0],
-                    [
-                      "active",
-                      "Active",
-                      page?.items.filter((item) => item.status === "ACTIVE").length ?? 0,
-                    ],
-                    [
-                      "draft",
-                      "Draft",
-                      page?.items.filter((item) => item.status === "DRAFT").length ?? 0,
-                    ],
-                  ] as const
-                ).map(([value, label, count]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === value}
-                    onClick={() => setTab(value)}
-                    className={`relative flex items-center gap-2 pb-2 text-sm font-semibold transition-colors ${tab === value ? "text-[var(--fm-text)] after:absolute after:inset-x-0 after:-bottom-[13px] after:h-0.5 after:bg-[var(--fm-admin-accent)]" : "text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"}`}
-                  >
-                    {label}
-                    <span className="rounded-full bg-[var(--fm-admin-surface-muted)] px-2 py-0.5 text-xs font-medium text-[var(--fm-text-muted)]">
-                      {count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <label className="relative block sm:w-64">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
-                  aria-hidden="true"
-                />
-                <Input
-                  aria-label="Search promo codes"
-                  placeholder="Search promo codes…"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="h-10 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
-                />
-              </label>
-            </div>
-
-            <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--fm-border)]">
-              {visiblePromotions.length === 0 ? (
-                <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
-                  No promotion codes match this view.
+            <section className="mt-8 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+              <h2 className="sr-only">Promotion code list</h2>
+              <AdminIndexViews
+                label="Promotion code views"
+                views={[
+                  { label: "All codes", status: "all" },
+                  { label: "Active", status: "active" },
+                  { label: "Draft", status: "draft" },
+                ]}
+                value={tab}
+                onChange={(nextView) => {
+                  if (createDirty || createLocked) return;
+                  setTab(nextView);
+                  updateListFilters(query, nextView);
+                }}
+              />
+              <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-[var(--fm-text-muted)]" aria-live="polite">
+                  Showing {visiblePromotions.length} of {page?.items.length ?? 0} promotion codes on
+                  this page. Search and status filter this page only.
                 </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
-                      <TableHead>Code</TableHead>
-                      <TableHead>Campaign name</TableHead>
-                      <TableHead>Benefit</TableHead>
-                      <TableHead>Minimum subtotal</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>
-                        <span className="sr-only">Manage</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visiblePromotions.map((promotion) => {
-                      const detailsOpen =
-                        createOpen && selectedPromotion?.promotionId === promotion.promotionId;
-                      const toggleDetails = () =>
-                        detailsOpen ? closePanel() : openPanel(promotion);
+                <label className="relative block sm:w-72">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    aria-label="Search promo codes on this page"
+                    placeholder="Search this page"
+                    value={query}
+                    disabled={createDirty || createLocked}
+                    onChange={(event) => {
+                      const nextQuery = event.target.value;
+                      setQuery(nextQuery);
+                      updateListFilters(nextQuery, tab);
+                    }}
+                    className="h-9 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
+                  />
+                </label>
+              </div>
 
-                      return (
-                        <TableRow
-                          key={promotion.promotionId}
-                          className="cursor-pointer align-top transition-colors hover:bg-[var(--fm-hover)] focus-visible:bg-[var(--fm-hover)]"
-                          tabIndex={0}
-                          aria-expanded={detailsOpen}
-                          onClick={toggleDetails}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              toggleDetails();
-                            }
-                          }}
-                        >
-                          <TableCell className="whitespace-nowrap font-semibold text-[var(--fm-text)]">
-                            {promotion.code}
-                          </TableCell>
-                          <TableCell className="min-w-32 max-w-48 text-[var(--fm-text)]">
-                            {promotion.name}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
-                              ? `${promotion.percent}% off`
-                              : promotion.benefitType === "DELIVERY_FEE_WAIVER"
-                                ? "Free delivery"
-                                : `₱${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            {promotion.minimumMinor > 0
-                              ? `₱${(promotion.minimumMinor / 100).toFixed(2)}`
-                              : "None"}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                            <span>{new Date(promotion.startsAt).toLocaleDateString()}</span>
-                            <span className="block">
-                              {promotion.endsAt
-                                ? new Date(promotion.endsAt).toLocaleDateString()
-                                : "No end date"}
-                            </span>
-                          </TableCell>
-                          <TableCell
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
-                          >
-                            <PromotionStatusSwitch
-                              promotion={promotion}
-                              onApplied={(summary) =>
-                                setPage((current) =>
-                                  current && !summary.productTargets?.length
-                                    ? {
-                                        ...current,
-                                        items: current.items.map((item) =>
-                                          item.promotionId === summary.promotionId ? summary : item,
-                                        ),
-                                      }
-                                    : current,
-                                )
+              <div className="overflow-x-auto">
+                {visiblePromotions.length === 0 ? (
+                  <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
+                    No promotion codes match this view on the current page. Other promotion codes
+                    may appear on later pages.
+                  </p>
+                ) : (
+                  <Table aria-label="Promotion code list">
+                    <TableHeader>
+                      <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
+                        <TableHead>Code</TableHead>
+                        <TableHead>Campaign name</TableHead>
+                        <TableHead>Benefit</TableHead>
+                        <TableHead>Minimum subtotal</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>
+                          <span className="sr-only">Manage</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visiblePromotions.map((promotion) => {
+                        const detailsOpen =
+                          createOpen && selectedPromotion?.promotionId === promotion.promotionId;
+                        const toggleDetails = () =>
+                          detailsOpen ? closePanel() : openPanel(promotion);
+
+                        return (
+                          <TableRow
+                            key={promotion.promotionId}
+                            className="cursor-pointer align-top transition-colors hover:bg-[var(--fm-hover)] focus-visible:bg-[var(--fm-hover)]"
+                            tabIndex={0}
+                            aria-expanded={detailsOpen}
+                            onClick={toggleDetails}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                toggleDetails();
                               }
-                            />
-                          </TableCell>
-                          <TableCell
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
+                            }}
                           >
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Open actions for ${promotion.code}`}
-                                  className="size-8 rounded-md"
+                            <TableCell className="whitespace-nowrap font-semibold text-[var(--fm-text)]">
+                              {promotion.code}
+                            </TableCell>
+                            <TableCell className="min-w-32 max-w-48 text-[var(--fm-text)]">
+                              {promotion.name}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                              {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
+                                ? `${promotion.percent}% off`
+                                : promotion.benefitType === "DELIVERY_FEE_WAIVER"
+                                  ? "Free delivery"
+                                  : `₱${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                              {promotion.minimumMinor > 0
+                                ? `₱${(promotion.minimumMinor / 100).toFixed(2)}`
+                                : "None"}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                              <span>{new Date(promotion.startsAt).toLocaleDateString()}</span>
+                              <span className="block">
+                                {promotion.endsAt
+                                  ? new Date(promotion.endsAt).toLocaleDateString()
+                                  : "No end date"}
+                              </span>
+                            </TableCell>
+                            <TableCell
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              {canManage ? (
+                                <PromotionStatusSwitch
+                                  promotion={promotion}
+                                  onApplied={(summary) =>
+                                    setPage((current) =>
+                                      current && !summary.productTargets?.length
+                                        ? {
+                                            ...current,
+                                            items: current.items.map((item) =>
+                                              item.promotionId === summary.promotionId
+                                                ? summary
+                                                : item,
+                                            ),
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <StatusBadge
+                                  tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
                                 >
-                                  <EllipsisVertical aria-hidden="true" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/admin/promotions/${promotion.promotionId}`}
-                                    prefetch={false}
+                                  {promotion.status === "ACTIVE" ? "Active" : promotion.status}
+                                </StatusBadge>
+                              )}
+                            </TableCell>
+                            <TableCell
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Open actions for ${promotion.code}`}
+                                    className="size-8 rounded-md"
                                   >
-                                    <Eye aria-hidden="true" />
-                                    View details
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/admin/promotions/${promotion.promotionId}`}
-                                    prefetch={false}
-                                  >
-                                    <Pencil aria-hidden="true" />
-                                    Edit details
-                                  </Link>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-
-            <div className="mt-auto flex items-center justify-between pt-6 text-sm text-[var(--fm-text-muted)]">
-              <span>Page {pagination.pageNumber}</span>
+                                    <EllipsisVertical aria-hidden="true" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      href={`/admin/promotions/${promotion.promotionId}`}
+                                      prefetch={false}
+                                    >
+                                      <Eye aria-hidden="true" />
+                                      View details
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  {canManage ? (
+                                    <DropdownMenuItem asChild>
+                                      <Link
+                                        href={`/admin/promotions/${promotion.promotionId}`}
+                                        prefetch={false}
+                                      >
+                                        <Pencil aria-hidden="true" />
+                                        Edit details
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
               <AdminCursorPagination
                 pageNumber={pagination.pageNumber}
                 nextCursor={page?.nextCursor ?? null}
+                pending={createDirty || createLocked}
                 onPrevious={pagination.previous}
                 onNext={pagination.next}
               />
-            </div>
+            </section>
           </section>
 
           {panelMounted ? (
