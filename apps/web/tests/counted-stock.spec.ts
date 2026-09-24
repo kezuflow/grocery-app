@@ -84,7 +84,7 @@ for (const width of [1280, 390]) {
     await page.getByLabel("Variant name").fill("Small");
     await page.getByLabel("Sell unit").selectOption("Pack");
     await page.getByLabel("Approximate weight per piece/pack (grams)").fill("300");
-    await page.getByRole("button", { name: "Add variant", exact: true }).click();
+    await page.getByRole("button", { name: "Add option", exact: true }).click();
     await page
       .getByLabel("SKU", { exact: true })
       .nth(1)
@@ -118,7 +118,7 @@ for (const width of [1280, 390]) {
     await dialog.getByLabel("Confirmation reason").fill("Opening warehouse stock");
     await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(stockRow).toContainText("20000");
+    await expect(stockRow).toContainText("20,000 g");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     const target = locations[1];
@@ -168,7 +168,7 @@ for (const width of [1280, 390]) {
     await page.goto("/admin/inventory");
     const row = (name: string) =>
       page.getByRole("row").filter({ has: page.getByText(name, { exact: true }) });
-    await expect(row(productName)).toContainText("2000");
+    await expect(row(productName)).toContainText("2,000 g");
     await row(productName).getByRole("button", { name: "Count sizes" }).click();
     const sheet = page.getByRole("dialog");
     await sheet.getByLabel("Measured grams being counted").fill("2000");

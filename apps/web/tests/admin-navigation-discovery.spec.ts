@@ -5,7 +5,9 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
 }) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
-  await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible({ timeout: 60000 });
+  await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible({
+    timeout: 60000,
+  });
 
   const navigation = adminPage.getByRole("navigation", { name: "Admin navigation" });
   await expect(navigation.locator('a[href="/admin/procurement"]')).toBeVisible();

@@ -11,17 +11,22 @@ import { AdminCursorPagination, useAdminPagination } from "./admin-controls";
 export function InventoryDistribution() {
   const [query, setQuery] = useState(""),
     [search, setSearch] = useState("");
-  const [page, setPage] = useState<InventoryDistributionPage | null>(null),
-    [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; page: InventoryDistributionPage } | null>(
+      null,
+    ),
+    [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [expanded, setExpanded] = useState(false),
     [reload, setReload] = useState(0);
   const pagination = useAdminPagination(search);
+  const readKey = JSON.stringify([expanded, search, pagination.cursor, reload]);
+  const page = loaded?.key === readKey ? loaded.page : null;
+  const visibleError = error?.key === readKey ? error.message : null;
   useEffect(() => {
     if (!expanded) return;
     const controller = new AbortController(),
       params = new URLSearchParams({ query: search });
     if (pagination.cursor) params.set("cursor", pagination.cursor);
-    setPage(null);
+    setLoaded(null);
     setError(null);
     void (async () => {
       try {
@@ -35,14 +40,17 @@ export function InventoryDistribution() {
           ])
           .parse(await response.json());
         if (!result.ok) throw new Error(result.error.message);
-        setPage(result.value);
+        if (!controller.signal.aborted) setLoaded({ key: readKey, page: result.value });
       } catch (error: unknown) {
         if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : "Unable to load stock distribution");
+          setError({
+            key: readKey,
+            message: error instanceof Error ? error.message : "Unable to load stock distribution",
+          });
       }
     })();
     return () => controller.abort();
-  }, [expanded, search, pagination.cursor, reload]);
+  }, [expanded, search, pagination.cursor, reload, readKey]);
   return (
     <section className="space-y-4 rounded-lg border p-4" aria-label="Global stock distribution">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -88,8 +96,8 @@ export function InventoryDistribution() {
             </div>
             <Button type="submit">Find stock</Button>
           </form>
-          {error ? (
-            <p role="alert">{error}</p>
+          {visibleError ? (
+            <p role="alert">{visibleError}</p>
           ) : !page ? (
             <p role="status">Loading stock distribution…</p>
           ) : (
@@ -113,7 +121,7 @@ export function InventoryDistribution() {
                           ["Total physical stock", item.physicalBase],
                           ["Reserved", item.reservedBase],
                           ["Checkout holds", item.heldBase],
-                          ["In transit", item.transitBase],
+                          ["Outstanding transit", item.transitBase],
                           ["Damaged / non-sellable", item.damagedBase],
                           ["Missing", item.shortageBase],
                         ].map(([label, quantity]) => (
@@ -121,7 +129,7 @@ export function InventoryDistribution() {
                             <dt className="text-muted-foreground">{label}</dt>
                             <dd className="font-medium">
                               {typeof quantity === "number"
-                                ? quantity.toLocaleString("en-PH")
+                                ? `${quantity.toLocaleString("en-PH")} ${item.baseUnit === "GRAM" ? "g" : "pieces"}`
                                 : quantity}
                             </dd>
                           </div>

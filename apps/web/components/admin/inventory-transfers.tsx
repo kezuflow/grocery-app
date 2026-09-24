@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   z,
   inventoryTransferPageSchema,
   inventoryTransferOptionsViewSchema,
+  inventoryTransferResultSchema,
   inventoryTransferViewSchema,
 } from "@freshmarkets/validation";
 import type {
@@ -12,7 +13,7 @@ import type {
   InventoryTransferPage,
   InventoryTransferView,
 } from "@freshmarkets/contracts";
-import { useAdminContext } from "@/app/admin/admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 import { InventoryDistribution } from "./inventory-distribution";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
@@ -20,9 +21,10 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { PageHeader } from "./admin-shell";
+import { PageHeader, StatusBadge } from "./admin-shell";
 import { AdminCursorPagination, useAdminPagination } from "./admin-controls";
 import { useAdminCommand } from "./use-admin-command";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 async function readTransfer<T>(url: string, schema: z.ZodType<T>, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
@@ -44,17 +46,20 @@ export function InventoryTransfersPage() {
   const scope = state.phase === "ready" ? state.selectedScope : null;
   const scopeKey =
     scope?.kind === "GLOBAL" ? "global" : scope?.kind === "LOCATION" ? scope.locationId : null;
-  const [page, setPage] = useState<InventoryTransferPage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; page: InventoryTransferPage } | null>(null);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [creating, setCreating] = useState(false);
   const [reload, setReload] = useState(0);
   const pagination = useAdminPagination(`${scopeKey}:${filter}`);
+  const readKey = JSON.stringify([scopeKey, filter, pagination.cursor, reload]);
+  const page = loaded?.key === readKey ? loaded.page : null;
+  const visibleError = error?.key === readKey ? error.message : null;
   useEffect(() => {
     setCreating(false);
   }, [scopeKey]);
   useEffect(() => {
-    setPage(null);
+    setLoaded(null);
     setError(null);
     if (!scopeKey) return;
     const controller = new AbortController(),
@@ -67,13 +72,16 @@ export function InventoryTransfersPage() {
       inventoryTransferPageSchema,
       controller.signal,
     )
-      .then(setPage)
+      .then((value) => setLoaded({ key: readKey, page: value }))
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : "Unable to load transfers");
+          setError({
+            key: readKey,
+            message: error instanceof Error ? error.message : "Unable to load transfers",
+          });
       });
     return () => controller.abort();
-  }, [scopeKey, filter, pagination.cursor, reload]);
+  }, [scopeKey, filter, pagination.cursor, reload, readKey]);
   return (
     <div className="w-full space-y-6">
       <PageHeader
@@ -116,7 +124,7 @@ export function InventoryTransfersPage() {
               Refresh
             </Button>
           </div>
-          {creating ? (
+          {creating && scopeKey === "global" ? (
             <CreateTransfer
               onCreated={() => {
                 setCreating(false);
@@ -124,8 +132,8 @@ export function InventoryTransfersPage() {
               }}
             />
           ) : null}
-          {error ? (
-            <p role="alert">{error}</p>
+          {visibleError ? (
+            <p role="alert">{visibleError}</p>
           ) : !page ? (
             <p role="status">Loading transfers…</p>
           ) : (
@@ -133,30 +141,52 @@ export function InventoryTransfersPage() {
               {!page.items.length ? (
                 <p>No transfers match this scope and status.</p>
               ) : (
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table>
-                    <TableHeader>
+                <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+                  <Table className="block lg:table" aria-label="Warehouse transfers">
+                    <TableHeader className="hidden lg:table-header-group">
                       <TableRow>
                         <TableHead>Movement</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Products</TableHead>
+                        <TableHead>Product lines</TableHead>
                         <TableHead>Created</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className="block lg:table-row-group">
                       {page.items.map((item) => (
-                        <TableRow key={item.transferId}>
-                          <TableCell>
+                        <TableRow
+                          key={item.transferId}
+                          className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                        >
+                          <TableCell className="col-span-2 whitespace-normal">
                             <Link
-                              className="font-medium underline"
+                              className="font-medium underline underline-offset-2"
                               href={`/admin/transfers/${item.transferId}`}
                             >
                               {item.sourceLocationName} → {item.destinationLocationName}
                             </Link>
                           </TableCell>
-                          <TableCell className="capitalize">{statusLabel(item.status)}</TableCell>
-                          <TableCell>{item.lineCount}</TableCell>
-                          <TableCell>
+                          <TableCell className="text-sm">
+                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                              Status
+                            </span>
+                            <StatusBadge>{statusLabel(item.status)}</StatusBadge>
+                            {item.status === "RESOLVED" ? (
+                              <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                                Outstanding goods accounted for; destination receipt remains
+                                distinct.
+                              </span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums">
+                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                              Product lines
+                            </span>
+                            {item.lineCount}
+                          </TableCell>
+                          <TableCell className="col-span-2 text-sm lg:col-span-1">
+                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                              Created
+                            </span>
                             {new Date(item.createdAt).toLocaleString("en-PH", {
                               timeZone: "Asia/Manila",
                             })}
@@ -186,31 +216,56 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
     [destination, setDestination] = useState(""),
     [query, setQuery] = useState(""),
     [search, setSearch] = useState("");
-  const [options, setOptions] = useState<InventoryTransferOptions | null>(null),
-    [error, setError] = useState<string | null>(null);
+  const [loadedOptions, setLoadedOptions] = useState<{
+      key: string;
+      value: InventoryTransferOptions;
+    } | null>(null),
+    [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [quantities, setQuantities] = useState<
     Record<string, { product: InventoryTransferOptions["products"][number]; quantity: string }>
   >({});
   const [reason, setReason] = useState("");
   const command = useAdminCommand();
+  const optionsKey = JSON.stringify([source, search]);
+  const options = loadedOptions?.key === optionsKey ? loadedOptions.value : null;
+  const visibleError = error?.key === optionsKey ? error.message : null;
+  const frozen = command.busy || command.uncertain;
+  const dirty =
+    !!source ||
+    !!destination ||
+    !!query.trim() ||
+    !!reason.trim() ||
+    Object.values(quantities).some((line) => !!line.quantity.trim());
+  useAdminScopeGuard(dirty, frozen, () => {
+    setSource("");
+    setDestination("");
+    setQuery("");
+    setSearch("");
+    setQuantities({});
+    setReason("");
+  });
+  useAdminRouteGuard(dirty, frozen);
   useEffect(() => {
     const controller = new AbortController(),
       params = new URLSearchParams({ query: search });
     if (source) params.set("sourceLocationId", source);
-    setOptions(null);
+    setLoadedOptions(null);
     setError(null);
     void readTransfer(
       `/api/admin/transfers/options?${params}`,
       inventoryTransferOptionsViewSchema,
       controller.signal,
     )
-      .then(setOptions)
+      .then((value) => setLoadedOptions({ key: optionsKey, value }))
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : "Unable to load transfer choices");
+          setError({
+            key: optionsKey,
+            message: error instanceof Error ? error.message : "Unable to load transfer choices",
+          });
       });
     return () => controller.abort();
-  }, [source, search]);
+  }, [source, search, optionsKey]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const body = {
@@ -233,7 +288,6 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
     )
       onCreated();
   }
-  const frozen = command.busy || command.uncertain;
   return (
     <form
       onSubmit={(event) => void submit(event)}
@@ -241,7 +295,7 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
       aria-label="Create warehouse transfer"
     >
       <h2 className="text-lg font-semibold">New warehouse transfer</h2>
-      {error ? <p role="alert">{error}</p> : null}
+      {visibleError ? <p role="alert">{visibleError}</p> : null}
       <fieldset disabled={frozen} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -251,6 +305,7 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
               value={source}
               onValueChange={(value) => {
                 setSource(value);
+                setDestination("");
                 setQuantities({});
               }}
             >
@@ -393,9 +448,27 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
 }
 
 export function InventoryTransferDetail({ transferId }: { transferId: string }) {
-  const [transfer, setTransfer] = useState<InventoryTransferView | null>(null),
-    [error, setError] = useState<string | null>(null),
-    [reload, setReload] = useState(0);
+  const { state } = useAdminContext();
+  const scope = state.phase === "ready" ? state.selectedScope : null;
+  const scopeKey =
+    scope?.kind === "GLOBAL" ? "global" : scope?.kind === "LOCATION" ? scope.locationId : null;
+  const [loaded, setLoaded] = useState<{
+    key: string;
+    scopeKey: string;
+    value: InventoryTransferView;
+  } | null>(null);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
+  const [confirmed, setConfirmed] = useState<{
+    transferId: string;
+    scopeKey: string;
+    status: string;
+    version: number;
+    action: string;
+    acceptedNow: boolean;
+    resolutionCategory: string;
+    resolutionOutcome: string;
+  } | null>(null);
+  const [reload, setReload] = useState(0);
   const [quantities, setQuantities] = useState<Record<string, string>>({}),
     [reason, setReason] = useState("");
   const [sizeCounts, setSizeCounts] = useState<Record<string, string>>({});
@@ -409,24 +482,78 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
   const [inspectionConfirmed, setInspectionConfirmed] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const command = useAdminCommand();
+  const readKey = JSON.stringify([transferId, scopeKey, reload]);
+  const transfer = loaded?.key === readKey ? loaded.value : null;
+  const confirmedHere =
+    confirmed?.transferId === transferId && confirmed.scopeKey === scopeKey ? confirmed : null;
+  const previousTransfer =
+    !transfer &&
+    confirmedHere &&
+    loaded?.scopeKey === scopeKey &&
+    loaded.value.transferId === transferId
+      ? loaded.value
+      : null;
+  const visibleError = error?.key === readKey ? error.message : null;
+  const scopeAllowed =
+    !!transfer &&
+    (scopeKey === "global" ||
+      scopeKey === transfer.sourceLocationId ||
+      scopeKey === transfer.destinationLocationId);
+  const frozen = command.busy || command.uncertain;
+  const dirty =
+    !!reason.trim() ||
+    !!resolutionLine ||
+    !!resolutionQuantity.trim() ||
+    resolutionCategory !== "UNCLASSIFIED" ||
+    resolutionOutcome !== "LOSS" ||
+    inspectionConfirmed ||
+    Object.values(quantities).some((value) => !!value.trim()) ||
+    Object.values(sizeCounts).some((value) => !!value.trim()) ||
+    Object.values(observations).some(
+      (value) => value.damaged !== undefined || value.missing !== undefined,
+    );
+  const resetDraft = useCallback(() => {
+    setQuantities({});
+    setSizeCounts({});
+    setObservations({});
+    setResolutionLine("");
+    setResolutionQuantity("");
+    setResolutionCategory("UNCLASSIFIED");
+    setResolutionOutcome("LOSS");
+    setInspectionConfirmed(false);
+    setReason("");
+  }, []);
+  useAdminScopeGuard(dirty, frozen, resetDraft);
+  useAdminRouteGuard(dirty, frozen);
   useEffect(() => {
     const controller = new AbortController();
-    setTransfer(null);
     setError(null);
+    if (!scopeKey) return () => controller.abort();
     void readTransfer(
       `/api/admin/transfers/${encodeURIComponent(transferId)}`,
       inventoryTransferViewSchema,
       controller.signal,
     )
-      .then(setTransfer)
+      .then((value) => {
+        if (controller.signal.aborted) return;
+        resetDraft();
+        setLoaded({ key: readKey, scopeKey, value });
+        setConfirmed(null);
+      })
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : "Unable to load transfer");
+          setError({
+            key: readKey,
+            message: error instanceof Error ? error.message : "Unable to load transfer",
+          });
       });
     return () => controller.abort();
-  }, [transferId, reload]);
+  }, [transferId, scopeKey, reload, readKey, resetDraft]);
   async function act(action: string) {
-    if (!transfer) return;
+    if (!transfer || !scopeAllowed) return;
+    const acceptedNow =
+      action === "RECEIVE" &&
+      transfer.lines.some((line) => Number(quantities[line.lineId] ?? 0) > 0);
     if (!command.uncertain && !reason.trim()) {
       command.setNotice("Give a reason for this action.");
       return;
@@ -490,12 +617,18 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
           },
         ));
     if (done) {
-      setQuantities({});
-      setSizeCounts({});
-      setObservations({});
-      setResolutionQuantity("");
-      setInspectionConfirmed(false);
-      setReason("");
+      const result = inventoryTransferResultSchema.parse(command.getLastSuccessValue());
+      setConfirmed({
+        transferId,
+        scopeKey: scopeKey!,
+        status: result.status,
+        version: result.version,
+        action,
+        acceptedNow,
+        resolutionCategory,
+        resolutionOutcome,
+      });
+      resetDraft();
       setPendingAction(null);
       setReload((value) => value + 1);
     }
@@ -509,17 +642,73 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
         title="Transfer details"
         description="Record checked goods and remaining damage or shortages. Only accepted quantities credit destination stock."
       />
-      {error ? (
-        <p role="alert">{error}</p>
+      {command.notice ? <p role="status">{command.notice}</p> : null}
+      {!scopeKey ? (
+        <p>Select a Global or related location scope to view this transfer.</p>
+      ) : previousTransfer ? (
+        <section
+          className="space-y-3 rounded-lg border p-4"
+          aria-label="Confirmed transfer readback"
+        >
+          <h2 className="font-semibold">
+            {previousTransfer.sourceLocationName} → {previousTransfer.destinationLocationName}
+          </h2>
+          <p>
+            {confirmedHere!.action === "DISPATCH"
+              ? "Dispatch confirmed."
+              : confirmedHere!.action === "RECEIVE"
+                ? confirmedHere!.acceptedNow
+                  ? "Destination receipt confirmed."
+                  : "Transfer check confirmed. No destination stock was credited."
+                : confirmedHere!.action === "CANCEL"
+                  ? "Draft cancellation confirmed."
+                  : `${confirmedHere!.resolutionCategory === "DAMAGED" ? "Damaged goods" : confirmedHere!.resolutionCategory === "MISSING" ? "Missing goods" : "Outstanding goods"} ${confirmedHere!.resolutionOutcome === "LOSS" ? "loss" : "inspected return"} resolution confirmed.`}
+          </p>
+          <p>Transfer status: {statusLabel(confirmedHere!.status)}.</p>
+          <p role={visibleError ? "alert" : "status"}>
+            {visibleError
+              ? `The latest transfer could not be loaded: ${visibleError}`
+              : "Loading the latest transfer…"}{" "}
+            The quantities below are from before the confirmed action.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {previousTransfer.lines.map((line) => (
+              <li key={line.lineId}>
+                {line.productName}: {units(line.acceptedBase, line.baseUnit)} accepted,{" "}
+                {units(line.outstandingBase, line.baseUnit)} outstanding before the action
+              </li>
+            ))}
+          </ul>
+          {visibleError ? (
+            <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
+              Retry loading transfer
+            </Button>
+          ) : null}
+        </section>
+      ) : visibleError ? (
+        <div className="space-y-3">
+          <p role="alert">{visibleError}</p>
+          <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
+            Retry loading transfer
+          </Button>
+        </div>
       ) : !transfer ? (
         <p role="status">Loading transfer…</p>
+      ) : !scopeAllowed ? (
+        <p>This transfer is outside the selected location scope.</p>
       ) : (
         <>
           <div className="rounded-lg border p-4">
             <h2 className="text-lg font-semibold">
               {transfer.sourceLocationName} → {transfer.destinationLocationName}
             </h2>
-            <p className="capitalize">{statusLabel(transfer.status)}</p>
+            <StatusBadge>{statusLabel(transfer.status)}</StatusBadge>
+            {transfer.status === "RESOLVED" ? (
+              <p>
+                Outstanding goods are accounted for. Resolution does not record a destination
+                receipt.
+              </p>
+            ) : null}
             <p>{transfer.reason}</p>
           </div>
           <section className="space-y-4" aria-label="Transfer quantities">
@@ -528,9 +717,14 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                 <h3 className="font-semibold">{line.productName}</h3>
                 <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   {[
-                    ["Sent / planned", line.quantityBase],
+                    [
+                      transfer.status === "DRAFT" || transfer.status === "CANCELED"
+                        ? "Planned"
+                        : "Sent",
+                      line.quantityBase,
+                    ],
                     ["Accepted", line.acceptedBase],
-                    ["In transit", line.outstandingBase],
+                    ["Outstanding transit", line.outstandingBase],
                     ["Damaged (non-sellable)", line.damagedBase],
                     ["Missing", line.shortageBase],
                     ["Recorded loss", line.lostBase],
@@ -805,11 +999,14 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
               </Button>
             </section>
           ) : null}
-          {command.notice ? <p role="status">{command.notice}</p> : null}
           <Button
             variant="outline"
             disabled={command.busy || command.uncertain}
-            onClick={() => setReload((value) => value + 1)}
+            onClick={() => {
+              if (!dirty || window.confirm("Discard unsaved transfer entries and refresh?")) {
+                setReload((value) => value + 1);
+              }
+            }}
           >
             Refresh transfer
           </Button>
@@ -824,6 +1021,24 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
               ))}
             </section>
           ) : null}
+          {transfer.receipts.length ? (
+            <section className="space-y-2" aria-label="Accepted transfer receipts">
+              <h2 className="font-semibold">Accepted receipts</h2>
+              {transfer.receipts.map((receipt) => {
+                const line = transfer.lines.find((item) => item.lineId === receipt.lineId);
+                return (
+                  <p key={receipt.receiptId} className="text-sm">
+                    {new Date(receipt.receivedAt).toLocaleString("en-PH", {
+                      timeZone: "Asia/Manila",
+                    })}{" "}
+                    · {line?.productName ?? "Product"} ·{" "}
+                    {line ? units(receipt.acceptedBase, line.baseUnit) : receipt.acceptedBase}{" "}
+                    accepted · {receipt.reason}
+                  </p>
+                );
+              })}
+            </section>
+          ) : null}
           {transfer.checks.length ? (
             <section className="space-y-2">
               <h2 className="font-semibold">Latest checks (up to 100)</h2>
@@ -834,8 +1049,10 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                     {new Date(check.checkedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}{" "}
                     · {line?.productName} ·{" "}
                     {line ? units(check.acceptedBase, line.baseUnit) : check.acceptedBase} accepted;
-                    damaged remaining {check.damagedBase}, missing remaining {check.shortageBase} ·{" "}
-                    {check.reason}
+                    damaged remaining{" "}
+                    {line ? units(check.damagedBase, line.baseUnit) : check.damagedBase}, missing
+                    remaining {line ? units(check.shortageBase, line.baseUnit) : check.shortageBase}{" "}
+                    · {check.reason}
                   </p>
                 );
               })}
@@ -852,7 +1069,12 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
                       timeZone: "Asia/Manila",
                     })}{" "}
                     · {line?.productName} ·{" "}
-                    {resolution.outcome === "LOSS" ? "Loss" : "Verified sellable return"}:{" "}
+                    {resolution.category === "DAMAGED"
+                      ? "Damaged"
+                      : resolution.category === "MISSING"
+                        ? "Missing"
+                        : "Other outstanding goods"}{" "}
+                    · {resolution.outcome === "LOSS" ? "Loss" : "Verified sellable return"}:{" "}
                     {line ? units(resolution.quantityBase, line.baseUnit) : resolution.quantityBase}{" "}
                     · {resolution.reason}
                   </p>

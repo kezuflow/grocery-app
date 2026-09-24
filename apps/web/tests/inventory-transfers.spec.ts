@@ -1,4 +1,4 @@
-import type { APIResponse } from "@playwright/test";
+import type { APIResponse, Route } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
 import { test, expect } from "./admin-authenticated-fixture";
 
@@ -15,7 +15,7 @@ for (const width of [1280, 390]) {
   test(`Warehouse stock to two destinations with partial acceptance at ${width}px`, async ({
     adminPage: page,
   }, testInfo) => {
-    test.setTimeout(150000);
+    test.setTimeout(210000);
     await page.setViewportSize({ width, height: 1000 });
     const suffix = crypto.randomUUID(),
       productName = `Transfer onions ${width} ${suffix.slice(0, 5)}`;
@@ -95,7 +95,7 @@ for (const width of [1280, 390]) {
     await dialog.getByLabel("Confirmation reason").fill("Opening warehouse stock");
     await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(stockRow).toContainText("100000");
+    await expect(stockRow).toContainText("100,000 g");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
     const dispatches: { body: string | null; key: string | undefined }[] = [];
@@ -120,6 +120,17 @@ for (const width of [1280, 390]) {
       await page.getByLabel(`Send ${productName} (grams)`, { exact: true }).fill("20000");
       await page.getByLabel("Reason", { exact: true }).fill("Destination replenishment");
       await page.getByRole("button", { name: "Create draft", exact: true }).click();
+      if (target === locations[1]) {
+        await expect(
+          page.getByRole("link", { name: `${warehouse.name} → ${target.name}`, exact: true }),
+        ).toBeVisible();
+        await expect
+          .poll(() => page.evaluate(() => window.history.state?.freshmarketsAdminGuard))
+          .toBeFalsy();
+        await page.goBack();
+        await expect(page).toHaveURL(/\/admin\/inventory$/);
+        await page.goForward();
+      }
       await page
         .getByRole("link", { name: `${warehouse.name} → ${target.name}`, exact: true })
         .click();
@@ -146,6 +157,15 @@ for (const width of [1280, 390]) {
         await expect(
           page.getByText(quantity === 5000 ? "partially received" : "received", { exact: true }),
         ).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Accepted receipts" })).toBeVisible();
+        if (quantity === 5000 && target === locations[1]) {
+          await page.getByLabel(`Accept ${productName} (grams)`, { exact: true }).fill("1000");
+          page.once("dialog", (dialog) => void dialog.accept());
+          await page.getByRole("button", { name: "Refresh transfer" }).click();
+          await expect(
+            page.getByLabel(`Accept ${productName} (grams)`, { exact: true }),
+          ).toHaveValue("");
+        }
       }
     }
     const options = z.object({
@@ -187,6 +207,28 @@ for (const width of [1280, 390]) {
       .click();
     await page.getByLabel("Reason for action", { exact: true }).fill("Dispatch checked goods");
     await page.getByRole("button", { name: "Dispatch transfer", exact: true }).click();
+    await page.getByLabel(`Damaged remaining for ${productName}`, { exact: true }).fill("3000");
+    await page.getByLabel(`Missing remaining for ${productName}`, { exact: true }).fill("2000");
+    await page.getByLabel("Reason for action", { exact: true }).fill("Initial discrepancy check");
+    let failedCheckReadback = false;
+    const failCheckRead = async (route: Route) => {
+      if (route.request().method() === "GET" && !failedCheckReadback) {
+        failedCheckReadback = true;
+        await route.abort("failed");
+      } else {
+        await route.continue();
+      }
+    };
+    await page.route("**/api/admin/transfers/*", failCheckRead);
+    await page.getByRole("button", { name: "Record checked goods", exact: true }).click();
+    await expect(
+      page.getByText("Transfer check confirmed. No destination stock was credited."),
+    ).toBeVisible();
+    await expect(page.getByText("Transfer status: in transit.")).toBeVisible();
+    await page.getByRole("button", { name: "Retry loading transfer" }).click();
+    await expect(page.getByRole("heading", { name: "Latest checks (up to 100)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Accepted receipts" })).toHaveCount(0);
+    await page.unroute("**/api/admin/transfers/*", failCheckRead);
     await page.getByLabel(`Accept ${productName} (grams)`, { exact: true }).fill("15000");
     await page.getByLabel(`Damaged remaining for ${productName}`, { exact: true }).fill("3000");
     await page.getByLabel(`Missing remaining for ${productName}`, { exact: true }).fill("2000");
@@ -195,6 +237,7 @@ for (const width of [1280, 390]) {
       .fill("Inspected arrival: damage and shortage");
     await page.getByRole("button", { name: "Record checked goods", exact: true }).click();
     await expect(page.getByText("partially received", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Accepted receipts" })).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`warehouse-discrepancy-${width}.png`),
       fullPage: true,
@@ -221,11 +264,27 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByText("The action could not be confirmed.", { exact: false }),
     ).toBeVisible();
+    let failedReadback = false;
+    await page.route("**/api/admin/transfers/*", async (route) => {
+      if (route.request().method() === "GET" && !failedReadback) {
+        failedReadback = true;
+        await route.abort("failed");
+      } else {
+        await route.continue();
+      }
+    });
     await page.getByRole("button", { name: "Save resolution", exact: true }).click();
+    await expect(page.getByText("Missing goods loss resolution confirmed.")).toBeVisible();
+    await expect(page.getByText("Transfer status: partially received.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry loading transfer" })).toBeVisible();
+    await page.getByRole("button", { name: "Retry loading transfer" }).click();
     await expect(
       page.getByRole("heading", { name: "Latest resolutions (up to 100)", exact: true }),
     ).toBeVisible();
     expect(resolutions[1]).toEqual(resolutions[0]);
+    await expect(page.getByText("Missing · Loss", { exact: false })).toBeVisible();
+    await page.getByRole("combobox", { name: "Product to resolve", exact: true }).click();
+    await page.getByRole("option", { name: productName, exact: true }).click();
     await page.getByRole("combobox", { name: "Outstanding goods", exact: true }).click();
     await page.getByRole("option", { name: "Reported damaged goods", exact: true }).click();
     await page.getByRole("combobox", { name: "Resolution", exact: true }).click();
@@ -240,6 +299,9 @@ for (const width of [1280, 390]) {
       .check();
     await page.getByRole("button", { name: "Save resolution", exact: true }).click();
     await expect(page.getByText("resolved", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Damaged · Verified sellable return", { exact: false }),
+    ).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`warehouse-resolved-${width}.png`),
       fullPage: true,
@@ -254,9 +316,9 @@ for (const width of [1280, 390]) {
     });
     await expect(distribution.getByRole("article")).toHaveCount(1);
     await expect(distribution.getByRole("heading", { level: 3 })).toContainText(productName);
-    await expect(distribution.getByText("98,000", { exact: true })).toBeVisible();
-    await expect(distribution.getByText("43,000", { exact: true })).toBeVisible();
-    await expect(distribution.getByText("55,000", { exact: true })).toBeVisible();
+    await expect(distribution.getByText("98,000 g", { exact: true })).toBeVisible();
+    await expect(distribution.getByText("43,000 g", { exact: true })).toBeVisible();
+    await expect(distribution.getByText("55,000 g", { exact: true })).toBeVisible();
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

@@ -148,6 +148,7 @@ export function useAdminRouteGuard(dirty: boolean, locked: boolean): void {
     installListeners();
     return () => {
       guards.delete(owner.current);
+      syncHistoryGuard();
       removeListeners();
     };
   }, []);
