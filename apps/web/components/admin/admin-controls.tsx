@@ -13,6 +13,44 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 
+/** Compact view tabs shared by real Admin index pages. */
+export function AdminIndexViews<T extends string>({
+  label,
+  views,
+  value,
+  onChange,
+}: {
+  label: string;
+  views: ReadonlyArray<{ label: string; status: T }>;
+  value: T;
+  onChange(status: T): void;
+}) {
+  return (
+    <div
+      role="group"
+      className="flex min-h-14 items-end gap-1 overflow-x-auto border-b border-[var(--fm-border)] px-3 pt-2"
+      aria-label={label}
+    >
+      {views.map((view) => (
+        <button
+          type="button"
+          key={view.label}
+          aria-pressed={value === view.status}
+          className={cn(
+            "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+            value === view.status
+              ? "border-[var(--fm-text)] text-[var(--fm-text)]"
+              : "border-transparent text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]",
+          )}
+          onClick={() => onChange(view.status)}
+        >
+          {view.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AdminCursorPagination({
   pageNumber,
   nextCursor,

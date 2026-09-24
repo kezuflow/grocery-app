@@ -304,7 +304,8 @@ describe("shared Admin accessibility contract", () => {
     expect(productsPage).toContain("<LocationProductPreviewPanel");
     expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
     expect(categoriesPage).toContain("<NewCategoryWorkspace");
-    expect(ordersPage).toContain('aria-controls="order-detail-panel"');
+    expect(ordersPage).toContain("href={recordHref(order)}");
+    expect(ordersPage).toContain('panelId="order-detail-panel"');
     expect(ordersPage).toContain("aria-label={`Preview order ${orderLabel(order)}`}");
     expect(orderPreviewPanel).toContain("Order Preview");
     expect(orderPreviewPanel).toContain('aria-label="Order status"');

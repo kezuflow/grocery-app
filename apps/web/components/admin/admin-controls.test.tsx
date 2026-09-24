@@ -2,8 +2,8 @@
 
 import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { useAdminPagination } from "./admin-controls";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminIndexViews, useAdminPagination } from "./admin-controls";
 
 let root: Root | null = null;
 
@@ -48,5 +48,31 @@ describe("useAdminPagination", () => {
       cursor: "first",
       page: "1",
     });
+  });
+
+  it("labels the selected index view and sends the requested filter", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const onChange = vi.fn();
+    await act(async () =>
+      root?.render(
+        <AdminIndexViews
+          label="Order status views"
+          views={[
+            { label: "All", status: "" },
+            { label: "Committed", status: "COMMITTED" },
+          ]}
+          value=""
+          onChange={onChange}
+        />,
+      ),
+    );
+    expect(container.querySelector('[role="group"]')?.getAttribute("aria-label")).toBe(
+      "Order status views",
+    );
+    expect(container.querySelectorAll("button")[0]?.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => container.querySelectorAll("button")[1]?.click());
+    expect(onChange).toHaveBeenCalledWith("COMMITTED");
   });
 });

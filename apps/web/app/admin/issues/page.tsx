@@ -22,6 +22,7 @@ import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import {
   AdminConfirmationDialog,
   AdminCursorPagination,
+  AdminIndexViews,
   useAdminPagination,
 } from "../../../components/admin/admin-controls";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
@@ -186,29 +187,15 @@ export default function IssuesPage() {
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Order issue queue</h2>
-        <div
-          className="flex min-h-14 items-end gap-1 overflow-x-auto border-b border-[var(--fm-border)] px-3 pt-2"
-          aria-label="Order issue status views"
-        >
-          {issueViews.map((view) => (
-            <button
-              type="button"
-              key={view.label}
-              aria-pressed={status === view.status}
-              className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
-                status === view.status
-                  ? "border-[var(--fm-text)] text-[var(--fm-text)]"
-                  : "border-transparent text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
-              }`}
-              onClick={() => {
-                setStatus(view.status);
-                pagination.reset();
-              }}
-            >
-              {view.label}
-            </button>
-          ))}
-        </div>
+        <AdminIndexViews
+          label="Order issue status views"
+          views={issueViews}
+          value={status}
+          onChange={(next) => {
+            setStatus(next);
+            pagination.reset();
+          }}
+        />
 
         {state.phase === "loading" ? (
           <div className="p-4">

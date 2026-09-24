@@ -1,4 +1,7 @@
 import { executeAdminE2eSql, expect, test } from "./admin-authenticated-fixture";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Finance workspace smoke coverage with deterministic local Staff identities.
@@ -32,6 +35,211 @@ test("an unauthenticated visitor cannot open membership or issue workspaces", as
 test("a provisioned Staff reader opens the real Orders workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/orders");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+});
+
+test("shared index views preserve the Problems status filter", async ({ adminPage }) => {
+  const statuses: string[] = [];
+  await adminPage.route("**/api/admin/order-issues?**", (route) => {
+    statuses.push(new URL(route.request().url()).searchParams.get("status") ?? "");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "problem-view-test",
+        value: { items: [], nextCursor: null },
+      }),
+    });
+  });
+  await adminPage.goto("/admin/issues");
+  await adminPage.getByRole("button", { name: "Being handled" }).click();
+  await expect(adminPage.getByRole("button", { name: "Being handled" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect.poll(() => statuses.includes("CLAIMED")).toBe(true);
+});
+
+test("Order number opens the record and Back restores the filtered cursor page", async ({
+  adminPage,
+}) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  const requests: string[] = [];
+  await adminPage.route("**/api/admin/orders?**", (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url.search);
+    const second = url.searchParams.get("cursor") === "next-orders";
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "orders-return-test",
+        value: {
+          items: [
+            {
+              orderId: second ? "test-order-2" : "test-order-1",
+              orderNumber: second ? "FM-RETURN-2" : "FM-RETURN-1",
+              customerName: "Fixture Customer",
+              customerEmail: "fixture@example.test",
+              fulfillmentMode: "INSTANT",
+              status: "COMMITTED",
+              totalMinor: 10000,
+              currency: "PHP",
+              paymentStatus: "SUCCEEDED",
+              fulfillmentStatus: "NOT_STARTED",
+              deliveryStatus: null,
+              deliveryDispatchStatus: null,
+              deliveryProviderStatus: null,
+              committedAt: "2026-09-21T08:00:00.000Z",
+              version: 1,
+            },
+          ],
+          nextCursor: second ? null : "next-orders",
+        },
+      }),
+    });
+  });
+  await adminPage.route("**/api/admin/orders/test-order-2", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "orders-record-test",
+        value: {
+          orderId: "test-order-2",
+          orderNumber: "FM-RETURN-2",
+          customerName: "Fixture Customer",
+          customerEmail: "fixture@example.test",
+          fulfillmentMode: "INSTANT",
+          status: "COMMITTED",
+          totalMinor: 10000,
+          currency: "PHP",
+          paymentStatus: "SUCCEEDED",
+          fulfillmentStatus: "NOT_STARTED",
+          deliveryStatus: null,
+          deliveryDispatchStatus: null,
+          deliveryProviderStatus: null,
+          committedAt: "2026-09-21T08:00:00.000Z",
+          version: 1,
+          allowedActions: ["CANCEL"],
+          customer: {
+            name: "Fixture Customer",
+            email: "fixture@example.test",
+            phone: null,
+            addressLines: ["Cebu City"],
+          },
+          financial: {
+            subtotalMinor: 10000,
+            discountMinor: 0,
+            deliveryFeeMinor: 0,
+            serviceFeeMinor: 0,
+            taxMinor: 0,
+            totalMinor: 10000,
+            currency: "PHP",
+            source: "CHECKOUT_QUOTE",
+          },
+          items: [
+            {
+              productName: "Fresh Carrots",
+              variantName: "1 kg",
+              unit: "GRAM",
+              quantity: 1,
+              baseQuantity: 1000,
+              unitPriceMinor: 10000,
+              lineTotalMinor: 10000,
+            },
+          ],
+          payments: [],
+          amendments: [],
+          fulfillment: null,
+          delivery: null,
+          exceptions: [],
+          timeline: [],
+          recentAudit: [],
+        },
+      }),
+    }),
+  );
+  await adminPage.goto("/admin/orders");
+  await expect(adminPage.getByRole("link", { name: "FM-RETURN-1" })).toBeVisible();
+  if (process.env.SAUI_CAPTURE_ORDERS === "1") {
+    const path = fileURLToPath(
+      new URL(
+        "../../../docs/operations/checkpoints/evidence/saui-03/orders-index-desktop.png",
+        import.meta.url,
+      ),
+    );
+    mkdirSync(dirname(path), { recursive: true });
+    await adminPage.screenshot({ path, fullPage: true });
+  }
+  await adminPage.getByRole("button", { name: "Committed", exact: true }).click();
+  await expect(adminPage).toHaveURL(/\/admin\/orders\?status=COMMITTED$/);
+  await adminPage
+    .getByRole("navigation", { name: "Results pagination" })
+    .getByRole("button", { name: "Next" })
+    .click();
+  await expect(adminPage).toHaveURL(/status=COMMITTED.*cursor=next-orders/);
+  await adminPage.getByRole("link", { name: "FM-RETURN-2" }).click();
+  await expect(adminPage).toHaveURL(/\/admin\/orders\/test-order-2\?/);
+  await expect(
+    adminPage.getByRole("heading", { level: 1, name: "Order FM-RETURN-2" }),
+  ).toBeVisible();
+  if (process.env.SAUI_CAPTURE_ORDERS === "1") {
+    const path = fileURLToPath(
+      new URL(
+        "../../../docs/operations/checkpoints/evidence/saui-03/order-record-desktop.png",
+        import.meta.url,
+      ),
+    );
+    await adminPage.screenshot({ path, fullPage: true });
+  }
+  await adminPage.getByRole("button", { name: "Cancel order" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toContainText("Confirm order cancellation");
+  if (process.env.SAUI_CAPTURE_ORDERS === "1") {
+    const path = fileURLToPath(
+      new URL(
+        "../../../docs/operations/checkpoints/evidence/saui-03/order-confirmation-desktop.png",
+        import.meta.url,
+      ),
+    );
+    await adminPage.screenshot({ path, fullPage: true });
+  }
+  await adminPage.getByRole("button", { name: "Keep unchanged" }).click();
+  await expect(adminPage.getByRole("alertdialog")).toHaveCount(0);
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  if (process.env.SAUI_CAPTURE_ORDERS === "1") {
+    const path = fileURLToPath(
+      new URL(
+        "../../../docs/operations/checkpoints/evidence/saui-03/order-record-mobile.png",
+        import.meta.url,
+      ),
+    );
+    await adminPage.screenshot({ path, fullPage: true });
+  }
+  await adminPage.getByRole("link", { name: "Orders", exact: true }).last().click();
+  await expect(adminPage).toHaveURL(/status=COMMITTED.*cursor=next-orders/);
+  await expect(adminPage.getByRole("link", { name: "FM-RETURN-2" })).toBeVisible();
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  await expect(adminPage.getByRole("button", { name: "Preview order" })).toBeVisible();
+  if (process.env.SAUI_CAPTURE_ORDERS === "1") {
+    const path = fileURLToPath(
+      new URL(
+        "../../../docs/operations/checkpoints/evidence/saui-03/orders-index-mobile.png",
+        import.meta.url,
+      ),
+    );
+    await adminPage.screenshot({ path, fullPage: true });
+  }
+  expect(
+    requests.some(
+      (query) => query.includes("status=COMMITTED") && query.includes("cursor=next-orders"),
+    ),
+  ).toBe(true);
 });
 
 test("the Order list shows complete operational progress without an Unassigned status", async ({
@@ -108,9 +316,11 @@ test("the Order list shows complete operational progress without an Unassigned s
     await adminPage.setViewportSize(viewport);
     await adminPage.goto("/admin/orders");
 
-    await expect(adminPage.getByLabel("Order progress: Committed")).toBeAttached();
-    await expect(adminPage.getByLabel("Order progress: Packing; Finding rider")).toBeAttached();
-    await expect(adminPage.getByLabel("Order progress: Canceled")).toBeAttached();
+    await expect(adminPage.getByLabel("Order progress: Committed").first()).toBeAttached();
+    await expect(
+      adminPage.getByLabel("Order progress: Packing; Finding rider").first(),
+    ).toBeAttached();
+    await expect(adminPage.getByLabel("Order progress: Canceled").first()).toBeAttached();
     await expect(adminPage.getByLabel(/Order progress: Unassigned/)).toHaveCount(0);
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -215,7 +425,7 @@ test("clicking an Order row opens the authoritative item preview and status sele
   });
 
   await adminPage.goto("/admin/orders");
-  await adminPage.getByText("Preview Customer").click();
+  await adminPage.getByRole("table", { name: "Order list" }).getByText("Preview Customer").click();
 
   await expect(adminPage.getByText("Order Preview", { exact: true })).toBeVisible();
   await expect(

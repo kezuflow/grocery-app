@@ -2,10 +2,12 @@
 
 import { adminCancellationResponse } from "../../../../lib/order-cancellation-response";
 import type { AdminOrderDetail, RpcResult } from "@freshmarkets/contracts";
-import { ArrowLeft, Clipboard, MapPin, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, Clipboard, Phone } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
+import { useAdminContext } from "../../admin-context-provider";
 import {
   notifyCommandError,
   notifyCommandSuccess,
@@ -81,6 +83,17 @@ function SummaryRow({
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ "order-id": string }> }) {
+  const admin = useAdminContext();
+  const searchParams = useSearchParams();
+  const requestedReturn = searchParams.get("returnTo");
+  const currentScope =
+    admin.state.phase === "ready" ? JSON.stringify(admin.state.selectedScope) : null;
+  const listHref =
+    currentScope === searchParams.get("returnScope") &&
+    requestedReturn &&
+    (requestedReturn === "/admin/orders" || requestedReturn.startsWith("/admin/orders?"))
+      ? requestedReturn
+      : "/admin/orders";
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -189,7 +202,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
         </Alert>
       ) : null}
       <Link
-        href="/admin/orders"
+        href={listHref}
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
@@ -249,131 +262,57 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(19rem,1fr)] [&>*]:min-w-0">
             <div className="min-w-0 space-y-6">
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
-                <CardHeader className="px-5">
-                  <CardTitle>Customer information</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-5 px-5 sm:grid-cols-2">
-                  <div className="flex gap-3">
-                    <UserRound
-                      className="mt-0.5 size-5 text-[var(--fm-text-muted)]"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 text-sm">
-                      <p className="font-medium">{order.customer.name ?? "Customer"}</p>
-                      <a
-                        className="break-all text-[var(--fm-text-muted)] hover:underline"
-                        href={`mailto:${order.customer.email}`}
-                      >
-                        {order.customer.email}
-                      </a>
-                      {order.customer.phone ? (
-                        <a
-                          className="mt-1 block text-[var(--fm-text-muted)] hover:underline"
-                          href={`tel:${order.customer.phone}`}
-                        >
-                          {order.customer.phone}
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <MapPin
-                      className="mt-0.5 size-5 text-[var(--fm-text-muted)]"
-                      aria-hidden="true"
-                    />
-                    <div className="text-sm">
-                      <p className="font-medium">Delivery address</p>
-                      <p className="mt-1 text-[var(--fm-text-muted)]">
-                        {order.customer.addressLines.length > 0
-                          ? order.customer.addressLines.join(", ")
-                          : "Address unavailable"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
-                <CardHeader className="px-5">
-                  <CardTitle>Delivery status</CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
-                  {["CANCELED", "CANCELLATION_REQUESTED", "EXCEPTION"].includes(order.status) ? (
-                    <OrderStatusBadge status={order.status} />
-                  ) : (
-                    <div>
-                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                        {deliveryStages.map((stage, index) => (
-                          <span
-                            className={
-                              index <= deliveryStage(order)
-                                ? "font-medium text-[var(--fm-text)]"
-                                : "text-[var(--fm-text-muted)]"
-                            }
-                            key={stage}
-                          >
-                            {stage}
-                          </span>
-                        ))}
-                      </div>
-                      <div
-                        className="mt-3 grid grid-cols-4 gap-1"
-                        role="progressbar"
-                        aria-label="Order delivery progress"
-                        aria-valuemin={0}
-                        aria-valuemax={3}
-                        aria-valuenow={deliveryStage(order)}
-                      >
-                        {deliveryStages.map((stage, index) => (
-                          <span
-                            className={`h-1.5 rounded-full ${index <= deliveryStage(order) ? "bg-[var(--fm-text)]" : "bg-[var(--fm-border)]"}`}
-                            key={stage}
-                          />
-                        ))}
-                      </div>
-                      <p className="mt-3 text-sm text-[var(--fm-text-muted)]">
-                        {order.delivery?.deliveredAt
-                          ? `Delivered ${dateTime(order.delivery.deliveredAt)}`
-                          : order.fulfillment?.promisedAt
-                            ? `Promised ${dateTime(order.fulfillment.promisedAt)}`
-                            : order.fulfillment?.deliveryDate
-                              ? `Delivery date ${dateTime(order.fulfillment.deliveryDate)}`
-                              : "No delivery promise is available."}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
               <ListPageSection title="Order items">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {order.items.map((item, index) => (
-                      <TableRow key={`${item.productName}-${item.variantName}-${index}`}>
-                        <TableCell>
-                          <p className="font-medium">{item.productName}</p>
-                          <p className="text-xs text-[var(--fm-text-muted)]">
-                            {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
-                          </p>
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{money(item.unitPriceMinor, order.currency)}</TableCell>
-                        <TableCell className="font-medium">
+                <ul className="divide-y divide-[var(--fm-border)] sm:hidden">
+                  {order.items.map((item, index) => (
+                    <li
+                      key={`${item.productName}-${item.variantName}-${index}`}
+                      className="space-y-2 p-4 text-sm"
+                    >
+                      <p className="font-medium">{item.productName}</p>
+                      <p className="text-[var(--fm-text-muted)]">
+                        {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
+                      </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[var(--fm-text-muted)]">
+                          {item.quantity} × {money(item.unitPriceMinor, order.currency)}
+                        </span>
+                        <span className="font-medium">
                           {money(item.lineTotalMinor, order.currency)}
-                        </TableCell>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Total</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {order.items.map((item, index) => (
+                        <TableRow key={`${item.productName}-${item.variantName}-${index}`}>
+                          <TableCell>
+                            <p className="font-medium">{item.productName}</p>
+                            <p className="text-xs text-[var(--fm-text-muted)]">
+                              {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
+                            </p>
+                          </TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{money(item.unitPriceMinor, order.currency)}</TableCell>
+                          <TableCell className="font-medium">
+                            {money(item.lineTotalMinor, order.currency)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </ListPageSection>
 
               {order.amendments.length > 0 ? (
@@ -407,136 +346,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                   </div>
                 </ListPageSection>
               ) : null}
-
-              <ListPageSection title="Timeline">
-                <AdminTimeline>
-                  {order.timeline.length > 0
-                    ? order.timeline.map((entry) => (
-                        <li
-                          className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]"
-                          key={entry.eventId}
-                        >
-                          <time className="text-xs text-[var(--fm-text-muted)]">
-                            {dateTime(entry.occurredAt)}
-                          </time>
-                          <span>{entry.label}</span>
-                          {entry.status ? <StatusBadge>{entry.status}</StatusBadge> : null}
-                        </li>
-                      ))
-                    : undefined}
-                </AdminTimeline>
-              </ListPageSection>
-            </div>
-
-            <aside className="space-y-6">
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
-                <CardHeader className="px-5">
-                  <CardTitle>Order summary</CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
-                  <dl className="space-y-3">
-                    <SummaryRow
-                      label={`Subtotal (${order.items.length} items)`}
-                      value={money(order.financial.subtotalMinor, order.currency)}
-                    />
-                    <SummaryRow
-                      label="Discount"
-                      value={
-                        order.financial.discountMinor === null
-                          ? "Unavailable"
-                          : `−${money(order.financial.discountMinor, order.currency)}`
-                      }
-                      muted
-                    />
-                    <SummaryRow
-                      label="Delivery"
-                      value={money(order.financial.deliveryFeeMinor, order.currency)}
-                    />
-                    {order.financial.serviceFeeMinor && order.financial.serviceFeeMinor > 0 ? (
-                      <SummaryRow
-                        label="Historical FreshMarkets fee"
-                        value={money(order.financial.serviceFeeMinor, order.currency)}
-                      />
-                    ) : null}
-                    <SummaryRow
-                      label="Tax"
-                      value={money(order.financial.taxMinor, order.currency)}
-                    />
-                  </dl>
-                  <Separator className="my-4" />
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">Total</span>
-                    <span className="text-lg font-semibold">
-                      {money(order.financial.totalMinor, order.currency)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
-                <CardHeader className="px-5">
-                  <CardTitle>Customer details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 px-5 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Customer name</p>
-                    <p className="mt-1 font-medium">{order.customer.name ?? "Unavailable"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Email</p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <a
-                        className="min-w-0 truncate hover:underline"
-                        href={`mailto:${order.customer.email}`}
-                      >
-                        {order.customer.email}
-                      </a>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Copy email"
-                        onClick={() => void copy(order.customer.email, "Email")}
-                      >
-                        <Clipboard aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Phone</p>
-                    {order.customer.phone ? (
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <a
-                          className="inline-flex items-center gap-2 hover:underline"
-                          href={`tel:${order.customer.phone}`}
-                        >
-                          <Phone className="size-3.5" aria-hidden="true" />
-                          {order.customer.phone}
-                        </a>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Copy phone"
-                          onClick={() => void copy(order.customer.phone ?? "", "Phone")}
-                        >
-                          <Clipboard aria-hidden="true" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-[var(--fm-text-muted)]">Unavailable</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Address</p>
-                    <p className="mt-1">
-                      {order.customer.addressLines.length > 0
-                        ? order.customer.addressLines.join(", ")
-                        : "Unavailable"}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
 
               <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
                 <CardHeader className="px-5">
@@ -618,6 +427,188 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                       ) : null}
                     </div>
                   ) : null}
+                </CardContent>
+              </Card>
+
+              <ListPageSection title="Timeline">
+                <AdminTimeline>
+                  {order.timeline.length > 0
+                    ? order.timeline.map((entry) => (
+                        <li
+                          className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]"
+                          key={entry.eventId}
+                        >
+                          <time className="text-xs text-[var(--fm-text-muted)]">
+                            {dateTime(entry.occurredAt)}
+                          </time>
+                          <span>{entry.label}</span>
+                          {entry.status ? <StatusBadge>{entry.status}</StatusBadge> : null}
+                        </li>
+                      ))
+                    : undefined}
+                </AdminTimeline>
+              </ListPageSection>
+            </div>
+
+            <aside className="space-y-6">
+              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+                <CardHeader className="px-5">
+                  <CardTitle>Order summary</CardTitle>
+                </CardHeader>
+                <CardContent className="px-5">
+                  <dl className="space-y-3">
+                    <SummaryRow
+                      label={`Subtotal (${order.items.length} items)`}
+                      value={money(order.financial.subtotalMinor, order.currency)}
+                    />
+                    <SummaryRow
+                      label="Discount"
+                      value={
+                        order.financial.discountMinor === null
+                          ? "Unavailable"
+                          : `−${money(order.financial.discountMinor, order.currency)}`
+                      }
+                      muted
+                    />
+                    <SummaryRow
+                      label="Delivery"
+                      value={money(order.financial.deliveryFeeMinor, order.currency)}
+                    />
+                    {order.financial.serviceFeeMinor && order.financial.serviceFeeMinor > 0 ? (
+                      <SummaryRow
+                        label="Historical FreshMarkets fee"
+                        value={money(order.financial.serviceFeeMinor, order.currency)}
+                      />
+                    ) : null}
+                    <SummaryRow
+                      label="Tax"
+                      value={money(order.financial.taxMinor, order.currency)}
+                    />
+                  </dl>
+                  <Separator className="my-4" />
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">Total</span>
+                    <span className="text-lg font-semibold">
+                      {money(order.financial.totalMinor, order.currency)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+                <CardHeader className="px-5">
+                  <CardTitle>Delivery status</CardTitle>
+                </CardHeader>
+                <CardContent className="px-5">
+                  {["CANCELED", "CANCELLATION_REQUESTED", "EXCEPTION"].includes(order.status) ? (
+                    <OrderStatusBadge status={order.status} />
+                  ) : (
+                    <div>
+                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                        {deliveryStages.map((stage, index) => (
+                          <span
+                            className={
+                              index <= deliveryStage(order)
+                                ? "font-medium text-[var(--fm-text)]"
+                                : "text-[var(--fm-text-muted)]"
+                            }
+                            key={stage}
+                          >
+                            {stage}
+                          </span>
+                        ))}
+                      </div>
+                      <div
+                        className="mt-3 grid grid-cols-4 gap-1"
+                        role="progressbar"
+                        aria-label="Order delivery progress"
+                        aria-valuemin={0}
+                        aria-valuemax={3}
+                        aria-valuenow={deliveryStage(order)}
+                      >
+                        {deliveryStages.map((stage, index) => (
+                          <span
+                            className={`h-1.5 rounded-full ${index <= deliveryStage(order) ? "bg-[var(--fm-text)]" : "bg-[var(--fm-border)]"}`}
+                            key={stage}
+                          />
+                        ))}
+                      </div>
+                      <p className="mt-3 text-sm text-[var(--fm-text-muted)]">
+                        {order.delivery?.deliveredAt
+                          ? `Delivered ${dateTime(order.delivery.deliveredAt)}`
+                          : order.fulfillment?.promisedAt
+                            ? `Promised ${dateTime(order.fulfillment.promisedAt)}`
+                            : order.fulfillment?.deliveryDate
+                              ? `Delivery date ${dateTime(order.fulfillment.deliveryDate)}`
+                              : "No delivery promise is available."}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+                <CardHeader className="px-5">
+                  <CardTitle>Customer details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 px-5 text-sm">
+                  <div>
+                    <p className="text-xs text-[var(--fm-text-muted)]">Customer name</p>
+                    <p className="mt-1 font-medium">{order.customer.name ?? "Unavailable"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--fm-text-muted)]">Email</p>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <a
+                        className="min-w-0 truncate hover:underline"
+                        href={`mailto:${order.customer.email}`}
+                      >
+                        {order.customer.email}
+                      </a>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Copy email"
+                        onClick={() => void copy(order.customer.email, "Email")}
+                      >
+                        <Clipboard aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--fm-text-muted)]">Phone</p>
+                    {order.customer.phone ? (
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <a
+                          className="inline-flex items-center gap-2 hover:underline"
+                          href={`tel:${order.customer.phone}`}
+                        >
+                          <Phone className="size-3.5" aria-hidden="true" />
+                          {order.customer.phone}
+                        </a>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Copy phone"
+                          onClick={() => void copy(order.customer.phone ?? "", "Phone")}
+                        >
+                          <Clipboard aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[var(--fm-text-muted)]">Unavailable</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--fm-text-muted)]">Address</p>
+                    <p className="mt-1">
+                      {order.customer.addressLines.length > 0
+                        ? order.customer.addressLines.join(", ")
+                        : "Unavailable"}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
 

@@ -7,11 +7,15 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { Clipboard, EllipsisVertical, Eye, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AdminCursorPagination,
-  useAdminPagination,
+  AdminIndexViews,
+  useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
+import { useAdminContext } from "../admin-context-provider";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
@@ -66,16 +70,59 @@ function orderLabel(order: AdminOrderSummary): string {
 }
 
 export default function OrdersPage() {
+  const { state } = useAdminContext();
+  const scopeKey = state.phase === "ready" ? JSON.stringify(state.selectedScope) : "loading";
+  return <OrdersWorkspace key={scopeKey} scopeKey={scopeKey} />;
+}
+
+function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
+  const requestVersion = useRef(0);
   const [state, setState] = useState<State>({ phase: "loading" });
   const [page, setPage] = useState<AdminOrderPage | null>(null);
-  const [status, setStatus] = useState("");
+  const searchParams = useSearchParams();
+  const requestedStatus = searchParams.get("status") ?? "";
+  const status = orderViews.some((view) => view.status === requestedStatus) ? requestedStatus : "";
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderSummary | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const pagination = useAdminPagination(status);
+  const pagination = useAdminUrlPagination("/admin/orders");
+  const listUrl = `/admin/orders${searchParams.size ? `?${searchParams}` : ""}`;
+  function recordHref(order: AdminOrderSummary) {
+    return `/admin/orders/${encodeURIComponent(order.orderId)}?returnTo=${encodeURIComponent(listUrl)}&returnScope=${encodeURIComponent(scopeKey)}`;
+  }
+  function rememberReturn() {
+    sessionStorage.setItem(
+      `freshmarkets.admin.orders.return:${scopeKey}`,
+      JSON.stringify({ url: listUrl, y: window.scrollY }),
+    );
+  }
+  useEffect(() => {
+    if (state.phase !== "ready") return;
+    const key = `freshmarkets.admin.orders.return:${scopeKey}`;
+    const stored = sessionStorage.getItem(key);
+    if (!stored) return;
+    sessionStorage.removeItem(key);
+    try {
+      const target = JSON.parse(stored) as { url: string; y: number };
+      if (target.url === `${window.location.pathname}${window.location.search}` && target.y >= 0) {
+        window.requestAnimationFrame(() => window.scrollTo(0, target.y));
+      }
+    } catch {
+      // An invalid return position cannot change the order list.
+    }
+  }, [scopeKey, state.phase]);
+
+  function selectView(nextStatus: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (nextStatus) next.set("status", nextStatus);
+    else next.delete("status");
+    pagination.reset(next);
+    window.history.pushState(null, "", `/admin/orders${next.size ? `?${next}` : ""}`);
+  }
 
   const load = useCallback(async (nextStatus: string, cursor: string | null) => {
+    const version = ++requestVersion.current;
     setState({ phase: "loading" });
     try {
       const query = new URLSearchParams({ limit: "50" });
@@ -84,6 +131,7 @@ export default function OrdersPage() {
       const payload = (await (
         await fetch(`/api/admin/orders?${query}`)
       ).json()) as RpcResult<AdminOrderPage>;
+      if (version !== requestVersion.current) return;
       if (!payload.ok) {
         setState({
           phase: "error",
@@ -96,12 +144,16 @@ export default function OrdersPage() {
       setSelectedIds(new Set());
       setState({ phase: "ready" });
     } catch {
+      if (version !== requestVersion.current) return;
       setState({ phase: "error", message: "Network error loading orders." });
     }
   }, []);
 
   useEffect(() => {
     void load(status, pagination.cursor);
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [status, load, pagination.cursor]);
 
   const visibleOrders = page?.items ?? [];
@@ -153,29 +205,12 @@ export default function OrdersPage() {
 
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
         <h2 className="sr-only">Order list</h2>
-        <div
-          className="flex min-h-14 items-end gap-1 overflow-x-auto border-b border-[var(--fm-border)] px-3 pt-2"
-          aria-label="Order status views"
-        >
-          {orderViews.map((view) => (
-            <button
-              type="button"
-              key={view.label}
-              aria-pressed={status === view.status}
-              className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
-                status === view.status
-                  ? "border-[var(--fm-text)] text-[var(--fm-text)]"
-                  : "border-transparent text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
-              }`}
-              onClick={() => {
-                setStatus(view.status);
-                pagination.reset();
-              }}
-            >
-              {view.label}
-            </button>
-          ))}
-        </div>
+        <AdminIndexViews
+          label="Order status views"
+          views={orderViews}
+          value={status}
+          onChange={selectView}
+        />
 
         {selectedIds.size > 0 ? (
           <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
@@ -224,121 +259,168 @@ export default function OrdersPage() {
           </div>
         ) : null}
         {state.phase === "ready" && visibleOrders.length > 0 ? (
-          <Table aria-label="Order list">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-11">
-                  <Checkbox
-                    aria-label="Select all orders on this page"
-                    checked={someSelected ? "indeterminate" : allSelected}
-                    onCheckedChange={(checked) =>
-                      setSelectedIds(
-                        checked === true
-                          ? new Set(visibleOrders.map((order) => order.orderId))
-                          : new Set(),
-                      )
-                    }
-                  />
-                </TableHead>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            <ul aria-label="Order list" className="divide-y divide-[var(--fm-border)] sm:hidden">
               {visibleOrders.map((order) => (
-                <TableRow
-                  key={order.orderId}
-                  data-state={selectedIds.has(order.orderId) ? "selected" : undefined}
-                  tabIndex={0}
-                  aria-label={`Preview order ${orderLabel(order)}`}
-                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-focus)]"
-                  onClick={(event) => {
-                    if ((event.target as Element).closest("button, a, input, [role='menuitem']"))
-                      return;
-                    openOrderPreview(order);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.target !== event.currentTarget) return;
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openOrderPreview(order);
-                    }
-                  }}
-                >
-                  <TableCell>
+                <li key={order.orderId} className="space-y-3 p-4">
+                  <div className="flex min-w-0 items-start gap-3">
                     <Checkbox
                       aria-label={`Select order ${orderLabel(order)}`}
                       checked={selectedIds.has(order.orderId)}
                       onCheckedChange={(checked) => selectOrder(order.orderId, checked === true)}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      aria-expanded={panelOpen && selectedOrder?.orderId === order.orderId}
-                      aria-controls="order-detail-panel"
-                      className="font-medium hover:underline"
-                      onClick={() => openOrderPreview(order)}
-                    >
-                      {orderLabel(order)}
-                    </button>
-                    {order.orderNumber ? (
-                      <p className="mt-0.5 max-w-40 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
-                        {order.orderId}
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={recordHref(order)}
+                        onClick={rememberReturn}
+                        className="font-semibold text-[var(--fm-text)] hover:underline"
+                      >
+                        {orderLabel(order)}
+                      </Link>
+                      <p className="truncate text-sm text-[var(--fm-text-muted)]">
+                        {order.customerName ?? "Customer"}
                       </p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-medium">{order.customerName ?? "Customer"}</p>
-                    <p className="text-xs text-[var(--fm-text-muted)]">{order.customerEmail}</p>
-                  </TableCell>
-                  <TableCell className="text-sm capitalize">
-                    {order.fulfillmentMode.toLowerCase()}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {money(order.totalMinor, order.currency)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                    {date(order.committedAt)}
-                  </TableCell>
-                  <TableCell>
+                    </div>
                     <OrderProgressStatus order={order} />
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Open actions for order ${orderLabel(order)}`}
-                        >
-                          <EllipsisVertical aria-hidden="true" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => openOrderPreview(order)}>
-                          <Eye aria-hidden="true" />
-                          View details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => void copyOrderId(order)}>
-                          <Clipboard aria-hidden="true" />
-                          {copiedId === order.orderId ? "Copied" : "Copy order ID"}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 pl-7 text-sm">
+                    <span className="text-[var(--fm-text-muted)]">
+                      {date(order.committedAt)} · {order.fulfillmentMode.toLowerCase()}
+                    </span>
+                    <span className="font-medium">{money(order.totalMinor, order.currency)}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="ml-7"
+                    onClick={() => openOrderPreview(order)}
+                  >
+                    Preview order
+                  </Button>
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+            <div className="hidden sm:block">
+              <Table aria-label="Order list">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-11">
+                      <Checkbox
+                        aria-label="Select all orders on this page"
+                        checked={someSelected ? "indeterminate" : allSelected}
+                        onCheckedChange={(checked) =>
+                          setSelectedIds(
+                            checked === true
+                              ? new Set(visibleOrders.map((order) => order.orderId))
+                              : new Set(),
+                          )
+                        }
+                      />
+                    </TableHead>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleOrders.map((order) => (
+                    <TableRow
+                      key={order.orderId}
+                      data-state={selectedIds.has(order.orderId) ? "selected" : undefined}
+                      tabIndex={0}
+                      aria-label={`Preview order ${orderLabel(order)}`}
+                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-focus)]"
+                      onClick={(event) => {
+                        if (
+                          (event.target as Element).closest("button, a, input, [role='menuitem']")
+                        )
+                          return;
+                        openOrderPreview(order);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openOrderPreview(order);
+                        }
+                      }}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          aria-label={`Select order ${orderLabel(order)}`}
+                          checked={selectedIds.has(order.orderId)}
+                          onCheckedChange={(checked) =>
+                            selectOrder(order.orderId, checked === true)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={recordHref(order)}
+                          className="font-medium hover:underline"
+                          onClick={rememberReturn}
+                        >
+                          {orderLabel(order)}
+                        </Link>
+                        {order.orderNumber ? (
+                          <p className="mt-0.5 max-w-40 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                            {order.orderId}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium">{order.customerName ?? "Customer"}</p>
+                        <p className="text-xs text-[var(--fm-text-muted)]">{order.customerEmail}</p>
+                      </TableCell>
+                      <TableCell className="text-sm capitalize">
+                        {order.fulfillmentMode.toLowerCase()}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {money(order.totalMinor, order.currency)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        {date(order.committedAt)}
+                      </TableCell>
+                      <TableCell>
+                        <OrderProgressStatus order={order} />
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Open actions for order ${orderLabel(order)}`}
+                            >
+                              <EllipsisVertical aria-hidden="true" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => openOrderPreview(order)}>
+                              <Eye aria-hidden="true" />
+                              View details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void copyOrderId(order)}>
+                              <Clipboard aria-hidden="true" />
+                              {copiedId === order.orderId ? "Copied" : "Copy order ID"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : null}
 
         {state.phase === "ready" ? (
