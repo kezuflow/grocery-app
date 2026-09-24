@@ -325,9 +325,15 @@ describe("shared Admin accessibility contract", () => {
     expect(promotionsPage).toContain("[transition-duration:var(--fm-motion-panel)]");
     expect(promotionsPage).toContain("[transition-timing-function:var(--fm-ease-drawer)]");
     expect(promotionsPage).toContain("motion-reduce:transition-[opacity]");
-    expect(promotionsPage).toMatch(
-      /aria-label=\{\s*selectedPromotion\s*\?\s*"Close promotion details"/,
-    );
+    expect(promotionsPage).toContain('aria-label="Close promotion details"');
+    expect(promotionsPage).toContain("Select promotion type");
+    expect(promotionsPage).toContain('type: "DELIVERY_FEE_WAIVER"');
+    expect(promotionsPage).toContain('type: "DELIVERY_FIXED_DISCOUNT"');
+    expect(promotionsPage).toContain('type: "DELIVERY_PERCENT_DISCOUNT"');
+    expect(promotionsPage).toContain('state.phase === "ready" && editorOpen');
+    expect(promotionsPage).toContain("promotion-summary-heading");
+    expect(promotionsPage).toContain("Check save status");
+    expect(promotionsPage).toContain("Discard this promotion draft?");
     expect(salesPage).toContain(
       "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
     );

@@ -2,20 +2,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { EllipsisVertical, Eye, Info, Pencil, Percent, Plus, Search, X } from "lucide-react";
 import {
-  manageableBenefitTypes,
+  ArrowLeft,
+  BadgePercent,
+  CircleDollarSign,
+  EllipsisVertical,
+  Eye,
+  Info,
+  Pencil,
+  Plus,
+  Search,
+  Truck,
+  X,
+} from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import {
   type ManageableBenefitType,
   type AdminPromotionPage,
   type AdminPromotionSummary,
 } from "@freshmarkets/contracts";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -56,6 +61,48 @@ type LoadState =
   | { phase: "ready" };
 
 type PromotionListView = "all" | "active" | "draft";
+
+const benefitOptions: ReadonlyArray<{
+  type: ManageableBenefitType;
+  label: string;
+  description: string;
+  icon: typeof BadgePercent;
+}> = [
+  {
+    type: "ORDER_FIXED_DISCOUNT",
+    label: "Amount off order",
+    description: "Take a fixed peso amount off eligible full-price merchandise.",
+    icon: CircleDollarSign,
+  },
+  {
+    type: "ORDER_PERCENT_DISCOUNT",
+    label: "Percentage off order",
+    description: "Take a whole percentage off eligible full-price merchandise.",
+    icon: BadgePercent,
+  },
+  {
+    type: "DELIVERY_FEE_WAIVER",
+    label: "Free delivery",
+    description: "Waive the eligible delivery fee.",
+    icon: Truck,
+  },
+  {
+    type: "DELIVERY_FIXED_DISCOUNT",
+    label: "Amount off delivery",
+    description: "Take a fixed peso amount off the eligible delivery fee.",
+    icon: CircleDollarSign,
+  },
+  {
+    type: "DELIVERY_PERCENT_DISCOUNT",
+    label: "Percentage off delivery",
+    description: "Take a whole percentage off the eligible delivery fee.",
+    icon: BadgePercent,
+  },
+];
+
+function benefitOption(type: ManageableBenefitType) {
+  return benefitOptions.find((option) => option.type === type) ?? benefitOptions[0];
+}
 
 function promotionListView(value: string | null): PromotionListView {
   return value === "active" || value === "draft" ? value : "all";
@@ -114,6 +161,8 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
   const [globalLimit, setGlobalLimit] = useState("");
   const [perCustomerLimit, setPerCustomerLimit] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [panelWidth, setPanelWidth] = useState(ADMIN_WORKSPACE_PANEL_DEFAULT_WIDTH);
@@ -132,7 +181,8 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
       (value) => value.trim() !== "",
     );
   const createLocked = createIntent.pending || createIntent.uncertain;
-  useAdminScopeGuard(canManage && createDirty, canManage && createLocked, () => {
+
+  function resetCreateDraft(): void {
     setCode("");
     setName("");
     setBenefit("ORDER_FIXED_DISCOUNT");
@@ -142,11 +192,32 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
     setEndsAt("");
     setGlobalLimit("");
     setPerCustomerLimit("");
+    setChooserOpen(false);
+    setEditorOpen(false);
+  }
+
+  useAdminScopeGuard(canManage && createDirty, canManage && createLocked, () => {
+    resetCreateDraft();
     setCreateOpen(false);
     setPanelMounted(false);
     setSelectedPromotion(null);
   });
   useAdminRouteGuard(canManage && createDirty, canManage && createLocked);
+
+  function chooseBenefit(type: ManageableBenefitType): void {
+    if (type !== benefit) setDiscount("");
+    setBenefit(type);
+    setChooserOpen(false);
+    setEditorOpen(true);
+    setNotice(null);
+  }
+
+  function discardCreateDraft(): void {
+    if (createLocked) return;
+    if (createDirty && !window.confirm("Discard this promotion draft?")) return;
+    resetCreateDraft();
+    setNotice(null);
+  }
 
   useEffect(() => {
     setQuery(appliedQuery);
@@ -168,7 +239,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
     );
   }
 
-  function openPanel(promotion: AdminPromotionSummary | null = null): void {
+  function openPanel(promotion: AdminPromotionSummary): void {
     if (closeTimer.current !== null) {
       window.clearTimeout(closeTimer.current);
       closeTimer.current = null;
@@ -246,6 +317,53 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
     const instant = new Date(trimmed);
     return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
   }
+
+  const createSummary = useMemo(() => {
+    const option = benefitOption(benefit);
+    const amountMinor = parsePesoMinor(discount);
+    const minimumMinor = parsePesoMinor(minimum);
+    const parsedStart = parseLocalDateTime(startsAt);
+    const parsedEnd = parseLocalDateTime(endsAt);
+    const percent = Number(discount);
+    const validPercent = Number.isInteger(percent) && percent >= 1 && percent <= 100;
+    const value =
+      benefit === "DELIVERY_FEE_WAIVER"
+        ? "Free delivery"
+        : benefit.endsWith("PERCENT_DISCOUNT")
+          ? discount.trim() && validPercent
+            ? `${percent}% off ${benefit.startsWith("ORDER_") ? "the order" : "delivery"}`
+            : `Percentage off ${benefit.startsWith("ORDER_") ? "the order" : "delivery"}`
+          : amountMinor !== null && amountMinor >= 1 && discount.trim()
+            ? `₱${(amountMinor / 100).toFixed(2)} off ${benefit.startsWith("ORDER_") ? "the order" : "delivery"}`
+            : `Amount off ${benefit.startsWith("ORDER_") ? "the order" : "delivery"}`;
+    const perCustomer = parsePositiveInt(perCustomerLimit);
+    const total = parsePositiveInt(globalLimit);
+    const invalidLimit =
+      (perCustomerLimit.trim() && perCustomer === null) || (globalLimit.trim() && total === null);
+    const limits = [
+      perCustomer !== null ? `${perCustomer} per customer` : null,
+      total !== null ? `${total} total` : null,
+    ].filter(Boolean);
+
+    return {
+      type: option.label,
+      value,
+      minimum:
+        minimum.trim() && minimumMinor === null
+          ? "Enter a valid minimum order subtotal"
+          : minimumMinor !== null && minimumMinor > 0
+            ? `Minimum order subtotal of ₱${(minimumMinor / 100).toFixed(2)}`
+            : "No minimum order subtotal",
+      period: `${parsedStart ? `Starts ${new Date(parsedStart).toLocaleDateString()}` : "Starts when saved"}${
+        parsedEnd ? ` · Ends ${new Date(parsedEnd).toLocaleDateString()}` : " · No end date"
+      }`,
+      limits: invalidLimit
+        ? "Enter valid whole-number usage limits"
+        : limits.length
+          ? limits.join(" · ")
+          : "No usage limits",
+    };
+  }, [benefit, discount, endsAt, globalLimit, minimum, perCustomerLimit, startsAt]);
 
   const load = useCallback(async (cursor: string | null) => {
     const version = ++requestVersion.current;
@@ -364,15 +482,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
       setNotice(payload.ok ? "Promotion created as DRAFT." : payload.error.message);
       if (payload.ok) {
         notifyCommandSuccess("Promotion created", "Saved as draft.");
-        setCode("");
-        setName("");
-        setBenefit("ORDER_FIXED_DISCOUNT");
-        setDiscount("");
-        setMinimum("");
-        setStartsAt("");
-        setEndsAt("");
-        setGlobalLimit("");
-        setPerCustomerLimit("");
+        resetCreateDraft();
         const next = new URLSearchParams(searchParams.toString());
         pagination.reset(next);
         window.history.replaceState(
@@ -384,13 +494,78 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
       }
     } catch {
       setNotice(
-        "Creation could not be confirmed. Try Create draft again to check the same change.",
+        "Creation could not be confirmed. Check the same save again to resolve its outcome.",
       );
     }
   }
 
   return (
     <div className="w-full">
+      <DialogPrimitive.Root
+        open={chooserOpen}
+        onOpenChange={(open) => {
+          if (!open && !createLocked) setChooserOpen(false);
+        }}
+      >
+        <DialogPrimitive.Portal>
+          <div className="fm-admin contents">
+            <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.42)]" />
+            <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] focus:outline-none">
+              <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-4">
+                <div>
+                  <DialogPrimitive.Title className="text-lg font-semibold tracking-[-0.02em]">
+                    Select promotion type
+                  </DialogPrimitive.Title>
+                  <DialogPrimitive.Description className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                    Choose one of the promotion benefits FreshMarkets supports.
+                  </DialogPrimitive.Description>
+                </div>
+                <DialogPrimitive.Close asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Close promotion type chooser"
+                  >
+                    <X aria-hidden="true" />
+                  </Button>
+                </DialogPrimitive.Close>
+              </div>
+              <div className="divide-y divide-[var(--fm-border)] p-2">
+                {benefitOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => chooseBenefit(option.type)}
+                      className="flex w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-3 text-left transition-colors hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)]">
+                        <Icon className="size-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{option.label}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--fm-text-muted)]">
+                          {option.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end border-t border-[var(--fm-border)] px-5 py-3">
+                <DialogPrimitive.Close asChild>
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                </DialogPrimitive.Close>
+              </div>
+            </DialogPrimitive.Content>
+          </div>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+
       {state.phase === "loading" ? (
         <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
           <PageHeader title="Promotion Codes" />
@@ -411,7 +586,330 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
         </section>
       ) : null}
 
-      {state.phase === "ready" ? (
+      {state.phase === "ready" && editorOpen ? (
+        <form
+          onSubmit={create}
+          aria-labelledby="admin-page-title"
+          className="min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)]"
+        >
+          <header className="border-b border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4 sm:px-7">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Discard promotion and return to promotion codes"
+                  onClick={discardCreateDraft}
+                  disabled={createLocked}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                </Button>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-[var(--fm-text-muted)]">Promotion Codes</p>
+                  <h1
+                    id="admin-page-title"
+                    className="truncate text-xl font-bold tracking-[-0.03em]"
+                  >
+                    Create promo code
+                  </h1>
+                </div>
+              </div>
+              <p className="hidden text-sm text-[var(--fm-text-muted)] sm:block">
+                Saved promotions begin as drafts.
+              </p>
+            </div>
+          </header>
+
+          <div className="mx-auto grid w-full max-w-6xl gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.8fr)] lg:items-start">
+            <div className="space-y-5">
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="promotion-details-heading"
+              >
+                <h2 id="promotion-details-heading" className="text-base font-semibold">
+                  Promotion details
+                </h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold">
+                    Promo code<span className="text-red-600"> *</span>
+                    <Input
+                      aria-label="Promotion code"
+                      disabled={createLocked}
+                      placeholder="WELCOME10"
+                      value={code}
+                      onChange={(event) => setCode(event.target.value.toUpperCase())}
+                      className="mt-1.5 h-10"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold">
+                    Campaign name<span className="text-red-600"> *</span>
+                    <Input
+                      aria-label="Promotion name"
+                      disabled={createLocked}
+                      placeholder="Welcome to FreshMarkets"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      className="mt-1.5 h-10"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="promotion-benefit-heading"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 id="promotion-benefit-heading" className="text-base font-semibold">
+                      Benefit
+                    </h2>
+                    <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                      {benefitOption(benefit).label}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChooserOpen(true)}
+                    disabled={createLocked}
+                  >
+                    Change type
+                  </Button>
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {benefit !== "DELIVERY_FEE_WAIVER" ? (
+                    <label className="block text-sm font-semibold">
+                      {benefit.endsWith("PERCENT_DISCOUNT")
+                        ? "Discount percentage"
+                        : "Discount amount"}
+                      <span className="text-red-600"> *</span>
+                      <div className="relative mt-1.5">
+                        {benefit.endsWith("FIXED_DISCOUNT") ? (
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                            ₱
+                          </span>
+                        ) : null}
+                        <Input
+                          aria-label={
+                            benefit.endsWith("PERCENT_DISCOUNT")
+                              ? "Discount percentage"
+                              : "Fixed discount in pesos"
+                          }
+                          disabled={createLocked}
+                          placeholder={benefit.endsWith("PERCENT_DISCOUNT") ? "10" : "100.00"}
+                          inputMode="decimal"
+                          value={discount}
+                          onChange={(event) => setDiscount(event.target.value)}
+                          className={`h-10 ${benefit.endsWith("PERCENT_DISCOUNT") ? "pr-10" : "pl-8"}`}
+                        />
+                        {benefit.endsWith("PERCENT_DISCOUNT") ? (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                            %
+                          </span>
+                        ) : null}
+                      </div>
+                    </label>
+                  ) : (
+                    <div className="rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm">
+                      The eligible delivery fee is waived.
+                    </div>
+                  )}
+                  <label className="block text-sm font-semibold">
+                    Minimum order subtotal
+                    <div className="relative mt-1.5">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                        ₱
+                      </span>
+                      <Input
+                        aria-label="Minimum purchase in pesos"
+                        disabled={createLocked}
+                        placeholder="No minimum"
+                        inputMode="decimal"
+                        value={minimum}
+                        onChange={(event) => setMinimum(event.target.value)}
+                        className="h-10 pl-8"
+                      />
+                    </div>
+                  </label>
+                </div>
+                <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+                  {benefit.startsWith("ORDER_")
+                    ? "Applies to eligible full-price merchandise in the order."
+                    : "Applies to the eligible delivery fee."}
+                </p>
+              </section>
+
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="promotion-dates-heading"
+              >
+                <h2 id="promotion-dates-heading" className="text-base font-semibold">
+                  Active dates
+                </h2>
+                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                  Leave the start blank to begin when the draft is saved. Leave the end blank for no
+                  end date.
+                </p>
+                <fieldset disabled={createLocked} className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-semibold">
+                    Start date
+                    <Input
+                      aria-label="Start date"
+                      type="date"
+                      title="Start date (empty = now)"
+                      value={startsAt}
+                      max={endsAt || undefined}
+                      onChange={(event) => setStartsAt(event.target.value)}
+                      className="mt-1.5 h-10"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold">
+                    End date
+                    <Input
+                      aria-label="End date"
+                      type="date"
+                      title="End date (empty = no end)"
+                      value={endsAt}
+                      min={startsAt || undefined}
+                      onChange={(event) => setEndsAt(event.target.value)}
+                      className="mt-1.5 h-10"
+                    />
+                  </label>
+                </fieldset>
+              </section>
+
+              <section
+                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                aria-labelledby="promotion-limits-heading"
+              >
+                <h2 id="promotion-limits-heading" className="text-base font-semibold">
+                  Usage limits
+                </h2>
+                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                  Leave either value blank when that limit does not apply.
+                </p>
+                <fieldset disabled={createLocked} className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold">
+                    Maximum total uses
+                    <Input
+                      aria-label="Total usage limit"
+                      placeholder="No limit"
+                      inputMode="numeric"
+                      value={globalLimit}
+                      onChange={(event) => setGlobalLimit(event.target.value)}
+                      className="mt-1.5 h-10 font-normal"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold">
+                    Maximum uses per customer
+                    <Input
+                      aria-label="Per-customer usage limit"
+                      placeholder="No limit"
+                      inputMode="numeric"
+                      value={perCustomerLimit}
+                      onChange={(event) => setPerCustomerLimit(event.target.value)}
+                      className="mt-1.5 h-10 font-normal"
+                    />
+                  </label>
+                </fieldset>
+              </section>
+            </div>
+
+            <aside
+              className="space-y-4 lg:sticky lg:top-5"
+              aria-labelledby="promotion-summary-heading"
+            >
+              <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]">
+                <h2 id="promotion-summary-heading" className="text-base font-semibold">
+                  Summary
+                </h2>
+                <p className="mt-1 break-all text-sm text-[var(--fm-text-muted)]">
+                  {code.trim() ? code.trim().toUpperCase() : "Promotion code not entered"}
+                </p>
+                <dl className="mt-4 divide-y divide-[var(--fm-border)] text-sm" aria-live="polite">
+                  <div className="py-3 first:pt-0">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Type</dt>
+                    <dd className="mt-1 font-medium">{createSummary.type}</dd>
+                  </div>
+                  <div className="py-3">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Value</dt>
+                    <dd className="mt-1 font-medium">{createSummary.value}</dd>
+                  </div>
+                  <div className="py-3">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Requirement</dt>
+                    <dd className="mt-1">{createSummary.minimum}</dd>
+                  </div>
+                  <div className="py-3">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">
+                      Active dates
+                    </dt>
+                    <dd className="mt-1">{createSummary.period}</dd>
+                  </div>
+                  <div className="py-3 last:pb-0">
+                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Usage</dt>
+                    <dd className="mt-1">{createSummary.limits}</dd>
+                  </div>
+                </dl>
+              </section>
+              <p className="flex gap-2 px-1 text-xs leading-5 text-[var(--fm-text-muted)]">
+                <Info
+                  className="mt-0.5 size-3.5 shrink-0 text-[var(--fm-info)]"
+                  aria-hidden="true"
+                />
+                Promotion Sale discounts are applied automatically. This code remains a separate
+                checkout benefit.
+              </p>
+            </aside>
+          </div>
+
+          {notice ? (
+            <p
+              role={createIntent.uncertain ? "alert" : "status"}
+              className="mx-auto mb-4 w-[calc(100%-2.5rem)] max-w-6xl rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm sm:w-[calc(100%-3.5rem)]"
+            >
+              {notice}
+            </p>
+          ) : null}
+
+          <div className="sticky bottom-0 z-10 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-3 shadow-[0_-8px_24px_rgb(15_23_42_/_0.08)] sm:px-7">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+              <p className="text-sm text-[var(--fm-text-muted)]" aria-live="polite">
+                {createIntent.uncertain
+                  ? "Save outcome unknown. Keep this editor open and check the same save."
+                  : createDirty
+                    ? "Unsaved changes"
+                    : "Complete the promotion details to save a draft."}
+              </p>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={discardCreateDraft}
+                  disabled={createLocked}
+                >
+                  Discard
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createIntent.pending}
+                  className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
+                >
+                  {createIntent.pending
+                    ? "Saving…"
+                    : createIntent.uncertain
+                      ? "Check save status"
+                      : "Save draft"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </form>
+      ) : null}
+
+      {state.phase === "ready" && !editorOpen ? (
         <div
           data-admin-workspace
           style={{ "--fm-admin-workspace-panel-open-width": `${panelWidth}px` } as CSSProperties}
@@ -426,9 +924,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                   <Button
                     type="button"
                     size="sm"
-                    aria-expanded={createOpen}
-                    aria-controls="promotion-side-panel"
-                    onClick={() => (createOpen ? closePanel() : openPanel())}
+                    onClick={() => setChooserOpen(true)}
                     className="fm-admin-reference-primary"
                   >
                     <Plus className="size-4" aria-hidden="true" />
@@ -643,15 +1139,14 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
             </section>
           </section>
 
-          {panelMounted ? (
+          {panelMounted && selectedPromotion ? (
             <aside
               id="promotion-side-panel"
               className={`fixed inset-0 z-50 flex h-svh min-h-0 overflow-hidden xl:sticky xl:inset-auto xl:top-0 xl:z-auto xl:h-[calc(100svh-4.5rem)] ${createOpen ? "" : "pointer-events-none"}`}
               aria-labelledby="create-promo-title"
             >
-              <form
+              <div
                 className={`ml-auto flex h-full min-h-0 w-full flex-col bg-[var(--fm-admin-surface)] transition-[transform,opacity] [transition-duration:var(--fm-motion-panel)] [transition-timing-function:var(--fm-ease-drawer)] will-change-[transform,opacity] motion-reduce:transform-none motion-reduce:transition-[opacity] motion-reduce:[transition-duration:var(--fm-motion-fast)] motion-reduce:[transition-timing-function:var(--fm-ease-out)] xl:absolute xl:inset-y-0 xl:right-0 xl:w-[var(--fm-admin-workspace-panel-open-width)] xl:border-l xl:border-[var(--fm-border)] ${createOpen ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 xl:translate-x-0"}`}
-                onSubmit={create}
               >
                 <AdminWorkspaceResizeHandle
                   label="Resize promotion workspace"
@@ -661,7 +1156,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                 />
                 <div className="flex items-center justify-between border-b border-[var(--fm-border)] px-5 py-5">
                   <h2 id="create-promo-title" className="text-xl font-bold tracking-[-0.03em]">
-                    {selectedPromotion ? "Promotion details" : "Create promo code"}
+                    Promotion details
                   </h2>
                   <Button
                     type="button"
@@ -669,304 +1164,90 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                     size="icon-sm"
                     onClick={closePanel}
                     disabled={createIntent.pending}
-                    aria-label={
-                      selectedPromotion ? "Close promotion details" : "Close create promo code"
-                    }
+                    aria-label="Close promotion details"
                   >
                     <X aria-hidden="true" />
                   </Button>
                 </div>
-                {selectedPromotion ? (
-                  <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-                        Promo code
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">{selectedPromotion.code}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-                        Campaign name
-                      </p>
-                      <p className="mt-1 text-sm font-medium">{selectedPromotion.name}</p>
-                    </div>
-                    <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
-                      <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Status</dt>
-                        <dd className="font-medium">{selectedPromotion.status}</dd>
-                      </div>
-                      <div className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Promotion ID</dt>
-                        <dd className="max-w-48 break-all text-right font-mono text-xs font-medium">
-                          {selectedPromotion.promotionId}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Benefit</dt>
-                        <dd className="text-right font-medium">
-                          {selectedPromotion.benefitType.endsWith("PERCENT_DISCOUNT")
-                            ? `${selectedPromotion.percent}% off`
-                            : selectedPromotion.benefitType === "DELIVERY_FEE_WAIVER"
-                              ? "Free delivery"
-                              : `₱${((selectedPromotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Minimum subtotal</dt>
-                        <dd className="font-medium">
-                          {selectedPromotion.minimumMinor > 0
-                            ? `₱${(selectedPromotion.minimumMinor / 100).toFixed(2)}`
-                            : "None"}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Valid period</dt>
-                        <dd className="text-right font-medium">
-                          {new Date(selectedPromotion.startsAt).toLocaleDateString()}
-                          <br />
-                          {selectedPromotion.endsAt
-                            ? new Date(selectedPromotion.endsAt).toLocaleDateString()
-                            : "No end date"}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
-                        <dt className="text-[var(--fm-text-muted)]">Usage limits</dt>
-                        <dd className="text-right font-medium">
-                          {selectedPromotion.globalUsageLimit === null &&
-                          selectedPromotion.perCustomerUsageLimit === null
-                            ? "Unlimited"
-                            : [
-                                selectedPromotion.perCustomerUsageLimit !== null
-                                  ? `${selectedPromotion.perCustomerUsageLimit}/customer`
-                                  : null,
-                                selectedPromotion.globalUsageLimit !== null
-                                  ? `${selectedPromotion.globalUsageLimit} total`
-                                  : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                        </dd>
-                      </div>
-                    </dl>
-                    <Link
-                      href={`/admin/promotions/${selectedPromotion.promotionId}`}
-                      prefetch={false}
-                      className="inline-flex text-sm font-semibold text-[var(--fm-info)] underline underline-offset-4"
-                    >
-                      Open full promotion details
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="block text-sm font-semibold">
-                        Promo code<span className="text-red-600"> *</span>
-                        <Input
-                          aria-label="Promotion code"
-                          disabled={createIntent.pending || createIntent.uncertain}
-                          placeholder="WELCOME10"
-                          value={code}
-                          onChange={(event) => setCode(event.target.value.toUpperCase())}
-                          className="mt-1.5 h-10"
-                        />
-                      </label>
-                      <label className="block text-sm font-semibold">
-                        Campaign name<span className="text-red-600"> *</span>
-                        <Input
-                          aria-label="Promotion name"
-                          disabled={createIntent.pending || createIntent.uncertain}
-                          placeholder="Welcome to FreshMarkets"
-                          value={name}
-                          onChange={(event) => setName(event.target.value)}
-                          className="mt-1.5 h-10"
-                        />
-                      </label>
-                    </div>
-                    <fieldset
-                      disabled={createIntent.pending || createIntent.uncertain}
-                      className="space-y-2"
-                    >
-                      <legend className="text-sm font-semibold">Benefit</legend>
-                      <div className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--fm-border)] p-1">
-                        <button
-                          type="button"
-                          onClick={() => setBenefit("ORDER_PERCENT_DISCOUNT")}
-                          className={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-xs font-semibold transition-colors ${benefit === "ORDER_PERCENT_DISCOUNT" ? "bg-[var(--fm-admin-accent)] text-white" : "text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"}`}
-                        >
-                          <Percent className="size-3.5" aria-hidden="true" />
-                          Percentage off
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBenefit("ORDER_FIXED_DISCOUNT")}
-                          className={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-xs font-semibold transition-colors ${benefit === "ORDER_FIXED_DISCOUNT" ? "bg-[var(--fm-admin-accent)] text-white" : "text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]"}`}
-                        >
-                          ₱ Fixed amount off
-                        </button>
-                      </div>
-                      <Select
-                        value={benefit}
-                        onValueChange={(value) => {
-                          const choice = manageableBenefitTypes.find((type) => type === value);
-                          if (choice) setBenefit(choice);
-                        }}
-                      >
-                        <SelectTrigger className="sr-only" aria-label="Campaign benefit">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {manageableBenefitTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </fieldset>
-                    <div className="grid grid-cols-2 gap-3">
-                      {benefit !== "DELIVERY_FEE_WAIVER" ? (
-                        <label className="block text-sm font-semibold">
-                          {benefit.endsWith("PERCENT_DISCOUNT")
-                            ? "Discount percentage"
-                            : "Discount amount"}
-                          <span className="text-red-600"> *</span>
-                          <div className="relative mt-1.5">
-                            <Input
-                              aria-label={
-                                benefit.endsWith("PERCENT_DISCOUNT")
-                                  ? "Discount percentage"
-                                  : "Fixed discount in pesos"
-                              }
-                              disabled={createIntent.pending || createIntent.uncertain}
-                              placeholder={benefit.endsWith("PERCENT_DISCOUNT") ? "10" : "100"}
-                              value={discount}
-                              onChange={(event) => setDiscount(event.target.value)}
-                              className="h-10 pr-10"
-                            />
-                            {benefit.endsWith("PERCENT_DISCOUNT") ? (
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
-                                %
-                              </span>
-                            ) : null}
-                          </div>
-                        </label>
-                      ) : (
-                        <span />
-                      )}
-                      <label className="block text-sm font-semibold">
-                        Minimum order subtotal
-                        <div className="relative mt-1.5">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
-                            ₱
-                          </span>
-                          <Input
-                            aria-label="Minimum purchase in pesos"
-                            disabled={createIntent.pending || createIntent.uncertain}
-                            placeholder="500"
-                            inputMode="decimal"
-                            value={minimum}
-                            onChange={(event) => setMinimum(event.target.value)}
-                            className="h-10 pl-8"
-                          />
-                        </div>
-                      </label>
-                    </div>
-                    <fieldset className="space-y-2">
-                      <legend className="text-sm font-semibold">Eligibility</legend>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span
-                            className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--fm-admin-accent)]"
-                            aria-hidden="true"
-                          >
-                            <span className="size-2 rounded-full bg-[var(--fm-admin-accent)]" />
-                          </span>
-                          <span className="font-medium">All products</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm opacity-60">
-                          <span
-                            className="flex size-4 shrink-0 rounded-full border-2 border-[var(--fm-border)]"
-                            aria-hidden="true"
-                          />
-                          <span className="font-medium">Selected products</span>
-                        </div>
-                      </div>
-                    </fieldset>
-                    <fieldset
-                      disabled={createIntent.pending || createIntent.uncertain}
-                      className="space-y-2"
-                    >
-                      <legend className="text-sm font-semibold">Validity period</legend>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="text-xs font-semibold">
-                          Start date
-                          <Input
-                            aria-label="Start date"
-                            type="date"
-                            title="Start date (empty = today)"
-                            value={startsAt}
-                            max={endsAt || undefined}
-                            onChange={(event) => setStartsAt(event.target.value)}
-                            className="mt-1.5 h-10 text-xs"
-                          />
-                        </label>
-                        <label className="text-xs font-semibold">
-                          End date
-                          <Input
-                            aria-label="End date"
-                            type="date"
-                            title="End date (empty = no end)"
-                            value={endsAt}
-                            min={startsAt || undefined}
-                            onChange={(event) => setEndsAt(event.target.value)}
-                            className="mt-1.5 h-10 text-xs"
-                          />
-                        </label>
-                      </div>
-                    </fieldset>
-                    <fieldset
-                      disabled={createIntent.pending || createIntent.uncertain}
-                      className="space-y-2"
-                    >
-                      <legend className="text-sm font-semibold">
-                        Usage limits{" "}
-                        <span className="font-normal text-[var(--fm-text-muted)]">(optional)</span>
-                      </legend>
-                      <span className="block text-xs text-[var(--fm-text-muted)]">
-                        Leave blank for no limits.
-                      </span>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="block text-xs font-semibold">
-                          Maximum total uses
-                          <Input
-                            aria-label="Total usage limit"
-                            placeholder="No limit"
-                            inputMode="numeric"
-                            value={globalLimit}
-                            onChange={(event) => setGlobalLimit(event.target.value)}
-                            className="mt-1.5 h-10 text-sm font-normal"
-                          />
-                        </label>
-                        <label className="block text-xs font-semibold">
-                          Maximum uses per customer
-                          <Input
-                            aria-label="Per-customer usage limit"
-                            placeholder="No limit"
-                            inputMode="numeric"
-                            value={perCustomerLimit}
-                            onChange={(event) => setPerCustomerLimit(event.target.value)}
-                            className="mt-1.5 h-10 text-sm font-normal"
-                          />
-                        </label>
-                      </div>
-                    </fieldset>
-                    <p className="flex gap-2 text-xs text-[var(--fm-text-muted)]">
-                      <Info className="mt-0.5 size-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-                      Discounts from Promotion Sale are applied automatically and can be combined
-                      with this promo code.
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
+                      Promo code
                     </p>
+                    <p className="mt-1 text-lg font-semibold">{selectedPromotion.code}</p>
                   </div>
-                )}
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
+                      Campaign name
+                    </p>
+                    <p className="mt-1 text-sm font-medium">{selectedPromotion.name}</p>
+                  </div>
+                  <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+                    <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Status</dt>
+                      <dd className="font-medium">{selectedPromotion.status}</dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Promotion ID</dt>
+                      <dd className="max-w-48 break-all text-right font-mono text-xs font-medium">
+                        {selectedPromotion.promotionId}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Benefit</dt>
+                      <dd className="text-right font-medium">
+                        {selectedPromotion.benefitType.endsWith("PERCENT_DISCOUNT")
+                          ? `${selectedPromotion.percent}% off`
+                          : selectedPromotion.benefitType === "DELIVERY_FEE_WAIVER"
+                            ? "Free delivery"
+                            : `₱${((selectedPromotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Minimum subtotal</dt>
+                      <dd className="font-medium">
+                        {selectedPromotion.minimumMinor > 0
+                          ? `₱${(selectedPromotion.minimumMinor / 100).toFixed(2)}`
+                          : "None"}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Valid period</dt>
+                      <dd className="text-right font-medium">
+                        {new Date(selectedPromotion.startsAt).toLocaleDateString()}
+                        <br />
+                        {selectedPromotion.endsAt
+                          ? new Date(selectedPromotion.endsAt).toLocaleDateString()
+                          : "No end date"}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-3 py-3 text-sm">
+                      <dt className="text-[var(--fm-text-muted)]">Usage limits</dt>
+                      <dd className="text-right font-medium">
+                        {selectedPromotion.globalUsageLimit === null &&
+                        selectedPromotion.perCustomerUsageLimit === null
+                          ? "Unlimited"
+                          : [
+                              selectedPromotion.perCustomerUsageLimit !== null
+                                ? `${selectedPromotion.perCustomerUsageLimit}/customer`
+                                : null,
+                              selectedPromotion.globalUsageLimit !== null
+                                ? `${selectedPromotion.globalUsageLimit} total`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                      </dd>
+                    </div>
+                  </dl>
+                  <Link
+                    href={`/admin/promotions/${selectedPromotion.promotionId}`}
+                    prefetch={false}
+                    className="inline-flex text-sm font-semibold text-[var(--fm-info)] underline underline-offset-4"
+                  >
+                    Open full promotion details
+                  </Link>
+                </div>
                 <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4">
                   <Button
                     type="button"
@@ -974,19 +1255,10 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                     onClick={closePanel}
                     disabled={createIntent.pending}
                   >
-                    {selectedPromotion ? "Close" : "Cancel"}
+                    Close
                   </Button>
-                  {!selectedPromotion ? (
-                    <Button
-                      type="submit"
-                      disabled={createIntent.pending}
-                      className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
-                    >
-                      {createIntent.pending ? "Creating…" : "Create draft"}
-                    </Button>
-                  ) : null}
                 </div>
-              </form>
+              </div>
             </aside>
           ) : null}
         </div>

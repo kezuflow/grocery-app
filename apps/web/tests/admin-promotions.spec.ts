@@ -71,6 +71,22 @@ async function mockMixedPromotionPage(page: Page, nextCursor: string | null = nu
   return requests;
 }
 
+async function openPromotionEditor(page: Page, type: string) {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await page.getByRole("button", { name: "Create promo code", exact: true }).click();
+  const chooser = page.getByRole("dialog", { name: "Select promotion type" });
+  await expect(chooser).toBeVisible();
+  if (process.env.SAUI_CAPTURE_DISCOUNTS_EDITOR === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/promotion-chooser-1440.png",
+      animations: "disabled",
+    });
+  }
+  await chooser.getByRole("button", { name: new RegExp(`^${type}`) }).click();
+  await expect(chooser).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1, name: "Create promo code" })).toBeVisible();
+}
+
 test.beforeAll(async ({ request }) => {
   try {
     const response = await request.get("/");
@@ -173,6 +189,74 @@ test("a Staff principal without capability is denied the Promotion Codes workspa
   await expect(deniedAdminPage.getByRole("alert")).toContainText(/requires.*promotions\.read/i);
 });
 
+test("the full promotion editor guards a dirty route exit and explicit discard", async ({
+  adminPage: page,
+}) => {
+  await page.goto("/admin/promotions");
+  await openPromotionEditor(page, "Percentage off delivery");
+  await page.getByLabel("Promotion code", { exact: true }).fill("DIRTY_EXIT");
+  await page.getByLabel("Discount percentage", { exact: true }).fill("25");
+
+  page.once("dialog", async (dialog) => dialog.dismiss());
+  await page.getByRole("link", { name: "Promotion Sale", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/promotions/);
+  await expect(page.getByLabel("Promotion code", { exact: true })).toHaveValue("DIRTY_EXIT");
+
+  page.once("dialog", async (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Create promo code" })).toBeVisible();
+
+  page.once("dialog", async (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Promotion Codes" })).toBeVisible();
+});
+
+test("an unknown create response locks the draft and checks the identical intent", async ({
+  adminPage: page,
+}) => {
+  const sent: { body: string | null; key: string | undefined }[] = [];
+  await page.route("**/api/admin/promotions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    sent.push({
+      body: route.request().postData(),
+      key: route.request().headers()["idempotency-key"],
+    });
+    if (sent.length < 3) return route.abort("failed");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "promotion-create-recovered",
+        value: {
+          ...listedPromotion,
+          promotionId: "promotion-recovered",
+          code: "UNKNOWN25",
+          name: "Unknown delivery result",
+          benefitType: "DELIVERY_PERCENT_DISCOUNT",
+          discountMinor: null,
+          percent: 25,
+        },
+      }),
+    });
+  });
+
+  await page.goto("/admin/promotions");
+  await openPromotionEditor(page, "Percentage off delivery");
+  await page.getByLabel("Promotion code", { exact: true }).fill("UNKNOWN25");
+  await page.getByLabel("Promotion name", { exact: true }).fill("Unknown delivery result");
+  await page.getByLabel("Discount percentage", { exact: true }).fill("25");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+
+  await expect(page.getByText(/Save outcome unknown/)).toBeVisible();
+  await expect(page.getByLabel("Promotion code", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Check save status", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Promotion Codes" })).toBeVisible();
+  expect(sent).toHaveLength(3);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2]).toEqual(sent[0]);
+});
+
 test("promotion creation succeeds with capability and is denied without it", async ({
   adminPage,
   deniedAdminPage,
@@ -226,23 +310,53 @@ test("creates, edits and activates a campaign through lost browser responses", a
     await route.abort("failed");
   });
   await page.goto("/admin/promotions");
+  await openPromotionEditor(page, "Amount off order");
   await page.getByLabel("Promotion code", { exact: true }).fill(code);
   await page.getByLabel("Promotion name", { exact: true }).fill("Recovery campaign");
   await page.getByLabel("Fixed discount in pesos", { exact: true }).fill("19.99");
-  await page.getByRole("button", { name: "Create draft", exact: true }).click();
+  await page.getByLabel("Minimum purchase in pesos", { exact: true }).fill("125.50");
+  await page.getByLabel("Start date", { exact: true }).fill("2026-10-01");
+  await page.getByLabel("End date", { exact: true }).fill("2026-10-31");
+  await page.getByLabel("Total usage limit", { exact: true }).fill("50");
+  await page.getByLabel("Per-customer usage limit", { exact: true }).fill("2");
+  await expect(page.getByText("₱19.99 off the order", { exact: true })).toBeVisible();
+  await expect(page.getByText("Minimum order subtotal of ₱125.50", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 per customer · 50 total", { exact: true })).toBeVisible();
+  if (process.env.SAUI_CAPTURE_DISCOUNTS_EDITOR === "1") {
+    await page.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-06/promotion-editor-1440.png",
+      fullPage: true,
+      animations: "disabled",
+    });
+  }
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
   const row = page
     .getByRole("row")
     .filter({ has: page.getByRole("cell", { name: code, exact: true }) });
-  await row.getByRole("link", { name: "Manage", exact: true }).click();
+  await row.getByRole("button", { name: `Open actions for ${code}` }).click();
+  await page.getByRole("menuitem", { name: "Edit details", exact: true }).click();
   await page.getByLabel("Campaign name", { exact: true }).fill("Weekend campaign");
   await page.getByLabel("Campaign discount", { exact: true }).fill("25.50");
   await page.getByLabel("Campaign minimum purchase", { exact: true }).fill("200.00");
   await page.getByRole("button", { name: "Save campaign", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Weekend campaign" })).toBeVisible();
-  await page.getByLabel("Reason", { exact: true }).fill("Launch weekend campaign");
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
   expect(requests.size).toBe(3);
+  const createRequests = requests.get("/api/admin/promotions");
+  expect(createRequests).toHaveLength(2);
+  expect(JSON.parse(createRequests?.[0]?.body ?? "{}")).toEqual({
+    code,
+    name: "Recovery campaign",
+    description: "",
+    benefitType: "ORDER_FIXED_DISCOUNT",
+    discountMinor: 1_999,
+    minimumMinor: 12_550,
+    startsAt: new Date("2026-10-01").toISOString(),
+    endsAt: new Date("2026-10-31").toISOString(),
+    globalUsageLimit: 50,
+    perCustomerUsageLimit: 2,
+  });
   for (const sent of requests.values()) {
     expect(sent).toHaveLength(2);
     expect(sent[1]).toEqual(sent[0]);
@@ -253,12 +367,17 @@ test("creates, edits and activates a campaign through lost browser responses", a
 for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amount off"])
   test(`authors and previews ${benefit} from Admin`, async ({ adminPage: page }, testInfo) => {
     const code = `DELIVERY_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
-    await page.setViewportSize({ width: 390, height: 1000 });
     await page.goto("/admin/promotions");
+    await openPromotionEditor(
+      page,
+      benefit === "Delivery percentage off"
+        ? "Percentage off delivery"
+        : benefit === "Delivery amount off"
+          ? "Amount off delivery"
+          : benefit,
+    );
     await page.getByLabel("Promotion code", { exact: true }).fill(code);
     await page.getByLabel("Promotion name", { exact: true }).fill(benefit);
-    await page.getByRole("combobox", { name: "Campaign benefit", exact: true }).click();
-    await page.getByRole("option", { name: benefit, exact: true }).click();
     if (benefit !== "Free delivery")
       await page
         .getByLabel(
@@ -266,12 +385,12 @@ for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amo
           { exact: true },
         )
         .fill(benefit === "Delivery percentage off" ? "25" : "30.00");
-    await page.getByRole("button", { name: "Create draft", exact: true }).click();
-    await page
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    const row = page
       .getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: code, exact: true }) })
-      .getByRole("link", { name: "Manage", exact: true })
-      .click();
+      .filter({ has: page.getByRole("cell", { name: code, exact: true }) });
+    await row.getByRole("button", { name: `Open actions for ${code}` }).click();
+    await page.getByRole("menuitem", { name: "Edit details", exact: true }).click();
     await page.getByLabel("Campaign maximum discount", { exact: true }).fill("25.50");
     await page.getByLabel("Campaign total redemption limit", { exact: true }).fill("10");
     await page.getByLabel("Campaign customer redemption limit", { exact: true }).fill("2");
@@ -279,7 +398,6 @@ for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amo
     await expect(page.getByLabel("Campaign maximum discount", { exact: true })).toHaveValue(
       "25.50",
     );
-    await page.getByLabel("Reason", { exact: true }).fill("Launch delivery campaign");
     await page.getByRole("button", { name: "Activate", exact: true }).click();
     await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
     await expect(page.getByText("Maximum discount: PHP 25.50", { exact: true })).toBeVisible();
@@ -300,21 +418,21 @@ test("selects a customer for preview and safely retries a customer grant", async
   signedInPage,
 }, testInfo) => {
   await signedInPage.goto("/account/profile");
-  await expect(signedInPage.getByRole("heading", { name: "Your preferences" })).toBeVisible();
+  await expect(signedInPage.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
   const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
   const email = session.user.email;
   const code = `CUSTOMER_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
-  await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto("/admin/promotions");
+  await openPromotionEditor(page, "Amount off order");
   await page.getByLabel("Promotion code", { exact: true }).fill(code);
   await page.getByLabel("Promotion name", { exact: true }).fill("Customer preview campaign");
   await page.getByLabel("Fixed discount in pesos", { exact: true }).fill("25.50");
-  await page.getByRole("button", { name: "Create draft", exact: true }).click();
-  await page
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  const row = page
     .getByRole("row")
-    .filter({ has: page.getByRole("cell", { name: code, exact: true }) })
-    .getByRole("link", { name: "Manage", exact: true })
-    .click();
+    .filter({ has: page.getByRole("cell", { name: code, exact: true }) });
+  await row.getByRole("button", { name: `Open actions for ${code}` }).click();
+  await page.getByRole("menuitem", { name: "Edit details", exact: true }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await page.getByRole("combobox", { name: "Condition 2", exact: true }).click();
@@ -345,7 +463,6 @@ test("selects a customer for preview and safely retries a customer grant", async
   await expect.poll(() => audienceRequests.length).toBe(2);
   expect(audienceRequests[1]).toEqual(audienceRequests[0]);
   expect(audienceRequests[0]?.key).toBeTruthy();
-  await page.getByLabel("Reason", { exact: true }).fill("Launch customer campaign");
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
   await page.getByLabel("Preview customer", { exact: true }).fill(email);
