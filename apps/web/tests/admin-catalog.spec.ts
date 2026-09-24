@@ -63,6 +63,67 @@ test("a provisioned Staff reader can scan the Product workspace", async ({ admin
   await expect(adminPage.getByRole("navigation", { name: "Results pagination" })).toBeVisible();
 });
 
+test("Product status views retain scope-aware, unit-safe list context", async ({ adminPage }) => {
+  await adminPage.goto("/admin/catalog/products");
+  const scope = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  if (!(await scope.textContent())?.includes("Global")) {
+    await scope.click();
+    await adminPage.getByRole("option", { name: "Global", exact: true }).click();
+  }
+  const views = adminPage.getByRole("group", { name: "Product status views" });
+  await expect(views.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  await expect(adminPage.getByText("Global catalog ownership")).toBeVisible();
+  await expect(adminPage.getByRole("columnheader", { name: "Active variants" })).toBeVisible();
+  await views.getByRole("button", { name: "Active", exact: true }).click();
+  await expect(adminPage).toHaveURL(/\/admin\/catalog\/products\?status=active$/);
+  await expect(views.getByRole("button", { name: "Active", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  if (process.env.SAUI_CAPTURE_PRODUCTS === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/products-global-desktop.png",
+    });
+  }
+
+  await scope.click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await expect(scope).toContainText("Central Cebu");
+  await expect(adminPage).toHaveURL(/\/admin\/catalog\/products\?status=active$/);
+  await expect(adminPage.getByText("Central Cebu pricing")).toBeVisible();
+  await expect(adminPage.getByRole("columnheader", { name: "Priced variants" })).toBeVisible();
+  await expect(adminPage.getByRole("columnheader", { name: "Shared inventory" })).toHaveCount(0);
+  await adminPage
+    .getByRole("button", { name: /^Preview / })
+    .first()
+    .click();
+  await expect(
+    adminPage.getByRole("button", { name: "Close location product preview" }),
+  ).toBeVisible();
+  await adminPage.getByRole("button", { name: "Close location product preview" }).click();
+  await expect(adminPage.locator("#product-detail-panel")).toHaveCount(0);
+  if (process.env.SAUI_CAPTURE_PRODUCTS === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/products-location-desktop.png",
+    });
+  }
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  await expect(adminPage.locator("[data-product-record]").first()).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: "Columns" })).toHaveCount(0);
+  await expect(adminPage.getByRole("link", { name: "Full details" }).first()).toBeVisible();
+  await expect(
+    adminPage.getByRole("button", { name: /^Open mobile actions for/ }).first(),
+  ).toBeVisible();
+  expect(
+    await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  if (process.env.SAUI_CAPTURE_PRODUCTS === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/products-location-mobile.png",
+    });
+  }
+});
+
 test("a catalog read-only principal sees no Product or Category mutation controls", async ({
   catalogReadOnlyPage,
 }) => {

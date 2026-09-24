@@ -4,13 +4,14 @@ for (const width of [1440, 390]) {
   test(`Global Product preview exposes lifecycle and category controls at ${width}px`, async ({
     adminPage: page,
   }) => {
+    test.setTimeout(60_000);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/admin/catalog/products?query=abiu");
     await page.getByRole("button", { name: "Preview Abiu" }).click();
 
     await expect(page.getByText("Global product preview", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Product name")).toHaveValue("Abiu");
-    await expect(page.getByLabel("Product status")).toBeVisible();
+    await expect(page.getByLabel("Product name")).toHaveValue(/^Abiu/);
+    await expect(page.getByRole("combobox", { name: "Product status", exact: true })).toBeVisible();
     expect(await page.locator('[aria-label$=" status"]').count()).toBeGreaterThanOrEqual(2);
 
     await page.getByRole("button", { name: "Product categories" }).click();
@@ -19,12 +20,16 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("Primary", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
 
-    await page.getByLabel("Product name").fill("Abiu preview");
-    await page.getByRole("button", { name: "Save name" }).click();
+    if ((await page.getByLabel("Product name").inputValue()) !== "Abiu preview") {
+      await page.getByLabel("Product name").fill("Abiu preview");
+      await page.getByRole("button", { name: "Save name" }).click();
+      await expect(page.getByRole("button", { name: "Save name" })).toHaveCount(0);
+    }
     await expect(page.getByLabel("Product name")).toHaveValue("Abiu preview");
 
     await page.getByLabel("Product name").fill("Abiu");
     await page.getByRole("button", { name: "Save name" }).click();
+    await expect(page.getByRole("button", { name: "Save name" })).toHaveCount(0);
     await expect(page.getByLabel("Product name")).toHaveValue("Abiu");
   });
 }

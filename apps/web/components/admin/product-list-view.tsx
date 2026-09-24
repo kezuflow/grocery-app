@@ -14,10 +14,9 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
 import { notifyCommandError, notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
-import { ConfirmCommandDialog } from "./admin-controls";
+import { AdminIndexViews, ConfirmCommandDialog } from "./admin-controls";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -33,14 +32,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 
 type ProductListItem = AdminProductPage["items"][number];
 
-type ProductColumnKey = "category" | "price" | "variant" | "selling" | "inventory" | "status";
+type ProductColumnKey = "category" | "price" | "variant" | "selling" | "status";
+
+type ProductStatusView = "all" | "active" | "inactive";
+
+const PRODUCT_STATUS_VIEWS: ReadonlyArray<{ label: string; status: ProductStatusView }> = [
+  { label: "All", status: "all" },
+  { label: "Active", status: "active" },
+  { label: "Inactive", status: "inactive" },
+];
 
 const PRODUCT_COLUMN_OPTIONS: ReadonlyArray<{ key: ProductColumnKey; label: string }> = [
   { key: "category", label: "Category" },
   { key: "price", label: "Location price" },
   { key: "variant", label: "Variants" },
   { key: "selling", label: "Selling status" },
-  { key: "inventory", label: "Shared inventory" },
   { key: "status", label: "Status" },
 ];
 
@@ -82,6 +88,8 @@ export function ProductListView({
   onOpenProduct,
   openProductId,
   detailPanelId,
+  status,
+  onStatusChange,
   filters,
   activeFilterCount = 0,
 }: {
@@ -96,6 +104,8 @@ export function ProductListView({
   onOpenProduct?: (product: ProductListItem) => void;
   openProductId?: string | null;
   detailPanelId?: string;
+  status: ProductStatusView;
+  onStatusChange(status: ProductStatusView): void;
   filters?: ReactNode;
   activeFilterCount?: number;
 }) {
@@ -118,9 +128,7 @@ export function ProductListView({
   const locationOperations = locationScope !== null;
   const columnOptions = locationOperations
     ? PRODUCT_COLUMN_OPTIONS
-    : PRODUCT_COLUMN_OPTIONS.filter(
-        (column) => !["price", "selling", "inventory"].includes(column.key),
-      );
+    : PRODUCT_COLUMN_OPTIONS.filter((column) => !["price", "selling"].includes(column.key));
 
   useEffect(() => {
     const currentSelectable = new Set(selectableProducts.map((product) => product.productId));
@@ -238,14 +246,38 @@ export function ProductListView({
       ] as const);
   return (
     <div className="space-y-4">
-      <h2 className="sr-only">Catalog readiness</h2>
-      <AdminDashboardGrid ariaLabel="Catalog readiness" className="sm:grid-cols-2 xl:grid-cols-5">
-        {readiness.map(([label, value]) => (
-          <MetricCard className="xl:col-span-1" key={label} label={label} value={String(value)} />
-        ))}
-      </AdminDashboardGrid>
-
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+        <h2 className="sr-only">Product list</h2>
+        <AdminIndexViews
+          label="Product status views"
+          views={PRODUCT_STATUS_VIEWS}
+          value={status}
+          onChange={onStatusChange}
+        />
+        <div className="border-b border-[var(--fm-border)] px-4 py-3">
+          <p className="text-sm font-medium">
+            {locationScope ? `${locationScope.locationName} pricing` : "Global catalog ownership"}
+          </p>
+          <p className="mt-0.5 text-xs leading-5 text-[var(--fm-text-muted)]">
+            {locationScope
+              ? `${locationScope.locationName} owns the exact prices shown here. Product identity remains Global; exact inventory quantities stay in each scoped Product preview.`
+              : "Global owns product identity, lifecycle, selling options, and categories. Exact prices and inventory context appear after choosing a fulfillment location."}
+          </p>
+        </div>
+        <dl
+          aria-label="Catalog readiness"
+          className="grid grid-cols-2 border-b border-[var(--fm-border)] bg-[var(--fm-surface-muted)] sm:grid-cols-3 lg:grid-cols-5"
+        >
+          {readiness.map(([label, value]) => (
+            <div
+              className="border-r border-[var(--fm-border)] px-4 py-3 last:border-r-0"
+              key={label}
+            >
+              <dt className="text-xs text-[var(--fm-text-muted)]">{label}</dt>
+              <dd className="mt-0.5 text-base font-semibold tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
         {selectedIds.size > 0 ? (
           <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -306,7 +338,7 @@ export function ProductListView({
             )}
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
+                <Button type="button" size="sm" variant="outline" className="hidden md:inline-flex">
                   <Columns3 aria-hidden="true" />
                   Columns
                 </Button>
@@ -357,7 +389,178 @@ export function ProductListView({
             </AlertDescription>
           </Alert>
         ) : null}
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {page.items.map((product) => (
+            <article
+              key={product.productId}
+              data-product-record={product.productId}
+              data-preview-open={openProductId === product.productId ? "true" : undefined}
+              data-state={selectedIds.has(product.productId) ? "selected" : undefined}
+              className={`rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 ${
+                openProductId === product.productId
+                  ? "border-[var(--fm-admin-accent-strong)] bg-[var(--fm-admin-accent-soft)]"
+                  : ""
+              }`}
+              onClick={(event) => {
+                if (!onOpenProduct) return;
+                const target = event.target;
+                if (
+                  target instanceof Element &&
+                  target.closest(
+                    "button, a, input, select, textarea, [role='checkbox'], [role='menuitem']",
+                  )
+                )
+                  return;
+                onOpenProduct(product);
+              }}
+            >
+              <div className="flex items-start gap-3">
+                {canManage ? (
+                  <Checkbox
+                    aria-label={`Select ${product.name}`}
+                    checked={selectedIds.has(product.productId)}
+                    disabled={product.status !== "active" || deactivationPending}
+                    onCheckedChange={(checked) =>
+                      selectProduct(product.productId, checked === true)
+                    }
+                  />
+                ) : null}
+                {product.primaryMedia ? (
+                  <img
+                    alt={product.primaryMedia.altText}
+                    className="size-11 shrink-0 rounded-md border border-[var(--fm-border)] object-cover"
+                    height={44}
+                    loading="lazy"
+                    src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
+                    width={44}
+                  />
+                ) : (
+                  <span className="grid size-11 shrink-0 place-items-center rounded-md border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-muted)]">
+                    <ImageIcon className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  {onOpenProduct ? (
+                    <button
+                      type="button"
+                      aria-label={`Preview ${product.name}`}
+                      aria-expanded={openProductId === product.productId}
+                      aria-controls={detailPanelId}
+                      className="block max-w-full truncate text-left font-medium hover:underline"
+                      onClick={() => onOpenProduct(product)}
+                    >
+                      {product.name}
+                    </button>
+                  ) : (
+                    <span className="block truncate font-medium">{product.name}</span>
+                  )}
+                  <span className="block truncate text-xs text-[var(--fm-text-muted)]">
+                    {product.slug}
+                  </span>
+                </div>
+                <AdminStatusPill
+                  status={product.status}
+                  tone={product.status === "active" ? "success" : "danger"}
+                  label={product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                />
+              </div>
+
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--fm-border)] pt-3 text-sm">
+                <div>
+                  <dt className="text-xs text-[var(--fm-text-muted)]">Category</dt>
+                  <dd className="mt-0.5 font-medium">{product.categoryCode}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[var(--fm-text-muted)]">
+                    {locationOperations ? "Priced variants" : "Active variants"}
+                  </dt>
+                  <dd className="mt-0.5 font-medium tabular-nums">
+                    {locationOperations
+                      ? `${product.pricedSkuCount} / ${product.activeSkuCount}`
+                      : `${product.activeSkuCount} / ${product.skuCount}`}
+                  </dd>
+                </div>
+                {locationOperations ? (
+                  <>
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Location price</dt>
+                      <dd
+                        className={`mt-0.5 ${product.priceRange ? "font-medium" : "text-[var(--fm-text-muted)]"}`}
+                      >
+                        {priceRange(product)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[var(--fm-text-muted)]">Selling status</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums">
+                        {product.availableSkuCount} / {product.activeSkuCount} selling
+                      </dd>
+                    </div>
+                  </>
+                ) : null}
+              </dl>
+
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--fm-border)] pt-3">
+                <Button asChild size="sm" variant="outline">
+                  <a
+                    href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
+                  >
+                    Full details
+                  </a>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Open mobile actions for ${product.name}`}
+                      className="size-8 rounded-md"
+                    >
+                      <EllipsisVertical aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {onOpenProduct ? (
+                      <DropdownMenuItem onSelect={() => onOpenProduct(product)}>
+                        <Eye aria-hidden="true" />
+                        Preview
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canManage ? (
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={`/admin/catalog/products/${product.productId}/edit${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
+                        >
+                          <Pencil aria-hidden="true" />
+                          Edit product
+                        </a>
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuItem onSelect={() => void copyProductId(product.productId)}>
+                      <Clipboard aria-hidden="true" />
+                      {copiedProductId === product.productId ? "ID copied" : "Copy ID"}
+                    </DropdownMenuItem>
+                    {canManage && product.status === "active" ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                          disabled={deactivationPending || !onDeactivateSelected}
+                          onSelect={() => setRowToDeactivate(product)}
+                        >
+                          <PowerOff aria-hidden="true" />
+                          Deactivate
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <Table aria-label="Products">
             <TableHeader>
               <TableRow>
@@ -390,12 +593,13 @@ export function ProductListView({
                 {locationOperations && visibleColumns.has("price") ? (
                   <TableHead>Location price</TableHead>
                 ) : null}
-                {visibleColumns.has("variant") ? <TableHead>Variants</TableHead> : null}
+                {visibleColumns.has("variant") ? (
+                  <TableHead>
+                    {locationOperations ? "Priced variants" : "Active variants"}
+                  </TableHead>
+                ) : null}
                 {locationOperations && visibleColumns.has("selling") ? (
                   <TableHead>Selling status</TableHead>
-                ) : null}
-                {locationOperations && visibleColumns.has("inventory") ? (
-                  <TableHead>Shared inventory</TableHead>
                 ) : null}
                 {visibleColumns.has("status") ? <TableHead>Status</TableHead> : null}
                 <TableHead className="w-12 text-right">
@@ -509,23 +713,6 @@ export function ProductListView({
                       <span className="font-medium">
                         {product.availableSkuCount} / {product.activeSkuCount} selling
                       </span>
-                    </TableCell>
-                  ) : null}
-                  {locationOperations && visibleColumns.has("inventory") ? (
-                    <TableCell>
-                      {product.inventoryPosition ? (
-                        <>
-                          <span className="font-medium">
-                            {product.inventoryPosition.availableBase.toLocaleString()} available
-                          </span>
-                          <span className="block text-xs text-[var(--fm-text-muted)]">
-                            {product.inventoryPosition.onHandBase.toLocaleString()} on hand ·{" "}
-                            {product.inventoryPosition.reservedBase.toLocaleString()} reserved
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[var(--fm-text-muted)]">No stock recorded</span>
-                      )}
                     </TableCell>
                   ) : null}
                   {visibleColumns.has("status") ? (

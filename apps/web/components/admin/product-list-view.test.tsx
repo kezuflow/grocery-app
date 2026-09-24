@@ -76,12 +76,27 @@ describe("ProductListView", () => {
   });
 
   it("renders catalog readiness, secure media, resolved prices, and availability", () => {
-    const html = renderToStaticMarkup(<ProductListView page={page} fromQuery="status=active" />);
+    const html = renderToStaticMarkup(
+      <ProductListView
+        page={page}
+        fromQuery="status=active"
+        status="active"
+        onStatusChange={vi.fn()}
+      />,
+    );
     expect(html).toContain("Catalog readiness");
     expect(html).toContain("Missing location prices");
     expect(html).toContain("₱25.00–₱30.00");
     expect(html).toContain("0 / 2 selling");
-    expect(html).toContain("9,000 available");
+    expect(html).not.toContain("9,000 available");
+    expect(html).not.toContain("Shared inventory");
+    expect(html).toContain("exact inventory quantities stay in each scoped Product preview");
+    expect(html).toContain("Central Cebu pricing");
+    expect(html).toContain("Product status views");
+    expect(html).toContain("Priced variants");
+    expect(html).toContain('data-product-record="product-onion"');
+    expect(html).toContain(">Full details</a>");
+    expect(html).toContain('aria-label="Open mobile actions for Red onion"');
     expect(html).toContain(
       "/api/admin/catalog/products/product-onion/media/media-1/content?v=2&amp;locationId=location-cebu-central",
     );
@@ -89,7 +104,7 @@ describe("ProductListView", () => {
     expect(html).not.toContain(">View</a>");
     expect(html).toContain("rounded-full");
     expect(html).toContain("Columns");
-    expect(html).toContain(">Variants</th>");
+    expect(html).toContain(">Priced variants</th>");
     expect(html).toContain(">Status</th>");
     expect(html).not.toContain("Variant readiness");
     expect(html).not.toContain("Catalog status");
@@ -97,6 +112,52 @@ describe("ProductListView", () => {
     expect(html).not.toContain("active variants");
     expect(html).not.toContain("objectKey");
     expect(html).not.toContain("Rating");
+  });
+
+  it("switches between the supported status views", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const onStatusChange = vi.fn();
+
+    act(() => {
+      root?.render(
+        <ProductListView
+          page={page}
+          fromQuery="status=active"
+          status="active"
+          onStatusChange={onStatusChange}
+        />,
+      );
+    });
+
+    const inactiveView = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Inactive",
+    );
+    expect(inactiveView?.getAttribute("aria-pressed")).toBe("false");
+
+    act(() => inactiveView?.click());
+
+    expect(onStatusChange).toHaveBeenCalledWith("inactive");
+  });
+
+  it("explains Global ownership without exposing location-only fields", () => {
+    const html = renderToStaticMarkup(
+      <ProductListView
+        page={{ ...page, scope: { kind: "GLOBAL" } }}
+        fromQuery=""
+        status="all"
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Global catalog ownership");
+    expect(html).toContain(
+      "Global owns product identity, lifecycle, selling options, and categories",
+    );
+    expect(html).toContain(">Active variants</th>");
+    expect(html).not.toContain(">Location price</th>");
+    expect(html).not.toContain(">Selling status</th>");
   });
 
   it("shows the bulk action toolbar after selecting a product and clears it on cancel", () => {
@@ -111,6 +172,8 @@ describe("ProductListView", () => {
           page={page}
           fromQuery="status=active"
           canManage
+          status="active"
+          onStatusChange={vi.fn()}
           onDeactivateSelected={onDeactivateSelected}
           filters={<input aria-label="Search products" />}
         />,
@@ -156,6 +219,8 @@ describe("ProductListView", () => {
           page={page}
           fromQuery="status=active"
           canManage
+          status="active"
+          onStatusChange={vi.fn()}
           onOpenProduct={onOpenProduct}
           openProductId="product-onion"
           detailPanelId="product-detail-panel"
@@ -165,9 +230,17 @@ describe("ProductListView", () => {
     });
 
     const row = container.querySelector<HTMLTableRowElement>('[data-product-row="product-onion"]');
+    const mobileRecord = container.querySelector<HTMLElement>(
+      '[data-product-record="product-onion"]',
+    );
     expect(row?.dataset.previewOpen).toBe("true");
+    expect(mobileRecord?.dataset.previewOpen).toBe("true");
     expect(container.querySelector('[aria-label="Preview Red onion"]')).not.toBeNull();
 
+    act(() => mobileRecord?.click());
+    expect(onOpenProduct).toHaveBeenCalledWith(page.items[0]);
+
+    onOpenProduct.mockClear();
     const categoryCell = [...(row?.querySelectorAll("td") ?? [])].find(
       (cell) => cell.textContent === "VEGETABLES",
     );
@@ -191,6 +264,8 @@ describe("ProductListView", () => {
           page={page}
           fromQuery="status=active"
           canManage
+          status="active"
+          onStatusChange={vi.fn()}
           onDeactivateSelected={vi.fn()}
         />,
       );

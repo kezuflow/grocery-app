@@ -46,6 +46,9 @@ type ProductsPageClientProps = {
 };
 
 type ProductListItem = AdminProductPage["items"][number];
+const productStatusViews = ["all", "active", "inactive"] as const;
+type ProductStatusView = (typeof productStatusViews)[number];
+
 function sameScopeTarget(
   left: AdminProductScopeTarget | null,
   right: AdminProductScopeTarget | null,
@@ -68,7 +71,12 @@ export function ProductsPageClient({
 }: ProductsPageClientProps) {
   const searchParams = useSearchParams();
   const query = searchParams.get("query") ?? "";
-  const status = searchParams.get("status") ?? "all";
+  const requestedStatus = searchParams.get("status") ?? "all";
+  const status: ProductStatusView = productStatusViews.includes(
+    requestedStatus as ProductStatusView,
+  )
+    ? (requestedStatus as ProductStatusView)
+    : "all";
   const [bulkPending, setBulkPending] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductListItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -320,24 +328,11 @@ export function ProductsPageClient({
               panelVisible && panelMode === "detail" ? selectedProduct?.productId : null
             }
             detailPanelId="product-detail-panel"
-            activeFilterCount={Number(query.trim().length > 0) + Number(status !== "all")}
+            status={status}
+            onStatusChange={(nextStatus) => setFilter("status", nextStatus)}
+            activeFilterCount={Number(query.trim().length > 0)}
             filters={
-              <>
-                <ProductSearchInput query={query} onSearch={(value) => setFilter("query", value)} />
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Status
-                  <select
-                    aria-label="Product status"
-                    value={status}
-                    onChange={(event) => setFilter("status", event.target.value)}
-                    className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 font-normal"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </label>
-              </>
+              <ProductSearchInput query={query} onSearch={(value) => setFilter("query", value)} />
             }
           />
           <AdminCursorPagination
