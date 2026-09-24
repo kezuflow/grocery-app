@@ -140,6 +140,18 @@ export function groupAdminNavigation(
   });
 }
 
+/** A redirect-only Settings root and duplicate parent URLs are not search results. */
+export function commandPaletteEntries(
+  group: AdminNavigationGroup,
+): ReadonlyArray<AdminNavigationEntry> {
+  return group.items.flatMap((item) => [
+    ...(item.code === "settings" || item.children.some((child) => child.href === item.href)
+      ? []
+      : [item]),
+    ...item.children,
+  ]);
+}
+
 export function mostSpecificActiveNavigation(
   items: ReadonlyArray<AdminNavigationEntry>,
   pathname: string | null,

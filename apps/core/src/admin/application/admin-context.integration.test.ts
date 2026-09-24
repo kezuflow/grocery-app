@@ -4,6 +4,7 @@ import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { createAuth } from "../../auth/service";
 import { getAdminBootstrap } from "./admin-bootstrap";
+import { adminNavigationFor } from "./get-admin-context";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -88,6 +89,47 @@ async function staffCookie(options: {
 }
 
 describe("scoped admin context", () => {
+  it("advertises Settings children only when their existing reads are authorized", () => {
+    const codes = (capabilities: Parameters<typeof adminNavigationFor>[0]) =>
+      adminNavigationFor(capabilities).map((item) => item.code);
+    expect(codes(["locations.read"])).toEqual(
+      expect.arrayContaining(["locations", "locations-list", "locations-service-areas"]),
+    );
+    expect(codes(["staff.read"])).toEqual(
+      expect.arrayContaining(["staff", "staff-list", "staff-roles"]),
+    );
+    expect(codes(["audit.read"])).toContain("audit");
+    expect(codes(["fulfillment.read"])).toEqual(
+      expect.arrayContaining(["settings", "settings-fulfillment-mode", "settings-delivery-cycles"]),
+    );
+    for (const capability of [
+      "locations.manage",
+      "staff.manage",
+      "settings.read",
+      "settings.manage",
+      "fulfillment.manage",
+    ] as const) {
+      expect(
+        codes([capability]).filter((code) =>
+          [
+            "locations",
+            "locations-list",
+            "locations-service-areas",
+            "staff",
+            "staff-list",
+            "staff-roles",
+            "settings",
+            "settings-fulfillment-mode",
+            "settings-delivery-cycles",
+          ].includes(code),
+        ),
+      ).toEqual([]);
+    }
+    expect(
+      adminNavigationFor(["fulfillment.read"]).find((item) => item.code === "settings"),
+    ).toMatchObject({ scopeKinds: ["GLOBAL"] });
+  });
+
   it("denies context and scopes for an unauthenticated request", async () => {
     expect(await core.getAdminContext({ requestId: "r1", headers: {} })).toMatchObject({
       ok: false,

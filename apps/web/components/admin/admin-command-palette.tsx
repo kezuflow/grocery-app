@@ -4,7 +4,11 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { groupAdminNavigation, type AdminNavigationEntry } from "./admin-navigation";
+import {
+  commandPaletteEntries,
+  groupAdminNavigation,
+  type AdminNavigationEntry,
+} from "./admin-navigation";
 import { tryNavigateAdminRoute } from "./use-admin-route-guard";
 
 /**
@@ -59,22 +63,20 @@ export function AdminCommandPalette({
                   heading={group.label}
                   className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-[var(--fm-text-muted)]"
                 >
-                  {group.items
-                    .flatMap((item) => [item, ...item.children])
-                    .map((entry) => (
-                      <CommandPrimitive.Item
-                        key={entry.code}
-                        value={entry.label}
-                        onSelect={() => select(entry.href)}
-                        className="flex min-h-9 cursor-default items-center gap-2.5 rounded-[var(--fm-radius-control)] px-2.5 text-sm text-[var(--fm-text)] data-[selected=true]:bg-[var(--fm-hover)] data-[selected=true]:outline-none"
-                      >
-                        <entry.icon
-                          className="size-4 shrink-0 text-[var(--fm-text-muted)]"
-                          aria-hidden="true"
-                        />
-                        {entry.label}
-                      </CommandPrimitive.Item>
-                    ))}
+                  {commandPaletteEntries(group).map((entry) => (
+                    <CommandPrimitive.Item
+                      key={entry.code}
+                      value={entry.label}
+                      onSelect={() => select(entry.href)}
+                      className="flex min-h-9 cursor-default items-center gap-2.5 rounded-[var(--fm-radius-control)] px-2.5 text-sm text-[var(--fm-text)] data-[selected=true]:bg-[var(--fm-hover)] data-[selected=true]:outline-none"
+                    >
+                      <entry.icon
+                        className="size-4 shrink-0 text-[var(--fm-text-muted)]"
+                        aria-hidden="true"
+                      />
+                      {entry.label}
+                    </CommandPrimitive.Item>
+                  ))}
                 </CommandPrimitive.Group>
               ))}
             </CommandPrimitive.List>

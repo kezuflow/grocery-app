@@ -16,6 +16,8 @@ export function workspaceTabsFromNavigation(
   );
   const tabs: SettingsTab[] = [];
   for (const item of candidates) {
+    // The Settings root is a compatibility redirect, not an editable workspace.
+    if (parentCode === "settings" && item.code === parentCode) continue;
     const tab = { id: item.code, label: item.label, href: item.href };
     const duplicateIndex = tabs.findIndex((candidate) => candidate.href === tab.href);
     if (duplicateIndex >= 0) {

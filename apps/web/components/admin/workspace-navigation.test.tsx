@@ -73,6 +73,41 @@ describe("workspaceTabsFromNavigation", () => {
     });
   });
 
+  it("keeps Settings children reachable without a tab to its redirect-only root", () => {
+    const settings = [
+      {
+        code: "settings",
+        label: "Settings",
+        href: "/admin/settings",
+        section: "settings" as const,
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
+      {
+        code: "settings-delivery-cycles",
+        label: "Scheduled cycles",
+        href: "/admin/settings/scheduled-cycles",
+        section: "settings" as const,
+        scopeKinds: globalScope,
+        parentCode: "settings",
+        kind: "destination" as const,
+      },
+    ];
+    expect(
+      workspaceTabsFromNavigation(settings, "settings", "/admin/settings/scheduled-cycles"),
+    ).toEqual({
+      activeId: "settings-delivery-cycles",
+      tabs: [
+        {
+          id: "settings-delivery-cycles",
+          label: "Scheduled cycles",
+          href: "/admin/settings/scheduled-cycles",
+        },
+      ],
+    });
+  });
+
   it("presents Categories as a Products tab", () => {
     expect(
       workspaceTabsFromNavigation(

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   adminNavigationFromContext,
   adminNavigationItemsForScope,
+  commandPaletteEntries,
   groupAdminNavigation,
   mostSpecificActiveNavigation,
 } from "./admin-navigation";
@@ -30,6 +31,32 @@ const audit = {
 };
 
 describe("admin navigation mapping", () => {
+  it("searches Settings children without offering the redirect-only root", () => {
+    const items = adminNavigationFromContext([
+      {
+        code: "settings",
+        label: "Settings",
+        href: "/admin/settings",
+        section: "settings",
+        scopeKinds: globalScope,
+        parentCode: null,
+        kind: "workspace",
+      },
+      {
+        code: "settings-delivery-cycles",
+        label: "Scheduled cycles",
+        href: "/admin/settings/scheduled-cycles",
+        section: "settings",
+        scopeKinds: globalScope,
+        parentCode: "settings",
+        kind: "destination",
+      },
+    ]);
+    expect(
+      commandPaletteEntries(groupAdminNavigation(items)[0]!).map((entry) => entry.code),
+    ).toEqual(["settings-delivery-cycles"]);
+  });
+
   it("shows Banners as a separate Core-authorized workspace", () => {
     const items = adminNavigationFromContext([
       {

@@ -270,7 +270,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: null,
     kind: "workspace",
-    capabilities: ["locations.read", "locations.manage"],
+    capabilities: ["locations.read"],
   },
   {
     code: "locations-list",
@@ -279,7 +279,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "locations",
     kind: "destination",
-    capabilities: ["locations.read", "locations.manage"],
+    capabilities: ["locations.read"],
   },
   {
     code: "locations-service-areas",
@@ -288,7 +288,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "locations",
     kind: "destination",
-    capabilities: ["locations.read", "locations.manage"],
+    capabilities: ["locations.read"],
   },
   {
     code: "staff",
@@ -297,7 +297,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: null,
     kind: "workspace",
-    capabilities: ["staff.read", "staff.manage"],
+    capabilities: ["staff.read"],
   },
   {
     code: "staff-list",
@@ -306,7 +306,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "staff",
     kind: "destination",
-    capabilities: ["staff.read", "staff.manage"],
+    capabilities: ["staff.read"],
   },
   {
     code: "staff-roles",
@@ -315,7 +315,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "staff",
     kind: "destination",
-    capabilities: ["staff.read", "staff.manage"],
+    capabilities: ["staff.read"],
   },
   {
     code: "audit",
@@ -333,7 +333,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: null,
     kind: "workspace",
-    capabilities: ["settings.read", "settings.manage", "fulfillment.read", "fulfillment.manage"],
+    capabilities: ["fulfillment.read"],
   },
   {
     code: "settings-fulfillment-mode",
@@ -342,7 +342,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "settings",
     kind: "destination",
-    capabilities: ["settings.read", "settings.manage"],
+    capabilities: ["fulfillment.read"],
   },
   {
     code: "settings-delivery-cycles",
@@ -351,7 +351,7 @@ const WORKSPACES: ReadonlyArray<{
     section: "settings",
     parentCode: "settings",
     kind: "destination",
-    capabilities: ["fulfillment.read", "fulfillment.manage"],
+    capabilities: ["fulfillment.read"],
   },
 ];
 
@@ -376,7 +376,6 @@ const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "locations",
   "locations-list",
   "locations-service-areas",
-  "settings",
   "transfers",
   "procurement",
 ]);
