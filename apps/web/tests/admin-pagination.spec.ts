@@ -154,9 +154,7 @@ test("customer search reaches its second cursor page without losing the filter",
   expect(new URL(secondRequest.url()).searchParams.get("query")).toBe("example.com");
 });
 
-test("promotion, catalog, finance, and operations queues expose later cursor records", async ({
-  page,
-}) => {
+test("promotion, finance, and operations queues expose later cursor records", async ({ page }) => {
   const fixtures = [
     {
       path: "/admin/promotions",
@@ -233,40 +231,6 @@ test("promotion, catalog, finance, and operations queues expose later cursor rec
     await expect(page.getByText(fixture.text)).toBeVisible();
     await page.unroute(`**${fixture.api}?**`);
   }
-
-  await page.route("**/api/admin/catalog/categories**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(result({ items: [], nextCursor: null })),
-    }),
-  );
-  await page.route("**/api/admin/catalog/units**", (route) =>
-    route.fulfill({ contentType: "application/json", body: JSON.stringify(result([])) }),
-  );
-  await page.route("**/api/admin/catalog/products?**", (route) => {
-    const second = new URL(route.request().url()).searchParams.get("cursor") === "catalog-next";
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(
-        result({
-          items: [
-            {
-              productId: second ? "product-2" : "product-1",
-              name: second ? "Later product" : "First product",
-              categoryCode: "PRODUCE",
-              status: "active",
-              skuCount: 1,
-            },
-          ],
-          nextCursor: second ? null : "catalog-next",
-        }),
-      ),
-    });
-  });
-  await installPaginationBootstrap(page, { kind: "GLOBAL" });
-  await page.goto("/admin/catalog");
-  await next(page, 1);
-  await expect(page.getByText("Later product")).toBeVisible();
 
   await page.route("**/api/admin/procurement?**", (route) => {
     const second = new URL(route.request().url()).searchParams.get("cursor") === "procurement-next";

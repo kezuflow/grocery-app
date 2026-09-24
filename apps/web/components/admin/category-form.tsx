@@ -14,6 +14,8 @@ export type CategoryFormValue = {
 };
 
 export function CategoryForm({
+  formId,
+  hideSubmit = false,
   value,
   categories,
   pending,
@@ -23,6 +25,8 @@ export function CategoryForm({
   onChange,
   onSubmit,
 }: {
+  formId?: string;
+  hideSubmit?: boolean;
   value: CategoryFormValue;
   categories: ReadonlyArray<Pick<AdminCategorySummary, "categoryId" | "name">>;
   pending: boolean;
@@ -33,10 +37,10 @@ export function CategoryForm({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <form className="space-y-5" onSubmit={onSubmit}>
+    <form id={formId} className="space-y-5" onSubmit={onSubmit}>
       <fieldset className="space-y-5" disabled={pending || locked}>
         {value.code !== undefined ? (
-          <label className="block space-y-1 text-sm font-medium">
+          <label className="grid gap-1.5 text-sm font-medium">
             <span>Category code</span>
             <Input
               value={value.code}
@@ -46,14 +50,14 @@ export function CategoryForm({
             />
           </label>
         ) : null}
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="grid gap-1.5 text-sm font-medium">
           <span>Category name</span>
           <Input
             value={value.name}
             onChange={(event) => onChange({ ...value, name: event.target.value })}
           />
         </label>
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="grid gap-1.5 text-sm font-medium">
           <span>Category slug</span>
           <Input
             value={value.slug}
@@ -61,7 +65,7 @@ export function CategoryForm({
             placeholder="fresh-produce"
           />
         </label>
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="grid gap-1.5 text-sm font-medium">
           <span>Parent category</span>
           <select
             className="h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
@@ -78,7 +82,7 @@ export function CategoryForm({
             ))}
           </select>
         </label>
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="grid gap-1.5 text-sm font-medium">
           <span>Icon asset</span>
           <Input
             value={value.iconAssetKey ?? ""}
@@ -86,7 +90,7 @@ export function CategoryForm({
             placeholder="fresh-produce.svg"
           />
         </label>
-        <label className="block space-y-1 text-sm font-medium">
+        <label className="grid gap-1.5 text-sm font-medium">
           <span>Sort order</span>
           <Input
             type="number"
@@ -96,9 +100,11 @@ export function CategoryForm({
           />
         </label>
       </fieldset>
-      <Button type="submit" size="sm" className="fm-admin-reference-primary" disabled={pending}>
-        {pending ? "Saving…" : submitLabel}
-      </Button>
+      {!hideSubmit ? (
+        <Button type="submit" size="sm" className="fm-admin-reference-primary" disabled={pending}>
+          {pending ? "Saving…" : submitLabel}
+        </Button>
+      ) : null}
     </form>
   );
 }

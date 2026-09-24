@@ -4,6 +4,7 @@ import { categoryDetailResultSchema } from "@/components/admin/category-authorin
 
 import type { AdminCategoryDetail, RpcResult } from "@freshmarkets/contracts";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCatalogCommand } from "@/components/admin/catalog-command-state";
@@ -13,13 +14,19 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
 
 export default function CategoryDetailPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
   const searchParams = useSearchParams();
+  const admin = useAdminContext();
+  const globalScope = admin.state.phase === "ready" && admin.state.selectedScope?.kind === "GLOBAL";
   const intent = useCatalogCommand(adminCategorySummarySchema);
   const [result, setResult] = useState<RpcResult<AdminCategoryDetail> | null>(null);
   const [reason, setReason] = useState("");
+  useAdminScopeGuard(reason.trim().length > 0, intent.pending || intent.uncertain, () =>
+    setReason(""),
+  );
   const [confirming, setConfirming] = useState(false);
   const statusTrigger = useRef<HTMLButtonElement>(null);
   const [notice, setNotice] = useState(
@@ -58,7 +65,8 @@ export default function CategoryDetailPage() {
     };
   }, [load]);
   async function changeStatus(confirmedReason: string) {
-    if (!result?.ok || !confirmedReason.trim()) {
+    if (!globalScope || !result?.ok || !result.value.allowedActions.includes("SET_STATUS")) return;
+    if (!confirmedReason.trim()) {
       setNotice("A reason is required.");
       return;
     }
@@ -105,13 +113,22 @@ export default function CategoryDetailPage() {
     );
   const category = result.value;
   const from = searchParams.get("from");
+  const returnQuery = from ? new URLSearchParams(from).toString() : "";
+  const listHref = `/admin/catalog/categories${returnQuery ? `?${returnQuery}` : ""}`;
   return (
     <div className="space-y-6">
+      <Link
+        href={listHref}
+        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+      >
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Categories
+      </Link>
       <PageHeader
         title={category.name}
         description={`${category.code} · Version ${category.version}`}
         action={
-          category.allowedActions.includes("UPDATE") ? (
+          globalScope && category.allowedActions.includes("UPDATE") ? (
             <Button asChild variant="outline">
               <Link
                 href={`/admin/catalog/categories/${category.categoryId}/edit${from ? `?from=${encodeURIComponent(from)}` : ""}`}
@@ -156,7 +173,7 @@ export default function CategoryDetailPage() {
             </div>
           </dl>
         </section>
-        {category.allowedActions.includes("SET_STATUS") ? (
+        {globalScope && category.allowedActions.includes("SET_STATUS") ? (
           <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
             <h2 className="font-semibold">Lifecycle</h2>
             <p className="mt-1 text-sm text-[var(--fm-text-muted)]">

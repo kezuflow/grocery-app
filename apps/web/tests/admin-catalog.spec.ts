@@ -34,6 +34,54 @@ test("a provisioned Staff reader opens the real Catalog workspace", async ({ adm
   await expect(adminPage.getByRole("heading", { level: 1, name: "Catalog" })).toBeVisible();
 });
 
+test("Catalog overview keeps the controlled-unit reference distinct from Product and Category work", async ({
+  adminPage,
+}) => {
+  await adminPage.goto("/admin/catalog");
+  await expect(adminPage.getByRole("table", { name: "Controlled units" })).toBeVisible();
+  await expect(
+    adminPage.getByText("Counted sizes use actual counted PIECE stock", { exact: false }),
+  ).toBeVisible();
+  await expect(adminPage.getByRole("link", { name: "Open Products" })).toBeVisible();
+  await expect(adminPage.getByRole("link", { name: "Open Categories" })).toBeVisible();
+  await expect(adminPage.getByLabel("Category code")).toHaveCount(0);
+  if (process.env.SAUI_CAPTURE_CATEGORY === "1") {
+    await adminPage.screenshot({
+      path: "../../docs/operations/checkpoints/evidence/saui-04/catalog-overview-desktop.png",
+      fullPage: true,
+    });
+  }
+  await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await expect(adminPage.getByRole("alert")).toContainText("Select Global scope");
+  await expect(adminPage.getByRole("status", { name: "Loading controlled units" })).toHaveCount(0);
+  await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
+  await adminPage.getByRole("option", { name: "Global", exact: true }).click();
+  await expect(adminPage.getByRole("table", { name: "Controlled units" })).toBeVisible();
+});
+
+test("Catalog overview distinguishes a failed controlled-unit read from an empty registry", async ({
+  adminPage,
+}) => {
+  await adminPage.route("**/api/admin/catalog/units", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Unit read unavailable",
+          requestId: "units-test",
+        },
+      }),
+    }),
+  );
+  await adminPage.goto("/admin/catalog");
+  await expect(adminPage.getByRole("alert")).toContainText("Unit read unavailable");
+  await expect(adminPage.getByText("No controlled units are defined.")).toHaveCount(0);
+});
+
 test("a provisioned Staff reader can scan the Category workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/catalog/categories");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Categories" })).toBeVisible();
@@ -172,6 +220,26 @@ test("a catalog read-only principal sees no Product or Category mutation control
 
   await catalogReadOnlyPage.goto("/admin/catalog/categories");
   await expect(catalogReadOnlyPage.getByRole("button", { name: "Add category" })).toHaveCount(0);
+  await catalogReadOnlyPage
+    .getByRole("button", { name: /^Open actions for/ })
+    .first()
+    .click();
+  await catalogReadOnlyPage.getByRole("menuitem", { name: "View details" }).click();
+  const categoryHref = await catalogReadOnlyPage
+    .getByRole("link", { name: "Full details" })
+    .getAttribute("href");
+  expect(categoryHref).toBeTruthy();
+  await catalogReadOnlyPage.goto(`${categoryHref!.split("?")[0]}/edit`);
+  await expect(catalogReadOnlyPage.getByRole("alert")).toContainText(
+    "Catalog management is required to edit this category.",
+  );
+  await expect(catalogReadOnlyPage.getByLabel("Category name")).toHaveCount(0);
+
+  await catalogReadOnlyPage.goto("/admin/catalog/categories/new");
+  await expect(catalogReadOnlyPage.getByRole("alert")).toContainText(
+    "Catalog management is required to create a category.",
+  );
+  await expect(catalogReadOnlyPage.getByLabel("Category name")).toHaveCount(0);
 
   await catalogReadOnlyPage.goto("/admin/catalog/products/new");
   await expect(catalogReadOnlyPage.getByRole("alert")).toContainText(
@@ -296,7 +364,107 @@ test("a category manager can create and inspect a Category", async ({ adminPage 
     "Products and historical records remain intact",
   );
   await adminPage.getByRole("button", { name: "Cancel" }).click();
+  await adminPage.getByLabel("Status change reason").clear();
+  await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await expect(adminPage.getByRole("link", { name: "Edit category" })).toHaveCount(0);
+  await expect(adminPage.getByLabel("Status change reason")).toHaveCount(0);
 });
+
+test("Category cursor deep link returns to its filtered page after record navigation", async ({
+  adminPage,
+}) => {
+  const token = crypto.randomUUID().slice(0, 8);
+  const name = `Cursor category ${token}`;
+  const created = await adminPage.request.post("/api/admin/catalog/categories", {
+    data: { code: `CURSOR_${token.toUpperCase()}`, name, slug: `cursor-${token}` },
+    headers: { "idempotency-key": crypto.randomUUID() },
+  });
+  const body = await created.json();
+  expect(body.ok).toBe(true);
+  await adminPage.route("**/api/admin/catalog/categories?**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("cursor") !== "page-two") return route.continue();
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, value: { items: [body.value], nextCursor: null } }),
+    });
+  });
+  await adminPage.goto(`/admin/catalog/categories?query=${token}&cursor=page-two&cursorHistory=`);
+  await expect(adminPage.getByText("Page 2")).toBeVisible();
+  await adminPage.getByRole("button", { name: new RegExp(`^${name}`) }).click();
+  await adminPage
+    .locator("#category-detail-panel")
+    .getByRole("link", { name: "Full details" })
+    .click();
+  await expect(adminPage.getByRole("heading", { level: 1, name })).toBeVisible();
+  await adminPage
+    .locator("#main-content")
+    .getByRole("link", { name: "Categories", exact: true })
+    .click();
+  await expect(adminPage).toHaveURL(/query=.*&cursor=page-two&cursorHistory=/);
+  await expect(adminPage.getByText("Page 2")).toBeVisible();
+  await expect(adminPage.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible();
+});
+
+for (const width of [1440, 390]) {
+  test(`Category filtered list, guarded edit and return at ${width}px`, async ({ adminPage }) => {
+    test.setTimeout(90_000);
+    await adminPage.setViewportSize({ width, height: 900 });
+    const token = crypto.randomUUID().slice(0, 8);
+    const name = `SAUI category ${token}`;
+    await adminPage.goto("/admin/catalog/categories/new");
+    await adminPage.getByLabel("Category code").fill(`SAUI_${token.toUpperCase()}`);
+    await adminPage.getByLabel("Category name").fill(name);
+    await adminPage.getByLabel("Category slug").fill(`saui-${token}`);
+    await adminPage.getByRole("button", { name: "Create category" }).click();
+    await expect(adminPage.getByRole("heading", { level: 1, name })).toBeVisible();
+
+    await adminPage.goto(`/admin/catalog/categories?query=${token}&status=active`);
+    const row = adminPage.getByRole("button", { name: new RegExp(`^${name}`) });
+    await expect(row).toBeVisible();
+    if (process.env.SAUI_CAPTURE_CATEGORY === "1") {
+      await adminPage.screenshot({
+        path: `../../docs/operations/checkpoints/evidence/saui-04/categories-index-${width}.png`,
+        fullPage: true,
+      });
+    }
+    await row.click();
+    await adminPage
+      .locator("#category-detail-panel")
+      .getByRole("link", { name: "Full details" })
+      .click();
+    await expect(adminPage.getByRole("heading", { level: 1, name })).toBeVisible();
+    await adminPage.getByRole("link", { name: "Edit category" }).click();
+    await adminPage.getByLabel("Category name").fill(`${name} updated`);
+    await expect(adminPage.getByText("Unsaved changes")).toBeVisible();
+    if (process.env.SAUI_CAPTURE_CATEGORY === "1") {
+      await adminPage.screenshot({
+        path: `../../docs/operations/checkpoints/evidence/saui-04/category-edit-${width}.png`,
+        fullPage: true,
+      });
+    }
+    adminPage.once("dialog", (dialog) => void dialog.dismiss());
+    await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
+    await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+    await expect(adminPage.getByRole("combobox", { name: "Active admin scope" })).toContainText(
+      "Global",
+    );
+    await expect(adminPage.getByLabel("Category name")).toHaveValue(`${name} updated`);
+    await adminPage.getByRole("button", { name: "Save category" }).click();
+    await expect(
+      adminPage.getByRole("heading", { level: 1, name: `${name} updated` }),
+    ).toBeVisible();
+    await adminPage.getByRole("link", { name: "Categories", exact: true }).last().click();
+    await expect(adminPage).toHaveURL(new RegExp(`categories\\?query=${token}&status=active$`));
+    await expect(
+      adminPage.getByRole("button", { name: new RegExp(`^${name} updated`) }),
+    ).toBeVisible();
+    expect(await adminPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+}
 
 test("a Staff principal without capability is denied the Catalog workspace", async ({
   deniedAdminPage,

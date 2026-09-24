@@ -176,6 +176,7 @@ export function AdminConfirmationDialog({
   cancelLabel = "Keep unchanged",
   restoreFocusRef,
   pending,
+  cancelDisabled = false,
   onCancel,
   onConfirm,
 }: {
@@ -191,6 +192,7 @@ export function AdminConfirmationDialog({
   cancelLabel?: string;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   pending?: boolean;
+  cancelDisabled?: boolean;
   onCancel(): void;
   onConfirm(reason: string): void;
 }) {
@@ -233,7 +235,7 @@ export function AdminConfirmationDialog({
         ) : null}
         <div className="flex justify-end gap-2">
           <AlertDialogCancel asChild>
-            <Button type="button" variant="outline" disabled={pending}>
+            <Button type="button" variant="outline" disabled={pending || cancelDisabled}>
               {cancelLabel}
             </Button>
           </AlertDialogCancel>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { AdminCategoryPage, AdminCategorySummary, RpcResult } from "@freshmarkets/contracts";
+import { adminCategorySummarySchema } from "@freshmarkets/validation";
 import {
   Clipboard,
   EllipsisVertical,
@@ -35,11 +36,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AdminCursorPagination, useAdminPagination } from "@/components/admin/admin-controls";
+import {
+  AdminCursorPagination,
+  AdminIndexViews,
+  useAdminUrlPagination,
+} from "@/components/admin/admin-controls";
 import { useAdminContext } from "../../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { NewCategoryWorkspace } from "./new/page";
-import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
+import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 
 type CategoriesPageClientProps = {
   initialPayload: RpcResult<AdminCategoryPage>;
@@ -55,11 +60,10 @@ export function CategoriesPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [payload, setPayload] = useState<RpcResult<AdminCategoryPage> | null>(initialPayload);
-  const [categoryToDeactivate, setCategoryToDeactivate] = useState<{
-    item: AdminCategorySummary;
-    idempotencyKey: string;
-  } | null>(null);
-  const [deactivationPending, setDeactivationPending] = useState(false);
+  const [categoryToDeactivate, setCategoryToDeactivate] = useState<AdminCategorySummary | null>(
+    null,
+  );
+  const deactivationIntent = useCatalogCommand(adminCategorySummarySchema);
   const [commandResult, setCommandResult] = useState<{
     kind: "success" | "error";
     message: string;
@@ -69,41 +73,67 @@ export function CategoriesPageClient({
   const [selectedCategory, setSelectedCategory] = useState<AdminCategorySummary | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
-  const pagination = useAdminPagination();
+  const [creatorState, setCreatorState] = useState({ dirty: false, locked: false });
+  const [reloadId, setReloadId] = useState(0);
+  const pagination = useAdminUrlPagination("/admin/catalog/categories");
   const adminContext = useAdminContext();
   const query = searchParams.get("query") ?? initialQuery;
   const status = searchParams.get("status") ?? initialStatus;
   const canManage =
     adminContext.state.phase === "ready" &&
+    adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
+  function canLeaveCreator() {
+    if (!panelOpen || panelMode !== "create") return true;
+    if (creatorState.locked) return false;
+    return !creatorState.dirty || window.confirm("Discard this unsaved category?");
+  }
 
   useEffect(() => {
-    if (!pagination.cursor) return;
+    let current = true;
+    if (
+      !pagination.cursor &&
+      query === initialQuery &&
+      status === initialStatus &&
+      reloadId === 0
+    ) {
+      setPayload(initialPayload);
+      return;
+    }
     setPayload(null);
-    const params = new URLSearchParams({ limit: "50", cursor: pagination.cursor });
+    const params = new URLSearchParams({ limit: "50" });
+    if (pagination.cursor) params.set("cursor", pagination.cursor);
     if (query.trim()) params.set("query", query.trim());
     if (status !== "all") params.set("status", status);
     void fetch(`/api/admin/catalog/categories?${params}`)
       .then((response) => response.json() as Promise<RpcResult<AdminCategoryPage>>)
-      .then(setPayload)
-      .catch(() =>
-        setPayload({
-          ok: false,
-          error: {
-            code: "INTERNAL_ERROR",
-            message: "Network error loading Categories",
-            requestId: "unavailable",
-          },
-        }),
-      );
-  }, [pagination.cursor, query, status]);
+      .then((result) => {
+        if (current) setPayload(result);
+      })
+      .catch(() => {
+        if (current)
+          setPayload({
+            ok: false,
+            error: {
+              code: "INTERNAL_ERROR",
+              message: "Network error loading Categories",
+              requestId: "unavailable",
+            },
+          });
+      });
+    return () => {
+      current = false;
+    };
+  }, [pagination.cursor, query, status, initialPayload, initialQuery, initialStatus, reloadId]);
 
   const items = payload?.ok ? payload.value.items : [];
   function setFilter(key: string, value: string) {
+    if (!canLeaveCreator()) return;
+    if (panelOpen && panelMode === "create") setPanelOpen(false);
     const next = new URLSearchParams(searchParams.toString());
     if (value && value !== "all") next.set(key, value);
     else next.delete(key);
-    pagination.reset();
+    pagination.reset(next);
     router.replace(`/admin/catalog/categories${next.size ? `?${next}` : ""}`);
   }
 
@@ -116,26 +146,16 @@ export function CategoriesPageClient({
   }
 
   async function deactivateCategory(reason: string) {
-    if (!categoryToDeactivate || deactivationPending) return;
-    setDeactivationPending(true);
+    if (!categoryToDeactivate || deactivationIntent.pending) return;
     setCommandResult(null);
     try {
-      const response = await fetch(
-        `/api/admin/catalog/categories/${encodeURIComponent(categoryToDeactivate.item.categoryId)}/status`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "idempotency-key": categoryToDeactivate.idempotencyKey,
-          },
-          body: JSON.stringify({
-            status: "inactive",
-            reason,
-            expectedVersion: categoryToDeactivate.item.version,
-          }),
-        },
+      const result = await deactivationIntent.submit(
+        `/api/admin/catalog/categories/${encodeURIComponent(categoryToDeactivate.categoryId)}/status`,
+        { status: "inactive", reason, expectedVersion: categoryToDeactivate.version },
+        "POST",
+        { title: "Category deactivated", description: categoryToDeactivate.name },
       );
-      const result = (await response.json()) as RpcResult<AdminCategorySummary>;
+      if (!result) return;
       if (!result.ok) {
         setCommandResult({
           kind: "error",
@@ -159,20 +179,86 @@ export function CategoriesPageClient({
           : current,
       );
       setCommandResult({ kind: "success", message: `${result.value.name} deactivated.` });
-      notifyCommandSuccess("Category deactivated", result.value.name);
       setCategoryToDeactivate(null);
+      setSelectedCategory(null);
+      setPanelOpen(false);
+      setReloadId((current) => current + 1);
     } catch {
-      setCommandResult({ kind: "error", message: "Network error while deactivating category." });
-      setCategoryToDeactivate(null);
-    } finally {
-      setDeactivationPending(false);
+      setCommandResult({
+        kind: "error",
+        message: "Connection lost. Retry the saved Category request to confirm its outcome.",
+      });
     }
+  }
+
+  function openCategory(item: AdminCategorySummary) {
+    if (!canLeaveCreator()) return;
+    setSelectedCategory(item);
+    setPanelMode("detail");
+    setPanelOpen(true);
+  }
+
+  function categoryActions(item: AdminCategorySummary) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Open actions for ${item.name}`}
+            className="size-7 rounded-md"
+          >
+            <EllipsisVertical aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => openCategory(item)}>
+            <Eye aria-hidden="true" />
+            View details
+          </DropdownMenuItem>
+          {canManage ? (
+            <DropdownMenuItem
+              asChild
+              onSelect={(event) => {
+                if (!canLeaveCreator()) event.preventDefault();
+              }}
+            >
+              <a
+                href={`/admin/catalog/categories/${item.categoryId}/edit${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+              >
+                <Pencil aria-hidden="true" />
+                Edit category
+              </a>
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem onSelect={() => void copyCategoryId(item.categoryId)}>
+            <Clipboard aria-hidden="true" />
+            {copiedCategoryId === item.categoryId ? "ID copied" : "Copy ID"}
+          </DropdownMenuItem>
+          {canManage && item.status === "active" ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                disabled={deactivationIntent.pending || deactivationIntent.uncertain}
+                onSelect={() => setCategoryToDeactivate(item)}
+              >
+                <PowerOff aria-hidden="true" />
+                Deactivate
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
   }
 
   const master = (
     <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader
         title="Categories"
+        description="Global catalog hierarchy and Product assignments."
         action={
           canManage ? (
             <Button
@@ -181,7 +267,9 @@ export function CategoriesPageClient({
               className="fm-admin-reference-primary"
               aria-expanded={panelOpen && panelMode === "create"}
               aria-controls="category-detail-panel"
+              disabled={panelOpen && panelMode === "create" && creatorState.locked}
               onClick={() => {
+                if (!canLeaveCreator()) return;
                 setPanelMode("create");
                 setPanelOpen((open) => (panelMode === "create" ? !open : true));
               }}
@@ -217,9 +305,26 @@ export function CategoriesPageClient({
           </AlertDescription>
         </Alert>
       ) : null}
+      {!payload ? (
+        <p role="status" className="text-sm">
+          Loading Categories…
+        </p>
+      ) : null}
       {payload?.ok ? (
         <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
-          <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] p-4 sm:flex-row">
+          <AdminIndexViews
+            label="Category status views"
+            views={
+              [
+                { label: "All", status: "all" },
+                { label: "Active", status: "active" },
+                { label: "Inactive", status: "inactive" },
+              ] as const
+            }
+            value={status}
+            onChange={(next) => setFilter("status", next)}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] p-4">
             <Input
               aria-label="Search categories"
               value={query}
@@ -227,18 +332,11 @@ export function CategoriesPageClient({
               placeholder="Search categories"
               className="sm:max-w-xs"
             />
-            <select
-              aria-label="Category status"
-              value={status}
-              onChange={(event) => setFilter("status", event.target.value)}
-              className="h-9 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
+            <span className="text-xs text-[var(--fm-text-muted)]">
+              {items.length} categor{items.length === 1 ? "y" : "ies"} shown
+            </span>
           </div>
-          <Table aria-label="Categories">
+          <Table aria-label="Categories" className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -263,11 +361,7 @@ export function CategoriesPageClient({
                       }
                       aria-controls="category-detail-panel"
                       className="font-medium hover:underline"
-                      onClick={() => {
-                        setSelectedCategory(item);
-                        setPanelMode("detail");
-                        setPanelOpen(true);
-                      }}
+                      onClick={() => openCategory(item)}
                     >
                       {item.name}
                     </button>
@@ -282,69 +376,60 @@ export function CategoriesPageClient({
                     />
                   </TableCell>
                   <TableCell>{item.productCount}</TableCell>
-                  <TableCell className="w-12 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Open actions for ${item.name}`}
-                          className="size-7 rounded-md"
-                        >
-                          <EllipsisVertical aria-hidden="true" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSelectedCategory(item);
-                            setPanelMode("detail");
-                            setPanelOpen(true);
-                          }}
-                        >
-                          <Eye aria-hidden="true" />
-                          View details
-                        </DropdownMenuItem>
-                        {canManage ? (
-                          <DropdownMenuItem asChild>
-                            <a
-                              href={`/admin/catalog/categories/${item.categoryId}/edit${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
-                            >
-                              <Pencil aria-hidden="true" />
-                              Edit category
-                            </a>
-                          </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem onSelect={() => void copyCategoryId(item.categoryId)}>
-                          <Clipboard aria-hidden="true" />
-                          {copiedCategoryId === item.categoryId ? "ID copied" : "Copy ID"}
-                        </DropdownMenuItem>
-                        {canManage && item.status === "active" ? (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
-                              disabled={deactivationPending}
-                              onSelect={() =>
-                                setCategoryToDeactivate({
-                                  item,
-                                  idempotencyKey: crypto.randomUUID(),
-                                })
-                              }
-                            >
-                              <PowerOff aria-hidden="true" />
-                              Deactivate
-                            </DropdownMenuItem>
-                          </>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                  <TableCell className="w-12 text-right">{categoryActions(item)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          <div
+            className="divide-y divide-[var(--fm-border)] md:hidden"
+            aria-label="Category records"
+          >
+            {items.map((item) => (
+              <article key={item.categoryId} className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    className="min-w-0 text-left font-semibold hover:underline"
+                    aria-expanded={
+                      panelOpen &&
+                      panelMode === "detail" &&
+                      selectedCategory?.categoryId === item.categoryId
+                    }
+                    aria-controls="category-detail-panel"
+                    onClick={() => openCategory(item)}
+                  >
+                    <span className="block truncate">{item.name}</span>
+                    <span className="block text-xs font-normal text-[var(--fm-text-muted)]">
+                      {item.code}
+                    </span>
+                  </button>
+                  {categoryActions(item)}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fm-text-muted)]">
+                  <AdminStatusPill
+                    status={item.status}
+                    tone={item.status === "active" ? "success" : "danger"}
+                    label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                  />
+                  <span>{item.parentName ?? "Top level"}</span>
+                  <span>
+                    {item.productCount} product{item.productCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <Link
+                  href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+                  prefetch={false}
+                  className="inline-flex text-sm font-medium underline underline-offset-4"
+                  onClick={(event) => {
+                    if (!canLeaveCreator()) event.preventDefault();
+                  }}
+                >
+                  Full details
+                </Link>
+              </article>
+            ))}
+          </div>
           {items.length === 0 ? (
             <p role="status" className="p-6 text-sm text-[var(--fm-text-muted)]">
               {query.trim() || status !== "all"
@@ -363,13 +448,18 @@ export function CategoriesPageClient({
       <ConfirmCommandDialog
         open={categoryToDeactivate !== null}
         title="Deactivate category?"
-        resource={categoryToDeactivate?.item.name ?? "Category"}
+        resource={categoryToDeactivate?.name ?? "Category"}
         scope="Global Catalog"
         consequence="This Category leaves active catalog navigation. Existing Product assignments and historical references remain intact."
-        confirmLabel="Confirm deactivation"
+        confirmLabel={
+          deactivationIntent.uncertain ? "Retry saved deactivation" : "Confirm deactivation"
+        }
         cancelLabel="Cancel"
-        pending={deactivationPending}
-        onCancel={() => setCategoryToDeactivate(null)}
+        pending={deactivationIntent.pending}
+        cancelDisabled={deactivationIntent.uncertain}
+        onCancel={() => {
+          if (!deactivationIntent.uncertain) setCategoryToDeactivate(null);
+        }}
         onConfirm={(reason) => void deactivateCategory(reason)}
       />
     </section>
@@ -454,10 +544,11 @@ export function CategoriesPageClient({
   const createDetail = (
     <NewCategoryWorkspace
       embedded
+      onEditorStateChange={setCreatorState}
       onCancel={() => setPanelOpen(false)}
       onCreated={() => {
         setPanelOpen(false);
-        router.refresh();
+        setReloadId((current) => current + 1);
       }}
     />
   );
