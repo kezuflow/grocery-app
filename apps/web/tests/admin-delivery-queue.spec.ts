@@ -612,3 +612,319 @@ test("Delivery pagination asks before discarding a manual draft and restores foc
   await expect(page.getByRole("link", { name: "Order second-d" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "Delivery" })).toBeFocused();
 });
+
+test("Delivery shows provider progress and offers replacement only after definite closure", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installDeliveryScopes(page);
+  const states = [
+    { id: "pending", status: "PENDING", providerStatus: null, label: "Booking in progress…" },
+    { id: "allocating", status: "ACTIVE", providerStatus: "ALLOCATING", label: "Finding rider" },
+    { id: "assigned", status: "ACTIVE", providerStatus: "PENDING_PICKUP", label: "Rider assigned" },
+    {
+      id: "in-delivery",
+      status: "ACTIVE",
+      providerStatus: "IN_DELIVERY",
+      label: "Out for delivery",
+    },
+    { id: "completed", status: "COMPLETED", providerStatus: "COMPLETED", label: "Delivered" },
+    { id: "failed", status: "FAILED", providerStatus: "FAILED", label: "Delivery failed" },
+    { id: "canceled", status: "CANCELED", providerStatus: "CANCELED", label: "Delivery canceled" },
+    {
+      id: "unknown",
+      status: "OUTCOME_UNKNOWN",
+      providerStatus: null,
+      label: "Awaiting provider confirmation",
+    },
+    {
+      id: "reconcile",
+      status: "RECONCILIATION_REQUIRED",
+      providerStatus: null,
+      label: "Awaiting provider confirmation",
+    },
+  ];
+  await page.route("**/api/admin/delivery?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          ...deliveryPage(firstLocation, "pending").value,
+          items: states.map((state, index) => {
+            const closed = state.id === "failed" || state.id === "canceled";
+            return {
+              ...deliveryItem(firstLocation, `state-${state.id}`, "SCHEDULED"),
+              status: closed
+                ? "FAILED"
+                : state.id === "completed"
+                  ? "DELIVERED"
+                  : state.id === "in-delivery"
+                    ? "EN_ROUTE"
+                    : state.id === "assigned"
+                      ? "ASSIGNED"
+                      : "UNASSIGNED",
+              manualActions: closed ? ["ASSIGN"] : [],
+              courierPickup: {
+                allowedKinds: closed ? ["IMMEDIATE", "SCHEDULED"] : [],
+                unavailableReason: closed
+                  ? null
+                  : "Resolve the current or uncertain delivery attempt before starting another.",
+              },
+              externalDispatch: {
+                dispatchId: `dispatch-${state.id}`,
+                provider: "lalamove",
+                status: state.status,
+                providerStatus: state.providerStatus,
+                trackingUrl: null,
+                providerDeliveryId:
+                  state.id === "pending" || state.id === "unknown" || state.id === "reconcile"
+                    ? null
+                    : `provider-${state.id}`,
+                version: index + 1,
+              },
+            };
+          }),
+        },
+      }),
+    }),
+  );
+  await page.goto("/admin/delivery");
+  for (const state of states) {
+    const row = page.getByRole("row", { name: new RegExp(`state-${state.id}`) });
+    await expect(row).toContainText(state.label);
+    await expect(row.getByRole("button", { name: "Request Lalamove" })).toHaveCount(
+      state.id === "failed" || state.id === "canceled" ? 1 : 0,
+    );
+    await expect(row.getByRole("button", { name: "Assign manual rider" })).toHaveCount(
+      state.id === "failed" || state.id === "canceled" ? 1 : 0,
+    );
+  }
+  for (const id of ["unknown", "reconcile"]) {
+    const row = page.getByRole("row", { name: new RegExp(`state-${id}`) });
+    await expect(
+      row.getByRole("textbox", { name: "Lalamove order number for recovery" }),
+    ).toBeVisible();
+    await expect(row.getByRole("button", { name: "Refresh provider" })).toBeVisible();
+  }
+  await page.screenshot({
+    path: testInfo.outputPath("delivery-recovery-states-1440.png"),
+    fullPage: true,
+  });
+});
+
+test("An uncertain courier booking keeps one request identity and never reports a confirmed booking", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  let providerUnresolved = false;
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const item = {
+      ...deliveryItem(firstLocation, "booking-unknown", "SCHEDULED"),
+      status: "UNASSIGNED",
+      manualActions: providerUnresolved ? [] : ["ASSIGN"],
+      courierPickup: providerUnresolved
+        ? {
+            allowedKinds: [],
+            unavailableReason:
+              "Resolve the current or uncertain delivery attempt before starting another.",
+          }
+        : { allowedKinds: ["IMMEDIATE", "SCHEDULED"], unavailableReason: null },
+      externalDispatch: providerUnresolved
+        ? {
+            dispatchId: "booking-unknown-dispatch",
+            provider: "lalamove",
+            status: "OUTCOME_UNKNOWN",
+            providerStatus: null,
+            trackingUrl: null,
+            providerDeliveryId: null,
+            version: 2,
+          }
+        : null,
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { ...deliveryPage(firstLocation, item.orderId, "next").value, items: [item] },
+      }),
+    });
+  });
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  let releaseFirst!: () => void;
+  const heldFirst = new Promise<void>((resolve) => (releaseFirst = resolve));
+  await page.route("**/api/admin/external-deliveries", async (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postData(),
+    });
+    if (requests.length === 1) {
+      await heldFirst;
+      providerUnresolved = true;
+    }
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          message:
+            requests.length === 1
+              ? "The provider may have accepted the booking; reconciliation is required"
+              : "The courier booking is still processing",
+          requestId: "booking-retry-request",
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const row = page.getByRole("row", { name: /booking-unknown/ });
+  await row.getByRole("button", { name: "Request Lalamove" }).click();
+  await row.getByRole("button", { name: "Review Lalamove booking" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Booking…" })).toBeDisabled();
+  expect(requests).toHaveLength(1);
+  releaseFirst();
+  await expect(row.getByText(/Booking was not confirmed\. Retry the saved request/)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Retry saved booking request" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Results pagination" })
+      .getByRole("button", { name: "Next" }),
+  ).toBeDisabled();
+  await expect(page.getByText("Lalamove booking confirmed")).toHaveCount(0);
+  await row.getByRole("button", { name: "Retry saved booking request" }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toEqual(requests[0]);
+  await expect(row.getByText(/Booking was not confirmed\. Retry the saved request/)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Retry saved booking request" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
+  await expect(page.getByText("Lalamove booking confirmed")).toHaveCount(0);
+  await page.reload();
+  await expect(row).toContainText("Awaiting provider confirmation");
+  await expect(row.getByRole("region", { name: "Choose dispatch method" })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Refresh provider" })).toBeVisible();
+});
+
+test("A definite pre-provider rejection lets staff correct pickup and use a new request", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  await page.route("**/api/admin/delivery?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          ...deliveryPage(firstLocation, "booking-invalid", "next").value,
+          items: [
+            {
+              ...deliveryItem(firstLocation, "booking-invalid", "SCHEDULED"),
+              courierPickup: { allowedKinds: ["SCHEDULED"], unavailableReason: null },
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  await page.route("**/api/admin/external-deliveries", (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postData(),
+    });
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "Pickup must be in the future and no later than the committed delivery promise",
+          requestId: `invalid-${requests.length}`,
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const row = page.getByRole("row", { name: /booking-invalid/ });
+  const pickup = row.getByLabel("Pickup time");
+  await pickup.fill("2026-01-01T10:00");
+  await row.getByRole("button", { name: "Review Lalamove booking" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await expect(row.getByText(/Pickup must be in the future/)).toBeVisible();
+  await expect(pickup).toBeEnabled();
+  await expect(row.getByRole("button", { name: "Retry saved booking request" })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Results pagination" })
+      .getByRole("button", { name: "Next" }),
+  ).toBeEnabled();
+  await pickup.fill("2027-01-01T10:00");
+  await row.getByRole("button", { name: "Review Lalamove booking" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]?.key).not.toBe(requests[0]?.key);
+  expect(requests[1]?.body).not.toBe(requests[0]?.body);
+  await expect(page.getByText("Lalamove booking confirmed")).toHaveCount(0);
+});
+
+test("A successful reply with unresolved provider status still locks the saved booking", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  await page.route("**/api/admin/delivery?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          ...deliveryPage(firstLocation, "booking-unresolved", "next").value,
+          items: [
+            {
+              ...deliveryItem(firstLocation, "booking-unresolved", "SCHEDULED"),
+              manualActions: ["ASSIGN"],
+              courierPickup: { allowedKinds: ["IMMEDIATE"], unavailableReason: null },
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  await page.route("**/api/admin/external-deliveries", (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postData(),
+    });
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          status: "OUTCOME_UNKNOWN",
+          quoteAmountMinor: null,
+          quoteCurrency: null,
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const row = page.getByRole("row", { name: /booking-unresolved/ });
+  await row.getByRole("button", { name: "Request Lalamove" }).click();
+  await row.getByRole("button", { name: "Review Lalamove booking" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await expect(row.getByText(/Booking outcome is unresolved/)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Results pagination" })
+      .getByRole("button", { name: "Next" }),
+  ).toBeDisabled();
+  await expect(page.getByText("Lalamove booking confirmed")).toHaveCount(0);
+  await row.getByRole("button", { name: "Retry saved booking request" }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toEqual(requests[0]);
+  await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
+});

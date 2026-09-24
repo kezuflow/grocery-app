@@ -109,12 +109,17 @@ export function ExternalDeliveryBooking({
         }),
       );
       setReviewing(false);
-      setUnknown(false);
-      saved.current = null;
       if (result.ok) {
-        if (
-          !["OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED", "FAILED"].includes(result.value.status)
-        ) {
+        if (["OUTCOME_UNKNOWN", "RECONCILIATION_REQUIRED"].includes(result.value.status)) {
+          setUnknown(true);
+          setMessage(
+            "Booking outcome is unresolved. Retry the saved request or refresh the page to check its current state.",
+          );
+          return;
+        }
+        setUnknown(false);
+        saved.current = null;
+        if (result.value.status !== "FAILED") {
           notifyCommandSuccess(
             result.value.status === "ACTIVE"
               ? "Lalamove booking confirmed"
@@ -130,8 +135,27 @@ export function ExternalDeliveryBooking({
             : ` Courier cost: ${result.value.quoteCurrency} ${(result.value.quoteAmountMinor / 100).toFixed(2)}.`;
         onBooked(`Lalamove booking ${result.value.status.toLowerCase()}.${cost}`);
       } else {
-        key.current = crypto.randomUUID();
-        setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
+        const rejectedBeforeSubmission = [
+          "VALIDATION_FAILED",
+          "STALE_VERSION",
+          "ILLEGAL_TRANSITION",
+          "CONFIGURATION_ERROR",
+          "FORBIDDEN",
+          "UNAUTHENTICATED",
+          "NOT_FOUND",
+          "IDEMPOTENCY_CONFLICT",
+        ].includes(result.error.code);
+        if (rejectedBeforeSubmission) {
+          setUnknown(false);
+          saved.current = null;
+          key.current = crypto.randomUUID();
+          setMessage(`${result.error.message} Request reference: ${result.error.requestId}`);
+        } else {
+          setUnknown(true);
+          setMessage(
+            `${result.error.message} Request reference: ${result.error.requestId}. Booking was not confirmed. Retry the saved request or refresh the page to check its current state.`,
+          );
+        }
       }
     } catch {
       setUnknown(true);
