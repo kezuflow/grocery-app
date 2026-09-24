@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
+import type { Capability } from "@freshmarkets/contracts";
 import { expect, test } from "./admin-authenticated-fixture";
 import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
@@ -66,13 +67,16 @@ function order(number: string, status: string, name: string) {
   };
 }
 
-async function bootstrap(page: Page) {
+async function bootstrap(
+  page: Page,
+  capabilities: Capability[] = ["fulfillment.read", "fulfillment.manage"],
+) {
   await installAdminBootstrapFixture(page, {
     context: {
       staffId: "staff-queue",
       displayName: "Queue Staff",
       email: "queue@example.com",
-      capabilities: ["fulfillment.read", "fulfillment.manage"],
+      capabilities,
       scopes: [{ kind: "location", locationId }],
       navigation: [],
       environment: "test",
@@ -237,4 +241,193 @@ test("a slow older filter cannot replace a newer view; error retains request ref
   await expect(page.getByRole("alert")).toContainText("history-ref");
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No orders in this view" })).toBeVisible();
+});
+
+test("read-only Fulfillment staff see the checklist without mutation controls", async ({
+  page,
+}) => {
+  await bootstrap(page, ["fulfillment.read"]);
+  await page.route("**/api/admin/fulfillment?**", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        requestId: "read-only",
+        value: { items: [order("Q1", "NOT_STARTED", "Ana")], nextCursor: null },
+      },
+    }),
+  );
+  await page.goto("/admin/fulfillment");
+  await expect(page.getByRole("heading", { name: "Ordered item checklist" })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Order FM-Q1 details" }).getByRole("button"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "Order FM-Q1 details" }).getByRole("textbox"),
+  ).toHaveCount(0);
+});
+
+test("unknown and reconciling preparation responses retry one exact Core intent", async ({
+  page,
+}) => {
+  await bootstrap(page);
+  let status = "NOT_STARTED";
+  await page.route("**/api/admin/fulfillment?**", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        requestId: "queue",
+        value: {
+          items: [order("Q1", status, "Ana"), order("Q2", "PICKING", "Bea")],
+          nextCursor: null,
+        },
+      },
+    }),
+  );
+  const attempts: Array<{ key: string | undefined; body: string | null }> = [];
+  await page.route("**/api/admin/fulfillment", async (route) => {
+    attempts.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postData(),
+    });
+    if (attempts.length === 1) {
+      await route.abort("failed");
+    } else if (attempts.length === 2) {
+      await route.fulfill({
+        json: {
+          ok: false,
+          error: {
+            code: "CONFLICT",
+            message: "Still reconciling",
+            requestId: "conflict",
+            details: { outcome: "RECONCILIATION_PENDING" },
+          },
+        },
+      });
+    } else {
+      status = "PICKING";
+      await route.fulfill({
+        json: {
+          ok: true,
+          requestId: "confirmed",
+          value: { orderId: "order-Q1", status: "PICKING", version: 2 },
+        },
+      });
+    }
+  });
+
+  await page.goto("/admin/fulfillment");
+  await page
+    .getByRole("complementary", { name: "Order FM-Q1 details" })
+    .getByRole("button", { name: "Accept order & start picking" })
+    .click();
+  await expect(page.getByText("Preparation action awaiting confirmation")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "FM-Q2" })).toBeDisabled();
+  await page.getByRole("button", { name: "Retry the same request" }).click();
+  await expect(page.getByText(/original action is still being reconciled/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "New", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Retry the same request" }).click();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Order FM-Q1 details" })
+      .getByRole("button", { name: "Finish picking" }),
+  ).toBeVisible();
+  expect(attempts).toHaveLength(3);
+  expect(
+    attempts.every(
+      (attempt) => attempt.key === attempts[0].key && attempt.body === attempts[0].body,
+    ),
+  ).toBe(true);
+  expect(JSON.parse(attempts[0].body ?? "null")).toMatchObject({
+    locationId,
+    orderId: "order-Q1",
+    action: "START_PICKING",
+    expectedVersion: 1,
+  });
+});
+
+test("a stale preparation rejection refreshes Core state without submitting a replacement", async ({
+  page,
+}) => {
+  await bootstrap(page);
+  let status = "NOT_STARTED";
+  await page.route("**/api/admin/fulfillment?**", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        requestId: "queue",
+        value: { items: [order("Q1", status, "Ana")], nextCursor: null },
+      },
+    }),
+  );
+  let posts = 0;
+  await page.route("**/api/admin/fulfillment", (route) => {
+    posts += 1;
+    status = "PICKING";
+    return route.fulfill({
+      json: {
+        ok: false,
+        error: {
+          code: "STALE_VERSION",
+          message: "Fulfillment changed; refresh before retrying",
+          requestId: "stale",
+        },
+      },
+    });
+  });
+  await page.goto("/admin/fulfillment");
+  await page
+    .getByRole("complementary", { name: "Order FM-Q1 details" })
+    .getByRole("button", { name: "Accept order & start picking" })
+    .click();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Order FM-Q1 details" })
+      .getByRole("button", { name: "Finish picking" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Fulfillment changed; refresh before retrying", { exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+});
+
+test("a shortage draft does not become the audit reason for a normal preparation action", async ({
+  page,
+}) => {
+  await bootstrap(page);
+  let body: Record<string, unknown> | null = null;
+  await page.route("**/api/admin/fulfillment?**", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        requestId: "queue",
+        value: {
+          items: [
+            {
+              ...order("Q1", "PICKING", "Ana"),
+              allowedActions: ["MARK_READY_TO_PACK", "RECORD_SHORTAGE"],
+            },
+          ],
+          nextCursor: null,
+        },
+      },
+    }),
+  );
+  await page.route("**/api/admin/fulfillment", async (route) => {
+    body = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      json: {
+        ok: true,
+        requestId: "saved",
+        value: { orderId: "order-Q1", status: "READY_TO_PACK", version: 2 },
+      },
+    });
+  });
+  await page.goto("/admin/fulfillment");
+  const detail = page.getByRole("complementary", { name: "Order FM-Q1 details" });
+  await detail.getByRole("textbox", { name: "Optional shortage reason" }).fill("Shortage draft");
+  await detail.getByRole("button", { name: "Finish picking" }).click();
+  await expect(page.getByText("Finish picking completed.")).toBeVisible();
+  expect(body).toMatchObject({ action: "MARK_READY_TO_PACK" });
+  expect(body).not.toHaveProperty("reason");
 });

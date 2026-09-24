@@ -34,6 +34,11 @@ export function preparationStatus(status: string): string {
     .replace(/^./, (first) => first.toUpperCase());
 }
 
+function reservationEvidence(status: string): string {
+  const label = preparationStatus(status);
+  return label === "Reserved" ? label : `Reservation ${label}`;
+}
+
 function deliveryLabel(detail: NonNullable<FulfillmentQueueView["operational"]>): string {
   const execution = detail.deliveryExecution;
   if (!execution)
@@ -69,12 +74,14 @@ export function OperationalOrderDetail({
   reason,
   setReason,
   pending,
+  canManage,
   onAction,
 }: {
   item: FulfillmentQueueView;
   reason: string;
   setReason: (value: string) => void;
   pending: boolean;
+  canManage: boolean;
   onAction: (action: string) => void;
 }) {
   const detail = item.operational;
@@ -83,6 +90,13 @@ export function OperationalOrderDetail({
     detail.fulfillmentMode === "SCHEDULED" &&
     item.status === "PACKING" &&
     !item.allowedActions.includes("MARK_PACKED");
+  const shortageAllowed = item.allowedActions.includes("RECORD_SHORTAGE");
+  const escalationAllowed = item.allowedActions.includes("ESCALATE");
+  const issueAction = shortageAllowed ? "RECORD_SHORTAGE" : escalationAllowed ? "ESCALATE" : null;
+  const preparationActions = item.allowedActions.filter(
+    (action) => action !== "RECORD_SHORTAGE" && action !== "ESCALATE",
+  );
+  const nextAction = preparationActions[0];
   return (
     <aside
       aria-label={`Order ${detail.orderNumber} details`}
@@ -115,11 +129,19 @@ export function OperationalOrderDetail({
         </div>
       </dl>
       {detail.blockers.length ? (
-        <div role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-950">
-          {detail.blockers.join(" · ")}
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <p className="font-semibold">{receivingNeeded ? "Packing blocked" : "Needs attention"}</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {detail.blockers.map((blocker, index) => (
+              <li key={`${index}-${blocker}`}>{blocker}</li>
+            ))}
+          </ul>
           {receivingNeeded ? (
             <Link
-              className="mt-2 block font-semibold underline"
+              className="mt-3 inline-flex min-h-9 items-center font-semibold underline underline-offset-2"
               href={
                 item.cycleId
                   ? `/admin/receiving?cycleId=${encodeURIComponent(item.cycleId)}`
@@ -132,63 +154,124 @@ export function OperationalOrderDetail({
         </div>
       ) : null}
       <div>
-        <h3 className="font-semibold">Paid item snapshot</h3>
-        <ul className="mt-2 divide-y divide-[var(--fm-border)] border-y border-[var(--fm-border)]">
-          {detail.lines.map((line) => (
-            <li key={line.lineId} className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto]">
-              <span>
+        <h3 className="font-semibold">Ordered item checklist</h3>
+        <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+          Prepare each immutable paid quantity using the goods evidence shown below.
+        </p>
+        <ol className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+          {detail.lines.map((line, index) => (
+            <li
+              key={line.lineId}
+              className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1 p-3 text-sm"
+            >
+              <span
+                aria-hidden="true"
+                className="row-span-2 flex size-7 items-center justify-center rounded-full border border-[var(--fm-border)] bg-[var(--fm-workspace)] text-xs font-semibold"
+              >
+                {index + 1}
+              </span>
+              <span className="min-w-0">
                 <span className="font-medium">{line.productName}</span>
                 {line.variantName ? ` · ${line.variantName}` : ""}
-                <span className="block text-[var(--fm-text-muted)]">
+                <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
                   {line.source === "COMMITTED_ADDITION" ? "Paid addition" : "Original order"}
                 </span>
               </span>
-              <span className="sm:text-right">
-                {line.quantity} {line.unit}
-                <span className="block text-[var(--fm-text-muted)]">
-                  {line.goods.kind === "INSTANT_RESERVATION" ? "Reserved" : "Cycle allocated"}:{" "}
-                  {line.goods.allocatedBase} {line.baseUnit ?? "base units"}
-                  {line.goods.kind === "SCHEDULED_ALLOCATION"
-                    ? line.goods.receivedBase === null
-                      ? " · no receipt recorded"
-                      : ` · cycle received ${line.goods.receivedBase}`
-                    : ""}
+              <span className="col-start-2">
+                <span className="font-semibold">
+                  {line.quantity} {line.unit}
+                </span>
+                <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                  {line.goods.kind === "INSTANT_RESERVATION" ? (
+                    <>
+                      {reservationEvidence(line.goods.status)} · {line.goods.allocatedBase}{" "}
+                      {line.baseUnit ?? "base units"}
+                    </>
+                  ) : line.goods.receivedBase === null ? (
+                    <>
+                      {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated · no
+                      receipt recorded
+                    </>
+                  ) : (
+                    <>
+                      {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated to this
+                      line · {line.goods.receivedBase} {line.baseUnit ?? "base units"} received for
+                      the delivery week pool
+                    </>
+                  )}
                 </span>
               </span>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
       {item.allowedActions.length ? (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold">
-            {receivingNeeded ? "Preparation actions" : "Next preparation step"}
-          </p>
-          {item.allowedActions.includes("RECORD_SHORTAGE") ? (
-            <Input
-              aria-label="Fulfillment action reason"
-              placeholder="Describe a shortage when reporting one"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            {item.allowedActions.map((action) => (
-              <Button
-                key={action}
-                size="sm"
-                variant={
-                  action === item.allowedActions[0] && action !== "RECORD_SHORTAGE"
-                    ? "default"
-                    : "outline"
-                }
-                disabled={pending}
-                onClick={() => onAction(action)}
-              >
-                {actionLabels[action] ?? action}
-              </Button>
-            ))}
+        <div className="space-y-3 rounded-lg border border-[var(--fm-border)] p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
+              Next preparation step
+            </p>
+            <p className="mt-1 font-semibold">
+              {nextAction
+                ? (actionLabels[nextAction] ?? nextAction)
+                : receivingNeeded
+                  ? "Record received goods before finishing packing"
+                  : "Resolve the current shortage before preparation continues"}
+            </p>
           </div>
+          {canManage && nextAction ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                key={nextAction}
+                size="sm"
+                disabled={pending}
+                onClick={() => onAction(nextAction)}
+              >
+                {actionLabels[nextAction] ?? nextAction}
+              </Button>
+              {preparationActions.slice(1).map((action) => (
+                <Button
+                  key={action}
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => onAction(action)}
+                >
+                  {actionLabels[action] ?? action}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          {canManage && issueAction ? (
+            <div className="space-y-2 border-t border-[var(--fm-border)] pt-3">
+              <p className="text-sm font-medium">
+                {issueAction === "RECORD_SHORTAGE" ? "Item shortage" : "Shortage escalation"}
+              </p>
+              <Input
+                aria-label={
+                  issueAction === "RECORD_SHORTAGE"
+                    ? "Optional shortage reason"
+                    : "Optional escalation reason"
+                }
+                placeholder={
+                  issueAction === "RECORD_SHORTAGE"
+                    ? "Describe the shortage (optional)"
+                    : "Add escalation context (optional)"
+                }
+                value={reason}
+                disabled={pending}
+                onChange={(event) => setReason(event.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => onAction(issueAction)}
+              >
+                {actionLabels[issueAction] ?? issueAction}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {["PACKED", "HANDED_OFF", "COMPLETED"].includes(item.status) || detail.deliveryExecution ? (

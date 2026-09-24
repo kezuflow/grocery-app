@@ -304,12 +304,12 @@ test("location staff inspect paid snapshots and mode-specific dispatch from both
 
   await page.goto("/admin/fulfillment");
   await expect(page.getByRole("heading", { name: "Order FM-INSTANT" })).toBeVisible();
-  await expect(page.getByText("Reserved: 1000 GRAM")).toBeVisible();
+  await expect(page.getByText("Reserved · 1000 GRAM")).toBeVisible();
   await expect(page.getByRole("link", { name: "View Lalamove delivery" })).toBeVisible();
   await page.getByRole("row", { name: /FM-SCHEDULED/ }).click();
   await expect(page.getByRole("heading", { name: "Order FM-SCHEDULED" })).toBeVisible();
   await expect(page.getByText("Paid addition")).toBeVisible();
-  await expect(page.getByText(/Cycle allocated: 2000 GRAM · cycle received 2000/)).toBeVisible();
+  await expect(page.getByText(/2000 GRAM received for the delivery week pool/)).toBeVisible();
   await expect(page.getByText(/payment|refund|total/i)).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Choose Manual or Lalamove dispatch" }),

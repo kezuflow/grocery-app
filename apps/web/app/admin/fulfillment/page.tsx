@@ -3,12 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
+  appErrorCodes,
+  type AppError,
   fulfillmentQueueFilters,
   type FulfillmentQueueFilter,
   type FulfillmentQueuePage,
   type FulfillmentQueueView,
   type RpcResult,
 } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import { Button } from "../../../components/ui/button";
 import {
   Table,
   TableBody,
@@ -20,6 +25,8 @@ import {
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
+import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import {
   AdminIndexViews,
   AdminCursorPagination,
@@ -55,6 +62,9 @@ const actionSuccessTitles: Record<string, string> = {
   ESCALATE: "Shortage escalated",
 };
 
+const awaitingOriginalFulfillmentOutcome = (error: AppError) =>
+  error.code === "CONFLICT" && error.details?.outcome === "RECONCILIATION_PENDING";
+
 const queueViewLabels: Record<FulfillmentQueueFilter, string> = {
   ALL: "All",
   NEW: "New",
@@ -67,6 +77,27 @@ const queueViews = fulfillmentQueueFilters.map((status) => ({
   status,
   label: queueViewLabels[status],
 }));
+
+const commandResultSchema = z.union([
+  z.object({ ok: z.literal(true), requestId: z.string(), value: z.unknown() }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({
+      code: z.enum(appErrorCodes),
+      message: z.string(),
+      requestId: z.string(),
+      details: z.record(z.string(), z.string()).optional(),
+    }),
+  }),
+]);
+
+type FrozenFulfillmentIntent = {
+  key: string;
+  body: string;
+  locationId: string;
+  orderId: string;
+  action: string;
+};
 
 function dateTime(value: string | null, timezone: string | null): string {
   if (!value) return "Timing pending";
@@ -103,7 +134,14 @@ function nextStep(item: FulfillmentQueueView): string {
 }
 
 export default function FulfillmentPage() {
+  const admin = useAdminContext();
   const { locationId, label } = useAdminLocation();
+  const canManage =
+    admin.state.phase === "ready" &&
+    admin.state.selectedScope?.kind === "LOCATION" &&
+    admin.state.selectedScope.locationId === locationId &&
+    admin.state.context.capabilities.includes("fulfillment.read") &&
+    admin.state.context.capabilities.includes("fulfillment.manage");
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
   const cycleId = searchParams.get("cycleId");
@@ -112,18 +150,28 @@ export default function FulfillmentPage() {
   const [state, setState] = useState("loading");
   const [notice, setNotice] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  const [unresolved, setUnresolved] = useState<FrozenFulfillmentIntent | null>(null);
   const [reason, setReason] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
   const [view, setView] = useState<FulfillmentQueueFilter>("ALL");
   const operationalRefresh = useAdminOperationalRefresh();
-  const actionIntent = useAdminCommandIntent();
+  const actionIntent = useAdminCommandIntent({
+    retainConflict: awaitingOriginalFulfillmentOutcome,
+  });
+  const commandLocked = actionIntent.pending || actionIntent.uncertain || unresolved !== null;
+  useAdminScopeGuard(false, commandLocked);
+  useAdminRouteGuard(false, commandLocked);
   const pagination = useAdminPagination(`${locationId}:${orderId}:${cycleId}:${view}`);
   const requestSequence = useRef(0);
+  const commandLockedRef = useRef(commandLocked);
+  commandLockedRef.current = commandLocked;
   const pageKeyRef = useRef<string | null>(null);
   const observedRefreshRevision = useRef(operationalRefresh.revision);
   const queryKey = `${locationId}:${orderId}:${cycleId}:${view}:${pagination.cursor}`;
   const load = useCallback(
-    async (cursor: string | null, background = false) => {
+    async (cursor: string | null, background = false, confirmedCommand = false) => {
+      if (background && !confirmedCommand && commandLockedRef.current) return;
       const sequence = ++requestSequence.current;
       const key = `${locationId}:${orderId}:${cycleId}:${view}:${cursor}`;
       if (!background) setState("loading");
@@ -185,38 +233,97 @@ export default function FulfillmentPage() {
   }, [operationalRefresh.revision, load, locationId, pagination.cursor]);
   const currentPage = pageKey === queryKey ? page : null;
   const selected = currentPage?.items.find((item) => item.orderId === selectedOrderId) ?? null;
-  async function act(orderId: string, action: string, expectedVersion: number) {
-    if (!locationId || actionIntent.pending) return;
-    let payload: RpcResult<unknown>;
+
+  async function submitIntent(intent: FrozenFulfillmentIntent) {
+    if (!canManage || actionIntent.pending || locationId !== intent.locationId) return;
+    if (actionIntent.idempotencyKey !== intent.key) {
+      setCommandNotice(
+        "The request identity changed. Reload this workspace before another action.",
+      );
+      return;
+    }
+    let payload: z.infer<typeof commandResultSchema>;
     try {
       payload = await actionIntent.submit(async (idempotencyKey) => {
         const response = await fetch("/api/admin/fulfillment", {
           method: "POST",
           headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-          body: JSON.stringify({
-            locationId,
-            orderId,
-            action,
-            expectedVersion,
-            reason: reason.trim() || undefined,
-          }),
+          body: intent.body,
         });
-        return (await response.json()) as RpcResult<unknown>;
+        return commandResultSchema.parse(await response.json());
       });
     } catch {
-      setNotice("Connection lost. Retry the same action to safely reuse its request key.");
+      setUnresolved(intent);
+      setCommandNotice(
+        "The action outcome is unknown. Keep this order open and retry the exact same request to confirm it.",
+      );
       return;
     }
-    setNotice(payload.ok ? `${actionLabels[action] ?? action} completed.` : payload.error.message);
+    if (
+      !payload.ok &&
+      payload.error.code === "CONFLICT" &&
+      awaitingOriginalFulfillmentOutcome(payload.error)
+    ) {
+      setUnresolved(intent);
+      setCommandNotice(
+        "The original action is still being reconciled. Retry the same request to confirm its outcome.",
+      );
+      return;
+    }
+    setUnresolved(null);
+    setCommandNotice(
+      payload.ok
+        ? `${actionLabels[intent.action] ?? intent.action} completed.`
+        : payload.error.message,
+    );
+    setReason("");
     if (
       payload.ok ||
       (!payload.ok && (payload.error.code === "STALE_VERSION" || payload.error.code === "CONFLICT"))
     )
-      void load(pagination.cursor);
+      void load(pagination.cursor, true, true);
     if (payload.ok) {
-      notifyCommandSuccess(actionSuccessTitles[action] ?? "Fulfillment updated");
+      notifyCommandSuccess(actionSuccessTitles[intent.action] ?? "Fulfillment updated");
       operationalRefresh.refresh();
     }
+  }
+
+  function act(orderId: string, action: string, expectedVersion: number) {
+    if (
+      !canManage ||
+      !locationId ||
+      commandLocked ||
+      selected?.orderId !== orderId ||
+      selected.version !== expectedVersion ||
+      !selected.allowedActions.some((allowed) => allowed === action)
+    )
+      return;
+    // Freeze the exact body before the first send. A transport failure reuses it unchanged.
+    const intent: FrozenFulfillmentIntent = {
+      key: actionIntent.idempotencyKey,
+      locationId,
+      orderId,
+      action,
+      body: JSON.stringify({
+        locationId,
+        orderId,
+        action,
+        expectedVersion,
+        reason:
+          action === "RECORD_SHORTAGE" || action === "ESCALATE"
+            ? reason.trim() || undefined
+            : undefined,
+      }),
+    };
+    requestSequence.current += 1;
+    setCommandNotice(null);
+    void submitIntent(intent);
+  }
+
+  function selectOrder(nextOrderId: string) {
+    if (commandLocked) return;
+    setSelectedOrderId(nextOrderId);
+    setReason("");
   }
   return (
     <div className="w-full space-y-6">
@@ -236,13 +343,43 @@ export default function FulfillmentPage() {
           </Link>
         </div>
       ) : null}
+      {unresolved ? (
+        <Alert role="alert" className="border-[var(--fm-warning-border)]">
+          <AlertTitle>Preparation action awaiting confirmation</AlertTitle>
+          <AlertDescription>
+            {commandNotice} Order {unresolved.orderId} remains selected until Core returns a final
+            result.
+            <Button
+              type="button"
+              className="mt-3 block"
+              size="sm"
+              disabled={actionIntent.pending}
+              onClick={() => void submitIntent(unresolved)}
+            >
+              {actionIntent.pending ? "Checking…" : "Retry the same request"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : commandNotice ? (
+        <p
+          role="status"
+          className="rounded-md border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
+        >
+          {commandNotice}
+        </p>
+      ) : null}
       {locationId ? (
         <div className="overflow-hidden rounded-[var(--fm-radius-panel)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
           <AdminIndexViews<FulfillmentQueueFilter>
             label="Fulfillment views"
             views={queueViews}
             value={view}
-            onChange={setView}
+            disabled={commandLocked}
+            onChange={(next) => {
+              if (commandLocked) return;
+              setReason("");
+              setView(next);
+            }}
           />
         </div>
       ) : null}
@@ -316,17 +453,19 @@ export default function FulfillmentPage() {
                         }
                         aria-selected={selectedOrderId === item.orderId}
                         onClick={(event) => {
+                          if (commandLocked) return;
                           if ((event.target as HTMLElement).closest("button, a")) return;
-                          setSelectedOrderId(item.orderId);
+                          selectOrder(item.orderId);
                         }}
                       >
-                        <TableCell className="font-medium whitespace-nowrap">
+                        <TableCell className="font-medium">
                           <button
                             type="button"
-                            className="text-left font-semibold underline-offset-2 hover:underline focus-visible:underline"
+                            className="block max-w-36 truncate text-left font-semibold underline-offset-2 hover:underline focus-visible:underline"
                             aria-controls="fulfillment-work-area"
                             aria-pressed={selectedOrderId === item.orderId}
-                            onClick={() => setSelectedOrderId(item.orderId)}
+                            disabled={commandLocked}
+                            onClick={() => selectOrder(item.orderId)}
                           >
                             {item.operational?.orderNumber ?? item.orderId}
                           </button>
@@ -369,8 +508,13 @@ export default function FulfillmentPage() {
             <AdminCursorPagination
               pageNumber={pagination.pageNumber}
               nextCursor={currentPage.nextCursor}
-              onPrevious={pagination.previous}
-              onNext={pagination.next}
+              pending={commandLocked}
+              onPrevious={() => {
+                if (!commandLocked) pagination.previous();
+              }}
+              onNext={(cursor) => {
+                if (!commandLocked) pagination.next(cursor);
+              }}
             />
           </ListPageSection>
           {selected ? (
@@ -379,7 +523,8 @@ export default function FulfillmentPage() {
                 item={selected}
                 reason={reason}
                 setReason={setReason}
-                pending={actionIntent.pending}
+                pending={commandLocked}
+                canManage={canManage}
                 onAction={(action) => void act(selected.orderId, action, selected.version)}
               />
             </div>

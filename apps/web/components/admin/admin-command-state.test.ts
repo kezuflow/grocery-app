@@ -47,4 +47,41 @@ describe("Admin command intent", () => {
     }));
     expect(intent.idempotencyKey).toBe("key-2");
   });
+
+  it("can retain the original key while a typed conflict is still reconciling", async () => {
+    const intent = createAdminCommandIntent(undefined, keys(), {
+      retainConflict: (error) => error.details?.outcome === "RECONCILIATION_PENDING",
+    });
+    await intent.submit(async () => ({
+      ok: false,
+      error: {
+        code: "CONFLICT",
+        message: "Still processing",
+        requestId: "request-4",
+        details: { outcome: "RECONCILIATION_PENDING" },
+      },
+    }));
+    expect(intent.idempotencyKey).toBe("key-1");
+    expect(intent.uncertain).toBe(true);
+    const replay = await intent.submit(async (key) => ({
+      ok: true,
+      value: key,
+      requestId: "request-5",
+    }));
+    expect(replay).toMatchObject({ ok: true, value: "key-1" });
+    expect(intent.idempotencyKey).toBe("key-2");
+    expect(intent.uncertain).toBe(false);
+  });
+
+  it("releases a definite business conflict so an operator can address its blocker", async () => {
+    const intent = createAdminCommandIntent(undefined, keys(), {
+      retainConflict: (error) => error.details?.outcome === "RECONCILIATION_PENDING",
+    });
+    await intent.submit(async () => ({
+      ok: false,
+      error: { code: "CONFLICT", message: "Goods not received", requestId: "request-6" },
+    }));
+    expect(intent.idempotencyKey).toBe("key-2");
+    expect(intent.uncertain).toBe(false);
+  });
 });

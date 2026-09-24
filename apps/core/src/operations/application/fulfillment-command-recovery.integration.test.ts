@@ -124,6 +124,29 @@ describe("reachable fulfillment command recovery", () => {
         .first(),
     ).toEqual({ count: 1 });
   });
+  it("marks an in-progress original Admin request with a typed reconciliation outcome", async () => {
+    const { manager, request } = await fixture();
+    const staff = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+      .bind(manager.id)
+      .first<{ auth_user_id: string }>();
+    if (!staff) throw new Error("Missing fixture staff");
+    const hash = await requestHash({
+      orderId: request.orderId,
+      action: request.action,
+      expectedVersion: request.expectedVersion,
+      actor: staff.auth_user_id,
+      reason: request.reason,
+    });
+    await env.DB.prepare(
+      "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,result_reference,created_at,updated_at) VALUES ('fulfillment.advance',?,?,'PROCESSING','command','pending',1,1)",
+    )
+      .bind(request.idempotencyKey, hash)
+      .run();
+    expect(await core.advanceAdminFulfillment(request)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", details: { outcome: "RECONCILIATION_PENDING" } },
+    });
+  });
   it("replays the original Admin result after later advancement and audits once", async () => {
     const { request } = await fixture();
     const first = await core.advanceAdminFulfillment(request);

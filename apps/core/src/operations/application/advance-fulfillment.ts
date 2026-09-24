@@ -1,5 +1,5 @@
 import type { FulfillmentCommandRequest } from "@freshmarkets/contracts";
-import type { AppErrorCode } from "@freshmarkets/contracts";
+import type { AppError, AppErrorCode } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, transitionToResult } from "../../commerce/state-machines";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { fulfillmentStates } from "@freshmarkets/contracts";
@@ -10,8 +10,16 @@ import {
   scheduledPackingGoodsReadyOrderIds,
 } from "../../fulfillment/application/consume-cycle-goods";
 
-function failure(code: AppErrorCode, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
+function failure(
+  code: AppErrorCode,
+  message: string,
+  requestId: string,
+  details?: AppError["details"],
+) {
+  return {
+    ok: false as const,
+    error: { code, message, requestId, ...(details ? { details } : {}) },
+  };
 }
 
 export type AdvanceFulfillmentPorts = {
@@ -31,7 +39,7 @@ const resultSchema = z.object({
 });
 export type AdvanceFulfillmentResult =
   | { ok: true; value: z.infer<typeof resultSchema>; requestId: string }
-  | { ok: false; error: { code: AppErrorCode; message: string; requestId: string } };
+  | { ok: false; error: AppError };
 
 const SCOPE = "fulfillment.advance";
 
@@ -115,6 +123,7 @@ export async function advanceFulfillment(
         "CONFLICT",
         "The original fulfillment command requires reconciliation before retry",
         command.requestId,
+        { outcome: "RECONCILIATION_PENDING" },
       );
     return null;
   }

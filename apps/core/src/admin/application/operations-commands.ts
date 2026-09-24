@@ -322,6 +322,7 @@ export async function advanceAdminFulfillment(
         code: result.error.code as import("@freshmarkets/contracts").AppErrorCode,
         message: result.error.message,
         requestId: request.requestId,
+        ...(result.error.details ? { details: result.error.details } : {}),
       },
     };
   return {

@@ -19,11 +19,13 @@ export function AdminIndexViews<T extends string>({
   views,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   views: ReadonlyArray<{ label: string; status: T }>;
   value: T;
   onChange(status: T): void;
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -36,8 +38,9 @@ export function AdminIndexViews<T extends string>({
           type="button"
           key={view.label}
           aria-pressed={value === view.status}
+          disabled={disabled}
           className={cn(
-            "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+            "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:opacity-50",
             value === view.status
               ? "border-[var(--fm-text)] text-[var(--fm-text)]"
               : "border-transparent text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]",
