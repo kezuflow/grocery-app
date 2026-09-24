@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState, type ComponentProps } from "react";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { use, useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import { ArrowLeft } from "lucide-react";
 import type { AdminPromotionDetail } from "@freshmarkets/contracts";
 import { adminPromotionSummarySchema } from "@freshmarkets/validation";
 import { catalogResultSchema, useCatalogCommand } from "@/components/admin/catalog-command-state";
@@ -11,17 +11,46 @@ import { PromotionStatusSwitch } from "@/components/admin/promotion-status-switc
 import { Button } from "../../../../components/ui/button";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../../components/ui/dropdown-menu";
+import { AdminPageState } from "../../../../components/admin/admin-page-state";
+import { PageHeader } from "../../../../components/admin/admin-shell";
+import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 
 type LoadState =
   | { phase: "loading" }
-  | { phase: "error"; message: string; requestId: string | null }
+  | { phase: "error"; code: string; message: string; requestId: string | null }
   | { phase: "ready"; sale: AdminPromotionDetail };
+
+const statusPresentation = {
+  DRAFT: {
+    label: "Draft",
+    badge: "bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]",
+    dot: "bg-slate-400",
+    icon: "bg-[var(--fm-admin-surface-muted)]",
+    description: "This sale is saved as a draft and is not active.",
+  },
+  ACTIVE: {
+    label: "Active",
+    badge: "bg-emerald-100 text-emerald-800",
+    dot: "bg-emerald-600",
+    icon: "bg-emerald-100",
+    description: "Active status; applies only during its scheduled dates when eligible.",
+  },
+  INACTIVE: {
+    label: "Inactive",
+    badge: "bg-amber-100 text-amber-900",
+    dot: "bg-amber-600",
+    icon: "bg-amber-100",
+    description: "This sale is inactive and is not applied at checkout.",
+  },
+  ARCHIVED: {
+    label: "Archived",
+    badge: "bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]",
+    dot: "bg-slate-500",
+    icon: "bg-[var(--fm-admin-surface-muted)]",
+    description: "This sale is archived and remains available as a historical record.",
+  },
+} as const;
 
 function peso(minor: number): string {
   return `₱${(minor / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
@@ -46,41 +75,106 @@ export default function InventorySaleDetailPage({
   params: Promise<{ "sale-id": string }>;
 }) {
   const { "sale-id": saleId } = use(params);
+  const admin = useAdminContext();
+
+  if (admin.state.phase !== "ready") {
+    return <AdminPageState state="loading" title="Loading sale access" />;
+  }
+
+  const canRead =
+    admin.state.selectedScope?.kind === "GLOBAL" &&
+    admin.state.context.capabilities.includes("promotions.read");
+  if (!canRead) {
+    return (
+      <section className="space-y-5" aria-labelledby="admin-page-title">
+        <PageHeader title="Promotion Sale unavailable" />
+        <AdminPageState
+          state="error"
+          title="Promotion Sale access denied"
+          message="Promotion Sale details require the promotions.read capability with a Global scope."
+        />
+      </section>
+    );
+  }
+
+  const scopeKey = JSON.stringify(admin.state.selectedScope);
+  return (
+    <InventorySaleDetailWorkspace
+      key={`${scopeKey}:${saleId}`}
+      saleId={saleId}
+      canManage={admin.state.context.capabilities.includes("promotions.manage")}
+    />
+  );
+}
+
+function InventorySaleDetailWorkspace({
+  saleId,
+  canManage,
+}: {
+  saleId: string;
+  canManage: boolean;
+}) {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const command = useCatalogCommand(adminPromotionSummarySchema);
+  const loadGeneration = useRef(0);
+  const locked = canManage && (command.pending || command.uncertain);
+  useAdminScopeGuard(canManage && editing, locked, () => setEditing(false));
+  useAdminRouteGuard(canManage && editing, locked);
 
-  const load = useCallback(async () => {
-    setState({ phase: "loading" });
-    try {
-      const response = await fetch(`/api/admin/promotions/${encodeURIComponent(saleId)}`);
-      const payload = catalogResultSchema(adminPromotionSummarySchema).parse(await response.json());
-      if (!payload.ok) {
+  const load = useCallback(
+    async (preserveConfirmed = false) => {
+      const generation = ++loadGeneration.current;
+      if (!preserveConfirmed) setState({ phase: "loading" });
+      try {
+        const response = await fetch(`/api/admin/promotions/${encodeURIComponent(saleId)}`);
+        const payload = catalogResultSchema(adminPromotionSummarySchema).parse(
+          await response.json(),
+        );
+        if (generation !== loadGeneration.current) return;
+        if (!payload.ok) {
+          if (preserveConfirmed) {
+            setNotice("The sale is saved, but the latest record could not be refreshed.");
+            return;
+          }
+          setState({
+            phase: "error",
+            code: payload.error.code,
+            message: payload.error.message,
+            requestId: payload.error.requestId,
+          });
+          return;
+        }
+        setState({ phase: "ready", sale: payload.value });
+      } catch {
+        if (generation !== loadGeneration.current) return;
+        if (preserveConfirmed) {
+          setNotice("The sale is saved, but the latest record could not be refreshed.");
+          return;
+        }
         setState({
           phase: "error",
-          message: payload.error.message,
-          requestId: payload.error.requestId,
+          code: "NETWORK_ERROR",
+          message: "Network error loading the inventory sale.",
+          requestId: null,
         });
-        return;
       }
-      setState({ phase: "ready", sale: payload.value });
-    } catch {
-      setState({
-        phase: "error",
-        message: "Network error loading the inventory sale.",
-        requestId: null,
-      });
-    }
-  }, [saleId]);
+    },
+    [saleId],
+  );
 
   useEffect(() => {
     void load();
+    return () => {
+      loadGeneration.current += 1;
+    };
   }, [load]);
 
   async function save(
     body: Parameters<NonNullable<ComponentProps<typeof PromotionDefinitionForm>["onSave"]>>[0],
   ): Promise<boolean> {
+    if (!canManage) return false;
     try {
       const payload = await command
         .submit(`/api/admin/promotions/${encodeURIComponent(saleId)}`, body, "PATCH", {
@@ -91,7 +185,8 @@ export default function InventorySaleDetailPage({
       setNotice(payload.ok ? "Sale details saved." : payload.error.message);
       if (payload.ok) {
         setEditing(false);
-        await load();
+        setState({ phase: "ready", sale: payload.value });
+        await load(true);
       }
       return payload.ok;
     } catch {
@@ -110,9 +205,15 @@ export default function InventorySaleDetailPage({
   }
 
   if (state.phase === "error") {
+    const title =
+      state.code === "NOT_FOUND"
+        ? "Promotion Sale not found"
+        : state.code === "FORBIDDEN"
+          ? "Promotion Sale access denied"
+          : "The inventory sale could not be loaded";
     return (
       <Alert variant="destructive">
-        <AlertTitle>The inventory sale could not be loaded</AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription>
           {state.message}
           {state.requestId ? (
@@ -127,7 +228,7 @@ export default function InventorySaleDetailPage({
 
   const { sale } = state;
   const targets = sale.productTargets ?? [];
-  const active = sale.status === "ACTIVE";
+  const status = statusPresentation[sale.status];
 
   return (
     <div className="mx-auto w-full max-w-[1280px]">
@@ -148,13 +249,10 @@ export default function InventorySaleDetailPage({
                   {sale.name}
                 </h1>
                 <span
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${active ? "bg-emerald-100 text-emerald-800" : "bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]"}`}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${status.badge}`}
                 >
-                  <span
-                    className={`size-1.5 rounded-full ${active ? "bg-emerald-600" : "bg-slate-400"}`}
-                    aria-hidden="true"
-                  />
-                  {active ? "Active" : "Draft"}
+                  <span className={`size-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
+                  {status.label}
                 </span>
               </div>
               <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
@@ -162,28 +260,7 @@ export default function InventorySaleDetailPage({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" className="gap-2">
-                    More actions <ChevronDown className="size-4" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onSelect={() => setNotice("Sale activity is shown on this page.")}
-                  >
-                    View activity
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      setNotice("Sale ID copied to the clipboard is not available in this browser.")
-                    }
-                  >
-                    View sale ID
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {sale.status === "DRAFT" ? (
+              {canManage && sale.status === "DRAFT" ? (
                 <Button
                   type="button"
                   onClick={() => setEditing((value) => !value)}
@@ -204,17 +281,9 @@ export default function InventorySaleDetailPage({
             </p>
           ) : null}
 
-          <div className="mt-8 flex items-center gap-6 border-b border-[var(--fm-border)] text-sm">
-            <span className="border-b-2 border-[var(--fm-admin-accent)] pb-3 font-semibold text-[var(--fm-text)]">
-              Details
-            </span>
-            <span className="pb-3 text-[var(--fm-text-muted)]">Products</span>
-            <span className="pb-3 text-[var(--fm-text-muted)]">Activity</span>
-          </div>
-
-          {editing && sale.status === "DRAFT" ? (
+          {editing && canManage && sale.status === "DRAFT" ? (
             <section
-              className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]"
+              className="mt-8 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]"
               aria-labelledby="edit-sale-title"
             >
               <h2
@@ -232,7 +301,7 @@ export default function InventorySaleDetailPage({
           ) : (
             <>
               <section
-                className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5"
+                className="mt-8 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5"
                 aria-labelledby="basic-information-title"
               >
                 <h2 id="basic-information-title" className="text-lg font-semibold">
@@ -245,7 +314,7 @@ export default function InventorySaleDetailPage({
                   </div>
                   <div>
                     <dt className="text-xs text-[var(--fm-text-muted)]">Status</dt>
-                    <dd className="mt-1 font-medium">{active ? "Active" : "Draft"}</dd>
+                    <dd className="mt-1 font-medium">{status.label}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-[var(--fm-text-muted)]">Products</dt>
@@ -384,44 +453,39 @@ export default function InventorySaleDetailPage({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span
-                    className={`flex size-7 items-center justify-center rounded-full ${active ? "bg-emerald-100" : "bg-[var(--fm-admin-surface-muted)]"}`}
+                    className={`flex size-7 items-center justify-center rounded-full ${status.icon}`}
                   >
-                    <span
-                      className={`size-2 rounded-full ${active ? "bg-emerald-600" : "bg-slate-400"}`}
-                    />
+                    <span className={`size-2 rounded-full ${status.dot}`} />
                   </span>
-                  <span className="text-lg font-semibold">{active ? "Active" : "Draft"}</span>
+                  <span className="text-lg font-semibold">{status.label}</span>
                 </div>
-                <PromotionStatusSwitch
-                  promotion={sale}
-                  onApplied={(summary) => setState({ phase: "ready", sale: summary })}
-                />
+                {canManage ? (
+                  <PromotionStatusSwitch
+                    promotion={sale}
+                    onApplied={(summary) => setState({ phase: "ready", sale: summary })}
+                  />
+                ) : null}
               </div>
-              <p className="mt-3 text-sm text-[var(--fm-text-muted)]">
-                {active
-                  ? "This sale is currently running and applied at checkout."
-                  : "This sale is saved as a draft and is not active."}
-              </p>
+              <p className="mt-3 text-sm text-[var(--fm-text-muted)]">{status.description}</p>
             </div>
           </section>
           <section className="p-5" aria-labelledby="activity-title">
             <h2 id="activity-title" className="text-lg font-semibold">
-              Activity
+              Record
             </h2>
             <ol className="mt-5 space-y-6 border-l border-[var(--fm-border)] pl-5 text-sm">
-              <li className="relative">
-                <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-[var(--fm-admin-surface)] bg-[var(--fm-admin-accent)]" />
-                <p className="font-medium">Sale {active ? "activated" : "created"}</p>
-                <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                  {new Date(active ? sale.updatedAt : sale.createdAt).toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                  Automatic sale setup for selected products.
-                </p>
-              </li>
+              {sale.updatedAt !== sale.createdAt ? (
+                <li className="relative">
+                  <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-[var(--fm-admin-surface)] bg-[var(--fm-admin-accent)]" />
+                  <p className="font-medium">Last updated</p>
+                  <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                    {new Date(sale.updatedAt).toLocaleString()}
+                  </p>
+                </li>
+              ) : null}
               <li className="relative">
                 <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-[var(--fm-admin-surface)] bg-slate-300" />
-                <p className="font-medium">Sale created</p>
+                <p className="font-medium">Created</p>
                 <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
                   {new Date(sale.createdAt).toLocaleString()}
                 </p>

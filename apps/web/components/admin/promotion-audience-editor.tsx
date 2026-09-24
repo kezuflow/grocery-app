@@ -71,12 +71,14 @@ export function PromotionAudienceEditor({
   promotionId,
   status,
   version,
+  canManage,
   onSaved,
 }: {
   promotionId: string;
   status: string;
   version: number;
-  onSaved: () => void;
+  canManage: boolean;
+  onSaved: (version: number) => void;
 }) {
   const [view, setView] = useState<AdminPromotionAudienceView | null>(null);
   const [rules, setRules] = useState<AdminPromotionRule[]>([]);
@@ -86,6 +88,7 @@ export function PromotionAudienceEditor({
   const [searching, setSearching] = useState(false);
   const command = useCatalogCommand(adminPromotionAudienceSchema);
   const frozen = command.pending || command.uncertain;
+  const editable = canManage && status === "DRAFT";
   const url = `/api/admin/promotions/${encodeURIComponent(promotionId)}/audience`;
   useEffect(() => {
     const controller = new AbortController();
@@ -136,8 +139,19 @@ export function PromotionAudienceEditor({
         setNotice(result.error.message);
         return;
       }
+      setView((current) =>
+        current
+          ? {
+              ...current,
+              version: result.value.version,
+              rules: result.value.rules,
+              unsupportedRuleCount: 0,
+            }
+          : current,
+      );
+      setRules(result.value.rules);
       setNotice("Audience saved.");
-      onSaved();
+      onSaved(result.value.version);
     } catch {
       setNotice("Audience could not be confirmed. Save again to retry the same change.");
     }
@@ -160,7 +174,7 @@ export function PromotionAudienceEditor({
             This campaign has retired or invalid conditions and cannot be activated until they are
             replaced.
           </p>
-          {status === "DRAFT" ? (
+          {editable ? (
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -177,7 +191,7 @@ export function PromotionAudienceEditor({
       {rules.map((rule, index) => (
         <div key={index} className="space-y-3 rounded-md border p-3">
           <div className="flex flex-wrap items-center gap-2">
-            {status === "DRAFT" ? (
+            {editable ? (
               <Select
                 value={rule.type}
                 disabled={frozen}
@@ -200,7 +214,7 @@ export function PromotionAudienceEditor({
             ) : (
               <p className="font-medium">{names[rule.type]}</p>
             )}
-            {status === "DRAFT" ? (
+            {editable ? (
               <Button
                 type="button"
                 size="sm"
@@ -218,7 +232,7 @@ export function PromotionAudienceEditor({
               <MinimumPurchaseInput
                 label={`Condition ${index + 1} minimum purchase`}
                 value={rule.parameters.minimumMinor}
-                disabled={frozen || status !== "DRAFT"}
+                disabled={frozen || !editable}
                 onChange={(minimumMinor) =>
                   change(index, { type: "MINIMUM_SUBTOTAL", parameters: { minimumMinor } })
                 }
@@ -227,7 +241,7 @@ export function PromotionAudienceEditor({
           ) : null}
           {rule.type === "CUSTOMER_SEGMENT" ? (
             <div className="space-y-2">
-              {status === "DRAFT" ? (
+              {editable ? (
                 <>
                   <label className="grid gap-1 text-sm">
                     Find a segment
@@ -316,7 +330,7 @@ export function PromotionAudienceEditor({
                       {view.customers.find((customer) => customer.customerId === customerId)
                         ?.label ?? "Customer details require customer-read access"}
                     </span>
-                    {status === "DRAFT" ? (
+                    {editable ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -339,7 +353,7 @@ export function PromotionAudienceEditor({
                   </li>
                 ))}
               </ul>
-              {status === "DRAFT" ? (
+              {editable ? (
                 <CustomerPicker
                   label={`Eligible customer ${index + 1}`}
                   value={null}
@@ -365,7 +379,7 @@ export function PromotionAudienceEditor({
           ) : null}
         </div>
       ))}
-      {status === "DRAFT" ? (
+      {editable ? (
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"

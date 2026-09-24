@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import type {
   AdminPromotionDetail,
+  AdminPromotionGrantView,
   AdminPromotionGrantPage,
   AdminPromotionPreviewView,
   AdminPromotionRedemptionPage,
@@ -23,19 +24,34 @@ import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
+import { AdminPageState } from "../../../../components/admin/admin-page-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
+import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
+
+type HistoryState<T> =
+  | { phase: "ready"; page: T }
+  | { phase: "error"; message: string; requestId: string | null };
 
 type LoadState =
   | { phase: "loading" }
-  | { phase: "error"; message: string; requestId: string | null }
+  | { phase: "error"; code: string; message: string; requestId: string | null }
   | {
       phase: "ready";
       promotion: AdminPromotionDetail;
-      grants: AdminPromotionGrantPage;
-      redemptions: AdminPromotionRedemptionPage;
+      grants: HistoryState<AdminPromotionGrantPage>;
+      redemptions: HistoryState<AdminPromotionRedemptionPage>;
     };
 
 const BASE = "/api/admin/promotions";
+
+function formatPromotionDate(value: string): string {
+  return `${new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila",
+  }).format(new Date(value))} PHT`;
+}
 
 export default function PromotionDetailPage({
   params,
@@ -43,6 +59,45 @@ export default function PromotionDetailPage({
   params: Promise<{ "promotion-id": string }>;
 }) {
   const { "promotion-id": promotionId } = use(params);
+  const admin = useAdminContext();
+
+  if (admin.state.phase !== "ready") {
+    return <AdminPageState state="loading" title="Loading promotion access" />;
+  }
+
+  const canRead =
+    admin.state.selectedScope?.kind === "GLOBAL" &&
+    admin.state.context.capabilities.includes("promotions.read");
+  if (!canRead) {
+    return (
+      <section className="space-y-5" aria-labelledby="admin-page-title">
+        <PageHeader title="Promotion unavailable" />
+        <AdminPageState
+          state="error"
+          title="Promotion access denied"
+          message="Promotion details require the promotions.read capability with a Global scope."
+        />
+      </section>
+    );
+  }
+
+  const scopeKey = JSON.stringify(admin.state.selectedScope);
+  return (
+    <PromotionDetailWorkspace
+      key={`${scopeKey}:${promotionId}`}
+      promotionId={promotionId}
+      canManage={admin.state.context.capabilities.includes("promotions.manage")}
+    />
+  );
+}
+
+function PromotionDetailWorkspace({
+  promotionId,
+  canManage,
+}: {
+  promotionId: string;
+  canManage: boolean;
+}) {
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [deliverySubtotal, setDeliverySubtotal] = useState("");
   const [previewSubtotal, setPreviewSubtotal] = useState("");
@@ -55,52 +110,142 @@ export default function PromotionDetailPage({
     z.union([adminPromotionSummarySchema, adminPromotionGrantViewSchema]),
   );
   const frozen = command.pending || command.uncertain;
+  const loadGeneration = useRef(0);
+  useAdminScopeGuard(false, canManage && frozen);
+  useAdminRouteGuard(false, canManage && frozen);
 
-  const load = useCallback(() => {
-    setPreviewResult(null);
-    setState({ phase: "loading" });
-    void (async () => {
-      try {
-        const [promotionResponse, grantsResponse, redemptionsResponse] = await Promise.all([
-          fetch(`${BASE}/${encodeURIComponent(promotionId)}`),
-          fetch(`${BASE}/${encodeURIComponent(promotionId)}/grants`),
-          fetch(`${BASE}/${encodeURIComponent(promotionId)}/redemptions`),
-        ]);
-        const promotionPayload = catalogResultSchema(adminPromotionSummarySchema).parse(
-          await promotionResponse.json(),
-        );
-        if (!promotionPayload.ok) {
+  const load = useCallback(
+    (preserveConfirmed = false) => {
+      const generation = ++loadGeneration.current;
+      if (!preserveConfirmed) {
+        setPreviewResult(null);
+        setState({ phase: "loading" });
+      }
+      void (async () => {
+        try {
+          const promotionResponse = await fetch(`${BASE}/${encodeURIComponent(promotionId)}`);
+          const promotionPayload = catalogResultSchema(adminPromotionSummarySchema).parse(
+            await promotionResponse.json(),
+          );
+          if (generation !== loadGeneration.current) return;
+          if (!promotionPayload.ok) {
+            if (preserveConfirmed) {
+              setNotice(
+                "The change is confirmed, but the latest promotion could not be refreshed.",
+              );
+              return;
+            }
+            setState({
+              phase: "error",
+              code: promotionPayload.error.code,
+              message: promotionPayload.error.message,
+              requestId: promotionPayload.error.requestId,
+            });
+            return;
+          }
+          const [grantsResult, redemptionsResult] = await Promise.allSettled([
+            fetch(`${BASE}/${encodeURIComponent(promotionId)}/grants`).then(
+              async (response) => (await response.json()) as RpcResult<AdminPromotionGrantPage>,
+            ),
+            fetch(`${BASE}/${encodeURIComponent(promotionId)}/redemptions`).then(
+              async (response) =>
+                (await response.json()) as RpcResult<AdminPromotionRedemptionPage>,
+            ),
+          ]);
+          if (generation !== loadGeneration.current) return;
+          const grants: HistoryState<AdminPromotionGrantPage> =
+            grantsResult.status === "fulfilled"
+              ? grantsResult.value.ok
+                ? { phase: "ready", page: grantsResult.value.value }
+                : {
+                    phase: "error",
+                    message: grantsResult.value.error.message,
+                    requestId: grantsResult.value.error.requestId,
+                  }
+              : {
+                  phase: "error",
+                  message: "Grant history could not be loaded. Check the connection and retry.",
+                  requestId: null,
+                };
+          const redemptions: HistoryState<AdminPromotionRedemptionPage> =
+            redemptionsResult.status === "fulfilled"
+              ? redemptionsResult.value.ok
+                ? { phase: "ready", page: redemptionsResult.value.value }
+                : {
+                    phase: "error",
+                    message: redemptionsResult.value.error.message,
+                    requestId: redemptionsResult.value.error.requestId,
+                  }
+              : {
+                  phase: "error",
+                  message:
+                    "Redemption history could not be loaded. Check the connection and retry.",
+                  requestId: null,
+                };
+          if (preserveConfirmed && (grants.phase === "error" || redemptions.phase === "error")) {
+            setNotice(
+              "The change is confirmed, but some promotion history could not be refreshed.",
+            );
+          }
+          setState((current) => ({
+            phase: "ready",
+            promotion: promotionPayload.value,
+            grants:
+              preserveConfirmed && grants.phase === "error" && current.phase === "ready"
+                ? current.grants
+                : grants,
+            redemptions:
+              preserveConfirmed && redemptions.phase === "error" && current.phase === "ready"
+                ? current.redemptions
+                : redemptions,
+          }));
+        } catch {
+          if (generation !== loadGeneration.current) return;
+          if (preserveConfirmed) {
+            setNotice("The change is confirmed, but the latest promotion could not be refreshed.");
+            return;
+          }
           setState({
             phase: "error",
-            message: promotionPayload.error.message,
-            requestId: promotionPayload.error.requestId,
+            code: "NETWORK_ERROR",
+            message: "Network error loading the promotion.",
+            requestId: null,
           });
-          return;
         }
-        const grantsPayload = (await grantsResponse.json()) as RpcResult<AdminPromotionGrantPage>;
-        const redemptionsPayload =
-          (await redemptionsResponse.json()) as RpcResult<AdminPromotionRedemptionPage>;
-        setState({
-          phase: "ready",
-          promotion: promotionPayload.value,
-          grants: grantsPayload.ok ? grantsPayload.value : { items: [], nextCursor: null },
-          redemptions: redemptionsPayload.ok
-            ? redemptionsPayload.value
-            : { items: [], nextCursor: null },
-        });
-      } catch {
-        setState({
-          phase: "error",
-          message: "Network error loading the promotion.",
-          requestId: null,
-        });
-      }
-    })();
-  }, [promotionId]);
+      })();
+    },
+    [promotionId],
+  );
 
-  useEffect(() => load(), [load]);
+  function applyConfirmed(value: AdminPromotionDetail | AdminPromotionGrantView): void {
+    setState((current) => {
+      if (current.phase !== "ready") return current;
+      if ("code" in value) return { ...current, promotion: value };
+      if (current.grants.phase !== "ready") return current;
+      if (current.grants.page.items.some((grant) => grant.grantId === value.grantId))
+        return current;
+      return {
+        ...current,
+        grants: {
+          phase: "ready",
+          page: {
+            ...current.grants.page,
+            items: [value, ...current.grants.page.items],
+          },
+        },
+      };
+    });
+  }
+
+  useEffect(() => {
+    load();
+    return () => {
+      loadGeneration.current += 1;
+    };
+  }, [load]);
 
   async function run(url: string, method: "POST" | "PATCH", body: unknown, successTitle: string) {
+    if (!canManage) return false;
     try {
       const payload = await command.submit(url, body, method).catch(() => command.retry());
       if (!payload) return false;
@@ -108,7 +253,8 @@ export default function PromotionDetailPage({
       if (payload.ok) {
         notifyCommandSuccess(successTitle);
         setGrantCustomer(null);
-        load();
+        applyConfirmed(payload.value);
+        load(true);
       }
       return payload.ok;
     } catch {
@@ -118,34 +264,50 @@ export default function PromotionDetailPage({
   }
 
   async function loadHistory(kind: "grants" | "redemptions", cursor: string) {
-    const response = await fetch(
-      `${BASE}/${encodeURIComponent(promotionId)}/${kind}?cursor=${encodeURIComponent(cursor)}`,
-    );
-    const payload = (await response.json()) as RpcResult<
-      AdminPromotionGrantPage | AdminPromotionRedemptionPage
-    >;
-    if (!payload.ok) {
-      setNotice(payload.error.message);
-      return;
-    }
-    setState((current) => {
-      if (current.phase !== "ready") return current;
-      if (kind === "grants") {
-        const next = payload.value as AdminPromotionGrantPage;
-        return {
-          ...current,
-          grants: { items: [...current.grants.items, ...next.items], nextCursor: next.nextCursor },
-        };
+    try {
+      const response = await fetch(
+        `${BASE}/${encodeURIComponent(promotionId)}/${kind}?cursor=${encodeURIComponent(cursor)}`,
+      );
+      const payload = (await response.json()) as RpcResult<
+        AdminPromotionGrantPage | AdminPromotionRedemptionPage
+      >;
+      if (!payload.ok) {
+        setNotice(payload.error.message);
+        return;
       }
-      const next = payload.value as AdminPromotionRedemptionPage;
-      return {
-        ...current,
-        redemptions: {
-          items: [...current.redemptions.items, ...next.items],
-          nextCursor: next.nextCursor,
-        },
-      };
-    });
+      setState((current) => {
+        if (current.phase !== "ready") return current;
+        if (kind === "grants" && current.grants.phase === "ready") {
+          const next = payload.value as AdminPromotionGrantPage;
+          return {
+            ...current,
+            grants: {
+              phase: "ready",
+              page: {
+                items: [...current.grants.page.items, ...next.items],
+                nextCursor: next.nextCursor,
+              },
+            },
+          };
+        }
+        if (kind === "redemptions" && current.redemptions.phase === "ready") {
+          const next = payload.value as AdminPromotionRedemptionPage;
+          return {
+            ...current,
+            redemptions: {
+              phase: "ready",
+              page: {
+                items: [...current.redemptions.page.items, ...next.items],
+                nextCursor: next.nextCursor,
+              },
+            },
+          };
+        }
+        return current;
+      });
+    } catch {
+      setNotice(`More ${kind} could not be loaded. Check the connection and try again.`);
+    }
   }
 
   if (state.phase === "loading") {
@@ -157,9 +319,15 @@ export default function PromotionDetailPage({
     );
   }
   if (state.phase === "error") {
+    const title =
+      state.code === "NOT_FOUND"
+        ? "Promotion not found"
+        : state.code === "FORBIDDEN"
+          ? "Promotion access denied"
+          : "The promotion could not be loaded";
     return (
       <Alert variant="destructive">
-        <AlertTitle>The promotion could not be loaded</AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         <AlertDescription>
           {state.message}
           {state.requestId ? (
@@ -177,6 +345,12 @@ export default function PromotionDetailPage({
 
   return (
     <div className="w-full space-y-6">
+      <Link
+        href="/admin/promotions"
+        className="inline-flex text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+      >
+        Back to Promotion Codes
+      </Link>
       <PageHeader
         title={promotion.name}
         description={promotion.code}
@@ -204,7 +378,7 @@ export default function PromotionDetailPage({
         </p>
       ) : null}
 
-      {command.uncertain ? (
+      {canManage && command.uncertain ? (
         <Button
           disabled={command.pending}
           onClick={async () => {
@@ -212,7 +386,10 @@ export default function PromotionDetailPage({
               const result = await command.retry();
               if (!result) return;
               setNotice(result.ok ? "Applied." : result.error.message);
-              if (result.ok) load();
+              if (result.ok) {
+                applyConfirmed(result.value);
+                load(true);
+              }
             } catch {
               setNotice("The change is still unconfirmed. Try again.");
             }
@@ -223,10 +400,15 @@ export default function PromotionDetailPage({
       ) : null}
       <ListPageSection
         title="Campaign details"
-        description="Draft details can be edited before activation."
+        description={
+          canManage
+            ? "Draft details can be edited before activation."
+            : "Recorded campaign definition and limits."
+        }
       >
-        {promotion.status === "DRAFT" ? (
+        {canManage && promotion.status === "DRAFT" ? (
           <PromotionDefinitionForm
+            key={promotion.version}
             promotion={promotion}
             disabled={frozen}
             onSave={(body) =>
@@ -267,10 +449,8 @@ export default function PromotionDetailPage({
                 ? "Applied automatically when eligible"
                 : "Applied by code or customer grant"}
             </p>
-            <p>
-              Starts: {promotion.startsAt}{" "}
-              {promotion.endsAt ? `Ends: ${promotion.endsAt}` : "No end date"}
-            </p>
+            <p>Starts: {formatPromotionDate(promotion.startsAt)}</p>
+            <p>Ends: {promotion.endsAt ? formatPromotionDate(promotion.endsAt) : "No end date"}</p>
           </div>
         )}
       </ListPageSection>
@@ -283,80 +463,95 @@ export default function PromotionDetailPage({
       </p>
       <ListPageSection
         title="Audience"
-        description="Choose the customers who can qualify for this campaign."
+        description={
+          canManage
+            ? "Choose the customers who can qualify for this campaign."
+            : "Customers who can qualify for this campaign."
+        }
       >
         <PromotionAudienceEditor
           promotionId={promotionId}
           status={promotion.status}
           version={promotion.version}
-          onSaved={load}
+          canManage={canManage}
+          onSaved={(version) => {
+            setNotice("Audience saved.");
+            setState((current) =>
+              current.phase === "ready"
+                ? { ...current, promotion: { ...current.promotion, version } }
+                : current,
+            );
+            load(true);
+          }}
         />
       </ListPageSection>
-      <ListPageSection title="Lifecycle" description="Status changes are audited automatically.">
-        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap gap-2">
-            {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
-              <Button
-                size="sm"
-                disabled={frozen}
-                onClick={() => {
-                  void run(
-                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
-                    "POST",
-                    {
-                      action: "ACTIVATE",
-                      expectedVersion: promotion.version,
-                    },
-                    "Promotion activated",
-                  );
-                }}
-              >
-                Activate
-              </Button>
-            ) : null}
-            {promotion.status === "ACTIVE" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={frozen}
-                onClick={() => {
-                  void run(
-                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
-                    "POST",
-                    {
-                      action: "DEACTIVATE",
-                      expectedVersion: promotion.version,
-                    },
-                    "Promotion deactivated",
-                  );
-                }}
-              >
-                Deactivate
-              </Button>
-            ) : null}
-            {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={frozen}
-                onClick={() => {
-                  void run(
-                    `${BASE}/${encodeURIComponent(promotionId)}/status`,
-                    "POST",
-                    {
-                      action: "ARCHIVE",
-                      expectedVersion: promotion.version,
-                    },
-                    "Promotion archived",
-                  );
-                }}
-              >
-                Archive
-              </Button>
-            ) : null}
+      {canManage ? (
+        <ListPageSection title="Lifecycle" description="Status changes are audited automatically.">
+          <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
+                <Button
+                  size="sm"
+                  disabled={frozen}
+                  onClick={() => {
+                    void run(
+                      `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                      "POST",
+                      {
+                        action: "ACTIVATE",
+                        expectedVersion: promotion.version,
+                      },
+                      "Promotion activated",
+                    );
+                  }}
+                >
+                  Activate
+                </Button>
+              ) : null}
+              {promotion.status === "ACTIVE" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={frozen}
+                  onClick={() => {
+                    void run(
+                      `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                      "POST",
+                      {
+                        action: "DEACTIVATE",
+                        expectedVersion: promotion.version,
+                      },
+                      "Promotion deactivated",
+                    );
+                  }}
+                >
+                  Deactivate
+                </Button>
+              ) : null}
+              {promotion.status === "DRAFT" || promotion.status === "INACTIVE" ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={frozen}
+                  onClick={() => {
+                    void run(
+                      `${BASE}/${encodeURIComponent(promotionId)}/status`,
+                      "POST",
+                      {
+                        action: "ARCHIVE",
+                        expectedVersion: promotion.version,
+                      },
+                      "Promotion archived",
+                    );
+                  }}
+                >
+                  Archive
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </ListPageSection>
+        </ListPageSection>
+      ) : null}
 
       <ListPageSection
         title="Preview"
@@ -466,9 +661,13 @@ export default function PromotionDetailPage({
 
       <ListPageSection
         title="Grants"
-        description="Offer this campaign to a customer. Eligibility and redemption limits still apply at checkout."
+        description={
+          canManage
+            ? "Offer this campaign to a customer. Eligibility and redemption limits still apply at checkout."
+            : "Recorded customer grants. Eligibility and redemption limits still apply at checkout."
+        }
       >
-        {promotion.status === "ACTIVE" ? (
+        {canManage && promotion.status === "ACTIVE" ? (
           <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
             <CustomerPicker
               label="Grant customer"
@@ -499,11 +698,23 @@ export default function PromotionDetailPage({
             </Button>
           </div>
         ) : null}
-        {grants.items.length === 0 ? (
+        {grants.phase === "error" ? (
+          <Alert variant="destructive" className="m-4">
+            <AlertTitle>Grant history unavailable</AlertTitle>
+            <AlertDescription>
+              {grants.message}
+              {grants.requestId ? (
+                <span className="mt-1 block font-mono text-xs">
+                  Request reference: {grants.requestId}
+                </span>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : grants.page.items.length === 0 ? (
           <p className="p-5 pt-0 text-sm text-[var(--fm-text-muted)]">No grants yet.</p>
         ) : (
           <ul className="divide-y divide-[var(--fm-border)] border-t border-[var(--fm-border)]">
-            {grants.items.map((grant) => (
+            {grants.page.items.map((grant) => (
               <li
                 key={grant.grantId}
                 className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
@@ -524,12 +735,12 @@ export default function PromotionDetailPage({
             ))}
           </ul>
         )}
-        {grants.nextCursor ? (
+        {grants.phase === "ready" && grants.page.nextCursor ? (
           <div className="border-t border-[var(--fm-border)] p-4">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void loadHistory("grants", grants.nextCursor!)}
+              onClick={() => void loadHistory("grants", grants.page.nextCursor!)}
             >
               Load more grants
             </Button>
@@ -538,11 +749,23 @@ export default function PromotionDetailPage({
       </ListPageSection>
 
       <ListPageSection title="Redemptions" description="Recorded at checkout; read-only here.">
-        {redemptions.items.length === 0 ? (
+        {redemptions.phase === "error" ? (
+          <Alert variant="destructive" className="m-4">
+            <AlertTitle>Redemption history unavailable</AlertTitle>
+            <AlertDescription>
+              {redemptions.message}
+              {redemptions.requestId ? (
+                <span className="mt-1 block font-mono text-xs">
+                  Request reference: {redemptions.requestId}
+                </span>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : redemptions.page.items.length === 0 ? (
           <p className="p-5 text-sm text-[var(--fm-text-muted)]">No redemptions recorded.</p>
         ) : (
           <ul className="divide-y divide-[var(--fm-border)]">
-            {redemptions.items.map((redemption) => (
+            {redemptions.page.items.map((redemption) => (
               <li
                 key={redemption.redemptionId}
                 className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
@@ -555,12 +778,12 @@ export default function PromotionDetailPage({
             ))}
           </ul>
         )}
-        {redemptions.nextCursor ? (
+        {redemptions.phase === "ready" && redemptions.page.nextCursor ? (
           <div className="border-t border-[var(--fm-border)] p-4">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void loadHistory("redemptions", redemptions.nextCursor!)}
+              onClick={() => void loadHistory("redemptions", redemptions.page.nextCursor!)}
             >
               Load more redemptions
             </Button>

@@ -687,6 +687,7 @@ test("selects a customer for preview and safely retries a customer grant", async
   await expect.poll(() => audienceRequests.length).toBe(2);
   expect(audienceRequests[1]).toEqual(audienceRequests[0]);
   expect(audienceRequests[0]?.key).toBeTruthy();
+  await expect(page.getByRole("status").filter({ hasText: "Audience saved." })).toBeVisible();
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeVisible();
   await page.getByLabel("Preview customer", { exact: true }).fill(email);
