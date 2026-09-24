@@ -59,8 +59,14 @@ export function ExternalDeliveryBooking({
   interaction.current = onInteractionState;
 
   useEffect(() => {
-    interaction.current?.(reviewing || pickupAt !== "" || unknown, pending || unknown);
-  }, [reviewing, pickupAt, pending, unknown]);
+    interaction.current?.(
+      reviewing ||
+        pickupAt !== "" ||
+        pickupKind !== (readiness.allowedKinds[0] ?? "SCHEDULED") ||
+        unknown,
+      pending || unknown,
+    );
+  }, [reviewing, pickupAt, pickupKind, readiness.allowedKinds, pending, unknown]);
   useEffect(() => () => interaction.current?.(false, false), []);
 
   useEffect(() => {
@@ -147,7 +153,7 @@ export function ExternalDeliveryBooking({
         </h3>
         <p className="text-xs text-[var(--fm-text-muted)]">
           {fulfillmentMode === "INSTANT"
-            ? "Request the courier the customer chose at checkout."
+            ? "Retry the courier the customer chose at checkout after a definite failure and packing. First booking starts automatically during packing."
             : "After packing, request a driver now or choose a future pickup within the customer’s delivery range."}
         </p>
       </div>
@@ -193,6 +199,20 @@ export function ExternalDeliveryBooking({
           ) : null}
         </fieldset>
       ) : null}
+      {(pickupAt || pickupKind !== (readiness.allowedKinds[0] ?? "SCHEDULED")) && !unknown ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
+            setPickupKind(readiness.allowedKinds[0] ?? "SCHEDULED");
+            setPickupAt("");
+          }}
+        >
+          Reset pickup choice
+        </Button>
+      ) : null}
       {message ? <p className="text-xs text-[var(--fm-danger)]">{message}</p> : null}
       <Button
         type="button"
@@ -217,7 +237,8 @@ export function ExternalDeliveryBooking({
         <AlertDialogContent>
           <AlertDialogTitle>Confirm Lalamove booking</AlertDialogTitle>
           <AlertDialogDescription>
-            Book Lalamove to collect this order from the store.
+            Confirming requests a fresh, short-lived courier quote and submits the booking. The
+            customer’s delivery charge does not change.
             {pickupKind === "SCHEDULED" && pickupAt
               ? ` Pickup: ${new Date(pickupAt).toLocaleString("en-PH")}.`
               : " Pickup: as soon as possible."}

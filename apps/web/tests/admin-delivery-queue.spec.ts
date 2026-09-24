@@ -129,6 +129,7 @@ test("Delivery queue isolates location reads and reaches later cursor pages at 1
   const firstHillsRow = page.getByRole("row", { name: /hills-first-order/ });
   await expect(firstHillsRow).toContainText("Scheduled");
   await expect(firstHillsRow).toContainText("Awaiting assignment");
+  await expect(firstHillsRow).toContainText("Courier action unavailable");
   releaseFirst();
   await expect(page.getByText("harbor-order", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("delivery-queue-1440.png"), fullPage: true });
@@ -219,7 +220,9 @@ test("Unknown manual request retains its key and body across navigation and queu
   await page.getByRole("button", { name: "Assign manual delivery" }).click();
   await page.getByRole("textbox", { name: "Person delivering" }).fill("Test rider");
   await page.getByRole("textbox", { name: "Phone including country code" }).fill("+639171234567");
-  await page.getByRole("button", { name: "Assign manual delivery" }).last().click();
+  await page.getByRole("button", { name: "Review assign manual delivery" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Test rider");
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
   await expect(
     page
@@ -260,6 +263,177 @@ test("Read-only delivery staff cannot use provider recovery controls", async ({ 
   await expect(page.getByText("GrabExpress · Finding rider")).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh provider" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+});
+
+test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignment, and shows saved evidence at 1440px", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installDeliveryScopes(page);
+  let assigned = false;
+  const requests: string[] = [];
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const item = {
+      ...deliveryItem(firstLocation, "scheduled-choice", "SCHEDULED"),
+      status: assigned ? "ASSIGNED" : "UNASSIGNED",
+      courierPickup: assigned
+        ? { allowedKinds: [], unavailableReason: "Delivery is assigned" }
+        : { allowedKinds: ["IMMEDIATE", "SCHEDULED"], unavailableReason: null },
+      manualActions: assigned ? ["HAND_OVER", "FAIL"] : ["ASSIGN"],
+      manualDelivery: assigned
+        ? {
+            dispatchId: "manual-saved",
+            personName: "Dispatch helper",
+            phoneE164: "+639171110000",
+            selectionReason: "STAFF_SELECTED_MANUAL",
+            note: "Local team",
+            status: "ACTIVE",
+            handedOverAt: null,
+            returnInspectedAt: null,
+            actualCostMinor: null,
+            currency: "PHP",
+            version: 1,
+          }
+        : null,
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { ...deliveryPage(firstLocation, "scheduled-choice").value, items: [item] },
+      }),
+    });
+  });
+  await page.route("**/api/admin/manual-deliveries", (route) => {
+    requests.push(route.request().postData() ?? "");
+    assigned = true;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          dispatchId: "manual-saved",
+          jobId: "job-scheduled-choice",
+          status: "ACTIVE",
+          version: 1,
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const row = page.getByRole("row", { name: /scheduled-choice/ });
+  await expect(row.getByRole("region", { name: "Choose dispatch method" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Review Lalamove booking" })).toHaveCount(0);
+  await row.getByRole("button", { name: "Request Lalamove" }).click();
+  await expect(row.getByText("Request a driver now", { exact: true })).toBeVisible();
+  await expect(row.getByText("Schedule pickup")).toBeVisible();
+  await row.getByRole("button", { name: "Review Lalamove booking" }).click();
+  await expect(page.getByRole("dialog")).toContainText("fresh, short-lived courier quote");
+  await expect(page.getByRole("dialog")).toContainText(
+    "customer’s delivery charge does not change",
+  );
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await row.getByRole("button", { name: "Assign manual rider" }).click();
+  await expect(row.getByRole("textbox", { name: "Person delivering" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Request Lalamove" })).toBeEnabled();
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: testInfo.outputPath("dispatch-choice-1440.png"), fullPage: true });
+  await expect(row.getByRole("button", { name: "Request Lalamove" })).toBeEnabled();
+  await row.getByRole("textbox", { name: "Person delivering" }).fill("Dispatch helper");
+  await row.getByRole("textbox", { name: "Phone including country code" }).fill("+639171110000");
+  await row.getByRole("textbox", { name: "Operational note (optional)" }).fill("Local team");
+  await row.getByRole("button", { name: "Review assign manual delivery" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Dispatch helper");
+  expect(requests).toHaveLength(0);
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(JSON.parse(requests[0]!)).toMatchObject({
+    action: "ASSIGN",
+    personName: "Dispatch helper",
+    note: "Local team",
+  });
+  await expect(row.getByText("Selection reason: Staff chose manual delivery")).toBeVisible();
+  await expect(row.getByText("Result: active")).toBeVisible();
+  await expect(row.getByRole("button", { name: "Hand over packed order" })).toBeVisible();
+  await row.getByRole("button", { name: "Record delivery failure" }).click();
+  await row.getByRole("textbox", { name: "What went wrong" }).fill("Local test failure");
+  await row.getByRole("textbox", { name: "Actual delivery cost (PHP)" }).fill("1.234");
+  await row.getByRole("button", { name: "Review record delivery failure" }).click();
+  await expect(
+    row.getByText("Enter a non-negative cost with at most two decimal places"),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(requests).toHaveLength(1);
+});
+
+test("Instant first booking remains automatic and persisted courier amounts are distinct", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const pending = {
+      ...deliveryItem(firstLocation, "instant-pending", "INSTANT"),
+      courierPickup: { allowedKinds: [], unavailableReason: "Automatic booking in progress" },
+    };
+    const quoted = {
+      ...deliveryItem(firstLocation, "courier-quoted", "SCHEDULED"),
+      externalDispatch: {
+        dispatchId: "courier-quote",
+        provider: "lalamove",
+        status: "ACTIVE",
+        providerStatus: "ALLOCATING",
+        trackingUrl: null,
+        providerDeliveryId: "provider-quote",
+        quoteAmountMinor: 4200,
+        quoteCurrency: "PHP",
+        actualCostMinor: 4300,
+        costCurrency: "PHP",
+        version: 2,
+      },
+    };
+    const completed = {
+      ...deliveryItem(firstLocation, "manual-complete", "SCHEDULED"),
+      status: "DELIVERED",
+      deliveredAtIso: "2026-09-24T08:00:00.000Z",
+      manualDelivery: {
+        dispatchId: "manual-complete",
+        personName: "Test helper",
+        phoneE164: "+639171110000",
+        selectionReason: "STAFF_SELECTED_MANUAL",
+        note: "Recorded by staff",
+        status: "COMPLETED",
+        handedOverAt: Date.parse("2026-09-24T07:00:00.000Z"),
+        returnInspectedAt: null,
+        actualCostMinor: 1750,
+        currency: "PHP",
+        version: 3,
+      },
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          ...deliveryPage(firstLocation, "instant-pending").value,
+          items: [pending, quoted, completed],
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const instant = page.getByRole("row", { name: /instant-pending/ });
+  await expect(instant).toContainText("Automatic Lalamove booking pending");
+  await expect(instant.getByRole("region", { name: "Choose dispatch method" })).toHaveCount(0);
+  await expect(instant.getByRole("button", { name: "Review Lalamove booking" })).toHaveCount(0);
+  const quoted = page.getByRole("row", { name: /courier-quoted/ });
+  await expect(quoted).toContainText("Provider quote: PHP 42.00");
+  await expect(quoted).toContainText("Courier cost: PHP 43.00");
+  const manual = page.getByRole("row", { name: /manual-complete/ });
+  await expect(manual).toContainText("Selection reason: Staff chose manual delivery");
+  await expect(manual).toContainText("Handed over:");
+  await expect(manual).toContainText("Result: completed");
+  await expect(manual).toContainText("Actual cost: PHP 17.50");
+  await expect(manual).toContainText("Delivered:");
 });
 
 test("An older queue read cannot unmount an unknown manual request", async ({ page }) => {
@@ -306,7 +480,8 @@ test("An older queue read cannot unmount an unknown manual request", async ({ pa
   await page.getByRole("button", { name: "Assign manual delivery" }).click();
   await page.getByRole("textbox", { name: "Person delivering" }).fill("Test rider");
   await page.getByRole("textbox", { name: "Phone including country code" }).fill("+639171234567");
-  await page.getByRole("button", { name: "Assign manual delivery" }).last().click();
+  await page.getByRole("button", { name: "Review assign manual delivery" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
   releaseOlderRead();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();

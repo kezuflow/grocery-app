@@ -27,6 +27,10 @@ type DispatchRow = {
   externalProviderStatus: string | null;
   externalTrackingUrl: string | null;
   externalVersion: number | null;
+  externalQuoteAmountMinor: number | null;
+  externalQuoteCurrency: string | null;
+  externalActualCostMinor: number | null;
+  externalCostCurrency: string | null;
   sortAt: number;
 };
 
@@ -98,7 +102,9 @@ export async function listDeliveryDispatch(
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.provider_delivery_id AS external_provider_delivery_id,
               dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
-              dispatch.version AS external_version,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
+              dispatch.version AS external_version,dispatch.quote_amount_minor AS external_quote_amount_minor,
+              dispatch.quote_currency AS external_quote_currency,dispatch.final_payable_minor AS external_actual_cost_minor,
+              dispatch.delivery_currency AS external_cost_currency,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
               dispatch.manual_reason,json_extract(dispatch.request_snapshot_json,'$.note') AS manual_note,
               dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
               o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
@@ -153,6 +159,10 @@ export async function listDeliveryDispatch(
       external_provider_status: string | null;
       external_tracking_url: string | null;
       external_version: number | null;
+      external_quote_amount_minor: number | null;
+      external_quote_currency: string | null;
+      external_actual_cost_minor: number | null;
+      external_cost_currency: string | null;
       sort_at: number;
     }>();
   return rows.results.map((r) => ({
@@ -213,6 +223,10 @@ export async function listDeliveryDispatch(
     externalProviderStatus: r.external_provider_status,
     externalTrackingUrl: r.external_tracking_url,
     externalVersion: r.external_version,
+    externalQuoteAmountMinor: r.external_quote_amount_minor,
+    externalQuoteCurrency: r.external_quote_currency,
+    externalActualCostMinor: r.external_actual_cost_minor,
+    externalCostCurrency: r.external_cost_currency,
     sortAt: r.sort_at,
   }));
 }

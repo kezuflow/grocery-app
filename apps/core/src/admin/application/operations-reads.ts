@@ -345,6 +345,10 @@ export async function listAdminDeliveryOperations(
             providerStatus: row.externalProviderStatus,
             trackingUrl: row.externalTrackingUrl,
             providerDeliveryId: row.externalProviderDeliveryId,
+            quoteAmountMinor: row.externalQuoteAmountMinor,
+            quoteCurrency: row.externalQuoteCurrency,
+            actualCostMinor: row.externalActualCostMinor,
+            costCurrency: row.externalCostCurrency,
             version: row.externalVersion,
           }
         : null,

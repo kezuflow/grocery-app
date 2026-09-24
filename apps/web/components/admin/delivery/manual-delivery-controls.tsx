@@ -5,6 +5,13 @@ import type { AdminDeliveryOperationView, ManualDeliveryAction } from "@freshmar
 import { z } from "@freshmarkets/validation";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
 import { notifyCommandSuccess } from "../admin-feedback";
 
 const labels: Record<ManualDeliveryAction, string> = {
@@ -28,12 +35,15 @@ export function ManualDeliveryControls({
   item,
   onChanged,
   onInteractionState,
+  initialAction = null,
 }: {
   item: AdminDeliveryOperationView;
   onChanged: () => void;
   onInteractionState?: (dirty: boolean, locked: boolean) => void;
+  initialAction?: ManualDeliveryAction | null;
 }) {
-  const [action, setAction] = useState<ManualDeliveryAction | null>(null);
+  const [action, setAction] = useState<ManualDeliveryAction | null>(initialAction);
+  const [reviewing, setReviewing] = useState(false);
   const [personName, setName] = useState("");
   const [phoneE164, setPhone] = useState("");
   const [noteOrReason, setNoteOrReason] = useState("");
@@ -45,12 +55,20 @@ export function ManualDeliveryControls({
   const interaction = useRef(onInteractionState);
   interaction.current = onInteractionState;
   useEffect(() => {
-    interaction.current?.(action !== null, pending || saved !== null);
-  }, [action, pending, saved]);
+    const draft =
+      action !== null &&
+      (action !== "ASSIGN" ||
+        initialAction !== "ASSIGN" ||
+        personName !== "" ||
+        phoneE164 !== "" ||
+        noteOrReason !== "");
+    interaction.current?.(draft || reviewing, pending || saved !== null);
+  }, [action, initialAction, personName, phoneE164, noteOrReason, reviewing, pending, saved]);
   useEffect(() => () => interaction.current?.(false, false), []);
 
   async function submit() {
     if (!action || pending) return;
+    setReviewing(false);
     const actualCostMinor = cost.trim() === "" ? null : Math.round(Number(cost) * 100);
     if (
       !saved &&
@@ -114,15 +132,18 @@ export function ManualDeliveryControls({
           <p>
             Manual · {manual.personName} · {manual.phoneE164}
           </p>
-          {manual.note ? <p>{manual.note}</p> : null}
           <p>
-            {manual.status}
-            {manual.returnInspectedAt !== null
-              ? " · Returned and inspected"
-              : manual.handedOverAt !== null
-                ? " · Handed over"
-                : ""}
+            Selection reason:{" "}
+            {manual.selectionReason === "STAFF_SELECTED_MANUAL"
+              ? "Staff chose manual delivery"
+              : manual.selectionReason.toLowerCase().replaceAll("_", " ")}
           </p>
+          {manual.note ? <p>{manual.note}</p> : null}
+          <p>Result: {manual.status.toLowerCase().replaceAll("_", " ")}</p>
+          {manual.handedOverAt !== null ? (
+            <p>Handed over: {new Date(manual.handedOverAt).toLocaleString("en-PH")}</p>
+          ) : null}
+          {manual.returnInspectedAt !== null ? <p>Returned and inspected</p> : null}
           {manual.status !== "ACTIVE" ? (
             <p>
               Actual cost:{" "}
@@ -156,7 +177,19 @@ export function ManualDeliveryControls({
           className="space-y-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit();
+            if (saved) void submit();
+            else if (
+              cost.trim() !== "" &&
+              (!/^\d+(\.\d{1,2})?$/.test(cost) ||
+                !Number.isSafeInteger(Math.round(Number(cost) * 100)))
+            ) {
+              setMessage(
+                "Enter a non-negative cost with at most two decimal places, or leave it blank when unknown.",
+              );
+            } else {
+              setMessage(null);
+              setReviewing(true);
+            }
           }}
         >
           <fieldset disabled={pending || saved !== null} className="space-y-2">
@@ -209,7 +242,11 @@ export function ManualDeliveryControls({
             ) : null}
           </fieldset>
           <Button size="sm" type="submit" disabled={pending}>
-            {pending ? "Saving…" : saved ? "Retry saved request" : labels[action]}
+            {pending
+              ? "Saving…"
+              : saved
+                ? "Retry saved request"
+                : `Review ${labels[action].toLowerCase()}`}
           </Button>
           {!saved ? (
             <Button size="sm" variant="ghost" type="button" onClick={() => setAction(null)}>
@@ -219,6 +256,32 @@ export function ManualDeliveryControls({
         </form>
       )}
       {message ? <p role="status">{message}</p> : null}
+      <AlertDialog open={reviewing} onOpenChange={(open) => !pending && setReviewing(open)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>
+            Confirm {action ? labels[action].toLowerCase() : "manual delivery"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {action === "ASSIGN"
+              ? `Assign ${personName} (${phoneE164}) to deliver this packed order. The assignment is recorded with staff audit evidence.`
+              : action === "HAND_OVER"
+                ? "Record that the packed order has physically been handed to the assigned person."
+                : action === "COMPLETE"
+                  ? `Record delivery as completed. Actual delivery cost: ${cost.trim() || "unknown"} ${manual?.currency ?? "PHP"}.`
+                  : `Record delivery as failed. Actual delivery cost: ${cost.trim() || "unknown"} ${manual?.currency ?? "PHP"}.`}
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel asChild disabled={pending}>
+              <Button type="button" variant="outline">
+                Back
+              </Button>
+            </AlertDialogCancel>
+            <Button type="button" disabled={pending} onClick={() => void submit()}>
+              {pending ? "Saving…" : "Confirm"}
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1333,6 +1333,15 @@ describe("external delivery request", () => {
       ok: true,
       value: { provider: "lalamove", status: "ACTIVE", quoteAmountMinor: 4000 },
     });
+    const bookedQueue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      orderId: delivery.orderId,
+    });
+    expect(
+      bookedQueue.ok && bookedQueue.value.items.find((item) => item.jobId === delivery.jobId),
+    ).toMatchObject({ externalDispatch: { quoteAmountMinor: 4000, quoteCurrency: "PHP" } });
     expect(create).toHaveBeenCalledOnce();
     await expect(
       env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
@@ -1808,6 +1817,25 @@ describe("staff-selected manual delivery", () => {
       actualCostMinor: null,
     });
     expect(completed).toMatchObject({ ok: true, value: { status: "COMPLETED", version: 3 } });
+    const completedQueue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      orderId: delivery.orderId,
+    });
+    expect(
+      completedQueue.ok && completedQueue.value.items.find((item) => item.jobId === delivery.jobId),
+    ).toMatchObject({
+      manualDelivery: {
+        personName: "Delivery helper",
+        phoneE164: "+639171110000",
+        selectionReason: "STAFF_SELECTED_MANUAL",
+        handedOverAt: expect.any(Number),
+        status: "COMPLETED",
+        actualCostMinor: null,
+      },
+      deliveredAtIso: expect.any(String),
+    });
     expect(await manageManualDelivery(deps, request)).toEqual(assigned);
     expect(
       await manageManualDelivery(deps, { ...request, personName: "Another person" }),

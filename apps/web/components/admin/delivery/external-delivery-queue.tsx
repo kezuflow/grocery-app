@@ -15,9 +15,8 @@ import { Skeleton } from "../../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../admin-shell";
 import { useAdminLocation } from "../use-admin-location";
-import { ExternalDeliveryBooking } from "./external-delivery-booking";
+import { DispatchActions } from "./dispatch-actions";
 import { DeliveryPromiseForm } from "./delivery-promise-form";
-import { ManualDeliveryControls } from "./manual-delivery-controls";
 import { useAdminOperationalRefresh } from "../../../app/admin/admin-operational-refresh-provider";
 import { notifyCommandSuccess } from "../admin-feedback";
 import { AdminCursorPagination, useAdminPagination } from "../admin-controls";
@@ -301,7 +300,7 @@ export function ExternalDeliveryQueue() {
                   {summary.items.map((item) => (
                     <TableRow
                       key={item.jobId}
-                      className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                      className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:align-top [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                     >
                       <TableCell className="col-span-2 whitespace-normal">
                         <Link
@@ -325,6 +324,11 @@ export function ExternalDeliveryQueue() {
                           FreshMarkets status
                         </span>
                         <StatusBadge>{deliveryJobStatusLabel(item.status)}</StatusBadge>
+                        {item.deliveredAtIso ? (
+                          <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                            Delivered: {new Date(item.deliveredAtIso).toLocaleString("en-PH")}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="col-span-2 whitespace-normal text-sm lg:col-span-1">
                         <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
@@ -338,6 +342,20 @@ export function ExternalDeliveryQueue() {
                                 : "GrabExpress"}{" "}
                               · {externalStatusLabel(item.externalDispatch)}
                             </p>
+                            {item.externalDispatch.quoteAmountMinor != null &&
+                            item.externalDispatch.quoteCurrency ? (
+                              <p>
+                                Provider quote: {item.externalDispatch.quoteCurrency}{" "}
+                                {(item.externalDispatch.quoteAmountMinor / 100).toFixed(2)}
+                              </p>
+                            ) : null}
+                            {item.externalDispatch.actualCostMinor != null &&
+                            item.externalDispatch.costCurrency ? (
+                              <p>
+                                Courier cost: {item.externalDispatch.costCurrency}{" "}
+                                {(item.externalDispatch.actualCostMinor / 100).toFixed(2)}
+                              </p>
+                            ) : null}
                             {item.externalDispatch.trackingUrl ? (
                               <a
                                 className="underline"
@@ -429,46 +447,6 @@ export function ExternalDeliveryQueue() {
                               </Button>
                             ) : null}
                           </div>
-                        ) : item.externalDispatch || item.manualDelivery ? null : (
-                          <ExternalDeliveryBooking
-                            locationId={item.locationId}
-                            fulfillmentMode={item.fulfillmentMode}
-                            delivery={{
-                              jobId: item.jobId,
-                              status: item.status,
-                              version: item.version,
-                            }}
-                            disabled={false}
-                            readiness={item.courierPickup}
-                            onBooked={(notice) => {
-                              setCommandNotice({ key: readKey, message: notice });
-                              void load();
-                            }}
-                            onInteractionState={(draft, command) =>
-                              setInteraction(`${item.jobId}:booking`, draft, command)
-                            }
-                          />
-                        )}
-                        {(item.externalDispatch || item.manualDelivery) &&
-                        item.courierPickup.allowedKinds.length > 0 ? (
-                          <ExternalDeliveryBooking
-                            locationId={item.locationId}
-                            fulfillmentMode={item.fulfillmentMode}
-                            delivery={{
-                              jobId: item.jobId,
-                              status: item.status,
-                              version: item.version,
-                            }}
-                            disabled={false}
-                            readiness={item.courierPickup}
-                            onBooked={(notice) => {
-                              setCommandNotice({ key: readKey, message: notice });
-                              void load();
-                            }}
-                            onInteractionState={(draft, command) =>
-                              setInteraction(`${item.jobId}:booking`, draft, command)
-                            }
-                          />
                         ) : null}
                         <DeliveryPromiseForm
                           item={item}
@@ -477,11 +455,15 @@ export function ExternalDeliveryQueue() {
                             setInteraction(`${item.jobId}:promise`, draft, command)
                           }
                         />
-                        <ManualDeliveryControls
+                        <DispatchActions
                           item={item}
+                          onBooked={(notice) => {
+                            setCommandNotice({ key: readKey, message: notice });
+                            void load();
+                          }}
                           onChanged={() => void load()}
-                          onInteractionState={(draft, command) =>
-                            setInteraction(`${item.jobId}:manual`, draft, command)
+                          onInteractionState={(kind, draft, command) =>
+                            setInteraction(`${item.jobId}:${kind}`, draft, command)
                           }
                         />
                       </TableCell>

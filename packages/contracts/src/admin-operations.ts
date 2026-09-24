@@ -205,6 +205,12 @@ export type AdminDeliveryOperationView = {
     status: string;
     trackingUrl: string | null;
     providerDeliveryId: string | null;
+    /** Persisted provider quotation from the latest execution attempt. */
+    quoteAmountMinor?: number | null;
+    quoteCurrency?: string | null;
+    /** Final provider payable, when observed. This is not the customer charge. */
+    actualCostMinor?: number | null;
+    costCurrency?: string | null;
     version: number;
   } | null;
   deliveredAtIso: string | null;
