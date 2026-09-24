@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminRefundProgress } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
@@ -20,16 +20,27 @@ const response = z.discriminatedUnion("ok", [
 export function RefundRecovery({
   refund,
   onAccepted,
+  onInteractionState,
 }: {
   refund: AdminRefundProgress;
   onAccepted: () => Promise<void>;
+  onInteractionState?: (active: boolean) => void;
 }) {
   const [reason, setReason] = useState("");
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [selected, setSelected] = useState(false);
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const interaction = useRef(onInteractionState);
+  interaction.current = onInteractionState;
+  useEffect(() => {
+    interaction.current?.(pending || saved !== null);
+  }, [pending, saved]);
+  useEffect(() => () => interaction.current?.(false), []);
   async function submit() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const intent = saved ?? {
       body: JSON.stringify({
         refundId: refund.refundId,
@@ -61,10 +72,19 @@ export function RefundRecovery({
           : result.data.error.message,
       );
       if (result.data.ok) notifyCommandSuccess("Refund provider check queued");
-      await onAccepted();
+      try {
+        await onAccepted();
+      } catch {
+        setNotice(
+          result.data.ok
+            ? "Provider check queued. Current progress could not be refreshed; reload this page."
+            : result.data.error.message,
+        );
+      }
     } catch {
       setNotice("The response is unknown. Retry the saved check to recover its acceptance.");
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }

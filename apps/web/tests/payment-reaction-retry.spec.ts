@@ -37,8 +37,23 @@ for (const width of [1440, 390])
     await page.getByLabel("Recovery reason").fill("Reviewed local event processing readiness");
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(page.getByText(/The response is unknown/)).toBeVisible();
+    let failReadback = width === 1440;
+    if (failReadback)
+      await page.route("**/api/admin/payments/attention?**", async (route) => {
+        if (failReadback) {
+          failReadback = false;
+          await route.abort("failed");
+        } else await route.continue();
+      });
     await page.getByRole("button", { name: "Retry saved command" }).click();
-    await expect(page.getByText(/Recovery queued\. The issue remains visible/u)).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({
+        hasText:
+          width === 1440
+            ? /Recovery request accepted\. Current progress could not be refreshed/u
+            : /Recovery queued\. The issue remains visible/u,
+      }),
+    ).toBeVisible();
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     expect(JSON.parse(writes[0].body ?? "{}")).toMatchObject({ caseId, expectedVersion: 1 });

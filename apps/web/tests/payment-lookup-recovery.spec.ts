@@ -35,6 +35,8 @@ for (const width of [1440, 390])
     const recovery = page.getByText(/Automatic checks stopped/);
     await expect(recovery).toBeVisible();
     const writes: { body: string | null; key: string | undefined }[] = [];
+    let releaseFirst!: () => void;
+    const heldFirst = new Promise<void>((resolve) => (releaseFirst = resolve));
     await page.route("**/api/admin/payments/recheck", async (route) => {
       writes.push({
         body: route.request().postData(),
@@ -43,6 +45,7 @@ for (const width of [1440, 390])
       if (writes.length > 1) return route.continue();
       const response = await route.fetch();
       expect(response.ok()).toBe(true);
+      await heldFirst;
       await route.abort("failed");
     });
     await page.getByRole("button", { name: "Check provider status", exact: true }).click();
@@ -50,10 +53,22 @@ for (const width of [1440, 390])
       .getByLabel("Provider check reason")
       .fill("Verify payment after interrupted checkout");
     await page.getByRole("button", { name: "Confirm provider check", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect(page.getByRole("button", { name: "Queuing check…" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Close payment details" })).toBeDisabled();
+    await page.getByRole("tab", { name: /Needs attention/ }).click();
+    await expect(page.getByRole("tab", { name: "Payments", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(writes).toHaveLength(1);
+    releaseFirst();
     await expect(page.getByText(/The response is unknown/)).toBeVisible();
     await expect(page.getByLabel("Provider check reason")).toBeDisabled();
     await page.getByRole("button", { name: "Retry saved provider check" }).click();
-    await expect(page.getByText(/Provider check queued/)).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Provider check queued" }),
+    ).toBeVisible();
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     expect(JSON.parse(writes[0].body ?? "{}")).toMatchObject({

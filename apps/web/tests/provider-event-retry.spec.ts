@@ -31,13 +31,20 @@ for (const width of [1440, 390])
  `);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/admin/payments/reconciliation");
-    const target = page
-      .getByRole("listitem")
-      .filter({ has: page.locator(`a[href="/admin/payments/transactions/${paymentId}"]`) });
+    const attention = (await (
+      await page.request.get("/api/admin/payments/attention?limit=50")
+    ).json()) as {
+      ok: boolean;
+      value: { items: { groupKey: string; paymentIntentId: string | null }[] };
+    };
+    expect(attention.ok).toBe(true);
+    const issue = attention.value.items.find((item) => item.paymentIntentId === paymentId);
+    expect(issue).toBeDefined();
+    await page.goto(`/admin/payments?tab=attention&issue=${encodeURIComponent(issue!.groupKey)}`);
+    const target = page.getByRole("complementary", { name: "Payment issue" });
     await expect(
       target.getByRole("button", { name: "Retry provider event", exact: true }),
     ).toBeVisible({ timeout: 15000 });
-    await expect(target.getByRole("button", { name: "Review resolution" })).toBeDisabled();
     const writes: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/payments/event-retry", async (route) => {
       writes.push({
@@ -49,18 +56,21 @@ for (const width of [1440, 390])
       expect(response.ok()).toBe(true);
       await route.abort("failed");
     });
-    await target.getByLabel("Event retry reason").fill("Reviewed local event processing readiness");
     await target.getByRole("button", { name: "Retry provider event", exact: true }).click();
+    await target.getByLabel("Recovery reason").fill("Reviewed local event processing readiness");
+    await target.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(target.getByText(/The response is unknown/)).toBeVisible();
-    await target.getByRole("button", { name: "Retry saved event request" }).click();
+    await page.getByRole("button", { name: "Retry saved command" }).click();
     await expect(
-      target.getByText("Event retry queued. Refresh for current progress.", { exact: true }),
+      target
+        .getByRole("status")
+        .filter({ hasText: /Recovery queued\. The issue remains visible/u }),
     ).toBeVisible();
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     expect(JSON.parse(writes[0].body ?? "{}")).toMatchObject({ caseId, expectedVersion: 1 });
     await page.reload();
-    await expect(target.getByText(/Event application: RETRY REQUIRED/)).toBeVisible();
+    await expect(target.getByText(/Checking automatically/)).toBeVisible();
     await expect(
       target.getByRole("button", { name: "Retry provider event", exact: true }),
     ).toHaveCount(0);

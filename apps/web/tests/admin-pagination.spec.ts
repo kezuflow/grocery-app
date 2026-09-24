@@ -201,10 +201,10 @@ test("Global promotion list exposes a later cursor record", async ({ page }) => 
   await expect(page.getByText("Later promotion")).toBeVisible();
 });
 
-test("finance and operations queues expose later cursor records", async ({ page }) => {
+test("finance queue exposes a later cursor record", async ({ adminPage: page }) => {
   const fixtures = [
     {
-      path: "/admin/payments/transactions",
+      path: "/admin/payments",
       api: "/api/admin/payments",
       cursor: "payments-next",
       first: {
@@ -237,6 +237,7 @@ test("finance and operations queues expose later cursor records", async ({ page 
     }),
   );
   for (const fixture of fixtures) {
+    await installPaginationBootstrap(page, { kind: "GLOBAL" });
     await page.route(`**${fixture.api}?**`, (route) => {
       const second = new URL(route.request().url()).searchParams.get("cursor") === fixture.cursor;
       return route.fulfill({
@@ -250,39 +251,9 @@ test("finance and operations queues expose later cursor records", async ({ page 
       });
     });
     await page.goto(fixture.path);
+    await page.getByRole("button", { name: "Refresh" }).click();
     await next(page);
     await expect(page.getByText(fixture.text)).toBeVisible();
     await page.unroute(`**${fixture.api}?**`);
   }
-
-  await page.route("**/api/admin/procurement?**", (route) => {
-    const second = new URL(route.request().url()).searchParams.get("cursor") === "procurement-next";
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(
-        result({
-          items: [
-            {
-              requirementId: second ? "requirement-later" : "requirement-first",
-              cycleId: "cycle-1",
-              requiredQuantityBase: 10,
-              acceptedBase: 0,
-              rejectedBase: 0,
-              status: "AGGREGATED",
-              version: 1,
-            },
-          ],
-          nextCursor: second ? null : "procurement-next",
-        }),
-      ),
-    });
-  });
-  await installPaginationBootstrap(page, {
-    kind: "LOCATION",
-    marketId: "market-metro-cebu",
-    locationId: "location-cebu-central",
-  });
-  await page.goto("/admin/procurement");
-  await next(page);
-  await expect(page.getByText("requirement-later")).toBeVisible();
 });

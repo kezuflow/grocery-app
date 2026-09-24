@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminPaymentDetail } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
@@ -20,16 +20,27 @@ const response = z.discriminatedUnion("ok", [
 export function PaymentRecovery({
   payment,
   onAccepted,
+  onInteractionState,
 }: {
   payment: AdminPaymentDetail;
   onAccepted: () => Promise<void>;
+  onInteractionState?: (active: boolean) => void;
 }) {
   const [reason, setReason] = useState("");
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [selected, setSelected] = useState(false);
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const interaction = useRef(onInteractionState);
+  interaction.current = onInteractionState;
+  useEffect(() => {
+    interaction.current?.(pending || saved !== null);
+  }, [pending, saved]);
+  useEffect(() => () => interaction.current?.(false), []);
   async function submit() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const intent = saved ?? {
       body: JSON.stringify({
         paymentIntentId: payment.paymentIntentId,
@@ -74,6 +85,7 @@ export function PaymentRecovery({
     } catch {
       setNotice("The response is unknown. Retry the saved check to recover its acceptance.");
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }

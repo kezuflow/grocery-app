@@ -797,20 +797,18 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
 
   await adminPage.goto("/admin/payments");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
-  await expect(adminPage.getByText("Recent transactions")).toBeVisible();
+  await expect(adminPage.getByRole("table", { name: "Payments" })).toBeVisible();
 
   await adminPage.goto("/admin/payments/transactions");
-  await expect(
-    adminPage.getByRole("heading", { level: 1, name: "Payment transactions" }),
-  ).toBeVisible();
+  await expect(adminPage).toHaveURL(/\/admin\/payments$/u);
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
   await expect(adminPage.getByText(`payment-${suffix}@example.com`)).toBeVisible();
 
   await adminPage.goto(`/admin/payments/transactions/${paymentIntentId}`);
-  await expect(
-    adminPage.getByRole("heading", { level: 1, name: `Payment ${paymentIntentId}` }),
-  ).toBeVisible();
+  await expect(adminPage).toHaveURL(new RegExp(`/admin/payments\\?payment=${paymentIntentId}`));
+  await expect(adminPage.getByRole("heading", { level: 2, name: paymentIntentId })).toBeVisible();
   await adminPage.getByLabel("Refund amount").fill("25.00");
-  await adminPage.getByRole("button", { name: "Request refund" }).click();
+  await adminPage.getByRole("button", { name: "Refund", exact: true }).click();
   await expect(adminPage.getByRole("alertdialog")).toContainText(paymentIntentId);
   await adminPage.getByLabel("Confirmation reason").fill("E2E quality issue");
   await adminPage.getByRole("button", { name: "Confirm" }).click();
@@ -819,15 +817,25 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   ).toBeVisible();
 
   await adminPage.goto("/admin/payments/reconciliation");
-  await expect(
-    adminPage.getByRole("heading", { level: 1, name: "Payment reconciliation" }),
-  ).toBeVisible();
-  const target = adminPage.getByRole("listitem").filter({
-    has: adminPage.locator(`a[href="/admin/payments/transactions/${paymentIntentId}"]`),
-  });
+  await expect(adminPage).toHaveURL(/\/admin\/payments\?tab=attention/u);
+  const attention = (await (
+    await adminPage.request.get("/api/admin/payments/attention?limit=50")
+  ).json()) as {
+    ok: boolean;
+    value: { items: { groupKey: string; paymentIntentId: string | null }[] };
+  };
+  expect(attention.ok).toBe(true);
+  const issue = attention.value.items.find((item) => item.paymentIntentId === paymentIntentId);
+  expect(issue).toBeDefined();
+  await adminPage.goto(
+    `/admin/payments?tab=attention&issue=${encodeURIComponent(issue!.groupKey)}`,
+  );
   // This synthetic paid fixture has no applied checkout commitment. A note
   // cannot make that unresolved money safe; the actual recovery must finish.
-  await expect(target.getByRole("button", { name: "Review resolution" })).toBeDisabled();
+  await expect(adminPage.getByRole("heading", { name: "Payment issue" })).toBeVisible();
+  await expect(
+    adminPage.getByText("No safe staff action is currently available.", { exact: false }),
+  ).toBeVisible();
 });
 
 test("a Staff principal without capability is denied the Orders workspace", async ({

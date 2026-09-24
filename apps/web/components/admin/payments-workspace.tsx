@@ -15,7 +15,7 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import {
   AdminConfirmationDialog,
   AdminCursorPagination,
-  useAdminPagination,
+  useAdminUrlPagination,
 } from "./admin-controls";
 import { AdminMasterDetailWorkspace } from "./admin-master-detail-workspace";
 import { AdminPageState } from "./admin-page-state";
@@ -27,6 +27,8 @@ import { Input } from "../ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { refundAmountMinor, refundResponse } from "@/lib/refund-response";
 import { notifyCommandSuccess } from "./admin-feedback";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 type Tab = "payments" | "attention";
 type StatusFilter = "all" | "paid" | "partially-refunded" | "refunded";
@@ -98,11 +100,30 @@ export function PaymentsWorkspace({
     key: string;
     successMessage: string;
   } | null>(null);
-  const paymentPages = useAdminPagination(status);
-  const attentionPages = useAdminPagination("attention");
-  const requestSerial = useRef(0);
+  const [childCommands, setChildCommands] = useState<Record<string, boolean>>({});
+  const sendPendingRef = useRef(false);
+  const pages = useAdminUrlPagination("/admin/payments");
+  const listRequestSerial = useRef(0);
+  const detailRequestSerial = useRef(0);
+  const workspaceUrl = useRef<string | null>(null);
   const command = useAdminCommandIntent();
-  const locked = unresolved !== null || command.pending;
+  const locked =
+    unresolved !== null ||
+    command.pending ||
+    command.uncertain ||
+    Object.values(childCommands).some(Boolean);
+  useAdminScopeGuard(false, locked);
+  useAdminRouteGuard(false, locked);
+
+  const setChildCommand = useCallback((id: string, active: boolean) => {
+    setChildCommands((current) => {
+      if (Boolean(current[id]) === active) return current;
+      const next = { ...current };
+      if (active) next[id] = true;
+      else delete next[id];
+      return next;
+    });
+  }, []);
 
   const replaceUrl = useCallback(
     (next: {
@@ -119,8 +140,11 @@ export function PaymentsWorkspace({
       const nextStatus = next.status ?? status;
       if (nextStatus === "all") params.delete("status");
       else params.set("status", nextStatus);
-      if (next.cursor) params.set("cursor", next.cursor);
-      else params.delete("cursor");
+      if (next.cursor !== undefined) {
+        if (next.cursor) params.set("cursor", next.cursor);
+        else params.delete("cursor");
+        params.delete("cursorHistory");
+      }
       if (next.payment) {
         params.set("payment", next.payment);
         params.delete("issue");
@@ -130,12 +154,13 @@ export function PaymentsWorkspace({
         params.delete("payment");
       } else if (next.issue === null) params.delete("issue");
       window.history.pushState(null, "", `/admin/payments${params.size ? `?${params}` : ""}`);
+      workspaceUrl.current = window.location.href;
     },
     [status, tab],
   );
 
   const loadPayments = useCallback(async (nextStatus: StatusFilter, cursor: string | null) => {
-    const serial = ++requestSerial.current;
+    const serial = ++listRequestSerial.current;
     setLoading(true);
     setError(null);
     const query = new URLSearchParams({ limit: "50" });
@@ -153,18 +178,23 @@ export function PaymentsWorkspace({
       const payload = (await (
         await fetch(`/api/admin/payments?${query}`)
       ).json()) as RpcResult<AdminPaymentPage>;
-      if (serial !== requestSerial.current) return;
-      if (!payload.ok) setError(payload.error.message);
-      else setPayments(payload.value);
+      if (serial !== listRequestSerial.current) return false;
+      if (!payload.ok) {
+        setError(payload.error.message);
+        return false;
+      }
+      setPayments(payload.value);
+      return true;
     } catch {
-      if (serial === requestSerial.current) setError("Network error loading payments.");
+      if (serial === listRequestSerial.current) setError("Network error loading payments.");
+      return false;
     } finally {
-      if (serial === requestSerial.current) setLoading(false);
+      if (serial === listRequestSerial.current) setLoading(false);
     }
   }, []);
 
   const loadAttention = useCallback(async (cursor: string | null) => {
-    const serial = ++requestSerial.current;
+    const serial = ++listRequestSerial.current;
     setLoading(true);
     setError(null);
     const query = new URLSearchParams({ limit: "50" });
@@ -173,34 +203,48 @@ export function PaymentsWorkspace({
       const payload = (await (
         await fetch(`/api/admin/payments/attention?${query}`)
       ).json()) as RpcResult<AdminPaymentAttentionPage>;
-      if (serial !== requestSerial.current) return;
-      if (!payload.ok) setError(payload.error.message);
-      else setAttention(payload.value);
+      if (serial !== listRequestSerial.current) return false;
+      if (!payload.ok) {
+        setError(payload.error.message);
+        return false;
+      }
+      setAttention(payload.value);
+      return true;
     } catch {
-      if (serial === requestSerial.current) setError("Network error loading payment issues.");
+      if (serial === listRequestSerial.current) setError("Network error loading payment issues.");
+      return false;
     } finally {
-      if (serial === requestSerial.current) setLoading(false);
+      if (serial === listRequestSerial.current) setLoading(false);
     }
   }, []);
 
-  const loadDetail = useCallback(async (paymentIntentId: string) => {
-    const serial = ++requestSerial.current;
+  const loadDetail = useCallback(async (paymentIntentId: string, preserveCurrent = false) => {
+    const serial = ++detailRequestSerial.current;
     setError(null);
+    if (!preserveCurrent) setDetail(null);
     try {
       const payload = (await (
         await fetch(`/api/admin/payments/${encodeURIComponent(paymentIntentId)}`)
       ).json()) as RpcResult<AdminPaymentDetail>;
-      if (serial !== requestSerial.current) return;
-      if (!payload.ok) setError(payload.error.message);
-      else setDetail(payload.value);
+      if (serial !== detailRequestSerial.current) return false;
+      if (!payload.ok) {
+        setError(payload.error.message);
+        return false;
+      }
+      setDetail(payload.value);
+      return true;
     } catch {
-      if (serial === requestSerial.current) setError("Network error loading this payment.");
+      if (serial === detailRequestSerial.current) setError("Network error loading this payment.");
+      return false;
     }
   }, []);
 
   useEffect(() => {
+    workspaceUrl.current = window.location.href;
     const restore = () => {
       if (locked) return;
+      if (workspaceUrl.current === window.location.href) return;
+      workspaceUrl.current = window.location.href;
       const params = new URLSearchParams(window.location.search);
       const restoredTab = params.get("tab") === "attention" ? "attention" : "payments";
       const restoredStatus = ["paid", "partially-refunded", "refunded"].includes(
@@ -211,9 +255,14 @@ export function PaymentsWorkspace({
       setTab(restoredTab);
       setStatus(restoredStatus);
       setSelectedIssue(params.get("issue"));
+      setRefundAmount("");
+      setConfirmRefund(false);
       const paymentId = params.get("payment");
       if (paymentId) void loadDetail(paymentId);
-      else setDetail(null);
+      else {
+        detailRequestSerial.current += 1;
+        setDetail(null);
+      }
       if (restoredTab === "attention") void loadAttention(params.get("cursor"));
       else void loadPayments(restoredStatus, params.get("cursor"));
     };
@@ -222,26 +271,41 @@ export function PaymentsWorkspace({
   }, [loadAttention, loadDetail, loadPayments, locked]);
 
   async function refresh() {
-    if (tab === "attention") await loadAttention(attentionPages.cursor);
-    else await loadPayments(status, paymentPages.cursor);
-    if (detail) await loadDetail(detail.paymentIntentId);
+    const requestedUrl = window.location.href;
+    const listLoaded =
+      tab === "attention"
+        ? await loadAttention(pages.cursor)
+        : await loadPayments(status, pages.cursor);
+    if (window.location.href !== requestedUrl) return false;
+    const detailLoaded = detail ? await loadDetail(detail.paymentIntentId, true) : true;
+    return Boolean(listLoaded && detailLoaded);
   }
   function choosePayment(paymentIntentId: string) {
     if (locked) return;
     setSelectedIssue(null);
+    setRefundAmount("");
+    setConfirmRefund(false);
+    setNotice(null);
     replaceUrl({ payment: paymentIntentId, issue: null });
     void loadDetail(paymentIntentId);
   }
   function chooseIssue(item: AdminPaymentAttentionItem) {
     if (locked) return;
+    detailRequestSerial.current += 1;
     setDetail(null);
+    setRefundAmount("");
+    setConfirmRefund(false);
+    setNotice(null);
     setSelectedIssue(item.groupKey);
     replaceUrl({ issue: item.groupKey, payment: null });
   }
   function changeTab(next: Tab) {
     if (locked || next === tab) return;
     setTab(next);
+    detailRequestSerial.current += 1;
     setDetail(null);
+    setRefundAmount("");
+    setConfirmRefund(false);
     setSelectedIssue(null);
     replaceUrl({ tab: next, cursor: null, payment: null, issue: null });
     if (next === "attention") void loadAttention(null);
@@ -253,6 +317,8 @@ export function PaymentsWorkspace({
     key: string,
     successMessage = "Recovery queued. The issue remains visible while it is checked automatically.",
   ) {
+    if (sendPendingRef.current) return;
+    sendPendingRef.current = true;
     setUnresolved({ url, body, key, successMessage });
     try {
       const response = await fetch(url, {
@@ -260,18 +326,42 @@ export function PaymentsWorkspace({
         headers: { "content-type": "application/json", "idempotency-key": key },
         body,
       });
-      const payload = (await response.json()) as { ok?: boolean; error?: { message?: string } };
+      const raw = await response.json();
+      const payload =
+        url === "/api/admin/payments/refunds"
+          ? refundResponse.parse(raw)
+          : (raw as { ok?: boolean; error?: { message?: string } });
       if (typeof payload.ok !== "boolean") throw new Error("Unknown response");
+      if (url === "/api/admin/payments/refunds") {
+        if (payload.ok && "value" in payload) {
+          const original = JSON.parse(body) as { paymentIntentId: string; amountMinor: number };
+          if (
+            payload.value.paymentIntentId !== original.paymentIntentId ||
+            payload.value.amountMinor !== original.amountMinor
+          )
+            throw new Error("Mismatched refund acceptance");
+          setRefundAmount("");
+        }
+        command.reset();
+      }
       setUnresolved(null);
       setNotice(payload.ok ? successMessage : (payload.error?.message ?? "Recovery was rejected."));
       if (payload.ok) notifyCommandSuccess("Recovery request accepted", successMessage);
-      await refresh();
+      if (!(await refresh())) {
+        setNotice(
+          payload.ok
+            ? "Recovery request accepted. Current progress could not be refreshed; reload this page."
+            : (payload.error?.message ?? "Recovery was rejected."),
+        );
+      }
     } catch {
       setNotice("The response is unknown. Retry the saved command to recover the original result.");
+    } finally {
+      sendPendingRef.current = false;
     }
   }
   async function submitRefund(reason: string) {
-    if (!detail) return;
+    if (!detail || command.pending || unresolved) return;
     const amountMinor = refundAmountMinor(refundAmount);
     if (amountMinor === null || amountMinor > detail.remainingRefundableMinor) {
       setNotice("Enter a valid amount within the remaining refundable balance.");
@@ -309,7 +399,12 @@ export function PaymentsWorkspace({
       if (result.ok) setRefundAmount("");
       if (result.ok)
         notifyCommandSuccess("Refund request accepted", "Provider progress is shown below.");
-      await loadDetail(detail.paymentIntentId);
+      if (!(await loadDetail(detail.paymentIntentId, true)))
+        setNotice(
+          result.ok
+            ? "Refund request accepted. Current progress could not be refreshed; reload this page."
+            : result.error.message,
+        );
     } catch {
       setNotice("The response is unknown. Retry the saved refund request to recover its result.");
     }
@@ -354,7 +449,6 @@ export function PaymentsWorkspace({
                 onChange={(event) => {
                   const next = event.target.value as StatusFilter;
                   setStatus(next);
-                  paymentPages.reset();
                   replaceUrl({ status: next, cursor: null });
                   void loadPayments(next, null);
                 }}
@@ -536,32 +630,34 @@ export function PaymentsWorkspace({
         ) : null}
         {tab === "payments" && payments ? (
           <AdminCursorPagination
-            pageNumber={paymentPages.pageNumber}
+            pageNumber={pages.pageNumber}
             nextCursor={payments.nextCursor}
             onPrevious={() => {
-              paymentPages.previous();
-              replaceUrl({ cursor: paymentPages.previousCursor });
-              void loadPayments(status, paymentPages.previousCursor);
+              const previousCursor = pages.previousCursor;
+              pages.previous();
+              workspaceUrl.current = window.location.href;
+              void loadPayments(status, previousCursor);
             }}
             onNext={(cursor) => {
-              paymentPages.next(cursor);
-              replaceUrl({ cursor });
+              pages.next(cursor);
+              workspaceUrl.current = window.location.href;
               void loadPayments(status, cursor);
             }}
           />
         ) : null}
         {tab === "attention" && attention ? (
           <AdminCursorPagination
-            pageNumber={attentionPages.pageNumber}
+            pageNumber={pages.pageNumber}
             nextCursor={attention.nextCursor}
             onPrevious={() => {
-              attentionPages.previous();
-              replaceUrl({ cursor: attentionPages.previousCursor });
-              void loadAttention(attentionPages.previousCursor);
+              const previousCursor = pages.previousCursor;
+              pages.previous();
+              workspaceUrl.current = window.location.href;
+              void loadAttention(previousCursor);
             }}
             onNext={(cursor) => {
-              attentionPages.next(cursor);
-              replaceUrl({ cursor });
+              pages.next(cursor);
+              workspaceUrl.current = window.location.href;
               void loadAttention(cursor);
             }}
           />
@@ -572,22 +668,31 @@ export function PaymentsWorkspace({
 
   const detailPanel = detail ? (
     <PaymentPanel
+      key={detail.paymentIntentId}
       payment={detail}
       locked={locked}
+      onInteractionState={setChildCommand}
       notice={notice}
       refundAmount={refundAmount}
       setRefundAmount={setRefundAmount}
       onClose={() => {
         if (!locked) {
+          detailRequestSerial.current += 1;
           setDetail(null);
+          setRefundAmount("");
+          setConfirmRefund(false);
           replaceUrl({ payment: null });
         }
       }}
-      onRefresh={() => loadDetail(detail.paymentIntentId)}
+      onRefresh={async () => {
+        if (!(await loadDetail(detail.paymentIntentId, true)))
+          throw new Error("Payment detail refresh failed");
+      }}
       onRefund={() => setConfirmRefund(true)}
     />
   ) : selectedAttention ? (
     <IssuePanel
+      key={selectedAttention.groupKey}
       item={selectedAttention}
       locked={locked}
       notice={notice}
@@ -654,6 +759,7 @@ export function PaymentsWorkspace({
 function PaymentPanel({
   payment,
   locked,
+  onInteractionState,
   notice,
   refundAmount,
   setRefundAmount,
@@ -663,6 +769,7 @@ function PaymentPanel({
 }: {
   payment: AdminPaymentDetail;
   locked: boolean;
+  onInteractionState: (id: string, active: boolean) => void;
   notice: string | null;
   refundAmount: string;
   setRefundAmount: (value: string) => void;
@@ -756,14 +863,26 @@ function PaymentPanel({
             View Order {payment.orderNumber ?? payment.orderId}
           </Link>
         ) : null}
-        <PaymentRecovery payment={payment} onAccepted={onRefresh} />
+        <PaymentRecovery
+          payment={payment}
+          onAccepted={onRefresh}
+          onInteractionState={(active) =>
+            onInteractionState(`payment:${payment.paymentIntentId}`, active)
+          }
+        />
         {payment.refunds.map((refund) => (
           <div key={refund.refundId} className="rounded-lg border p-3 text-sm">
             <div className="flex justify-between">
               <span>{money(refund.amountMinor, refund.currency)}</span>
               <StatusBadge>{refund.status}</StatusBadge>
             </div>
-            <RefundRecovery refund={refund} onAccepted={onRefresh} />
+            <RefundRecovery
+              refund={refund}
+              onAccepted={onRefresh}
+              onInteractionState={(active) =>
+                onInteractionState(`refund:${refund.refundId}`, active)
+              }
+            />
           </div>
         ))}
         {payment.allowedActions.includes("REQUEST_REFUND") ? (
@@ -949,8 +1068,7 @@ function IssuePanel({
         ) : null}
         {item.actions.length === 0 ? (
           <p className="text-sm">
-            No safe staff action is currently available. The retained verified evidence remains
-            available in the payment history.
+            No safe staff action is currently available. This issue remains recorded for review.
           </p>
         ) : (
           <div className="space-y-3">

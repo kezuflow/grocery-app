@@ -45,6 +45,7 @@ for (const width of [1440, 390])
         body: route.request().postData(),
         key: route.request().headers()["idempotency-key"],
       });
+      if (writes.length === 3) return route.abort("failed");
       if (writes.length > 1) return route.continue();
       const response = await route.fetch();
       expect(response.ok()).toBe(true);
@@ -68,6 +69,17 @@ for (const width of [1440, 390])
       expectedVersion: 1,
       reason: "Inspected quality issue",
     });
+    if (width === 1440) {
+      await page.getByLabel("Refund amount").fill("10.00");
+      await page.getByRole("button", { name: "Refund", exact: true }).click();
+      await page.getByLabel("Confirmation reason").fill("Separate later refund intent");
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+      await expect.poll(() => writes.length).toBe(3);
+      expect(writes[2].key).not.toBe(writes[0].key);
+      await expect(
+        page.getByText(/The response is unknown\. Retry the saved refund request/u),
+      ).toBeVisible();
+    }
     executeAdminE2eSql(
       `UPDATE payment_refund SET status='ESCALATED', last_error_code='PROVIDER_STATUS_UNKNOWN', version=version+1, updated_at=${Date.now()} WHERE payment_intent_id='${paymentIntentId}';`,
     );
@@ -91,8 +103,22 @@ for (const width of [1440, 390])
     await refundCard.getByRole("button", { name: "Confirm provider check", exact: true }).click();
     await expect(refundCard.getByText(/The response is unknown/)).toBeVisible();
     await expect(refundCard.getByLabel("Provider check reason")).toBeDisabled();
+    let failRefresh = width === 1440;
+    if (failRefresh)
+      await page.route(`**/api/admin/payments/${paymentIntentId}`, async (route) => {
+        if (failRefresh) {
+          failRefresh = false;
+          await route.abort("failed");
+        } else await route.continue();
+      });
     await refundCard.getByRole("button", { name: "Retry saved provider check" }).click();
-    await expect(refundCard.getByText(/Provider check queued/)).toBeVisible();
+    await expect(
+      refundCard.getByText(
+        width === 1440
+          ? /Provider check queued\. Current progress could not be refreshed/
+          : /Provider check queued/,
+      ),
+    ).toBeVisible();
     expect(checks).toHaveLength(2);
     expect(checks[1]).toEqual(checks[0]);
     await page.reload();

@@ -143,6 +143,7 @@ export function useAdminUrlPagination(pathname: string) {
   return {
     cursor,
     pageNumber: history.length + 1,
+    previousCursor: history.length > 0 ? history.at(-1) || null : null,
     next(nextCursor: string) {
       const next = new URLSearchParams(searchParams.toString());
       next.append("cursorHistory", cursor ?? "");
