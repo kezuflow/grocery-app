@@ -31,8 +31,16 @@ import {
   type FinanceAdministrationDeps,
 } from "./finance-administration-access";
 
-function failure(code: AppErrorCode, message: string, requestId: string) {
-  return { ok: false as const, error: { code, message, requestId } };
+function failure(
+  code: AppErrorCode,
+  message: string,
+  requestId: string,
+  details?: Readonly<Record<string, string>>,
+) {
+  return {
+    ok: false as const,
+    error: { code, message, requestId, ...(details ? { details } : {}) },
+  };
 }
 
 /** Admin order cancellation through the canonical command. */
@@ -398,7 +406,9 @@ export async function applyAdminOrderIssueAction(
       };
     }
     if (prior.status === "PROCESSING")
-      return failure("CONFLICT", "The prior problem action needs review", request.requestId);
+      return failure("CONFLICT", "The prior problem action needs review", request.requestId, {
+        outcome: "RECONCILIATION_PENDING",
+      });
     return null;
   };
   const previous = await replay();

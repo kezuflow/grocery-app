@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import type { CoreServiceBinding } from "@freshmarkets/contracts";
 import { completeResolvedReconciliationCases } from "../../payments/application/complete-reconciliation-cases";
+import { requestHash } from "../../idempotency";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
@@ -1162,5 +1163,41 @@ describe("finance administration", () => {
         }),
       ).toMatchObject({ ok: true, value: { status: "RESOLVED" } });
     }
+  });
+  it("identifies a still-processing problem action without relying on message text", async () => {
+    const manager = await seedManager();
+    const { orderId, customerId } = await seedOrderWithPayment({ status: "DELIVERED" });
+    const issueId = crypto.randomUUID();
+    const idempotencyKey = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO order_issue(id,order_id,customer_id,category,status,details,version,idempotency_key,created_at,updated_at) VALUES (?,?,?,'OTHER','SUBMITTED','Needs review',1,?,1,1)",
+    )
+      .bind(issueId, orderId, customerId, crypto.randomUUID())
+      .run();
+    const hash = await requestHash({
+      issueId,
+      action: "CLAIM",
+      reason: "Review report",
+      expectedVersion: 1,
+    });
+    await env.DB.prepare(
+      "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,created_at,updated_at) VALUES ('admin.issues.action',?,?,'PROCESSING','command',1,1)",
+    )
+      .bind(idempotencyKey, hash)
+      .run();
+    expect(
+      await core.applyAdminOrderIssueAction({
+        headers: { cookie: manager.cookie },
+        requestId: crypto.randomUUID(),
+        issueId,
+        action: "CLAIM",
+        reason: "Review report",
+        expectedVersion: 1,
+        idempotencyKey,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", details: { outcome: "RECONCILIATION_PENDING" } },
+    });
   });
 });
