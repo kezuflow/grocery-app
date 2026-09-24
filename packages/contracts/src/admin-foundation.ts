@@ -51,6 +51,15 @@ export function isAdminCapability(value: string): value is Capability {
 }
 
 export const adminNavigationSectionCodes = [
+  "home",
+  "orders",
+  "products",
+  "customers",
+  "discounts",
+  "content",
+  "analytics",
+  "settings",
+  // Compatibility for previously serialized Admin context fixtures.
   "overview",
   "commerce",
   "operations",

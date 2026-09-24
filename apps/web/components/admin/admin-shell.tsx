@@ -44,10 +44,32 @@ import {
   groupAdminNavigation,
   mostSpecificActiveNavigation,
   type AdminNavigationEntry,
+  type AdminNavigationGroup,
   type AdminNavigationParent,
 } from "./admin-navigation";
 
 const SIDEBAR_PREFERENCE_KEY = "fm-admin-sidebar-collapsed";
+const LABELED_NAVIGATION_GROUPS = new Set([
+  "discounts",
+  "content",
+  "finance",
+  "settings",
+  "commerce",
+  "operations",
+  "administration",
+]);
+
+function showNavigationGroupLabel(code: string): boolean {
+  return LABELED_NAVIGATION_GROUPS.has(code);
+}
+
+function isNestedGroupSibling(group: AdminNavigationGroup, item: AdminNavigationParent): boolean {
+  if (group.code !== "orders" && group.code !== "products") return false;
+  const anchor = group.items.find(
+    (candidate) => candidate.code === group.code || candidate.code === "location-products",
+  );
+  return Boolean(anchor && anchor.code !== item.code);
+}
 const FULL_BLEED_WORKSPACE_PATHS = [
   "/admin/promotions",
   "/admin/sales",
@@ -391,7 +413,7 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
     >
       <SelectTrigger
         aria-label="Active admin scope"
-        className="h-8 max-w-28 gap-2 rounded-md border-white/20 bg-white/10 px-2.5 text-[0.8rem] font-medium text-white shadow-none hover:bg-white/15 focus-visible:ring-white sm:max-w-36 lg:max-w-52 [&>svg:last-child]:hidden"
+        className="h-8 w-28 gap-2 rounded-md border-white/20 bg-white/10 px-2.5 text-[0.8rem] font-medium text-white shadow-none hover:bg-white/15 focus-visible:ring-white sm:w-36 lg:w-44 [&>svg:last-child]:hidden"
       >
         <span
           className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
@@ -448,18 +470,51 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
         <nav aria-label="Admin navigation" className="space-y-5">
           {groups.map((group) => (
             <div key={group.code}>
-              {group.code !== "overview" ? (
+              {showNavigationGroupLabel(group.code) ? (
                 <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
                   {group.label}
                 </p>
               ) : null}
               <div className="space-y-1">
                 {group.items.map((item) => (
-                  <MobileNavigationParent key={item.code} item={item} activeCode={active?.code} />
+                  <div
+                    key={item.code}
+                    className={cn(
+                      isNestedGroupSibling(group, item) &&
+                        "ml-4 border-l border-[var(--fm-border)] pl-1",
+                    )}
+                  >
+                    <MobileNavigationParent item={item} activeCode={active?.code} />
+                  </div>
                 ))}
               </div>
             </div>
           ))}
+          <div className="space-y-1 border-t border-[var(--fm-border)] pt-4">
+            <p className="px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+              Sales channels
+            </p>
+            <SheetClose asChild>
+              <Link href="/" prefetch={false} className="block min-h-11 rounded px-3 py-2 text-sm">
+                Online Store
+              </Link>
+            </SheetClose>
+            <span
+              aria-disabled="true"
+              className="block px-3 py-2 text-sm text-[var(--fm-text-muted)]"
+            >
+              Point of Sale · Coming soon
+            </span>
+            <p className="px-3 pt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+              Apps
+            </p>
+            <span
+              aria-disabled="true"
+              className="block px-3 py-2 text-sm text-[var(--fm-text-muted)]"
+            >
+              Messaging · Coming soon
+            </span>
+          </div>
         </nav>
       </SheetContent>
     </Sheet>
@@ -573,6 +628,52 @@ function AdminSidebar({
     setOpenParents((current) => new Set([...current, active.parentCode ?? active.code]));
   }, [active?.code, active?.parentCode]);
 
+  const settingsGroup = visibleGroups.find((group) => group.code === "settings");
+  const scrollingGroups = visibleGroups.filter((group) => group.code !== "settings");
+  function renderGroup(group: AdminNavigationGroup) {
+    return (
+      <div key={group.code} className="relative flex w-full min-w-0 flex-col p-2">
+        {showNavigationGroupLabel(group.code) ? (
+          <p
+            className={cn(
+              "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
+              collapsed ? "invisible -mt-8 opacity-0" : "visible mt-0 opacity-100",
+            )}
+          >
+            {group.label}
+          </p>
+        ) : null}
+        <div className="space-y-0">
+          {group.items.map((item) => (
+            <div
+              key={item.code}
+              className={cn(
+                !collapsed &&
+                  isNestedGroupSibling(group, item) &&
+                  "ml-3 border-l border-[var(--fm-border)] pl-1",
+              )}
+            >
+              <DesktopNavigationParent
+                item={item}
+                collapsed={collapsed}
+                activeCode={active?.code ?? null}
+                open={openParents.has(item.code)}
+                onToggle={() =>
+                  setOpenParents((current) => {
+                    const next = new Set(current);
+                    if (next.has(item.code)) next.delete(item.code);
+                    else next.add(item.code);
+                    return next;
+                  })
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider disableHoverableContent>
       <aside
@@ -625,54 +726,57 @@ function AdminSidebar({
                 </div>
               )}
             </div>
-            <nav
-              aria-label="Admin navigation"
-              className={cn(
-                "fm-admin-sidebar-scroll min-h-0 flex-1 space-y-0 overflow-x-visible",
-                collapsed ? "overflow-y-hidden" : "overflow-y-auto",
-              )}
-            >
-              {visibleGroups.map((group) => (
-                <div key={group.code} className="relative flex w-full min-w-0 flex-col p-2">
-                  {group.code !== "overview" ? (
-                    <p
-                      className={cn(
-                        "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
-                        collapsed ? "invisible -mt-8 opacity-0" : "visible mt-0 opacity-100",
-                      )}
-                    >
-                      {group.label}
+            <nav aria-label="Admin navigation" className="flex min-h-0 flex-1 flex-col">
+              <div
+                className={cn(
+                  "fm-admin-sidebar-scroll min-h-0 flex-1 overflow-x-hidden",
+                  collapsed ? "overflow-y-hidden" : "overflow-y-auto",
+                )}
+              >
+                {scrollingGroups.map(renderGroup)}
+                {!collapsed ? (
+                  <div className="space-y-1 border-t border-[var(--fm-border)] px-4 py-3 text-sm">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
+                      Sales channels
                     </p>
-                  ) : null}
-                  <div className="space-y-0">
-                    {group.items.map((item) => (
-                      <DesktopNavigationParent
-                        key={item.code}
-                        item={item}
-                        collapsed={collapsed}
-                        activeCode={active?.code ?? null}
-                        open={openParents.has(item.code)}
-                        onToggle={() =>
-                          setOpenParents((current) => {
-                            const next = new Set(current);
-                            if (next.has(item.code)) next.delete(item.code);
-                            else next.add(item.code);
-                            return next;
-                          })
-                        }
-                      />
-                    ))}
+                    <Link
+                      href="/"
+                      prefetch={false}
+                      className="block rounded px-2 py-1.5 hover:bg-[var(--fm-admin-sidebar-active)]"
+                    >
+                      Online Store
+                    </Link>
+                    <span
+                      aria-disabled="true"
+                      className="block px-2 py-1.5 text-[var(--fm-text-muted)]"
+                    >
+                      Point of Sale · Coming soon
+                    </span>
+                    <p className="pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
+                      Apps
+                    </p>
+                    <span
+                      aria-disabled="true"
+                      className="block px-2 py-1.5 text-[var(--fm-text-muted)]"
+                    >
+                      Messaging · Coming soon
+                    </span>
                   </div>
+                ) : null}
+                {items.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+                    No workspaces permitted.
+                  </p>
+                ) : visibleGroups.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+                    No matching workspaces.
+                  </p>
+                ) : null}
+              </div>
+              {settingsGroup ? (
+                <div className="max-h-[45vh] shrink-0 overflow-y-auto border-t border-[var(--fm-border)]">
+                  {renderGroup(settingsGroup)}
                 </div>
-              ))}
-              {items.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
-                  No workspaces permitted.
-                </p>
-              ) : visibleGroups.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
-                  No matching workspaces.
-                </p>
               ) : null}
             </nav>
           </div>

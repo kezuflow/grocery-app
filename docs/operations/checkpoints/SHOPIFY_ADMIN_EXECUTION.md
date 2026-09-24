@@ -7,11 +7,11 @@
 - **Reference ledger:** `docs/design/SHOPIFY_ADMIN_REFERENCES.md`.
 - **Owner decision:** Approved the Shopify-inspired admin direction in this conversation; implementation uses existing routes and preserves scope/business behavior.
 - **Execution status:** IN PROGRESS, SAUI-02 — Shared shell, navigation, scope, and notifications. SAUI-00/01 and SAUI-02.1 are accepted. Existing visual snapshots encode the old shell and remain failing until the redesigned page families are inspected and baselines are intentionally updated.
-- **Observed execution branch/HEAD:** clean tracked `main` synchronized with `origin/main` at `ecf36369266e2bb217c3502e983d6d7acd564e70` before SAUI task files were added.
-- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. SAUI task documents, DESIGN reconciliation, Admin shell/CSS, and focused browser tests are intended work. No commerce-alignment source or checkpoint was edited.
+- **Observed execution branch/HEAD:** `main` synchronized with `origin/main` at `f016015c` after verified SAUI-00/01/02.1 work was committed and pushed. Current SAUI-02.2/02.3 edits are uncommitted at this checkpoint update.
+- **Working tree:** The owner's ZIP `docs/freshmarkets-shopify-admin-plan.zip` is untracked and preserved, excluded from staging. Current intended edits are Core navigation metadata and tests, shared section contract, Web navigation/shell/tests, API_CONTRACTS navigation text, this checkpoint and three navigation images. No commerce-alignment source or checkpoint was edited.
 - **Runtime:** Node `v24.15.0`, pnpm `11.0.9`, repository hooks `.githooks`; disposable `apps/core/.wrangler/e2e-shopify-admin` state is locally provisioned. Actual lead model/effort is controlled by the active Codex session and not changed here. The authorized `gpt-5.6-sol` Medium read-only reference agent completed; the `gpt-5.6-sol` High independent reviewer hit a service usage limit before returning findings. Lead reviewed the diff directly; one writer remains the lead.
-- **Active slice:** SAUI-02.2 — regroup Core-authorized navigation with one ordering owner and no lost permitted leaves.
-- **Next action:** Reconcile navigation section metadata and Core ordering, update focused tests, then inspect desktop/mobile navigation and scope-specific leaves in the local browser.
+- **Active slice:** SAUI-02.4 — scope transition safety across dirty/pending forms and scope-keyed reads.
+- **Next action:** Audit current scope-change callers and high-risk forms, add a single transition guard without changing Core authority, then verify no old-scope data or pending intent appears under the new scope.
 
 ## Macro-phase ledger
 
@@ -19,7 +19,7 @@
 |---|---|---|---|---|
 | SAUI-00 | Baseline, scope freeze and acceptance inventory | ACCEPTED | 4/4 | 55 pages, 8 redirects, 118 API routes/Core calls; six current screenshots; snapshot mismatch recorded |
 | SAUI-01 | References and design-guide reconciliation | ACCEPTED | 4/4 | Reference ledger, visual specification, interaction matrix and guide reconciliation reviewed by lead; independent reviewer unavailable (usage limit) |
-| SAUI-02 | Shared shell, navigation, scope, notifications | IN PROGRESS | 1/4 | Full-width dark header, 232px expanded sidebar and scope beside bell; build and 8 focused browser cases passed |
+| SAUI-02 | Shared shell, navigation, scope, notifications | IN PROGRESS | 3/4 | Core-ordered Shopify groups and pinned Settings; stable scope width; local build, 18 focused browser cases and visual captures passed; transition safety pending |
 | SAUI-03 | Shared components and Orders pilot | TODO | 0/4 | — |
 | SAUI-04 | Products, categories, catalog reference | TODO | 0/4 | — |
 | SAUI-05 | Customers and customer administration | TODO | 0/3 | — |
@@ -31,21 +31,21 @@
 | SAUI-11 | Settings, locations, Scheduled cycles | TODO | 0/4 | — |
 | SAUI-12 | Full regression, cleanup, handoff | TODO | 0/4 | — |
 
-**Accepted:** 2/13 phases; 9/51 initially planned slices. Update counts if a slice is explicitly subdivided, without concealing omitted acceptance criteria.
+**Accepted:** 2/13 phases; 11/51 initially planned slices. Update counts if a slice is explicitly subdivided, without concealing omitted acceptance criteria.
 
 ## Active slice packet
 
 ```text
-ID / exact phase title: SAUI-02.2 / Shared shell, navigation, scope, and notifications
-Goal / acceptance criteria: Core-authorized destinations grouped in the approved hierarchy, all permitted leaves reachable in Global and Central Cebu, correct active states, keyboard and mobile behavior, pinned Settings, disabled future entries without navigation.
-Dependency evidence: SAUI-00/01 accepted; SAUI-02.1 built, visually inspected in three viewports, 8 focused browser cases passed.
+ID / exact phase title: SAUI-02.4 / Shared shell, navigation, scope, and notifications
+Goal / acceptance criteria: Dirty-form confirmation and pending/unknown-command locks; scope-keyed data with old-response rejection; compatible query/selection reset and honest invalid-destination state.
+Dependency evidence: SAUI-02.1–02.3 accepted; real Core navigation integration 16/16, Web grouping 16/16, contracts 2/2, local shell/navigation/notification browser 18/18, Global/Central Cebu/mobile sidebar captures inspected.
 Owner / actual model / effort: current lead session; one writer. Independent High reviewer unavailable due service usage limit; lead reviews each diff.
 Writer lock / allowed files: lead owns Core navigation metadata, shared contract, Web navigation and shell, tests, task checkpoint.
-Stable base HEAD or frozen diff: ecf36369266e2bb217c3502e983d6d7acd564e70 plus uncommitted SAUI docs and shell slice.
+Stable base HEAD or frozen diff: f016015c plus uncommitted SAUI-02.2/02.3 navigation/header scope diff.
 Reference IDs / relevant guide sections: M01–M11; PRODUCT scope/role rules; DESIGN Admin visual foundation and navigation; ENGINEERING contract/verification/Git.
 Commands / environment: local disposable `e2e-shopify-admin` Wrangler Web/Core on port 3100; no provider/production operation.
-Implemented versus verified versus accepted: 02.2 not begun. 02.1 accepted with typecheck, lint, build, 8/8 focused browser and inspected desktop/mobile images; visual snapshot comparisons failed because old baseline is intentionally stale.
-Next action: implement Core-owned navigation grouping and verify permitted leaves in Global/location scopes.
+Implemented versus verified versus accepted: 02.2/02.3 accepted with Core-owned sections/order, Web grouping, pinned Settings, disabled future labels, fixed selector width and unchanged notification behavior. 02.4 not implemented. Visual snapshot comparisons against the old shell remain failing by design.
+Next action: implement transition guard and read-key checks, then run scoped browser journeys.
 ```
 
 ## Baseline and route/action coverage
@@ -68,6 +68,10 @@ SAUI-00 used a disposable local D1 state. The managed Playwright command first t
 | SAUI-02.1 | working tree at `ecf36369` | `pnpm --filter @freshmarkets/web typecheck`; `pnpm exec oxlint apps/web/components/admin/admin-shell.tsx`; `pnpm --filter @freshmarkets/web build` | All passed | local command output | Build verifies compilation, not browser behavior |
 | SAUI-02.1 | same local build + disposable local D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-foundation.spec.ts admin-navigation-discovery.spec.ts --workers=1 --retries=0` | 8/8 passed; desktop expanded/persistence, mobile keyboard/focus, capability/scope leaves, payments redirect, auth and token isolation | local Playwright output | Local synthetic accounts and mock providers |
 | SAUI-02.1 | same local build + disposable local D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-visual-regression.spec.ts --workers=1 --retries=0` | 3/3 viewport runs failed against old shell snapshots at Overview (15% desktop, 16% tablet, 13% mobile pixel changes); actual output visually inspected | `evidence/saui-02/overview-{desktop,tablet,mobile}.png` | Snapshot failures expected from approved redesign; full archetype suite remains due after page families |
+| SAUI-02.2/02.3 | `f016015c` + uncommitted nav/header diff | `pnpm --filter @freshmarkets/contracts test -- admin-foundation.test.ts`; `pnpm --filter @freshmarkets/core test -- admin-context.integration.test.ts`; `pnpm --filter @freshmarkets/web test -- admin-navigation.test.ts` | 2/2, 16/16, 16/16 passed respectively; initial failures from changed section expectations were repaired | local test output | Local Worker integration, no provider transaction |
+| SAUI-02.2/02.3 | same working tree | `pnpm format:check`; Web/Core typecheck; `pnpm --filter @freshmarkets/web build` | Passed; no page/API route added | local command output | Compilation alone does not prove interaction |
+| SAUI-02.2/02.3 | rebuilt local Web/Core + disposable D1 | `APP_BASE_URL=http://localhost:3100 E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-shopify-admin pnpm --filter @freshmarkets/web exec playwright test admin-foundation.spec.ts admin-navigation-discovery.spec.ts admin-readiness.spec.ts notifications.spec.ts --workers=1 --retries=0` | 18/18 passed after fixing a test locator that selected the header brand instead of the sidebar Home link; stable bell position measured on Global→Central Cebu | local Playwright output | Synthetic users, mock providers |
+| SAUI-02.2 | same local stack | temporary read-only navigation capture Playwright spec; desktop Global/Central Cebu and mobile Central Cebu | 1/1 passed; all three sidebar/sheet images inspected; temporary spec removed | `evidence/saui-02/navigation-{global-desktop,cebu-desktop,cebu-mobile}.png` | UI capture, not authorization proof by itself |
 
 Separate mocked/component, local Worker/D1, local browser, actual sandbox provider and production evidence. Do not overwrite a failed result with “passed” without retaining the failure and repair record.
 
@@ -91,7 +95,7 @@ No external-access blocker. The shared-chat download control failed, but the own
 
 ## Latest handoff
 
-Active SAUI-02.2 on `main` at `ecf36369` with uncommitted task documentation, shell/test slice, and preserved owner ZIP. Local disposable Web/Core stack runs on port 3100. Next: implement Core-owned navigation grouping, test all authorized leaves in Global and Central Cebu, then stage only intended SAUI files, commit/push.
+Active SAUI-02.4 on `main` at `f016015c` with uncommitted navigation/header scope changes and preserved owner ZIP. Local disposable Web/Core stack runs on port 3100. Next: audit scope-switch safety and add transition guard/read-key protection, then stage only intended SAUI files, commit/push.
 
 ## History
 
@@ -99,3 +103,4 @@ Active SAUI-02.2 on `main` at `ecf36369` with uncommitted task documentation, sh
 - 2026-09-24: Owner invoked the SAUI implementation. Inspected `main`/HEAD/status, moved the supplied plan and kickoff to their intended paths, extracted ZIP reference/seed files, preserved ZIP untracked, reconciled Product preview requirements, recorded source route baseline, and completed read-only Mobbin reference audit. No application edits, tests or deployment yet.
 - 2026-09-24: SAUI-00 accepted with source route/action inventory and six inspected local screenshots. Browser visual snapshots drifted before redesign; 3/3 existing comparisons failed after a recovered local D1 setup, while the scoped capture passed 1/1. SAUI-01 visual and interaction contract entered DESIGN; independent review remains open. No application code or provider/production state changed.
 - 2026-09-24: SAUI-01 guide conflicts reconciled and lead-reviewed. Independent High reviewer failed due service usage limit; lead accepted the guide contract with that assurance limit. SAUI-02.1 shell geometry, neutral Admin tokens, header scope placement and focused browser tests implemented. Web typecheck/lint/build passed; 8/8 focused browser checks passed; three current visual images inspected and saved while old snapshots failed as expected. No business/API route/provider change.
+- 2026-09-24: Committed and pushed verified baseline/shell as `f016015c` on `main`. SAUI-02.2 Core-ordered Shopify sections, Settings pinning and noninteractive future labels implemented without new routes. SAUI-02.3 fixed selector width and preserved bell behavior. Contracts/Core/Web focused tests and 18 local browser checks passed; three current navigation images inspected. SAUI-02.4 is the next active safety slice.

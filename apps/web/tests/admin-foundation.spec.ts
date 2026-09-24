@@ -73,6 +73,22 @@ test("the desktop shell defaults to an expanded sidebar and persists an explicit
   await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
 });
 
+test("scope changes keep the notification control in a stable header position", async ({
+  adminPage,
+}) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  await adminPage.goto("/admin");
+  const selector = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  const bell = adminPage.getByRole("button", { name: "Open notifications" });
+  await expect(selector).toContainText("Global");
+  const before = await bell.boundingBox();
+  await selector.click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  await expect(selector).toContainText("Central Cebu");
+  const after = await bell.boundingBox();
+  expect(before?.x).toBe(after?.x);
+});
+
 test("a legacy Payments deep link opens the authorized canonical workspace", async ({
   adminPage,
 }) => {

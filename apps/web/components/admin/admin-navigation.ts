@@ -21,15 +21,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const SECTION_ORDER: ReadonlyArray<AdminNavigationSectionCode> = [
-  "overview",
-  "commerce",
-  "operations",
-  "finance",
-  "administration",
-];
-
 export const ADMIN_SECTION_LABELS: Readonly<Record<AdminNavigationSectionCode, string>> = {
+  home: "Home",
+  orders: "Orders",
+  products: "Products",
+  customers: "Customers",
+  discounts: "Discounts",
+  content: "Content",
+  analytics: "Analytics",
+  settings: "Settings",
   overview: "Overview",
   commerce: "Commerce",
   operations: "Operations",
@@ -62,6 +62,14 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
 };
 
 const SECTION_ICONS: Record<AdminNavigationSectionCode, LucideIcon> = {
+  home: LayoutDashboard,
+  orders: ClipboardList,
+  products: Boxes,
+  customers: Users,
+  discounts: BadgePercent,
+  content: Images,
+  analytics: BarChart3,
+  settings: Settings,
   overview: LayoutDashboard,
   commerce: Boxes,
   operations: Warehouse,
@@ -117,7 +125,8 @@ export function adminNavigationFromContext(
 export function groupAdminNavigation(
   items: ReadonlyArray<AdminNavigationEntry>,
 ): ReadonlyArray<AdminNavigationGroup> {
-  return SECTION_ORDER.flatMap((section) => {
+  // Core sends the canonical order; preserve its first section occurrence.
+  return [...new Set(items.map((item) => item.section))].flatMap((section) => {
     const sectionItems = items.filter((item) => item.section === section);
     const parents = sectionItems
       .filter((item) => item.parentCode === null)

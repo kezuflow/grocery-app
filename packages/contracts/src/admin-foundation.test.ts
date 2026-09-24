@@ -16,6 +16,14 @@ describe("admin foundation contracts", () => {
     expect(isAdminCapability("staff.manage")).toBe(true);
     expect(isAdminCapability("staff:manage")).toBe(false);
     expect(adminNavigationSectionCodes).toEqual([
+      "home",
+      "orders",
+      "products",
+      "customers",
+      "discounts",
+      "content",
+      "analytics",
+      "settings",
       "overview",
       "commerce",
       "operations",

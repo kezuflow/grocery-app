@@ -66,6 +66,37 @@ describe("admin navigation mapping", () => {
     ]);
   });
 
+  it("groups Shopify sections in Core order without dropping independently authorized leaves", () => {
+    const items = adminNavigationFromContext([
+      { ...overview, label: "Home", section: "home" },
+      {
+        ...overview,
+        code: "procurement",
+        label: "Delivery weeks",
+        href: "/admin/procurement",
+        section: "orders",
+      },
+      {
+        ...overview,
+        code: "receiving",
+        label: "Receiving",
+        href: "/admin/receiving",
+        section: "products",
+        scopeKinds: ["LOCATION"],
+      },
+      { ...audit, section: "settings" },
+    ]);
+    const groups = groupAdminNavigation(items);
+    expect(groups.map((group) => group.code)).toEqual(["home", "orders", "products", "settings"]);
+    expect(groups.flatMap((group) => group.items.map((item) => item.code))).toEqual([
+      "overview",
+      "procurement",
+      "receiving",
+      "audit",
+    ]);
+    expect(mostSpecificActiveNavigation(items, "/admin/receiving")?.code).toBe("receiving");
+  });
+
   it("keeps Core-provided destinations even when Web has no dedicated icon", () => {
     const items = adminNavigationFromContext([
       {

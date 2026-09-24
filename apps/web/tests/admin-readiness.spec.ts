@@ -46,7 +46,9 @@ test("authenticated shell supports keyboard focus, menu focus return, and respon
 
   await adminPage.setViewportSize({ width: 1280, height: 800 });
   await expect(adminPage.getByRole("navigation", { name: "Admin navigation" })).toBeVisible();
-  const overview = adminPage.getByRole("link", { name: "Overview" }).first();
+  const overview = adminPage
+    .getByRole("navigation", { name: "Admin navigation" })
+    .getByRole("link", { name: "Home" });
   await expect(overview).toHaveAttribute("aria-current", "page");
   await overview.focus();
   await adminPage.keyboard.press("Shift+Tab");
