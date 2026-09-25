@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { useAuthToasterId } from "./auth-provider";
 import { OpenEmailButton } from "./open-email-button";
 import { useIsHydrated } from "./use-is-hydrated";
 
@@ -33,6 +34,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
  */
 export function VerifyEmail({ className }: VerifyEmailProps) {
   const { authClient, basePaths, baseURL, localization, redirectTo, viewPaths, Link } = useAuth();
+  const toasterId = useAuthToasterId();
 
   const isHydrated = useIsHydrated();
   const [email, setEmail] = useState(
@@ -56,7 +58,7 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
 
   const { mutate: sendVerificationEmail, isPending } = useSendVerificationEmail(authClient, {
     onSuccess: () => {
-      toast.success(localization.auth.verificationEmailSent);
+      toast.success(localization.auth.verificationEmailSent, { toasterId });
       setCooldown(RESEND_COOLDOWN_SECONDS);
     },
   });

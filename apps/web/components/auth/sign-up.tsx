@@ -31,6 +31,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { AdditionalField } from "./additional-field";
+import { useAuthToasterId } from "./auth-provider";
 import { PasswordStrengthMeter } from "./password-strength-meter";
 import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
@@ -67,6 +68,7 @@ export function SignUp({
   socialPosition = "bottom",
   onSignUpSuccess,
 }: SignUpProps) {
+  const toasterId = useAuthToasterId();
   const {
     additionalFields,
     authClient,
@@ -144,7 +146,7 @@ export function SignUp({
     const email = formData.get("email") as string;
 
     if (emailAndPassword?.confirmPassword && password !== confirmPassword) {
-      toast.error(localization.auth.passwordsDoNotMatch);
+      toast.error(localization.auth.passwordsDoNotMatch, { toasterId });
       setPassword("");
       setConfirmPassword("");
       return;
@@ -160,7 +162,7 @@ export function SignUp({
         try {
           await field.validate(value);
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : String(error));
+          toast.error(error instanceof Error ? error.message : String(error), { toasterId });
           return;
         }
       }

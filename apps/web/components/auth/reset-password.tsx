@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { useAuthToasterId } from "./auth-provider";
 import { PasswordStrengthMeter } from "./password-strength-meter";
 
 export type ResetPasswordProps = {
@@ -31,6 +32,7 @@ export type ResetPasswordProps = {
  * @returns The password reset form UI ready to be mounted in the app layout.
  */
 export function ResetPassword({ className }: ResetPasswordProps) {
+  const toasterId = useAuthToasterId();
   const {
     authClient,
     basePaths,
@@ -55,7 +57,7 @@ export function ResetPassword({ className }: ResetPasswordProps) {
       }
     },
     onSuccess: () => {
-      toast.success(localization.auth.passwordResetSuccess);
+      toast.success(localization.auth.passwordResetSuccess, { toasterId });
       navigate({ to: signInURL });
     },
   });
@@ -74,10 +76,10 @@ export function ResetPassword({ className }: ResetPasswordProps) {
     const token = searchParams.get("token") as string;
 
     if (!token) {
-      toast.error(localization.auth.invalidResetPasswordToken);
+      toast.error(localization.auth.invalidResetPasswordToken, { toasterId });
       navigate({ to: signInURL });
     }
-  }, [localization.auth.invalidResetPasswordToken, navigate, signInURL]);
+  }, [localization.auth.invalidResetPasswordToken, navigate, signInURL, toasterId]);
 
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -86,7 +88,7 @@ export function ResetPassword({ className }: ResetPasswordProps) {
     const token = searchParams.get("token") as string;
 
     if (!token) {
-      toast.error(localization.auth.invalidResetPasswordToken);
+      toast.error(localization.auth.invalidResetPasswordToken, { toasterId });
       navigate({ to: signInURL });
       return;
     }
@@ -96,7 +98,7 @@ export function ResetPassword({ className }: ResetPasswordProps) {
     const confirmPassword = formData.get("confirmPassword") as string;
 
     if (emailAndPassword?.confirmPassword && password !== confirmPassword) {
-      toast.error(localization.auth.passwordsDoNotMatch);
+      toast.error(localization.auth.passwordsDoNotMatch, { toasterId });
       return;
     }
 

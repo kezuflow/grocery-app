@@ -41,6 +41,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useAuthToasterId } from "./auth-provider";
 
 export type AdditionalFieldProps = {
   name: string;
@@ -79,8 +80,10 @@ function CopyButton({
   isDisabled?: boolean;
 }) {
   const { localization } = useAuth();
+  const toasterId = useAuthToasterId();
   const { copied, copy } = useCopyToClipboard({
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : String(error), { toasterId }),
   });
 
   async function handleCopy() {

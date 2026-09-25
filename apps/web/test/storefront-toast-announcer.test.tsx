@@ -36,11 +36,11 @@ it("maps storefront success and failure events to Sonner", () => {
   expect(toast.success).toHaveBeenCalledOnce();
   expect(toast.success).toHaveBeenCalledWith(
     "Added to cart",
-    expect.objectContaining({ duration: 4_200 }),
+    expect.objectContaining({ duration: 4_200, toasterId: "storefront" }),
   );
   expect(toast.error).toHaveBeenCalledOnce();
   expect(toast.error).toHaveBeenCalledWith(
     "Could not add item",
-    expect.objectContaining({ duration: 4_200 }),
+    expect.objectContaining({ duration: 7_000, toasterId: "storefront" }),
   );
 });

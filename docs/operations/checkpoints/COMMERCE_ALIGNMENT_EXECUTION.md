@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SONNER-RESULT-FEEDBACK-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SONNER-RESULT-FEEDBACK-1`. The owner asked for visibly distinct successful and failed Sonner messages and approved the proposed implementation. Acceptance: success and error toasts have separate colors and existing icons in light/dark appearance; Storefront errors remain visible longer than successes; opening checkout authentication does not duplicate a toast and keeps its messages visible in the native dialog; Admin command outcome policy remains intact.
+
+Started on `main` at `b63207c7`, with only unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` preserved. The shared Sonner wrapper now enables rich success/error colors. Storefront toasts target the Storefront toaster and last 4.2 seconds for success or 7 seconds for error. Authentication toasts target their own toaster, including the in-dialog instance, while the standalone sign-in surface keeps its auth toaster. No Core, contract, schema, payment, stock or provider behavior changed. DESIGN records the presentation rule.
+
+Verification on this source working tree: focused Web Vitest for Storefront toast routing, Admin command feedback and sign-in route **6/6 passed**; Web typecheck, focused formatting, lint, naming, terminology and `git diff --check` passed. Lint reported two existing unrelated unused-variable warnings in the address-book test. Installed Sonner 2.0.8 types and styles were inspected for `richColors`, theme colors and `toasterId`. No browser visual acceptance, production deployment, live command, remote D1 write or actual provider operation occurred.
+
+Completion level: **1 of 1 requested source UI slices locally verified; production visual acceptance remains open**. Next action: on a separately authorized Web production release, verify success/error appearance and one visible authentication message in the checkout sign-in dialog; wider Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — STOCK-TRANSFER-GLOBAL-NAV-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-GLOBAL-NAV-1`. The owner requested Stock Transfer only in the Global navigation panel. Acceptance: Core advertises the authorized link with Global-only scope applicability; Web shows it in Global and hides it in selected locations, while direct location-scoped transfer detail/receipt authorization stays intact.

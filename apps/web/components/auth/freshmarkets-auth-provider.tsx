@@ -45,10 +45,12 @@ export function FreshMarketsAuthProvider({
   children,
   redirectTo = "/",
   onAuthViewChange,
+  toasterId,
 }: {
   children: ReactNode;
   redirectTo?: string;
   onAuthViewChange?: (view: AuthView) => void;
+  toasterId?: string;
 }) {
   const router = useRouter();
   const AuthLink = useMemo<ComponentType<AuthLinkProps>>(() => {
@@ -86,6 +88,7 @@ export function FreshMarketsAuthProvider({
 
   return (
     <AuthProvider
+      toasterId={toasterId}
       authClient={authClient}
       navigate={({ to, replace }) => {
         const authView = getAuthView(to);

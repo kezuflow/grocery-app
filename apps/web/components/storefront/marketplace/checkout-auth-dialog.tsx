@@ -47,7 +47,11 @@ export function CheckoutAuthDialog({ onClose }: { onClose: () => void }) {
         >
           <X className="size-4" aria-hidden="true" />
         </button>
-        <FreshMarketsAuthProvider redirectTo="/cart" onAuthViewChange={setView}>
+        <FreshMarketsAuthProvider
+          redirectTo="/cart"
+          onAuthViewChange={setView}
+          toasterId="auth-dialog"
+        >
           <Auth
             view={view}
             socialLayout="vertical"

@@ -12,7 +12,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { Toaster } from "../ui/sonner";
 
-export function ErrorToaster() {
+export function ErrorToaster({ toasterId }: { toasterId: string }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export function ErrorToaster() {
 
       const err = error as BetterFetchError;
       if (err?.error?.code === "EMAIL_NOT_VERIFIED") return;
-      if (err?.error) toast.error(err.error.message);
+      if (err?.error) toast.error(err.error.message, { toasterId });
     };
 
     const mutationCache = queryClient.getMutationCache();
@@ -53,16 +53,16 @@ export function ErrorToaster() {
       ) {
         return;
       }
-      toast.error(err.error?.message || err.message);
+      toast.error(err.error?.message || err.message, { toasterId });
     };
 
     return () => {
       queryCache.config.onError = previousQueryOnError;
       mutationCache.config.onError = previousMutationOnError;
     };
-  }, [queryClient]);
+  }, [queryClient, toasterId]);
 
   // Renders the surface the toast() calls above actually display on; without
   // it these auth errors were fired into the void.
-  return <Toaster position="bottom-center" />;
+  return <Toaster id={toasterId} position="bottom-center" />;
 }

@@ -16,7 +16,8 @@ export function ToastAnnouncer() {
     const onToast = (event: Event) => {
       const detail = (event as CustomEvent<StorefrontToast>).detail;
       const options = {
-        duration: 4_200,
+        toasterId: "storefront",
+        duration: detail.tone === "error" ? 7_000 : 4_200,
         action: detail.signInHref
           ? {
               label: "Sign in",
@@ -33,6 +34,7 @@ export function ToastAnnouncer() {
 
   return (
     <Toaster
+      id="storefront"
       position="bottom-center"
       closeButton={false}
       visibleToasts={1}
