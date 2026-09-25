@@ -760,10 +760,33 @@ describe("AddressEditor", () => {
     if (!deniedAction) throw new Error("Missing current-location action");
     click(deniedAction);
     expect(deniedMount.container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Location permission was not granted",
+      "Location access is blocked",
     );
     expect(deniedMount.container.textContent).not.toContain("private browser detail");
     act(() => deniedMount.root.unmount());
+  });
+
+  it.each([
+    [2, "Your device could not determine its location"],
+    [3, "Finding your location took too long"],
+  ])("reports location error %i without blaming permission", (code, expected) => {
+    const geolocation = {
+      getCurrentPosition: vi.fn((_success: PositionCallback, failure: PositionErrorCallback) =>
+        failure({ code, message: "private browser detail" } as GeolocationPositionError),
+      ),
+    } as unknown as Geolocation;
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const { container, root } = mount({ fetchImpl, geolocation });
+    const locate = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Use current location"),
+    );
+    if (!locate) throw new Error("Missing current-location action");
+    click(locate);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(expected);
+    expect(container.textContent).not.toContain("Location access is blocked");
+    expect(container.textContent).not.toContain("private browser detail");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    act(() => root.unmount());
   });
 
   it("ignores delayed geolocation callbacks after a newer candidate selection", async () => {
@@ -804,7 +827,7 @@ describe("AddressEditor", () => {
 
     expect(container.textContent).toContain(`Selected address: ${candidate.displayAddress}`);
     expect(container.textContent).not.toContain("Current location selected");
-    expect(container.textContent).not.toContain("Location permission was not granted");
+    expect(container.textContent).not.toContain("Location access is blocked");
     expect(currentPinPosition(adapter)).toEqual(candidate.coordinate);
     act(() => root.unmount());
   });

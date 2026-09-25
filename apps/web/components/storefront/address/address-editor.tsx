@@ -586,11 +586,21 @@ export function AddressEditor({
         };
         void confirmCoordinate(nextCoordinate, "DEVICE_LOCATION", generation);
       },
-      () => {
+      (error) => {
         if (generation !== coordinateActionGenerationRef.current) return;
-        setLocationError(
-          "Location permission was not granted. Search for an address or enable location access and try again.",
-        );
+        if (error.code === 1) {
+          setLocationError(
+            "Location access is blocked. Allow location for this site and your browser in device settings, then try again. You can also choose a point on the map.",
+          );
+        } else if (error.code === 3) {
+          setLocationError(
+            "Finding your location took too long. Check that device Location is on and try again, or choose a point on the map.",
+          );
+        } else {
+          setLocationError(
+            "Your device could not determine its location. Check that device Location is on and try again, or choose a point on the map.",
+          );
+        }
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     );
