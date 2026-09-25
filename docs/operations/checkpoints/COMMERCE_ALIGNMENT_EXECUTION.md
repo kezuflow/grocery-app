@@ -1,5 +1,17 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-INVENTORY-REASON-RELEASE-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `ADMIN-INVENTORY-REASON-RELEASE-1`. The owner requested commit, push and deployment of the Add stock/Remove stock Reason-field removal. Acceptance: release the committed source to production Web, retain production bindings and data, verify Core/Web readiness and 100% traffic, and inspect both authenticated confirmation dialogs without submitting a live adjustment.
+
+The source was already committed and pushed to synchronized `main`/`origin/main` at `0b9e1dbe96f4af21e8df307300db5a36e90cdeec`; only unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. Relative to the previous production source `b690ebf7`, the application diff is Web inventory form/test code and guidance, with no Core, schema or provider change. Production Web was version `16b6f093-61c9-403d-a7eb-e25f7265596c` and Core was `83d47789-2a8e-4c27-bed3-6b928b57991f`, each at 100%. Predeploy Web `/health` and `/api/core-health` and Core `/health` were HTTP 200; Core `/ready` reported ready.
+
+Source verification under `ADMIN-INVENTORY-REASON-1` passed focused Web Vitest **4/4**, Web typecheck, format, naming, terminology and lint (two unrelated existing warnings). This release ran `CLOUDFLARE_ENV=production pnpm --filter @freshmarkets/web build`, `node scripts/verify-worker-readiness.mjs` and a strict Web Wrangler deploy dry run successfully with Wrangler 4.127.1. Generated config targeted `freshmarkets-web-production`, canonical `https://freshmarkets.ph`, its Custom Domain and `freshmarkets-core-production#CoreEntrypoint`, with no nested environment. The three required Web and nine required Core production secret names were present; values were not read.
+
+Strict Web deployment from source `0b9e1dbe` produced version `b63fb633-d93a-44ff-9c32-840f7d563973` on `freshmarkets.ph` at 100% traffic. Core remained `83d47789-2a8e-4c27-bed3-6b928b57991f` at 100%. Postrelease Web `/health`, `/api/core-health`, `/admin/inventory` and Core `/health` returned HTTP 200; Core `/ready` remained ready. In an authenticated production in-app browser with Central Cebu scope, both Add stock and Remove stock showed resource, scope, consequence and confirmation without a Reason field. Both dialogs were canceled; no live inventory command, provider transaction, remote D1 write/migration or outbound message occurred. The automatic movement label has source/focused-test evidence but was not verified through a live adjustment.
+
+Completion level: **1 of 1 authorized Web production releases deployed, healthy and visually checked; 0 live adjustments attempted**. Next action: verify the automatic movement label when an authorized operator next records an ordinary stock adjustment; wider Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — ADMIN-INVENTORY-REASON-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `ADMIN-INVENTORY-REASON-1`. The owner requested removal of the operator-entered Reason field from `/admin/inventory` Add stock and Remove stock. Acceptance: both actions retain quantity and confirmation, submit stable adjustment intent, preserve Core authorization/stock/ledger/audit/replay behavior, and show automatic movement labels in history without requiring staff prose.
