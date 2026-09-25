@@ -1,6 +1,12 @@
 import { env } from "cloudflare:workers";
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { MarketplaceController } from "../../components/storefront/marketplace/marketplace-controller";
+import { AnnouncementPopup } from "../../components/storefront/announcement/announcement-popup";
+import {
+  ANNOUNCEMENT_COOKIE,
+  WELCOME_CAMPAIGN_KEY,
+} from "../../components/storefront/announcement/announcement-campaign";
 import { RetryReadButton } from "../../components/storefront/retry-read-button";
 import { coreClient } from "../../lib/core-client/core";
 import { withReadDeadline } from "../../lib/http/read-deadline";
@@ -46,12 +52,19 @@ async function MarketplaceContents({
       ...catalogLocation,
     });
     if (!home.ok) return <CatalogError />;
+    const seenAnnouncement =
+      (await cookies()).get(ANNOUNCEMENT_COOKIE)?.value === WELCOME_CAMPAIGN_KEY;
     return (
-      <MarketplaceController
-        initialSelection={selection}
-        initialHome={normalizeCatalogHome(home.value)}
-        categories={home.value.marketplace.categories}
-      />
+      <>
+        {!seenAnnouncement ? (
+          <AnnouncementPopup schedule={home.value.announcementSchedule} />
+        ) : null}
+        <MarketplaceController
+          initialSelection={selection}
+          initialHome={normalizeCatalogHome(home.value)}
+          categories={home.value.marketplace.categories}
+        />
+      </>
     );
   }
 

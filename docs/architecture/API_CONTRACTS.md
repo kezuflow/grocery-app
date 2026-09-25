@@ -126,12 +126,14 @@ Transformation failure returns 503/no-store and is not cached as a successful im
 - `marketplace.getHome({ marketHint?, addressId? }) -> MarketplaceHomeView`
 - `catalog.search({ query, categoryId?, cursor?, limit? }) -> ProductSearchPage`
 - `catalog.searchMarketplace(...) -> { page, categories, categoriesAvailable }`
-- `marketplace.getStorefrontHome(...) -> { marketplace, banners, bannersAvailable }`
+- `marketplace.getStorefrontHome(...) -> { marketplace, banners, bannersAvailable, announcementSchedule }`
 - `catalog.getProduct({ slug, locationId? }) -> MarketplaceProductView`
 - `catalog.listCategories({ parentId? }) -> CategoryNavigationView`
 - `checkout.listFulfillmentOptions({ addressId, addressVersion, cartId, cartVersion }) -> FulfillmentOptionView[]`
 
 `MarketplaceProductView` includes customer display data and persisted fixed variants with `skuId`, display/packaging label (`500 g`, `1 pack`), optional `Pack`/`Bunch` merchandising label, integer sell quantity, controlled sell-unit code/display (`G`/`KG`/`PC`), exact integer base-unit consumption, Core-resolved media (`src` + `alt`) with ordered customer-facing product details, an approximate assembled-pack contents note, the exact resolved-location quoteable price, availability messaging, and global fulfillment context. Staff packing instructions never appear in any public DTO. It does not expose inventory ledger quantities unless a deliberate customer-facing availability field is defined. Sellable sizes are returned from database configuration, not a hard-coded union. Before location resolution the target permits general catalog browsing without fabricated local price/stock. The first-visit location flow is PRODUCT GD-D21; no Market/global fallback is allowed.
+
+`announcementSchedule` is Core's customer-copy choice: `MONDAY_FRIDAY_SUNDAY` only while Global Scheduled selling is Open and every currently offered Open cycle has a Monday opening, Friday cutoff and Sunday-only arrival window in its configured timezone; otherwise `GENERAL`. This is presentation evidence, not a checkout admission or delivery quote. Web renders versioned announcement copy from the typed choice and never infers a promise from client time or a static campaign image.
 
 `catalog.search` applies query/category/activity/local-activation/exact-location-price predicates database-side before keyset pagination over `(category sort order, product name, product id)`; results are bounded (`limit` 1–50) and `nextCursor` is an opaque token whose malformed values return `VALIDATION_FAILED`. The complete launch catalog is reachable through cursors without truncation. `marketplace.getHome` returns active categories plus bounded category rails (default 8 items per rail, capped at 12) built from one windowed scan and the same eligibility rules as search, never materializing the full catalog into one response. Location-scoped browsing requires a resolved delivery area; checkout revalidates the confirmed customer address rather than treating a remembered browse location as authority.
 

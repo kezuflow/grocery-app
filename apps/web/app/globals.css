@@ -117,6 +117,10 @@ body {
   font-weight: 400;
 }
 
+.fm-storefront :is(button, a) {
+  --fm-radius-control: 9999px;
+}
+
 .fm-order-progress-fill {
   opacity: 0;
   transition: opacity var(--fm-motion-base) var(--fm-ease-out);
