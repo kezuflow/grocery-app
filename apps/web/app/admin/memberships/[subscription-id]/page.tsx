@@ -141,6 +141,7 @@ function MembershipDetailWorkspace({
   useAdminRouteGuard(canManage && reason.trim().length > 0, locked);
   useEffect(() => {
     if (!command.uncertain || confirming) return;
+    restoreTarget.current = retryTrigger.current ?? actionFeedback.current;
     const frame = requestAnimationFrame(() => retryTrigger.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [command.uncertain, confirming]);

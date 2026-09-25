@@ -113,7 +113,8 @@ test("storefront product, cart and account interactions preserve shell identity"
 
   await page.getByRole("link", { name: /^Cart/ }).click();
   await expect(page.getByRole("dialog", { name: "Shopping cart" })).toBeVisible();
-  await page.getByRole("button", { name: "Close cart" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Shopping cart" })).toBeHidden();
   await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(
     page.getByRole("dialog").getByRole("heading", { name: "Account", exact: true }),

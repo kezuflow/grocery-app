@@ -4,6 +4,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
+import type { RefObject } from "react";
 import {
   commandPaletteEntries,
   groupAdminNavigation,
@@ -20,10 +21,12 @@ export function AdminCommandPalette({
   items,
   open,
   onOpenChange,
+  restoreFocusRef,
 }: {
   items: ReadonlyArray<AdminNavigationEntry>;
   open: boolean;
   onOpenChange(next: boolean): void;
+  restoreFocusRef: RefObject<HTMLElement | null>;
 }) {
   const router = useRouter();
   const groups = groupAdminNavigation(items);
@@ -38,10 +41,29 @@ export function AdminCommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none!" />
         <DialogPrimitive.Content
           aria-label="Admin command palette"
-          className="fixed left-1/2 top-[20%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-background)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] duration-(--fm-motion-base) ease-out focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+          onCloseAutoFocus={(event) => {
+            const previous = restoreFocusRef.current;
+            const trigger = document.querySelector<HTMLElement>(
+              'button[aria-label="Open admin search"]:not([disabled])',
+            );
+            const fallback = trigger?.checkVisibility()
+              ? trigger
+              : document.getElementById("main-content");
+            const target =
+              previous &&
+              previous !== document.body &&
+              previous.isConnected &&
+              previous.checkVisibility()
+                ? previous
+                : fallback;
+            if (!target) return;
+            event.preventDefault();
+            target.focus();
+          }}
+          className="fixed left-1/2 top-[20%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-background)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] duration-(--fm-motion-base) ease-out focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none!"
         >
           <DialogPrimitive.Title className="sr-only">Admin command palette</DialogPrimitive.Title>
           <CommandPrimitive label="Admin command palette" className="flex flex-col">

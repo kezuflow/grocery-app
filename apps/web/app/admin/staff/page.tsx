@@ -60,6 +60,7 @@ export default function StaffPage() {
   >(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [loadingMoreRoles, setLoadingMoreRoles] = useState(false);
   const [scopeError, setScopeError] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [readLoading, setReadLoading] = useState(false);
@@ -85,6 +86,7 @@ export default function StaffPage() {
   const load = useCallback(() => {
     const sequence = ++readSequence.current;
     setReadLoading(true);
+    setLoadingMoreRoles(false);
     setState((current) => (current.phase === "ready" ? current : { phase: "loading" }));
     void (async () => {
       try {
@@ -98,21 +100,11 @@ export default function StaffPage() {
             ).then(
               async (response) => (await response.json()) as RpcResult<AdminStaffInvitationPage>,
             ),
-            (async () => {
-              let cursor: string | null = null;
-              const items: AdminRolePage["items"][number][] = [];
-              for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
-                const response = await fetch(
-                  `/api/admin/roles?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-                );
-                const payload = (await response.json()) as RpcResult<AdminRolePage>;
-                if (!payload.ok) throw new Error(payload.error.message);
-                items.push(...payload.value.items);
-                cursor = payload.value.nextCursor;
-                if (!cursor) return { items, nextCursor: null } satisfies AdminRolePage;
-              }
-              throw new Error("Role choices exceed the supported list size.");
-            })(),
+            fetch("/api/admin/roles?limit=100").then(async (response) => {
+              const payload = (await response.json()) as RpcResult<AdminRolePage>;
+              if (!payload.ok) throw new Error(payload.error.message);
+              return payload.value;
+            }),
             fetch("/api/admin/scopes").then(
               async (response) =>
                 (await response.json()) as RpcResult<ReadonlyArray<AdminScopeOptionView>>,
@@ -165,6 +157,36 @@ export default function StaffPage() {
   }, [staffPagination.cursor, invitationPagination.cursor]);
 
   useEffect(() => load(), [load]);
+
+  async function loadRemainingRoles() {
+    if (!roles?.nextCursor || loadingMoreRoles) return;
+    const sequence = readSequence.current;
+    setLoadingMoreRoles(true);
+    let cursor: string | null = roles.nextCursor;
+    const items = [...roles.items];
+    try {
+      for (let pageNumber = 1; cursor && pageNumber < 100; pageNumber += 1) {
+        const response: Response = await fetch(
+          `/api/admin/roles?limit=100&cursor=${encodeURIComponent(cursor)}`,
+        );
+        const payload = (await response.json()) as RpcResult<AdminRolePage>;
+        if (!payload.ok) throw new Error(payload.error.message);
+        items.push(...payload.value.items);
+        cursor = payload.value.nextCursor;
+      }
+      if (cursor) throw new Error("Role choices exceed the supported list size.");
+      if (sequence === readSequence.current) {
+        setRoles({ items, nextCursor: null });
+        setRoleError(null);
+      }
+    } catch {
+      if (sequence === readSequence.current) {
+        setRoleError("Additional role choices could not be loaded. Retry read.");
+      }
+    } finally {
+      if (sequence === readSequence.current) setLoadingMoreRoles(false);
+    }
+  }
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
@@ -303,6 +325,9 @@ export default function StaffPage() {
               <Select
                 value={inviteRole}
                 onValueChange={setInviteRole}
+                onOpenChange={(open) => {
+                  if (open) void loadRemainingRoles();
+                }}
                 disabled={busy || uncertain || Boolean(roleError)}
               >
                 <SelectTrigger aria-label="Invitation role" className="w-56">
@@ -316,6 +341,11 @@ export default function StaffPage() {
                         {role.name}
                       </SelectItem>
                     ))}
+                  {loadingMoreRoles ? (
+                    <p role="status" className="px-2 py-1 text-xs text-[var(--fm-text-muted)]">
+                      Loading more roles…
+                    </p>
+                  ) : null}
                 </SelectContent>
               </Select>
               <Select

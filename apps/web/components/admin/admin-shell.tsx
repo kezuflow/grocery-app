@@ -103,6 +103,7 @@ export function AdminShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const searchRestoreTarget = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
   const productDetailWorkspace =
     pathname.startsWith("/admin/catalog/products/") &&
@@ -120,12 +121,22 @@ export function AdminShell({
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setCommandOpen((open) => !open);
+        if (!commandOpen) {
+          searchRestoreTarget.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }
+        setCommandOpen(!commandOpen);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [commandOpen]);
+
+  function openSearch() {
+    searchRestoreTarget.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setCommandOpen(true);
+  }
 
   function changeCollapsed(next: boolean) {
     setCollapsed(next);
@@ -134,14 +145,19 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
-      <AdminCommandPalette items={items} open={commandOpen} onOpenChange={setCommandOpen} />
+      <AdminCommandPalette
+        items={items}
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        restoreFocusRef={searchRestoreTarget}
+      />
       <AdminHeader
         items={items}
         scopeLabel={scopeLabel}
         environment={environment}
         collapsed={collapsed}
         onCollapsedChange={changeCollapsed}
-        onOpenSearch={() => setCommandOpen(true)}
+        onOpenSearch={openSearch}
       />
       <div className="flex min-h-[calc(100vh-3.5rem)]">
         <AdminSidebar items={items} collapsed={collapsed} onCollapsedChange={changeCollapsed} />
@@ -269,14 +285,14 @@ function AdminThemeToggle() {
     >
       <Sun
         className={cn(
-          "absolute size-4 transition-[transform,opacity] duration-200",
+          "absolute size-4 transition-[transform,opacity] duration-200 motion-reduce:transition-none",
           dark ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100",
         )}
         aria-hidden="true"
       />
       <Moon
         className={cn(
-          "absolute size-4 transition-[transform,opacity] duration-200",
+          "absolute size-4 transition-[transform,opacity] duration-200 motion-reduce:transition-none",
           dark ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0",
         )}
         aria-hidden="true"

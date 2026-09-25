@@ -73,6 +73,49 @@ test("the desktop shell defaults to an expanded sidebar and persists an explicit
   await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible();
 });
 
+test("the desktop theme and search respect keyboard focus and reduced motion", async ({
+  adminPage,
+}, testInfo) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  await adminPage.emulateMedia({ reducedMotion: "reduce" });
+  await adminPage.goto("/admin");
+  const darkToggle = adminPage.getByRole("button", { name: "Switch to dark mode" });
+  await darkToggle.click();
+  await expect(adminPage.locator("html")).toHaveClass(/fm-admin-dark/);
+  await expect(adminPage.getByRole("button", { name: "Switch to light mode" })).toBeVisible();
+  expect(
+    await adminPage
+      .getByRole("button", { name: "Switch to light mode" })
+      .locator("svg")
+      .first()
+      .evaluate((icon) => getComputedStyle(icon).transitionProperty),
+  ).toBe("none");
+  await adminPage.reload();
+  await expect(adminPage.locator("html")).toHaveClass(/fm-admin-dark/);
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(adminPage.getByText("Open orders", { exact: true })).toBeVisible();
+  await adminPage.screenshot({ path: testInfo.outputPath("admin-dark-1440.png") });
+
+  const search = adminPage.getByRole("button", { name: "Open admin search" });
+  await search.focus();
+  await adminPage.keyboard.press("Control+k");
+  const palette = adminPage.getByRole("dialog", { name: "Admin command palette" });
+  await expect(palette).toBeVisible();
+  await expect(palette.getByRole("combobox")).toBeFocused();
+  expect(await palette.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+  await adminPage.screenshot({ path: testInfo.outputPath("admin-search-1440.png") });
+  await adminPage.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  await expect(search).toBeFocused();
+
+  const refresh = adminPage.getByRole("button", { name: "Refresh" });
+  await refresh.focus();
+  await adminPage.keyboard.press("Control+k");
+  await expect(palette.getByRole("combobox")).toBeFocused();
+  await adminPage.keyboard.press("Escape");
+  await expect(refresh).toBeFocused();
+});
+
 test("scope changes keep the notification control in a stable header position", async ({
   adminPage,
 }) => {

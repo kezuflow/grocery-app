@@ -33,6 +33,52 @@ test("a provisioned Staff reader opens the real Staff workspace", async ({ admin
   await expect(adminPage.getByRole("heading", { level: 1, name: "Staff & Access" })).toBeVisible();
 });
 
+test("Staff defers additional role pages until the invitation chooser opens at 1440px", async ({
+  adminPage,
+}) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  const roleRequests: string[] = [];
+  let secondRole: Record<string, unknown> | null = null;
+  await adminPage.route("**/api/admin/roles?**", async (route) => {
+    const url = new URL(route.request().url());
+    roleRequests.push(url.search);
+    if (url.searchParams.get("cursor") === "second-role-page") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          requestId: "staff-roles-second-page",
+          value: { items: [secondRole], nextCursor: null },
+        }),
+      });
+      return;
+    }
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      ok: boolean;
+      value?: { items: Array<Record<string, unknown>>; nextCursor: string | null };
+    };
+    expect(payload.ok).toBe(true);
+    expect(payload.value?.items.length).toBeGreaterThan(0);
+    secondRole = {
+      ...payload.value!.items[0],
+      roleId: "deferred-role-choice",
+      name: "Deferred role choice",
+      status: "ACTIVE",
+    };
+    payload.value!.nextCursor = "second-role-page";
+    await route.fulfill({ response, body: JSON.stringify(payload) });
+  });
+
+  await adminPage.goto("/admin/staff");
+  const chooser = adminPage.getByRole("combobox", { name: "Invitation role" });
+  await expect(chooser).toBeVisible();
+  expect(roleRequests).toHaveLength(1);
+  await chooser.click();
+  await expect(adminPage.getByRole("option", { name: "Deferred role choice" })).toBeVisible();
+  expect(roleRequests).toHaveLength(2);
+});
+
 test("a Staff principal without capability is denied the Staff workspace", async ({
   deniedAdminPage,
 }) => {
