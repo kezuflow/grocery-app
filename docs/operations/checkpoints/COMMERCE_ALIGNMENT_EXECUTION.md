@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — SCHEDULED-CUTOFF-BACKDATE-1 (2026-09-26)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SCHEDULED-CUTOFF-BACKDATE-1`. The owner requested changing the Sep 27 Scheduled week's order cutoff to Sep 25, 2026 at 11:59 PM Asia/Manila. Acceptance would be the live cycle displaying that cutoff and preserving payment/Order commitments. This request could not be executed through the approved cycle command.
+
+Started on synchronized `main`/`origin/main` at `5597dea0`; unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. At 2026-09-26 01:43:21 Asia/Manila, the requested cutoff was already in the past. Authenticated production Scheduled cycles read showed the Sep 27 cycle `Open`, Central Cebu, with cutoff Sep 26 11:59 PM and “Deactivate unavailable: Orders require coordinated operational and financial resolution”; its details panel exposes no Edit action. Core's `saveAdminDeliveryCycleDraft` explicitly accepts edits only in `DRAFT`, and schedule validation requires a future cutoff. This cycle has a paid Order; the previous weekly read also showed unresolved payment confirmation. Backdating through a direct data write would bypass those guards and cannot retroactively change immutable customer/started-payment snapshots.
+
+Verification: read-only live `/admin/settings/scheduled-cycles` panel; inspected Core cycle command/validation, Web cycle editor/details and `API_CONTRACTS.md`. No live cycle, Order, payment or stock mutation; no code behavior change, tests, deployment or provider operation. Completion level: **0 of 1 requested live cutoff changes; 1 of 1 supported-path blocker established**. Next action: clarify whether the owner instead wants the default for new Sunday cycles to be Friday 11:59 PM, or a separately designed early-close operation for an already Open week that preserves existing commitments and resolves pending payment readiness before purchase. The current cycle remains at Sep 26 11:59 PM; wider Phase 7 acceptance remains open.
+
 ## Latest owner request — FULFILLMENT-POS-POLLING-VERIFY-1 (2026-09-26)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `FULFILLMENT-POS-POLLING-VERIFY-1`. The owner asked whether `/admin/fulfillment` and `/admin/point-of-sale` still poll. Acceptance: report the active source behavior and verify that both production pages expose the shared workspace without a live write.
