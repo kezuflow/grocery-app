@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-PRODUCT-NUMBERED-PAGINATION-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `ADMIN-PRODUCT-NUMBERED-PAGINATION-1`. Acceptance: show clickable numbered pages on `/admin/catalog/products` while keeping the current authorized, filter-scoped cursor query and URL/back-forward behavior. The owner explicitly called this a small UI change and objected to unnecessary browser testing; verification is focused accordingly. This authorizes a reviewed source commit and main push, not production deployment.
+
+Started on synchronized `main` at `f7e3ff11`; unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. Product pagination now shows current and previous page numbers plus the next page only when Core supplies a cursor. Earlier known pages are directly clickable, and the visible number range stays bounded. Existing Previous/Next controls and URL cursor history remain in place; filters still reset pagination. No Core, contract, schema, provider or live commerce operation changed. The cursor API does not return a total page count, so the UI does not claim one.
+
+Focused Web pagination, shared control and accessibility tests passed **19/19**; Web typecheck and `git diff --check` passed on the working tree. No browser test or broad application suite was run, following the owner's correction. Production Products pagination remains unchanged until a separately authorized Web release.
+
+Completion level: **1 of 1 requested source UI changes implemented; 0 of 1 production releases accepted**. Next action: on a separately authorized Web production release, check the numbered Products list with its real cursor pages.
+
 ## Latest owner request — CATALOG-PACK-UNIT-CLARITY-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `CATALOG-PACK-UNIT-CLARITY-1`. Acceptance: remove the misleading universal `1 PACK = 1 PIECE` Catalog overview row from current authoring, explain how staff count actual named-size packs, reject new packaging-unit authoring, and preserve historical SKUs. This request authorizes a reviewed source commit and main push; it does not authorize production deployment or a live stock command.

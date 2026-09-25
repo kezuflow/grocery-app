@@ -421,6 +421,7 @@ export function ProductsPageClient({
             nextCursor={payload.value.nextCursor}
             onPrevious={pagination.previous}
             onNext={pagination.next}
+            onPage={pagination.goToPage}
           />
         </>
       ) : null}

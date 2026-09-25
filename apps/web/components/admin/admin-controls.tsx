@@ -60,17 +60,26 @@ export function AdminCursorPagination({
   pending = false,
   onPrevious,
   onNext,
+  onPage,
 }: {
   pageNumber: number;
   nextCursor: string | null;
   pending?: boolean;
   onPrevious(): void;
   onNext(cursor: string): void;
+  onPage?(pageNumber: number): void;
 }) {
+  const lastKnownPage = pageNumber + (nextCursor === null ? 0 : 1);
+  const numberedPages =
+    lastKnownPage <= 7
+      ? Array.from({ length: lastKnownPage }, (_, index) => index + 1)
+      : [...new Set([1, pageNumber - 1, pageNumber, pageNumber + 1, lastKnownPage])]
+          .filter((page) => page >= 1 && page <= lastKnownPage)
+          .sort((a, b) => a - b);
   return (
     <nav
       aria-label="Results pagination"
-      className="flex items-center justify-end gap-2 border-t border-[var(--fm-border)] p-3"
+      className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--fm-border)] p-3"
     >
       <Button
         type="button"
@@ -81,7 +90,40 @@ export function AdminCursorPagination({
       >
         Previous
       </Button>
-      <span className="text-xs text-[var(--fm-text-muted)]">Page {pageNumber}</span>
+      {onPage ? (
+        <div className="flex items-center gap-1" aria-label="Page numbers">
+          {numberedPages.map((page, index) => (
+            <div key={page} className="flex items-center gap-1">
+              {index > 0 && page - numberedPages[index - 1]! > 1 ? (
+                <span aria-hidden="true" className="px-1 text-[var(--fm-text-muted)]">
+                  …
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={page === pageNumber ? "default" : "outline"}
+                className="min-w-9"
+                aria-label={`Page ${page}`}
+                aria-current={page === pageNumber ? "page" : undefined}
+                disabled={pending}
+                onClick={() => {
+                  if (page === pageNumber) return;
+                  if (page === pageNumber + 1) {
+                    if (nextCursor) onNext(nextCursor);
+                  } else {
+                    onPage(page);
+                  }
+                }}
+              >
+                {page}
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-[var(--fm-text-muted)]">Page {pageNumber}</span>
+      )}
       <Button
         type="button"
         size="sm"
@@ -148,6 +190,18 @@ export function useAdminUrlPagination(pathname: string) {
       const next = new URLSearchParams(searchParams.toString());
       next.append("cursorHistory", cursor ?? "");
       next.set("cursor", nextCursor);
+      navigate(next);
+    },
+    goToPage(pageNumber: number) {
+      if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > history.length + 1)
+        return;
+      if (pageNumber === history.length + 1) return;
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("cursorHistory");
+      for (const prior of history.slice(0, pageNumber - 1)) next.append("cursorHistory", prior);
+      const pageCursor = pageNumber === 1 ? null : history[pageNumber - 1];
+      if (pageCursor) next.set("cursor", pageCursor);
+      else next.delete("cursor");
       navigate(next);
     },
     previous() {
