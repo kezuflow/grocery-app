@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import type {
   AdminCycleDestinations,
   AdminDeliveryCyclePage,
@@ -196,6 +196,10 @@ function FieldError({
 export function CycleEditor({
   draft,
   mode,
+  step,
+  setStep,
+  reviewed,
+  setReviewed,
   markets,
   timezone,
   destinations,
@@ -212,6 +216,10 @@ export function CycleEditor({
 }: {
   draft: DeliveryCycleDraft;
   mode: "new" | "edit" | "duplicate";
+  step: number;
+  setStep: Dispatch<SetStateAction<number>>;
+  reviewed: boolean;
+  setReviewed: Dispatch<SetStateAction<boolean>>;
   markets: AdminDeliveryCyclePage["markets"];
   timezone: string;
   destinations: AdminCycleDestinations;
@@ -226,8 +234,6 @@ export function CycleEditor({
   onRetry(): void;
   onLoadMoreDestinations(): void;
 }) {
-  const [step, setStep] = useState(1);
-  const [reviewed, setReviewed] = useState(false);
   const errors = useMemo(() => validateCycleDraft(draft), [draft]);
   const delivery = draft.windows[0];
   const deliveryStart = instantToBusinessFields(delivery?.startsAt ?? "", timezone);
@@ -295,15 +301,8 @@ export function CycleEditor({
           </h2>
           <p className="mt-1 text-sm text-[var(--fm-text-muted)]">Plan in {timezone}</p>
         </div>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label="Close cycle editor"
-          disabled={pending}
-          onClick={onCancel}
-        >
-          <X aria-hidden className="size-4" />
+        <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
+          Discard
         </Button>
       </header>
       <fieldset disabled={pending} className="contents">
@@ -329,7 +328,7 @@ export function CycleEditor({
               </div>
               {markets.length > 1 ? (
                 <div className="space-y-1.5">
-                  <Label>Market</Label>
+                  <Label>Business</Label>
                   <Select
                     value={draft.marketId}
                     onValueChange={(marketId) =>
@@ -337,7 +336,7 @@ export function CycleEditor({
                     }
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Choose market" />
+                      <SelectValue placeholder="Choose business" />
                     </SelectTrigger>
                     <SelectContent>
                       {markets.map((market) => (

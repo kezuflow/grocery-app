@@ -107,10 +107,16 @@ for (const width of [1440, 390]) {
     }
     await editor.getByRole("button", { name: "Continue", exact: true }).click();
     await editor.getByLabel("Planning note", { exact: true }).fill("Prepare weekly service");
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await editor.getByRole("button", { name: "Discard", exact: true }).click();
+    await expect(editor.getByLabel("Planning note", { exact: true })).toHaveValue(
+      "Prepare weekly service",
+    );
     await page.screenshot({
       path: testInfo.outputPath("scheduled-cycle-review.png"),
-      fullPage: true,
+      fullPage: false,
     });
+    await expect(editor.getByRole("heading", { name: "Review and save" })).toBeVisible();
 
     const attempts: { key: string | undefined; body: string | null }[] = [];
     await page.route("**/api/admin/delivery-cycles", async (route) => {
@@ -128,6 +134,11 @@ for (const width of [1440, 390]) {
 
     await editor.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(editor.getByLabel("Planning note", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Previous calendar period" })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Refresh visible calendar range" }),
+    ).toBeDisabled();
+    await expect(page.getByRole("button", { name: "month", exact: true })).toBeDisabled();
     await editor.getByRole("button", { name: "Retry unconfirmed request" }).click();
     const details =
       width >= 1280
@@ -142,13 +153,14 @@ for (const width of [1440, 390]) {
     const activate = page.getByRole("alertdialog");
     await expect(activate).toContainText("locks the schedule for editing");
     await activate.getByRole("button", { name: "Activate cycle", exact: true }).click();
+    await expect(details.getByRole("button", { name: "Close cycle details" })).toBeDisabled();
     await details.getByRole("button", { name: "Retry unconfirmed request" }).click();
     await expect(details).toContainText("Scheduled");
     await expect(details.getByRole("button", { name: "Edit draft" })).toHaveCount(0);
     expect(attempts).toHaveLength(4);
     expect(attempts[1]).toEqual(attempts[0]);
     expect(attempts[3]).toEqual(attempts[2]);
-    await page.screenshot({ path: testInfo.outputPath("scheduled-cycle.png"), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("scheduled-cycle.png"), fullPage: false });
 
     await details.getByRole("button", { name: "Deactivate", exact: true }).click();
     const deactivate = page.getByRole("alertdialog");
@@ -159,6 +171,27 @@ for (const width of [1440, 390]) {
     await expect(details).toContainText("Canceled");
     expect(attempts).toHaveLength(6);
     expect(attempts[5]).toEqual(attempts[4]);
-    await page.screenshot({ path: testInfo.outputPath("canceled-cycle.png"), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("canceled-cycle.png"), fullPage: false });
+
+    await page.route("**/api/admin/delivery-cycles?**", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      if (route.request().method() !== "GET" || !requestUrl.searchParams.has("rangeStart"))
+        return route.continue();
+      if (requestUrl.searchParams.get("status") === "DRAFT") return route.abort("failed");
+      const response = await route.fetch();
+      const body = await response.json();
+      if (body.ok) body.value.canManage = false;
+      await route.fulfill({ response, json: body });
+    });
+    await page.getByRole("button", { name: "Refresh visible calendar range" }).click();
+    await expect(details.getByRole("button", { name: "Duplicate" })).toHaveCount(0);
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "draft", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Scheduled cycle calendar" })).toContainText(
+      "The new range is unavailable",
+    );
+    await expect(page.getByRole("region", { name: "Scheduled cycle calendar" })).not.toContainText(
+      name,
+    );
   });
 }

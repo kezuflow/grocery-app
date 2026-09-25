@@ -30,6 +30,8 @@ import { Sheet, SheetContent } from "../ui/sheet";
 import { CycleCalendar } from "./delivery-cycles/cycle-calendar";
 import { CycleDetailsPanel } from "./delivery-cycles/cycle-details-panel";
 import { CycleEditor } from "./delivery-cycles/cycle-editor";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 import {
   addBusinessDays,
   businessFieldsToInstant,
@@ -164,7 +166,7 @@ function ResponsivePanel({
 }) {
   const [docked, setDocked] = useState(false);
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 1280px)");
+    const media = window.matchMedia("(min-width: 1440px)");
     const update = () => setDocked(media.matches);
     update();
     media.addEventListener("change", update);
@@ -199,6 +201,8 @@ export function DeliveryCyclesWorkspace({
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DeliveryCycleDraft | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("new");
+  const [editorStep, setEditorStep] = useState(1);
+  const [editorReviewed, setEditorReviewed] = useState(false);
   const [destinations, setDestinations] = useState<AdminCycleDestinations>({
     items: [],
     nextCursor: null,
@@ -211,13 +215,23 @@ export function DeliveryCyclesWorkspace({
   const [locationFilter, setLocationFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<DeliveryCycleState | "all">("all");
   const [visibleRange, setVisibleRange] = useState<Range | null>(null);
-  const [notice, setNotice] = useState(initial.ok ? "" : initial.error.message);
+  const [notice, setNotice] = useState("");
+  const [readError, setReadError] = useState<string | null>(
+    initial.ok ? null : initial.error.message,
+  );
   const [loading, setLoading] = useState(false);
   const [rangeIncomplete, setRangeIncomplete] = useState(false);
   const [pending, setPending] = useState<Command | null>(null);
   const loadSequence = useRef(0);
+  const loadedRangeKey = useRef<string | null>(null);
+  const refreshAfterCommand = useRef(false);
   const destinationLoadSequence = useRef(0);
   const intent = useAdminCommandIntent();
+  const locked = pending !== null || intent.pending;
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  useAdminScopeGuard(draft !== null, locked, () => setDraft(null));
+  useAdminRouteGuard(draft !== null, locked);
   const marketId =
     draft?.marketId ?? (marketFilter === "all" ? page?.markets[0]?.marketId : marketFilter) ?? "";
   const timezone =
@@ -270,6 +284,8 @@ export function DeliveryCyclesWorkspace({
 
   const loadRange = useCallback(
     async (range: Range) => {
+      if (lockedRef.current) return;
+      const queryKey = JSON.stringify([range, marketFilter, locationFilter, statusFilter]);
       const sequence = ++loadSequence.current;
       setLoading(true);
       setRangeIncomplete(false);
@@ -289,7 +305,7 @@ export function DeliveryCyclesWorkspace({
           combined = [...combined, ...result.value.items];
           cursor = result.value.nextCursor;
           if (!cursor) {
-            if (sequence !== loadSequence.current) return;
+            if (sequence !== loadSequence.current || lockedRef.current) return;
             setPage((current) => ({
               ...result.value,
               markets: result.value.markets.length
@@ -299,18 +315,26 @@ export function DeliveryCyclesWorkspace({
               nextCursor: null,
             }));
             setNotice("");
+            setReadError(null);
+            loadedRangeKey.current = queryKey;
             return;
           }
         }
         throw new Error("Cycle range exceeded the supported page limit.");
       } catch (error) {
-        if (sequence !== loadSequence.current) return;
+        if (sequence !== loadSequence.current || lockedRef.current) return;
         if (combined.length) {
           setPage((current) => (current ? { ...current, items: combined } : current));
           setRangeIncomplete(true);
+          setReadError(null);
+          loadedRangeKey.current = queryKey;
         } else {
-          setNotice(
-            error instanceof Error ? error.message : "Cycles could not be loaded. Retry refresh.",
+          if (loadedRangeKey.current !== queryKey) {
+            setPage((current) => (current ? { ...current, items: [] } : current));
+            setSelectedCycleId(null);
+          }
+          setReadError(
+            `${error instanceof Error ? error.message : "Cycles could not be loaded."} ${loadedRangeKey.current === queryKey ? "Showing the last loaded cycles." : "The new range is unavailable."}`,
           );
         }
       } finally {
@@ -324,9 +348,19 @@ export function DeliveryCyclesWorkspace({
     if (visibleRange) void loadRange(visibleRange);
   }, [loadRange, visibleRange]);
 
+  useEffect(() => {
+    if (!locked && refreshAfterCommand.current && visibleRange) {
+      refreshAfterCommand.current = false;
+      void loadRange(visibleRange);
+    }
+  }, [loadRange, locked, visibleRange]);
+
   async function submit(command: Command) {
     if (intent.pending) return;
     const submitted = pending ?? command;
+    if (loading) refreshAfterCommand.current = true;
+    loadSequence.current += 1;
+    setLoading(false);
     setPending(submitted);
     try {
       const result = await intent.submit(async (key) =>
@@ -375,9 +409,16 @@ export function DeliveryCyclesWorkspace({
     }
   }
 
+  const discardDraft = () => {
+    if (locked) return false;
+    return !draft || window.confirm("Discard unsaved cycle changes?");
+  };
   const openNew = (date?: string) => {
+    if (!discardDraft()) return;
     setDraft(date ? blankForDeliveryDate(marketId, date, timezone) : blank(marketId));
     setEditorMode("new");
+    setEditorStep(1);
+    setEditorReviewed(false);
     setSelectedCycleId(null);
   };
   const onDatesSet = (info: DatesSetInfo) => {
@@ -389,7 +430,7 @@ export function DeliveryCyclesWorkspace({
     );
   };
   const panelOpen = Boolean(draft || selectedCycle);
-  const disabled = pending !== null || intent.pending;
+  const disabled = locked;
   if (adminState.phase === "ready" && adminState.selectedScope?.kind !== "GLOBAL" && !pending)
     return <p>Select Global to administer Scheduled cycles.</p>;
   return (
@@ -432,15 +473,18 @@ export function DeliveryCyclesWorkspace({
             selectedCycleId={selectedCycleId}
             draft={draft}
             loading={loading}
+            error={readError}
             rangeIncomplete={rangeIncomplete}
             canCreate={Boolean(page?.canManage) && !disabled}
+            interactionLocked={disabled}
             filters={
               <>
                 {page && page.markets.length > 1 ? (
                   <label className="block">
-                    <span className="sr-only">Market</span>
+                    <span className="sr-only">Business</span>
                     <Select
                       value={marketFilter}
+                      disabled={disabled || draft !== null}
                       onValueChange={(value) => {
                         setMarketFilter(value);
                         setLocationFilter("all");
@@ -461,7 +505,11 @@ export function DeliveryCyclesWorkspace({
                 ) : null}
                 <label className="block">
                   <span className="sr-only">Location</span>
-                  <Select value={locationFilter} onValueChange={setLocationFilter}>
+                  <Select
+                    value={locationFilter}
+                    disabled={disabled || draft !== null}
+                    onValueChange={setLocationFilter}
+                  >
                     <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
                       <SelectValue />
                     </SelectTrigger>
@@ -479,6 +527,7 @@ export function DeliveryCyclesWorkspace({
                   <span className="sr-only">Status</span>
                   <Select
                     value={statusFilter}
+                    disabled={disabled || draft !== null}
                     onValueChange={(value) => setStatusFilter(value as DeliveryCycleState | "all")}
                   >
                     <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
@@ -498,23 +547,26 @@ export function DeliveryCyclesWorkspace({
             }
             onRangeChange={onDatesSet}
             onSelectCycle={(cycleId) => {
+              if (!discardDraft()) return;
               setDraft(null);
               setSelectedCycleId(cycleId);
             }}
             onEmptyDate={(date) => page?.canManage && openNew(date)}
             onDateRange={(startDate, endDateExclusive) => {
-              if (!page?.canManage) return;
+              if (!page?.canManage || !discardDraft()) return;
               setDraft(blankForPlanningRange(marketId, startDate, endDateExclusive, timezone));
               setEditorMode("new");
+              setEditorStep(1);
+              setEditorReviewed(false);
               setSelectedCycleId(null);
             }}
-            onRefresh={() => visibleRange && void loadRange(visibleRange)}
+            onRefresh={() => visibleRange && !disabled && void loadRange(visibleRange)}
           />
         </div>
         <ResponsivePanel
           open={panelOpen}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && discardDraft()) {
               setDraft(null);
               setSelectedCycleId(null);
             }
@@ -524,6 +576,10 @@ export function DeliveryCyclesWorkspace({
             <CycleEditor
               draft={draft}
               mode={editorMode}
+              step={editorStep}
+              setStep={setEditorStep}
+              reviewed={editorReviewed}
+              setReviewed={setEditorReviewed}
               markets={page?.markets ?? []}
               timezone={timezone}
               destinations={destinations}
@@ -533,7 +589,9 @@ export function DeliveryCyclesWorkspace({
               submitting={intent.pending}
               retryAvailable={pending !== null}
               onChange={setDraft}
-              onCancel={() => setDraft(null)}
+              onCancel={() => {
+                if (discardDraft()) setDraft(null);
+              }}
               onSave={(value) => {
                 const parsed = deliveryCycleDraftSchema.safeParse(value);
                 if (parsed.success) void submit({ action: "SAVE", ...parsed.data });
@@ -554,10 +612,14 @@ export function DeliveryCyclesWorkspace({
               onEdit={() => {
                 setDraft(draftFromCycle(selectedCycle));
                 setEditorMode("edit");
+                setEditorStep(1);
+                setEditorReviewed(false);
               }}
               onDuplicate={() => {
                 setDraft(duplicateFromCycle(selectedCycle));
                 setEditorMode("duplicate");
+                setEditorStep(1);
+                setEditorReviewed(false);
                 setSelectedCycleId(null);
               }}
               onCommand={(action, reason) =>

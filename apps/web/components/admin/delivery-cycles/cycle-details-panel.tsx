@@ -74,6 +74,26 @@ export function CycleDetailsPanel({
                     : "success"
               }
             />
+            {!retryAvailable && editable ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending || !cycle.pickupAt || cycle.windows.length !== 1}
+                onClick={() => setConfirmation("activate")}
+              >
+                <Power aria-hidden className="size-3.5" /> Activate cycle
+              </Button>
+            ) : !retryAvailable && deactivatable ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={pending}
+                onClick={() => setConfirmation("deactivate")}
+              >
+                <PowerOff aria-hidden className="size-3.5" /> Deactivate
+              </Button>
+            ) : null}
           </div>
           <p className="text-sm text-[var(--fm-text-muted)]">
             {locationNames.join(", ") || "No fulfillment locations"}
@@ -86,6 +106,7 @@ export function CycleDetailsPanel({
           size="icon"
           variant="ghost"
           aria-label="Close cycle details"
+          disabled={pending}
           onClick={onClose}
         >
           <X aria-hidden className="size-4" />
@@ -170,43 +191,31 @@ export function CycleDetailsPanel({
             <Pencil aria-hidden className="size-3.5" /> Edit draft
           </Button>
         ) : null}
-        {!retryAvailable ? (
+        {canManage && !retryAvailable ? (
           <Button
             type="button"
             variant="outline"
-            className={!editable && !deactivatable ? "col-span-2" : undefined}
+            className="col-span-2"
             disabled={pending}
             onClick={onDuplicate}
           >
             <Copy aria-hidden className="size-3.5" /> Duplicate
           </Button>
         ) : null}
-        {!retryAvailable && editable ? (
-          <Button
-            type="button"
-            className="w-full"
-            disabled={pending || !cycle.pickupAt || cycle.windows.length !== 1}
-            onClick={() => setConfirmation("activate")}
-          >
-            <Power aria-hidden className="size-3.5" /> Activate cycle
-          </Button>
-        ) : !retryAvailable && deactivatable ? (
-          <Button
-            type="button"
-            variant="destructive"
-            className="w-full"
-            disabled={pending}
-            onClick={() => setConfirmation("deactivate")}
-          >
-            <PowerOff aria-hidden className="size-3.5" /> Deactivate
-          </Button>
-        ) : null}
       </footer>
+      {editable && (!cycle.pickupAt || cycle.windows.length !== 1) ? (
+        <p className="border-t border-[var(--fm-border)] px-4 py-2 text-xs text-[var(--fm-text-muted)]">
+          Activate unavailable:{" "}
+          {cycle.windows.length !== 1
+            ? "This cycle has multiple delivery ranges."
+            : "Add a planned pickup time and save the draft."}
+        </p>
+      ) : null}
       <AdminConfirmationDialog
         open={confirmation !== null}
         title={confirmation === "activate" ? "Activate this cycle?" : "Deactivate this cycle?"}
         resource={cycle.name}
-        scope={cycle.marketName}
+        scope="Global"
         consequence={
           confirmation === "activate"
             ? "Activation makes the cycle eligible for ordering at its opening time and locks the schedule for editing."

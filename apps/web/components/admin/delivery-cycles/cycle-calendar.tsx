@@ -34,8 +34,10 @@ export function CycleCalendar({
   selectedCycleId,
   draft,
   loading,
+  error,
   rangeIncomplete,
   canCreate,
+  interactionLocked,
   filters,
   onRangeChange,
   onSelectCycle,
@@ -48,8 +50,10 @@ export function CycleCalendar({
   selectedCycleId: string | null;
   draft: DeliveryCycleDraft | null;
   loading: boolean;
+  error: string | null;
   rangeIncomplete: boolean;
   canCreate: boolean;
+  interactionLocked: boolean;
   filters?: ReactNode;
   onRangeChange(info: DatesSetInfo): void;
   onSelectCycle(cycleId: string): void;
@@ -91,7 +95,13 @@ export function CycleCalendar({
     >
       <div className="flex flex-wrap items-end gap-2 border-b border-[var(--fm-border)] p-3">
         <div className="flex items-center gap-1">
-          <Button type="button" size="sm" variant="outline" onClick={() => controller.today()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={interactionLocked}
+            onClick={() => controller.today()}
+          >
             Today
           </Button>
           <Button
@@ -99,6 +109,7 @@ export function CycleCalendar({
             size="icon"
             variant="ghost"
             aria-label="Previous calendar period"
+            disabled={interactionLocked}
             onClick={() => controller.prev()}
           >
             <ChevronLeft aria-hidden className="size-4" />
@@ -111,6 +122,7 @@ export function CycleCalendar({
             size="icon"
             variant="ghost"
             aria-label="Next calendar period"
+            disabled={interactionLocked}
             onClick={() => controller.next()}
           >
             <ChevronRight aria-hidden className="size-4" />
@@ -125,7 +137,7 @@ export function CycleCalendar({
             size="sm"
             variant="ghost"
             aria-label="Refresh visible calendar range"
-            disabled={loading}
+            disabled={loading || interactionLocked}
             onClick={onRefresh}
           >
             <RotateCw aria-hidden className={cn("size-3.5", loading && "animate-spin")} />
@@ -143,8 +155,9 @@ export function CycleCalendar({
                 size="sm"
                 variant="ghost"
                 aria-pressed={view === option}
+                disabled={interactionLocked}
                 className={cn(
-                  "h-7 capitalize",
+                  "min-h-9 capitalize",
                   view === option && "bg-[var(--fm-admin-surface)] shadow-sm",
                 )}
                 onClick={() => changeView(option)}
@@ -160,7 +173,15 @@ export function CycleCalendar({
           This range could not be fully loaded. Refresh to try again.
         </p>
       ) : null}
-      {!loading && cycles.length === 0 ? (
+      {error ? (
+        <p
+          role="alert"
+          className="border-b border-[var(--fm-border)] px-4 py-2 text-sm text-[var(--fm-destructive)]"
+        >
+          Cycles could not be loaded: {error} Use Refresh to try again.
+        </p>
+      ) : null}
+      {!loading && !error && cycles.length === 0 ? (
         <p className="border-b border-[var(--fm-border)] px-4 py-2 text-sm text-[var(--fm-text-muted)]">
           No cycles in this range. Select an empty date to start one.
         </p>
@@ -199,7 +220,7 @@ export function CycleCalendar({
           scrollTime="05:00:00"
           eventTimeFormat={{ hour: "numeric", minute: "2-digit" }}
           events={events}
-          selectable={canCreate && view === "month" && !loading}
+          selectable={canCreate && view === "month" && !loading && !interactionLocked}
           selectMirror
           selectMinDistance={8}
           selectLongPressDelay={350}
@@ -207,18 +228,20 @@ export function CycleCalendar({
             setView(viewName(info.view.type));
             onRangeChange(info);
           }}
-          dateClick={(info: DateClickInfo) => onEmptyDate(info.dateStr.slice(0, 10))}
+          dateClick={(info: DateClickInfo) => {
+            if (!interactionLocked) onEmptyDate(info.dateStr.slice(0, 10));
+          }}
           select={(info: DateSelectInfo) => {
-            if (!info.allDay) return;
+            if (!info.allDay || interactionLocked) return;
             onDateRange(info.startStr.slice(0, 10), info.endStr.slice(0, 10));
           }}
           eventClick={(info: EventClickInfo) => {
             info.jsEvent.preventDefault();
-            if (!info.event.extendedProps.draft)
+            if (!interactionLocked && !info.event.extendedProps.draft)
               onSelectCycle(String(info.event.extendedProps.cycleId));
           }}
           eventClass={eventClass}
-          noEventsText="No cycles in this range"
+          noEventsText={error ? "Cycles unavailable" : "No cycles in this range"}
         />
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[var(--fm-border)] px-4 py-3 text-xs text-[var(--fm-text-muted)]">
