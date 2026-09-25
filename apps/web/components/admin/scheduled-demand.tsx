@@ -93,7 +93,10 @@ export function ScheduledDemand({
                 <p className="font-semibold">{item.productName}</p>
                 <p className="text-sm text-[var(--fm-text-muted)]">{item.variantName}</p>
                 <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
-                  Recorded shipping weight: {item.shippingGrams.toLocaleString("en-PH")} g
+                  Recorded shipping weight:{" "}
+                  {item.shippingGrams === null
+                    ? "Not recorded"
+                    : `${item.shippingGrams.toLocaleString("en-PH")} g`}
                 </p>
               </TableCell>
               <TableCell className="col-span-2 text-sm lg:col-span-1">

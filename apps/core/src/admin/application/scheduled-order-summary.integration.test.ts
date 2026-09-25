@@ -371,4 +371,51 @@ describe("Scheduled cycle order summary", () => {
         .size,
     ).toBe(51);
   });
+
+  it("shows exact purchase demand when shipping weight is unavailable on a paid line", async () => {
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    const local = await locationManager("location");
+    await grantProcurementRead(local.id);
+    const knownOrderId = `known-${cycleId}`;
+    const unknownOrderId = `unknown-${cycleId}`;
+    for (const orderId of [knownOrderId, unknownOrderId]) {
+      await seedOrder(cycleId, orderId);
+      await seedPaidLine({
+        cycleId,
+        orderId,
+        locationId: "location-cebu-central",
+        skuId: "sku-carrot-1kg",
+        poolId: "pool-carrot",
+        productName: "Carrots",
+        variantName: "1 kg",
+        unitName: "GRAM",
+        baseUnit: "GRAM",
+        soldUnits: 1,
+        baseQuantity: 1000,
+      });
+    }
+    await env.DB.prepare("UPDATE committed_demand SET shipping_weight_grams=1000 WHERE order_id=?")
+      .bind(knownOrderId)
+      .run();
+
+    const result = await core.getAdminScheduledWeek({
+      headers: local.headers,
+      requestId: crypto.randomUUID(),
+      locationId: "location-cebu-central",
+      cycleId,
+      section: "DEMAND",
+    });
+
+    if (!result.ok || result.value.page.kind !== "DEMAND")
+      throw new Error("Missing purchase demand");
+    expect(result.value.page.items).toEqual([
+      expect.objectContaining({
+        skuId: "sku-carrot-1kg",
+        quantitySellable: 2,
+        quantityBase: 2000,
+        shippingGrams: null,
+      }),
+    ]);
+  });
 });

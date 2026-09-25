@@ -69,6 +69,10 @@ for (const width of [1440, 390])
       path: testInfo.outputPath(`scheduled-order-summary-${width}.png`),
       fullPage: true,
     });
+    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
+    const demand = page.getByRole("table", { name: "Paid quantities to buy" });
+    await expect(demand).toContainText("Recorded shipping weight: Not recorded");
+    await expect(demand).toContainText("12,000 g");
   });
 
 for (const width of [1440, 390])

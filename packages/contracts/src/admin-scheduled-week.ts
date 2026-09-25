@@ -21,7 +21,7 @@ export type ScheduledDemandItem = {
   quantitySellable: number;
   quantityBase: number;
   baseUnit: string;
-  shippingGrams: number;
+  shippingGrams: number | null;
   requirementId: string | null;
   requirementVersion: number;
   status: string;

@@ -69,7 +69,7 @@ export const scheduledWeekViewSchema = z.object({
           quantitySellable: integer,
           quantityBase: integer,
           baseUnit: z.string(),
-          shippingGrams: integer,
+          shippingGrams: integer.nullable(),
           requirementId: identifierSchema.nullable(),
           requirementVersion: integer,
           status: z.string(),

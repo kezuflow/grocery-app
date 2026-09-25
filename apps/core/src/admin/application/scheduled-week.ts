@@ -172,7 +172,9 @@ export async function getAdminScheduledWeek(
       : await resolveGlobalOperationsAdministrationAccess(deps, input, "procurement.manage");
     const rows = await deps.db
       .prepare(`WITH demand AS (
-      SELECT sku_id,inventory_pool_id,location_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,SUM(shipping_weight_grams) shippingGrams,MIN(base_unit_code) baseUnit
+      SELECT sku_id,inventory_pool_id,location_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,
+        CASE WHEN COUNT(*)=COUNT(shipping_weight_grams) THEN SUM(shipping_weight_grams) ELSE NULL END shippingGrams,
+        MIN(base_unit_code) baseUnit
       FROM committed_demand WHERE delivery_cycle_id=? AND (? IS NULL OR location_id=?) AND status='OPEN' AND demand_basis='EXACT_PAID_LINE' GROUP BY sku_id,inventory_pool_id,location_id
     ), totals AS (SELECT demand.*,
       SUM(quantitySellable) OVER (PARTITION BY sku_id,inventory_pool_id) totalQuantitySellable,
