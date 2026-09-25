@@ -368,11 +368,11 @@ export function ServiceAreasWorkspace({
     <div className="space-y-6">
       <div className="space-y-2">
         <Link
-          aria-label="Locations"
+          aria-label="Fulfillment setup"
           className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
-          href="/admin/locations"
+          href="/admin/fulfillment-setup"
         >
-          ← Locations
+          ← Fulfillment setup
         </Link>
         <PageHeader
           title="Service areas"

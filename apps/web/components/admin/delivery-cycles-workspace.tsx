@@ -21,7 +21,6 @@ import {
   deliveryCycleDraftSchema,
 } from "@freshmarkets/validation";
 import { PageHeader } from "./admin-shell";
-import { WorkspaceNavigation } from "./workspace-navigation";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "../ui/button";
@@ -451,7 +450,6 @@ export function DeliveryCyclesWorkspace({
           </div>
         }
       />
-      <WorkspaceNavigation parentCode="settings" label="Settings administration" />
       {notice ? (
         <p
           role="status"

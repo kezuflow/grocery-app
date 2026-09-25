@@ -559,11 +559,12 @@ function MobileNavigationParent({
   item: AdminNavigationParent;
   activeCode?: string;
 }) {
+  const sidebarChildren = item.code === "fulfillment-setup" ? [] : item.children;
   const parentActive =
     activeCode === item.code || item.children.some((child) => child.code === activeCode);
   return (
     <div>
-      {item.children.length > 0 ? (
+      {sidebarChildren.length > 0 ? (
         <div
           className={cn(
             "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
@@ -589,9 +590,9 @@ function MobileNavigationParent({
           </Link>
         </SheetClose>
       )}
-      {item.children.length > 0 ? (
+      {sidebarChildren.length > 0 ? (
         <div className="ml-8 border-l border-[var(--fm-border)] pl-2">
-          {item.children.map((child) => {
+          {sidebarChildren.map((child) => {
             const childActive = activeCode === child.code;
             return (
               <SheetClose key={child.code} asChild>
@@ -838,6 +839,7 @@ function DesktopNavigationParent({
   onToggle: () => void;
 }) {
   const [collapsedMenuOpen, setCollapsedMenuOpen] = useState(false);
+  const sidebarChildren = item.code === "fulfillment-setup" ? [] : item.children;
   const parentActive =
     activeCode === item.code || item.children.some((child) => child.code === activeCode);
   const controlClassName = cn(
@@ -861,7 +863,7 @@ function DesktopNavigationParent({
     <>
       <item.icon className="size-4 shrink-0" aria-hidden="true" />
       {label}
-      {item.children.length > 0 ? (
+      {sidebarChildren.length > 0 ? (
         <ChevronDown
           className={cn(
             "ml-auto size-4 shrink-0 transition-[max-width,opacity,transform] duration-200 ease-linear",
@@ -876,7 +878,7 @@ function DesktopNavigationParent({
 
   return (
     <div className="relative">
-      {item.children.length > 0 ? (
+      {sidebarChildren.length > 0 ? (
         <Popover
           open={collapsed && collapsedMenuOpen}
           onOpenChange={(next) => {
@@ -914,7 +916,7 @@ function DesktopNavigationParent({
               className="w-max min-w-32 max-w-64 rounded-[10px] border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-1 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
             >
               <p className="px-2 py-1 text-xs text-[var(--fm-text-muted)]">{item.label}</p>
-              {item.children.map((child) => (
+              {sidebarChildren.map((child) => (
                 <Link
                   key={child.code}
                   href={child.href}
@@ -935,7 +937,7 @@ function DesktopNavigationParent({
               href={item.href}
               prefetch={false}
               aria-label={collapsed ? item.label : undefined}
-              aria-current={activeCode === item.code ? "page" : undefined}
+              aria-current={parentActive ? "page" : undefined}
               className={controlClassName}
             >
               {controlContent}
@@ -948,9 +950,9 @@ function DesktopNavigationParent({
           ) : null}
         </Tooltip>
       )}
-      {!collapsed && open && item.children.length > 0 ? (
+      {!collapsed && open && sidebarChildren.length > 0 ? (
         <div id={`admin-nav-children-${item.code}`} className="ml-4 pl-2">
-          {item.children.map((child) => (
+          {sidebarChildren.map((child) => (
             <Link
               key={child.code}
               href={child.href}

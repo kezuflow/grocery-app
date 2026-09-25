@@ -7,7 +7,6 @@ import { useAdminCommandIntent } from "../../../../components/admin/admin-comman
 import { notifyCommandSuccess } from "../../../../components/admin/admin-feedback";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
-import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
@@ -163,7 +162,6 @@ export default function FulfillmentModePage() {
         title="Fulfillment mode"
         description="Pause selling, switch the one global fulfillment mode, verify readiness, and reopen new commerce."
       />
-      <WorkspaceNavigation parentCode="settings" label="Settings administration" />
       {!isGlobal && !unconfirmed ? (
         <AdminPageState
           state="permission-empty"

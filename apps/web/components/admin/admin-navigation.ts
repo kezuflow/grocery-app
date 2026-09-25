@@ -62,6 +62,9 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   staff: Users,
   audit: ScrollText,
   settings: Settings,
+  "fulfillment-setup": Truck,
+  "fulfillment-mode": Truck,
+  "scheduled-cycles": ClipboardList,
 };
 
 const SECTION_ICONS: Record<AdminNavigationSectionCode, LucideIcon> = {

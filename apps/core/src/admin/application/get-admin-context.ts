@@ -24,8 +24,9 @@ export type AdminContextDeps = {
 /**
  * Closed admin navigation vocabulary in canonical display order. `overview`
  * is always present for active Staff; every other workspace appears only when
- * its read or manage capability is held. Web renders these items verbatim and
- * never derives permissions from their visibility.
+ * its read or manage capability is held. Web preserves the authorized entries
+ * across its sidebar and workspace destinations without deriving permission
+ * from their visibility.
  */
 const WORKSPACES: ReadonlyArray<{
   code: string;
@@ -192,6 +193,51 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["transfers.read"],
   },
   {
+    code: "fulfillment-setup",
+    label: "Fulfillment setup",
+    href: "/admin/fulfillment-setup",
+    section: "commerce",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["locations.read", "fulfillment.read"],
+  },
+  {
+    code: "locations",
+    label: "Locations",
+    href: "/admin/locations",
+    section: "commerce",
+    parentCode: "fulfillment-setup",
+    kind: "destination",
+    capabilities: ["locations.read"],
+  },
+  {
+    code: "locations-service-areas",
+    label: "Service Areas",
+    href: "/admin/locations/service-areas",
+    section: "commerce",
+    parentCode: "fulfillment-setup",
+    kind: "destination",
+    capabilities: ["locations.read"],
+  },
+  {
+    code: "fulfillment-mode",
+    label: "Fulfillment mode",
+    href: "/admin/settings/fulfillment-mode",
+    section: "commerce",
+    parentCode: "fulfillment-setup",
+    kind: "destination",
+    capabilities: ["fulfillment.read"],
+  },
+  {
+    code: "scheduled-cycles",
+    label: "Scheduled cycles",
+    href: "/admin/settings/scheduled-cycles",
+    section: "commerce",
+    parentCode: "fulfillment-setup",
+    kind: "destination",
+    capabilities: ["fulfillment.read"],
+  },
+  {
     code: "customers",
     label: "Customers",
     href: "/admin/customers",
@@ -273,33 +319,6 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["fulfillment.read"],
   },
   {
-    code: "locations",
-    label: "Locations",
-    href: "/admin/locations",
-    section: "settings",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["locations.read"],
-  },
-  {
-    code: "locations-list",
-    label: "Locations",
-    href: "/admin/locations",
-    section: "settings",
-    parentCode: "locations",
-    kind: "destination",
-    capabilities: ["locations.read"],
-  },
-  {
-    code: "locations-service-areas",
-    label: "Service Areas",
-    href: "/admin/locations/service-areas",
-    section: "settings",
-    parentCode: "locations",
-    kind: "destination",
-    capabilities: ["locations.read"],
-  },
-  {
     code: "staff",
     label: "Staff",
     href: "/admin/staff",
@@ -335,33 +354,6 @@ const WORKSPACES: ReadonlyArray<{
     kind: "workspace",
     capabilities: ["audit.read"],
   },
-  {
-    code: "settings",
-    label: "Settings",
-    href: "/admin/settings",
-    section: "settings",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["fulfillment.read"],
-  },
-  {
-    code: "settings-fulfillment-mode",
-    label: "Fulfillment mode",
-    href: "/admin/settings/fulfillment-mode",
-    section: "settings",
-    parentCode: "settings",
-    kind: "destination",
-    capabilities: ["fulfillment.read"],
-  },
-  {
-    code: "settings-delivery-cycles",
-    label: "Scheduled cycles",
-    href: "/admin/settings/scheduled-cycles",
-    section: "settings",
-    parentCode: "settings",
-    kind: "destination",
-    capabilities: ["fulfillment.read"],
-  },
 ];
 
 const ALL_SCOPE_NAVIGATION_CODES: ReadonlySet<string> = new Set([
@@ -383,8 +375,8 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 ]);
 
 const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "fulfillment-setup",
   "locations",
-  "locations-list",
   "locations-service-areas",
   "transfers",
   "procurement",
@@ -411,7 +403,10 @@ export function adminNavigationFor(
     label,
     href,
     section,
-    scopeKinds: navigationScopeKindsFor(code),
+    scopeKinds:
+      code === "fulfillment-setup" && !capabilities.includes("locations.read")
+        ? (["GLOBAL"] as const)
+        : navigationScopeKindsFor(code),
     parentCode,
     kind,
   }));

@@ -89,18 +89,18 @@ async function staffCookie(options: {
 }
 
 describe("scoped admin context", () => {
-  it("advertises Settings children only when their existing reads are authorized", () => {
+  it("advertises Fulfillment setup and Settings children only when their reads are authorized", () => {
     const codes = (capabilities: Parameters<typeof adminNavigationFor>[0]) =>
       adminNavigationFor(capabilities).map((item) => item.code);
     expect(codes(["locations.read"])).toEqual(
-      expect.arrayContaining(["locations", "locations-list", "locations-service-areas"]),
+      expect.arrayContaining(["fulfillment-setup", "locations", "locations-service-areas"]),
     );
     expect(codes(["staff.read"])).toEqual(
       expect.arrayContaining(["staff", "staff-list", "staff-roles"]),
     );
     expect(codes(["audit.read"])).toContain("audit");
     expect(codes(["fulfillment.read"])).toEqual(
-      expect.arrayContaining(["settings", "settings-fulfillment-mode", "settings-delivery-cycles"]),
+      expect.arrayContaining(["fulfillment-setup", "fulfillment-mode", "scheduled-cycles"]),
     );
     for (const capability of [
       "locations.manage",
@@ -113,20 +113,19 @@ describe("scoped admin context", () => {
         codes([capability]).filter((code) =>
           [
             "locations",
-            "locations-list",
             "locations-service-areas",
             "staff",
             "staff-list",
             "staff-roles",
-            "settings",
-            "settings-fulfillment-mode",
-            "settings-delivery-cycles",
+            "fulfillment-setup",
+            "fulfillment-mode",
+            "scheduled-cycles",
           ].includes(code),
         ),
       ).toEqual([]);
     }
     expect(
-      adminNavigationFor(["fulfillment.read"]).find((item) => item.code === "settings"),
+      adminNavigationFor(["fulfillment.read"]).find((item) => item.code === "fulfillment-setup"),
     ).toMatchObject({ scopeKinds: ["GLOBAL"] });
   });
 
@@ -266,7 +265,7 @@ describe("scoped admin context", () => {
     );
   });
 
-  it("publishes the canonical Scheduled cycles settings URL", async () => {
+  it("publishes the Scheduled cycles destination under Fulfillment setup", async () => {
     const staff = await staffCookie({
       permissionCodes: ["fulfillment.read"],
       scope: { kind: "global" },
@@ -278,12 +277,12 @@ describe("scoped admin context", () => {
     expect(context.ok).toBe(true);
     if (!context.ok) return;
     expect(context.value.navigation).toContainEqual({
-      code: "settings-delivery-cycles",
+      code: "scheduled-cycles",
       label: "Scheduled cycles",
       href: "/admin/settings/scheduled-cycles",
-      section: "settings",
+      section: "commerce",
       scopeKinds: ["GLOBAL"],
-      parentCode: "settings",
+      parentCode: "fulfillment-setup",
       kind: "destination",
     });
   });
@@ -375,22 +374,21 @@ describe("scoped admin context", () => {
       code: "locations",
       label: "Locations",
       href: "/admin/locations",
-      section: "settings",
+      section: "commerce",
       scopeKinds: ["GLOBAL", "LOCATION"],
-      parentCode: null,
-      kind: "workspace",
+      parentCode: "fulfillment-setup",
+      kind: "destination",
     });
     for (const [code, label, href] of [
-      ["locations-list", "Locations", "/admin/locations"],
       ["locations-service-areas", "Service Areas", "/admin/locations/service-areas"],
     ]) {
       expect(context.value.navigation).toContainEqual({
         code,
         label,
         href,
-        section: "settings",
+        section: "commerce",
         scopeKinds: ["GLOBAL", "LOCATION"],
-        parentCode: "locations",
+        parentCode: "fulfillment-setup",
         kind: "destination",
       });
     }

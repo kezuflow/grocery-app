@@ -31,30 +31,30 @@ const audit = {
 };
 
 describe("admin navigation mapping", () => {
-  it("searches Settings children without offering the redirect-only root", () => {
+  it("searches the Fulfillment setup workspace and its destinations", () => {
     const items = adminNavigationFromContext([
       {
-        code: "settings",
-        label: "Settings",
-        href: "/admin/settings",
-        section: "settings",
+        code: "fulfillment-setup",
+        label: "Fulfillment setup",
+        href: "/admin/fulfillment-setup",
+        section: "commerce",
         scopeKinds: globalScope,
         parentCode: null,
         kind: "workspace",
       },
       {
-        code: "settings-delivery-cycles",
+        code: "scheduled-cycles",
         label: "Scheduled cycles",
         href: "/admin/settings/scheduled-cycles",
-        section: "settings",
+        section: "commerce",
         scopeKinds: globalScope,
-        parentCode: "settings",
+        parentCode: "fulfillment-setup",
         kind: "destination",
       },
     ]);
     expect(
       commandPaletteEntries(groupAdminNavigation(items)[0]!).map((entry) => entry.code),
-    ).toEqual(["settings-delivery-cycles"]);
+    ).toEqual(["fulfillment-setup", "scheduled-cycles"]);
   });
 
   it("shows Banners as a separate Core-authorized workspace", () => {
@@ -174,35 +174,43 @@ describe("admin navigation mapping", () => {
     expect(items[0]?.icon).toBeTruthy();
   });
 
-  it("keeps the Core-authorized Locations workspace visible in Global and location scopes", () => {
+  it("keeps Locations and Service Areas under Fulfillment setup in Global and location scopes", () => {
     const locations = {
       code: "locations",
       label: "Locations",
       href: "/admin/locations",
-      section: "administration" as const,
+      section: "commerce" as const,
       scopeKinds: ["GLOBAL", "LOCATION"] as const,
-      parentCode: null,
-      kind: "workspace" as const,
+      parentCode: "fulfillment-setup",
+      kind: "destination" as const,
     };
     const items = adminNavigationFromContext([
+      {
+        code: "fulfillment-setup",
+        label: "Fulfillment setup",
+        href: "/admin/fulfillment-setup",
+        section: "commerce" as const,
+        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        parentCode: null,
+        kind: "workspace" as const,
+      },
       locations,
-      { ...locations, code: "locations-list", parentCode: "locations", kind: "destination" },
       {
         ...locations,
         code: "locations-service-areas",
         label: "Service Areas",
         href: "/admin/locations/service-areas",
-        parentCode: "locations",
+        parentCode: "fulfillment-setup",
         kind: "destination",
       },
     ]);
 
-    expect(items[0]).toMatchObject({
+    expect(items[1]).toMatchObject({
       code: "locations",
       label: "Locations",
       href: "/admin/locations",
     });
-    expect(items[0]?.icon).toBeTruthy();
+    expect(items[1]?.icon).toBeTruthy();
     expect(adminNavigationItemsForScope(items, { kind: "GLOBAL" })).toHaveLength(3);
     expect(
       adminNavigationItemsForScope(items, {
@@ -217,13 +225,13 @@ describe("admin navigation mapping", () => {
     ]);
     for (const path of ["/admin/locations", "/admin/locations/location-cebu-central/fulfillment"]) {
       expect(mostSpecificActiveNavigation(items, path)).toEqual({
-        code: "locations-list",
-        parentCode: "locations",
+        code: "locations",
+        parentCode: "fulfillment-setup",
       });
     }
     expect(mostSpecificActiveNavigation(items, "/admin/locations/service-areas")).toEqual({
       code: "locations-service-areas",
-      parentCode: "locations",
+      parentCode: "fulfillment-setup",
     });
   });
 
