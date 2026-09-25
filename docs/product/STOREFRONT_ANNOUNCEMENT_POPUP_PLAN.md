@@ -1,6 +1,6 @@
 # Storefront announcement popup — plan and assets
 
-Status: the original popup and rounded Storefront/Admin buttons were deployed and browser-checked on 2026-09-26. The owner's subsequent announcement, image, motion and cart-action revision is implemented and locally browser-checked; it has not been deployed. This focused presentation slice belongs to [commerce alignment Phase 7](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). Core remains the authority for actual ordering admission, delivery options, windows and fees.
+Status: the original popup and rounded Storefront/Admin buttons were deployed and browser-checked on 2026-09-26. The owner's subsequent announcement, image, motion and cart-action revision was committed, pushed and deployed on 2026-09-26; the popup was checked in production at desktop and mobile widths, including repeat display after refresh. This focused presentation slice belongs to [commerce alignment Phase 7](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). Core remains the authority for actual ordering admission, delivery options, windows and fees.
 
 ## Current owner-approved experience
 
