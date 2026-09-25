@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOCK-TRANSFER-ROUTE-DIAG-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-ROUTE-DIAG-1`. The owner asked why Global cannot transfer stock to Cebu Fulfillment Center. Acceptance: trace the transfer option and route rules, inspect the published choices without issuing a command, and explain the observed restriction.
+
+Read-only inspection on `main` at `8c08b38e`; unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. Core transfer options classify active `CENTRAL_WAREHOUSE` locations as sources and active `CUSTOMER_FULFILLMENT` locations as destinations. Create/dispatch additionally require warehouse `INVENTORY` and `RECEIVING` capabilities. Global is an administration scope, not a physical inventory location. The authenticated production Stock Transfer form listed **Cebu Fulfillment Center** as its source warehouse and **Central Cebu** as its destination; no transfer rows matched the current Global list. Thus Cebu Fulfillment Center is currently configured as the warehouse, not an eligible destination. No live stock command, provider operation, remote D1 write or migration was run. This browser inspection establishes displayed choices, not a stock-balance or dispatch test.
+
+Verification: `rg`/source review of `apps/core/src/inventory/infrastructure/transfer-repository.ts`, `apps/core/src/inventory/application/inventory-transfers.ts`, and `apps/web/components/admin/inventory-transfers.tsx`; authenticated production in-app browser inspection of `/admin/transfers` and both option menus. No source or test behavior changed. Completion level: **1 of 1 read-only route diagnoses complete; 0 live transfers attempted**. Next action: if the intended flow is warehouse stock into Cebu Fulfillment Center, identify a distinct active customer-fulfillment destination or clarify the intended physical source/destination; changing the existing location purpose requires a separate approved location plan.
+
 ## Latest owner request — CATALOG-PAGINATION-PROD-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `CATALOG-PAGINATION-PROD-1`. The owner explicitly requested deployment of the pushed Catalog pack-count clarification and numbered Product pagination. Acceptance: release synchronized `main` at `b690ebf7` to the production Core/Web pair, preserve bindings and data, verify readiness and 100% traffic, and check the published Admin routes. This does not authorize a live stock command, provider transaction, remote D1 mutation/migration or outbound message.
