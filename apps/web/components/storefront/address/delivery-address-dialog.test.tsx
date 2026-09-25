@@ -87,8 +87,21 @@ afterEach(() => {
 const render = async () => {
   await act(async () => root.render(<DeliveryAddressDialog />));
 };
-it.each(["escape", "backdrop"])("remembers %s dismissal across navigation", async (method) => {
+const openSelector = async () => {
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Choose delivery address"]')?.click(),
+  );
+};
+it("waits for an explicit choice before opening the selector", async () => {
   await render();
+  expect(document.querySelector("dialog")).toBeNull();
+  await openSelector();
+  expect(document.querySelector("dialog")).not.toBeNull();
+  expect(document.activeElement?.textContent).toBe("Deliver to");
+});
+it.each(["escape", "backdrop"])("dismisses the selector with %s", async (method) => {
+  await render();
+  await openSelector();
   const dialog = document.querySelector("dialog");
   expect(dialog).not.toBeNull();
   await act(async () => {
@@ -96,7 +109,6 @@ it.each(["escape", "backdrop"])("remembers %s dismissal across navigation", asyn
       dialog?.dispatchEvent(new Event("cancel", { bubbles: true, cancelable: true }));
     else if (method === "backdrop") dialog?.click();
   });
-  expect(sessionStorage.getItem("freshmarkets.location-prompt-dismissed")).toBe("1");
   mocks.pathname = "/products/abiu";
   await render();
   expect(document.querySelector("dialog")).toBeNull();
@@ -104,10 +116,7 @@ it.each(["escape", "backdrop"])("remembers %s dismissal across navigation", asyn
 it.each([true, false])("refreshes only for a changed point (same=%s)", async (same) => {
   if (same) rememberBrowsingPoint({ latitude: 10, longitude: 123 });
   await render();
-  if (same)
-    await act(async () =>
-      document.querySelector<HTMLButtonElement>('[aria-label="Choose delivery address"]')?.click(),
-    );
+  await openSelector();
   await act(async () =>
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent === "Confirm test choice")
@@ -126,6 +135,7 @@ it.each(["guest", "pending", "error"])(
     mocks.session.error = state === "error" ? { message: "Unavailable" } : null;
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await render();
+    await openSelector();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain(
       state === "guest"
@@ -142,6 +152,7 @@ it("loads addresses for an authenticated session and handles session expiry", as
     .spyOn(globalThis, "fetch")
     .mockResolvedValue(new Response(null, { status: 401 }));
   await render();
+  await openSelector();
   expect(fetchSpy).toHaveBeenCalledTimes(1);
   expect(fetchSpy).toHaveBeenCalledWith(
     "/api/commerce/address",
@@ -176,6 +187,7 @@ it.each(["success", "unavailable", "failure", "dismiss"])(
       )
       .mockReturnValueOnce(pending);
     await render();
+    await openSelector();
     const button = [...document.querySelectorAll("button")].find((button) =>
       button.textContent?.startsWith("Home"),
     );

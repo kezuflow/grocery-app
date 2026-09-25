@@ -9,6 +9,7 @@ import { CartDrawer } from "./marketplace/cart-drawer";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
+import { DeliveryLocationPrompt } from "./address/delivery-location-prompt";
 import { StorefrontFooter } from "./storefront-footer";
 import { CatalogSearchForm } from "./marketplace/catalog-search-form";
 import { FreshMarketsMark } from "../brand/freshmarkets-mark";
@@ -20,6 +21,7 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
   return (
     <div className="fm-storefront min-h-[100dvh] bg-[var(--fm-background)] text-[var(--fm-text)]">
       <StorefrontHeader />
+      <DeliveryLocationPrompt />
       <div className="flex min-h-[calc(100dvh-4rem)] w-full items-start">
         <StorefrontSidebar />
         <main className="min-w-0 flex-1 pb-20 lg:pb-10">{children}</main>

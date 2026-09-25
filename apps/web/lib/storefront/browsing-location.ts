@@ -3,6 +3,7 @@ import type { Coordinate } from "@freshmarkets/contracts";
 export const BROWSING_LOCATION_COOKIE = "freshmarkets_browse_point_v2";
 export const BROWSING_CONTEXT_COOKIE = "freshmarkets_browse_context_v1";
 export const DELIVERY_LOCATION_REQUEST_EVENT = "fm:choose-delivery-location";
+export const DELIVERY_LOCATION_CHANGED_EVENT = "fm:delivery-location-changed";
 export const DELIVERY_SELECTION_STORAGE_KEY = "freshmarkets.delivery-location.v3";
 
 export type DeliveryLocationSelection = {
@@ -40,6 +41,8 @@ export function rememberDeliveryLocationSelection(selection: DeliveryLocationSel
   if (typeof globalThis.localStorage === "undefined") return;
   globalThis.localStorage.setItem(DELIVERY_SELECTION_STORAGE_KEY, JSON.stringify(selection));
   rememberBrowsingPoint(selection.coordinate);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new Event(DELIVERY_LOCATION_CHANGED_EVENT));
 }
 
 /** Session replacement keeps the public pin but discards private address identity. */

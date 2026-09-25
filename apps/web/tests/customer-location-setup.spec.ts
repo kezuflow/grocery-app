@@ -132,6 +132,11 @@ test("Global creates a ready site and a customer confirms delivery there", async
   await customer.setViewportSize({ width: 390, height: 950 });
   await customer.goto("/");
   const dialog = customer.getByRole("dialog", { name: "Choose delivery address", exact: true });
+  await customer
+    .getByRole("region", { name: "Choose delivery location" })
+    .getByRole("button", { name: "Set delivery location" })
+    .click();
+  await dialog.getByRole("button", { name: "Choose map" }).click();
   await dialog.getByRole("textbox", { name: /^Search for an address/ }).fill("Test new-site");
   await dialog.getByRole("button", { name: candidate.displayAddress, exact: true }).click();
   await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();

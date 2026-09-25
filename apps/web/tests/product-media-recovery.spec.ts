@@ -174,6 +174,13 @@ for (const width of [1440, 390]) {
         fullPage: true,
       });
       await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(5);
+      await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toHaveCount(
+        0,
+      );
+      await customer
+        .getByRole("region", { name: "Choose delivery location" })
+        .getByRole("button", { name: "Set delivery location" })
+        .click();
       await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toBeVisible();
       await customer.keyboard.press("Escape");
       await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toHaveCount(

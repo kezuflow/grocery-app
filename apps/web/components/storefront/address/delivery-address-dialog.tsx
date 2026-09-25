@@ -33,6 +33,7 @@ export function DeliveryAddressDialog() {
   const router = useRouter();
   const { googleMapsBrowserApiKey, googleMapsMapId } = useStorefrontRuntime();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [placement, setPlacement] = useState({ top: 72, left: 12 });
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -48,13 +49,6 @@ export function DeliveryAddressDialog() {
     localStorage.removeItem("freshmarkets.delivery-location.v2");
     setSelection(readDeliveryLocationSelection());
     setInteractive(true);
-    const browsing = pathname === "/" || pathname.startsWith("/products/") || pathname === "/cart";
-    if (
-      browsing &&
-      !browsingPointFromCookies(document.cookie) &&
-      !sessionStorage.getItem("freshmarkets.location-prompt-dismissed")
-    )
-      setOpen(true);
     const requestLocation = () => setOpen(true);
     window.addEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requestLocation);
     return () => window.removeEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requestLocation);
@@ -63,7 +57,10 @@ export function DeliveryAddressDialog() {
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      headingRef.current?.focus();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
@@ -86,7 +83,6 @@ export function DeliveryAddressDialog() {
   }, [open]);
 
   function dismiss(): void {
-    sessionStorage.setItem("freshmarkets.location-prompt-dismissed", "1");
     setOpen(false);
   }
 
@@ -161,10 +157,16 @@ export function DeliveryAddressDialog() {
             className="max-h-[inherit] overflow-y-auto rounded-xl bg-white shadow-[var(--fm-shadow-overlay)]"
           >
             <div className="p-4">
+              <h2
+                ref={headingRef}
+                tabIndex={-1}
+                className="mb-3 text-base font-bold focus:outline-none"
+              >
+                Deliver to
+              </h2>
               <Suspense fallback={<p role="status">Loading address search…</p>}>
                 <AddressEditor
                   compact
-                  compactHeading="Deliver to"
                   purpose="serviceability"
                   browserApiKey={googleMapsBrowserApiKey}
                   mapId={googleMapsMapId}

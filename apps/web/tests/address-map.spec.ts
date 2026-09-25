@@ -355,31 +355,47 @@ test("public serviceability checks a confirmed search result without saving or s
   expect(saveCalls).toBe(0);
 });
 
-test("storefront delivery control opens the address flow and keeps the confirmed browsing location", async ({
-  page,
-}) => {
-  await mockAddressResolution(page);
-  await page.route("**/api/serviceability", (route) =>
-    json(route, { ok: true, value: serviceability, requestId: "header-serviceability" }),
-  );
+for (const width of [1440, 390])
+  test(`inline delivery prompt opens the address flow at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockAddressResolution(page);
+    await page.route("**/api/serviceability", (route) =>
+      json(route, { ok: true, value: serviceability, requestId: "header-serviceability" }),
+    );
 
-  await page.goto("/");
-  const deliveryControl = page.getByRole("button", { name: "Choose delivery address" });
-  const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Choose map" }).click();
-  await dialog.getByPlaceholder("Search address").fill("Ayala Cebu");
-  await dialog.getByRole("button", { name: candidate.displayAddress }).click();
-  await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Deliver here" }).click();
+    await page.goto("/");
+    const deliveryControl = page.getByRole("button", { name: "Choose delivery address" });
+    const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
+    const inlinePrompt = page.getByRole("region", { name: "Choose delivery location" });
+    await expect(dialog).toHaveCount(0);
+    await expect(inlinePrompt).toBeVisible();
+    await expect(inlinePrompt.getByText("Where should we deliver?")).toBeVisible();
+    await expect(inlinePrompt).toHaveCSS("border-bottom-color", "rgb(0, 177, 79)");
+    const setLocation = inlinePrompt.getByRole("button", { name: "Set delivery location" });
+    await expect(setLocation).toHaveCSS("background-color", "rgb(0, 177, 79)");
+    await page.screenshot({ path: testInfo.outputPath(`inline-delivery-${width}.png`) });
+    await setLocation.click();
+    await expect(dialog).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.textContent?.trim()))
+      .toBe("Deliver to");
+    await dialog.getByRole("button", { name: "Choose map" }).click();
+    await dialog.getByPlaceholder("Search address").fill("Ayala Cebu");
+    await dialog.getByRole("button", { name: candidate.displayAddress }).click();
+    await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Deliver here" }).click();
 
-  await expect(dialog).toHaveCount(0);
-  await expect(deliveryControl).toContainText("Confirmed delivery entrance");
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Choose delivery address" })).toContainText(
-    "Confirmed delivery entrance",
-  );
-});
+    await expect(dialog).toHaveCount(0);
+    await expect(inlinePrompt).toHaveCount(0);
+    await expect(deliveryControl).toContainText("Confirmed delivery entrance");
+    await page.reload();
+    await expect(inlinePrompt).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Choose delivery address" })).toContainText(
+      "Confirmed delivery entrance",
+    );
+  });
 
 test("Deliver to confirms the device location from the action above Choose map", async ({
   page,
@@ -398,6 +414,10 @@ test("Deliver to confirms the device location from the action above Choose map",
 
   await page.goto("/");
   const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
+  await page
+    .getByRole("region", { name: "Choose delivery location" })
+    .getByRole("button", { name: "Set delivery location" })
+    .click();
   await expect(dialog).toBeVisible();
   const locate = dialog.getByRole("button", { name: "Use current location" });
   const chooseMap = dialog.getByRole("button", { name: "Choose map" });

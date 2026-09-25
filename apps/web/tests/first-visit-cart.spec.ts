@@ -154,7 +154,9 @@ for (const width of [1440, 390]) {
       name: "Choose delivery address",
       exact: true,
     });
-    await expect(locationDialog).toBeVisible();
+    const inlinePrompt = page.getByRole("region", { name: "Choose delivery location" });
+    await expect(inlinePrompt).toBeVisible();
+    await expect(locationDialog).toHaveCount(0);
     expect(
       await page.evaluate(() => localStorage.getItem("freshmarkets.delivery-location.v1")),
     ).toBeNull();
@@ -163,10 +165,11 @@ for (const width of [1440, 390]) {
         (cookie) => cookie.name === "freshmarkets_browse_point",
       ),
     ).toBe(false);
-    // The compact address popover intentionally has no redundant close row;
-    // dismissing it exercises the same browse-without-location state.
+    await inlinePrompt.getByRole("button", { name: "Set delivery location" }).click();
+    await expect(locationDialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(locationDialog).toHaveCount(0);
+    await expect(inlinePrompt).toBeVisible();
     await expect(page.getByRole("article").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /^Add .* to cart$/ })).toHaveCount(0);
     await page.goto("/products/red-onion");
@@ -190,6 +193,7 @@ for (const width of [1440, 390]) {
       fullPage: true,
     });
     await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
+    await expect(locationDialog).toBeVisible();
     await locationDialog.getByRole("button", { name: "Choose map", exact: true }).click();
     await locationDialog
       .getByRole("textbox", { name: /^Search for an address/ })
@@ -225,6 +229,7 @@ for (const width of [1440, 390]) {
     );
     await locationDialog.getByRole("button", { name: "Deliver here", exact: true }).click();
     await expect(locationDialog).toHaveCount(0);
+    await expect(inlinePrompt).toHaveCount(0);
     expect(confirmation).toMatchObject({
       ok: true,
       value: {
