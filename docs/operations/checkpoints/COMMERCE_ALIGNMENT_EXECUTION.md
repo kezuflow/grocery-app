@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — DELIVER-TO-CURRENT-LOCATION-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `DELIVER-TO-CURRENT-LOCATION-1`. The owner asked for Use current location directly above Choose map in the Deliver to selector, correctly wired. Acceptance: the action is available before opening search, requests device location only on click, uses the existing reverse-address and serviceability flow, shows the selected pin and requires an explicit Deliver here confirmation; denied/unavailable location keeps safe recovery and does not apply a browsing destination.
+
+Started on `main` at `0c74664e`, with only unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` preserved. The compact AddressEditor now presents its existing geolocation action before Choose map and removes the duplicate action inside search results. Its existing device-location handler, reverse lookup, Core-backed serviceability and browsing-location confirmation remain the caller-to-write path. No Core, contract, schema, stock, payment or provider integration code changed. DESIGN records the placement and confirmation rule.
+
+Verification on the source working tree: focused Web AddressEditor and Deliver to dialog Vitest **35/35 passed**; Web typecheck, focused formatting, lint, naming, terminology and `git diff --check` passed. Lint reported two existing unrelated unused-variable warnings in the address-book test. One managed local browser test with fresh `E2E_STATE_NAME=e2e-deliver-current-location`, `E2E_START_STACK=1`, `--workers=1 --retries=0` passed **1/1**: Playwright granted a test coordinate, confirmed the button order and map/serviceability response, then Deliver here completed through the real local Core browsing-location endpoint. The browser test mocked reverse-address and preliminary serviceability responses; it is not actual Google geocoder acceptance. No production release, actual provider transaction, live order/stock command or remote D1 write occurred. The new local E2E state was not deleted.
+
+Completion level: **1 of 1 requested source UI slices locally verified, including the browser flow; production visual acceptance remains open**. Next action: on a separately authorized Web production release, check the published Deliver to action and real device-location permission flow; wider Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — SONNER-RESULT-FEEDBACK-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SONNER-RESULT-FEEDBACK-1`. The owner asked for visibly distinct successful and failed Sonner messages and approved the proposed implementation. Acceptance: success and error toasts have separate colors and existing icons in light/dark appearance; Storefront errors remain visible longer than successes; opening checkout authentication does not duplicate a toast and keeps its messages visible in the native dialog; Admin command outcome policy remains intact.

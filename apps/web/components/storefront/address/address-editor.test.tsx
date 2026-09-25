@@ -979,12 +979,17 @@ it("defers the compact map until an address is chosen from the Choose map search
   try {
     expect(adapter.initializations).toHaveLength(0);
     expect(container.textContent).toContain("Choose map");
+    expect(container.textContent).toContain("Use current location");
     expect(container.textContent).not.toContain("Move the pin to your entrance");
     const toggle = container.querySelector<HTMLButtonElement>(
       '[aria-controls="address-search-panel"]',
     )!;
     click(toggle);
-    expect(container.textContent).not.toContain("Use current location");
+    expect(
+      Array.from(container.querySelectorAll("button")).filter(
+        (button) => button.textContent?.trim() === "Use current location",
+      ),
+    ).toHaveLength(1);
     await selectCandidate(container, fetchImpl as ReturnType<typeof vi.fn>);
     expect(adapter.initializations).toHaveLength(1);
     expect(container.textContent).not.toContain("Move the pin to your entrance");
@@ -994,6 +999,76 @@ it("defers the compact map until an address is chosen from the Choose map search
     vi.useRealTimers();
   }
 });
+
+it("confirms a device location from the compact Deliver to action", async () => {
+  const current = { latitude: 10.34, longitude: 123.91 };
+  const currentServiceability = { ...serviceable, coordinate: current };
+  const confirmedLocation = {
+    displayAddress: candidate.displayAddress,
+    coordinate: current,
+    serviceability: currentServiceability,
+  };
+  const geolocation = {
+    getCurrentPosition: vi.fn((success: PositionCallback) =>
+      success({ coords: current } as GeolocationPosition),
+    ),
+  } as unknown as Geolocation;
+  const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const path = String(url);
+    if (path === "/api/commerce/address-reverse") {
+      expect(JSON.parse(String(init?.body))).toEqual({ coordinate: current });
+      return response({ ok: true, value: candidate });
+    }
+    if (path === "/api/serviceability") {
+      expect(JSON.parse(String(init?.body))).toMatchObject(current);
+      return response({ ok: true, value: currentServiceability });
+    }
+    if (path === "/api/commerce/browsing-location") {
+      expect(JSON.parse(String(init?.body))).toEqual({ coordinate: current });
+      return response({ ok: true, value: confirmedLocation });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  }) as unknown as typeof fetch;
+  const adapter = new FakeMapAdapter();
+  const onServiceabilityConfirmed = vi.fn();
+  const { container, root } = mount({
+    compact: true,
+    compactHeading: "Deliver to",
+    purpose: "serviceability",
+    geolocation,
+    fetchImpl,
+    mapAdapter: adapter,
+    onServiceabilityConfirmed,
+  });
+  try {
+    const buttons = () => Array.from(container.querySelectorAll("button"));
+    const locate = buttons().find(
+      (button) => button.textContent?.trim() === "Use current location",
+    );
+    const chooseMap = buttons().find((button) => button.textContent?.trim() === "Choose map");
+    expect(locate).toBeDefined();
+    expect(chooseMap).toBeDefined();
+    expect(
+      locate!.compareDocumentPosition(chooseMap!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(adapter.initializations).toHaveLength(0);
+
+    click(locate!);
+    await flush();
+    expect(geolocation.getCurrentPosition).toHaveBeenCalledOnce();
+    expect(adapter.initializations).toHaveLength(1);
+    expect(currentPinPosition(adapter)).toEqual(current);
+    expect(container.textContent).toContain("Delivery area confirmed");
+    expect(onServiceabilityConfirmed).not.toHaveBeenCalled();
+
+    click(buttons().find((button) => button.textContent?.trim() === "Deliver here")!);
+    await flush();
+    expect(onServiceabilityConfirmed).toHaveBeenCalledExactlyOnceWith(confirmedLocation);
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
 it("expands compact search, focuses its input and cancels search on collapse", async () => {
   vi.useFakeTimers();
   const fetchImpl = vi.fn();

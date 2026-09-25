@@ -1033,6 +1033,16 @@ export function AddressEditor({
               {compact && compactHeading && (
                 <h2 className="text-base font-bold">{compactHeading}</h2>
               )}
+              {compact && (
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm font-semibold hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-[var(--fm-focus)]"
+                >
+                  <Navigation aria-hidden="true" className="size-4 shrink-0" />
+                  Use current location
+                </button>
+              )}
               {compact && !searchExpanded && (
                 <button
                   type="button"
@@ -1128,16 +1138,6 @@ export function AddressEditor({
                         </button>
                       </li>
                     ))}
-                    <li>
-                      <button
-                        type="button"
-                        onClick={useCurrentLocation}
-                        className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold hover:bg-[var(--fm-hover)]"
-                      >
-                        <Navigation aria-hidden="true" className="size-4 shrink-0" />
-                        Use current location
-                      </button>
-                    </li>
                   </ul>
                 ) : candidates.length > 0 ? (
                   <ul aria-label="Address search results" className="divide-y rounded-lg border">

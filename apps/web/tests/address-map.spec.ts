@@ -381,6 +381,46 @@ test("storefront delivery control opens the address flow and keeps the confirmed
   );
 });
 
+test("Deliver to confirms the device location from the action above Choose map", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation(candidate.coordinate);
+  let reverseCoordinate: unknown;
+  await page.route("**/api/commerce/address-reverse", async (route) => {
+    reverseCoordinate = route.request().postDataJSON();
+    await json(route, { ok: true, value: candidate, requestId: "device-reverse" });
+  });
+  await page.route("**/api/serviceability", (route) =>
+    json(route, { ok: true, value: serviceability, requestId: "device-serviceability" }),
+  );
+
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "Choose delivery address" });
+  await expect(dialog).toBeVisible();
+  const locate = dialog.getByRole("button", { name: "Use current location" });
+  const chooseMap = dialog.getByRole("button", { name: "Choose map" });
+  await expect(locate).toBeVisible();
+  expect(
+    await locate.evaluate(
+      (button, mapButton) =>
+        Boolean(
+          button.compareDocumentPosition(mapButton as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      await chooseMap.elementHandle(),
+    ),
+  ).toBe(true);
+  await locate.click();
+  await expect(dialog.getByText("Delivery area confirmed", { exact: true })).toBeVisible();
+  expect(reverseCoordinate).toEqual({ coordinate: candidate.coordinate });
+  await dialog.getByRole("button", { name: "Deliver here" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Choose delivery address" })).toContainText(
+    "Confirmed delivery entrance",
+  );
+});
+
 test("anonymous serviceability reaches Core through the real Web Service Binding", async ({
   request,
 }) => {
