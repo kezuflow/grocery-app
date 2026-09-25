@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — FULFILLMENT-POS-POLLING-VERIFY-1 (2026-09-26)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `FULFILLMENT-POS-POLLING-VERIFY-1`. The owner asked whether `/admin/fulfillment` and `/admin/point-of-sale` still poll. Acceptance: report the active source behavior and verify that both production pages expose the shared workspace without a live write.
+
+Started on synchronized `main`/`origin/main` at `c0e32512`; unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. `point-of-sale/page.tsx` renders the same `FulfillmentWorkspace` as Fulfillment with the station presentation (`Work now` default rather than `All`). The admin layout mounts one `AdminOperationalRefreshProvider` per open admin tab. For a selected location, it reads `/api/admin/operations-activity` immediately and every 8 seconds while visible, with 16/32-second failure backoff and focus/online/visibility refresh. Every successful activity read increments a revision; the mounted fulfillment workspace then re-reads its scoped `/api/admin/fulfillment` page, even if activity content is unchanged. Global scope has no location polling. Multiple separately open browser tabs have separate loops.
+
+Read-only authenticated production browser inspection opened both URLs under Central Cebu and found the Fulfillment queue and POS Work now list. Source and `API_CONTRACTS.md` establish the configured cadence; the browser inspection did not capture production request timing or verify the deployed bundle's exact source revision. No application change, tests, live command, provider operation or deployment occurred. Completion level: **1 of 1 polling behavior questions answered from source, with both live routes inspected**. Next action: if request volume is the concern, measure production request timing and decide whether unchanged activity should avoid the queue re-read; wider Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — SCHEDULED-RECEIVING-CUTOFF-DIAG-1 (2026-09-26)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SCHEDULED-RECEIVING-CUTOFF-DIAG-1`. The owner reported that the Sep 27 Scheduled week could not be set to receiving after an expected time. Acceptance for this read-only diagnosis: identify the current cycle cutoff and purchase/receiving gates without changing live commitments or stock.
