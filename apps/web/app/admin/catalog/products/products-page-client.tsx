@@ -22,6 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewProductWorkspace } from "./new/page";
 import {
+  tryChangeAdminWorkspace,
+  useAdminRouteGuard,
+} from "@/components/admin/use-admin-route-guard";
+import {
   resolveAdminProductScopeTarget,
   type AdminProductScopeTarget,
 } from "@/lib/admin/product-scope-target";
@@ -78,6 +82,12 @@ export function ProductsPageClient({
     ? (requestedStatus as ProductStatusView)
     : "all";
   const [bulkPending, setBulkPending] = useState(false);
+  const [unresolvedDeactivation, setUnresolvedDeactivation] = useState<{
+    products: ReadonlyArray<BulkProductSelection>;
+    reason: string;
+  } | null>(null);
+  const [recoveryVersion, setRecoveryVersion] = useState(0);
+  const [recoveryFailure, setRecoveryFailure] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductListItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
@@ -103,7 +113,8 @@ export function ProductsPageClient({
     adminContext.state.selectedScope?.kind === "LOCATION" &&
     adminContext.state.context.capabilities.includes("prices.manage");
   const scopeKey = scopeTarget ? serializeProductScope(scopeTarget) : "unresolved";
-  useAdminScopeGuard(false, bulkPending || priceRecoveryActive);
+  useAdminScopeGuard(false, bulkPending || unresolvedDeactivation !== null || priceRecoveryActive);
+  useAdminRouteGuard(false, bulkPending || unresolvedDeactivation !== null);
   const previousScopeKey = useRef(scopeKey);
   useEffect(() => {
     if (previousScopeKey.current === scopeKey) return;
@@ -194,8 +205,23 @@ export function ProductsPageClient({
   async function deactivateProducts(
     products: ReadonlyArray<BulkProductSelection>,
     reason: string,
+    retry = false,
   ): Promise<BulkProductDeactivationResult> {
     if (bulkPending) return { succeeded: [], failed: [] };
+    if (unresolvedDeactivation && !retry) {
+      return {
+        succeeded: [],
+        failed: [
+          {
+            productId: products[0]?.productId ?? "unavailable",
+            name: products[0]?.name ?? "Product",
+            message: "Recover the saved deactivation before starting another.",
+            requestId: null,
+          },
+        ],
+      };
+    }
+    if (!retry) setRecoveryFailure(null);
     setBulkPending(true);
     const outcome: {
       succeeded: Array<{ productId: string; name: string }>;
@@ -206,8 +232,9 @@ export function ProductsPageClient({
         requestId: string | null;
       }>;
     } = { succeeded: [], failed: [] };
+    let uncertain = false;
     try {
-      for (const product of products) {
+      for (const [index, product] of products.entries()) {
         try {
           const response = await fetch(
             `/api/admin/catalog/products/${encodeURIComponent(product.productId)}/status`,
@@ -228,20 +255,39 @@ export function ProductsPageClient({
           if (result.ok) {
             outcome.succeeded.push({ productId: product.productId, name: product.name });
           } else {
+            if (
+              result.error.code === "CONFLICT" &&
+              result.error.message ===
+                "Catalog result could not be confirmed; retry the saved request"
+            ) {
+              uncertain = true;
+              setUnresolvedDeactivation({ products: products.slice(index), reason });
+            }
             outcome.failed.push({
               productId: product.productId,
               name: product.name,
               message: result.error.message,
               requestId: result.error.requestId,
             });
+            if (uncertain) break;
           }
         } catch {
+          uncertain = true;
+          setUnresolvedDeactivation({ products: products.slice(index), reason });
           outcome.failed.push({
             productId: product.productId,
             name: product.name,
-            message: "Network error while deactivating this product.",
+            message: "Deactivation result is unknown. Retry the saved request.",
             requestId: null,
           });
+          break;
+        }
+      }
+      if (!uncertain) {
+        setUnresolvedDeactivation(null);
+        if (retry) {
+          setRecoveryVersion((current) => current + 1);
+          setRecoveryFailure(outcome.failed.map((failure) => failure.message).join(" ") || null);
         }
       }
       await invalidateAdminProductQueries(
@@ -273,9 +319,11 @@ export function ProductsPageClient({
               aria-expanded={panelVisible && panelMode === "create"}
               aria-controls="product-detail-panel"
               onClick={() => {
-                setPanelMode("create");
-                setWorkspaceScopeKey(scopeKey);
-                setPanelOpen((open) => (panelMode === "create" ? !open : true));
+                tryChangeAdminWorkspace(() => {
+                  setPanelMode("create");
+                  setWorkspaceScopeKey(scopeKey);
+                  setPanelOpen((open) => (panelMode === "create" ? !open : true));
+                });
               }}
             >
               <Plus aria-hidden="true" />
@@ -284,6 +332,36 @@ export function ProductsPageClient({
           ) : null
         }
       />
+      {unresolvedDeactivation ? (
+        <Alert variant="destructive">
+          <AlertTitle>Product deactivation could not be confirmed</AlertTitle>
+          <AlertDescription>
+            Retry the saved request for{" "}
+            {unresolvedDeactivation.products.map((product) => product.name).join(", ")}.
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 block"
+              disabled={bulkPending}
+              onClick={() =>
+                void deactivateProducts(
+                  unresolvedDeactivation.products,
+                  unresolvedDeactivation.reason,
+                  true,
+                )
+              }
+            >
+              Retry saved deactivation
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {recoveryFailure ? (
+        <Alert variant="destructive">
+          <AlertTitle>Product deactivation could not be completed</AlertTitle>
+          <AlertDescription>{recoveryFailure}</AlertDescription>
+        </Alert>
+      ) : null}
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {listQuery.data && listQuery.isFetching ? (
         <p role="status" className="text-sm text-[var(--fm-text-muted)]">
@@ -316,13 +394,16 @@ export function ProductsPageClient({
             fromQuery={searchParams.toString()}
             canManage={canManage}
             deactivationPending={bulkPending}
+            deactivationRecoveryVersion={recoveryVersion}
             onDeactivateSelected={deactivateProducts}
             onOpenProduct={(product) => {
               if (priceRecoveryActive) return;
-              setSelectedProduct(product);
-              setPanelMode("detail");
-              setWorkspaceScopeKey(scopeKey);
-              setPanelOpen(true);
+              tryChangeAdminWorkspace(() => {
+                setSelectedProduct(product);
+                setPanelMode("detail");
+                setWorkspaceScopeKey(scopeKey);
+                setPanelOpen(true);
+              });
             }}
             openProductId={
               panelVisible && panelMode === "detail" ? selectedProduct?.productId : null
@@ -355,7 +436,7 @@ export function ProductsPageClient({
           fromQuery={searchParams.toString()}
           canManagePrices={canManageLocationPrices}
           onClose={() => {
-            if (!priceRecoveryActive) setPanelOpen(false);
+            if (!priceRecoveryActive) tryChangeAdminWorkspace(() => setPanelOpen(false));
           }}
           onPriceSaved={() => {
             void invalidateAdminProductQueries(queryClient, [previewResult.value.productId]);
@@ -366,7 +447,7 @@ export function ProductsPageClient({
         <GlobalProductPreviewPanel
           product={previewResult.value}
           fromQuery={searchParams.toString()}
-          onClose={() => setPanelOpen(false)}
+          onClose={() => tryChangeAdminWorkspace(() => setPanelOpen(false))}
           onSaved={async () => {
             await invalidateAdminProductQueries(queryClient, [previewResult.value.productId]);
             await previewQuery.refetch();

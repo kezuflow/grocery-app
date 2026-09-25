@@ -77,6 +77,15 @@ export function tryNavigateAdminRoute(navigate: () => void): boolean {
   return true;
 }
 
+/** Confirm a same-page change that may discard a mounted editor without leaving the route. */
+export function tryChangeAdminWorkspace(change: () => void): boolean {
+  const { dirty, locked } = currentGuard();
+  if (locked) return false;
+  if (dirty && !window.confirm("Discard unsaved changes and leave this page?")) return false;
+  change();
+  return true;
+}
+
 function onLinkClick(event: MouseEvent): void {
   if (
     event.defaultPrevented ||

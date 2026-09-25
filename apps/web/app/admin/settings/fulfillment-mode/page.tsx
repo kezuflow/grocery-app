@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "../../../../components/ui/select";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { useAdminContext } from "../../admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
+import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
 
 type CommerceAction = "PAUSE" | "SWITCH_MODE" | "OPEN";
 type Command = {
@@ -58,6 +59,13 @@ export default function FulfillmentModePage() {
   const commandIntent = useAdminCommandIntent();
   const [unconfirmed, setUnconfirmed] = useState<Command | null>(null);
   const locked = commandIntent.pending || unconfirmed !== null;
+  const dirty =
+    reason.trim() !== "" || (configuration !== null && mode !== configuration.fulfillmentMode);
+  useAdminScopeGuard(dirty, locked, () => {
+    setReason("");
+    if (configuration) setMode(configuration.fulfillmentMode);
+  });
+  useAdminRouteGuard(dirty, locked);
   const readGeneration = useRef(0);
 
   const load = useCallback(async () => {

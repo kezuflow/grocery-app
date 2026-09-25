@@ -61,6 +61,11 @@ for (const width of [1440, 390]) {
     await loseNextResponse(page, "POST", "/api/admin/catalog/products");
     await page.getByRole("button", { name: "Create product", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved setup" })).toBeVisible();
+    if (width === 1440) {
+      await page.getByRole("link", { name: "Home", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/catalog\/products\/new$/);
+      await expect(page.getByRole("button", { name: "Retry saved setup" })).toBeVisible();
+    }
     await expect(page.getByLabel("Product name", { exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Retry saved setup" }).click();
@@ -76,6 +81,11 @@ for (const width of [1440, 390]) {
     await loseNextResponse(page, "PATCH", productPath);
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved product" })).toBeVisible();
+    if (width === 1440) {
+      await page.getByRole("link", { name: "Home", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/catalog\/products\/[^/]+\/edit(?:\?.*)?$/);
+      await expect(page.getByRole("button", { name: "Retry saved product" })).toBeVisible();
+    }
     await expect(page.getByLabel("Product name", { exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     // A scope refresh must not replace or hide the uncertain edit request.

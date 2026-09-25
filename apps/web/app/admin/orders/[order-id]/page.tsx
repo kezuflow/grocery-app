@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "../../../../components/admin/admin-command-state";
-import { useAdminContext } from "../../admin-context-provider";
+import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 import {
   notifyCommandError,
   notifyCommandSuccess,
@@ -97,6 +98,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
   const [message, setMessage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const cancelTrigger = useRef<HTMLButtonElement>(null);
@@ -105,14 +108,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
     orderId: string;
     body: string;
   } | null>(null);
+  const commandLocked =
+    cancelIntent.pending || cancelIntent.uncertain || savedCancellation !== null || confirming;
+  useAdminRouteGuard(false, commandLocked);
+  useAdminScopeGuard(false, commandLocked);
+  const outsideScope =
+    admin.state.phase === "ready" &&
+    admin.state.selectedScope?.kind === "LOCATION" &&
+    order?.fulfillment?.locationId !== admin.state.selectedScope.locationId;
+  const visibleState =
+    loadedScope !== currentScope ? "loading" : state === "ready" && outsideScope ? "scope" : state;
 
-  const load = useCallback(async (id: string) => {
+  const load = useCallback(async (id: string, scope: string | null) => {
+    const generation = ++loadGeneration.current;
     setState("loading");
+    setLoadedScope(scope);
     try {
       const payload = (await (
         await fetch(`/api/admin/orders/${encodeURIComponent(id)}`)
       ).json()) as RpcResult<AdminOrderDetail>;
+      if (generation !== loadGeneration.current) return;
       if (!payload.ok) {
+        setOrder(null);
         setMessage(payload.error.message);
         setState("error");
         return;
@@ -120,17 +137,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
       setOrder(payload.value);
       setState("ready");
     } catch {
+      if (generation !== loadGeneration.current) return;
+      setOrder(null);
       setMessage("Network error loading the order.");
       setState("error");
     }
   }, []);
 
   useEffect(() => {
+    let current = true;
     void params.then(({ "order-id": id }) => {
+      if (!current) return;
       setOrderId(id);
-      void load(id);
+      void load(id, currentScope);
     });
-  }, [params, load]);
+    return () => {
+      current = false;
+      loadGeneration.current += 1;
+    };
+  }, [params, load, currentScope]);
 
   async function submitCancellation(command: { orderId: string; body: string }) {
     setSavedCancellation(command);
@@ -160,7 +185,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
           payload.value.state === "CANCELED" ? "Order canceled" : "Cancellation accepted",
         );
       }
-      await load(command.orderId);
+      await load(command.orderId, currentScope);
     } catch {
       setMessage("The cancellation result is unknown. Retry the saved request.");
     }
@@ -210,25 +235,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
         Orders
       </Link>
 
-      {state === "loading" ? (
+      {visibleState === "loading" ? (
         <div role="status" className="space-y-4">
           <Skeleton className="h-12 w-80" />
           <Skeleton className="h-64 w-full" />
         </div>
       ) : null}
-      {state === "error" ? (
+      {visibleState === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Order could not be loaded</AlertTitle>
           <AlertDescription>
             {message}
             <br />
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => void load(orderId)}>
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => void load(orderId, currentScope)}
+            >
               Retry
             </Button>
           </AlertDescription>
         </Alert>
       ) : null}
-      {state === "ready" && order ? (
+      {visibleState === "scope" ? (
+        <Alert>
+          <AlertTitle>Order is outside this location</AlertTitle>
+          <AlertDescription>
+            Select the Order’s location or Global scope to view this record.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {visibleState === "ready" && order ? (
         <>
           <PageHeader
             title={`Order ${order.orderNumber ?? order.orderId}`}

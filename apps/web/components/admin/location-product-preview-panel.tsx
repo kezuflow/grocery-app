@@ -17,6 +17,7 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
 import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
+import { tryChangeAdminWorkspace, useAdminRouteGuard } from "./use-admin-route-guard";
 
 type LocationScope = Extract<AdminProductDetail["scope"], { kind: "LOCATION" }>;
 type LocationProductDetail = AdminProductDetail & { scope: LocationScope };
@@ -120,10 +121,10 @@ function LocationSkuPriceRow({
   const intent = useAdminCommandIntent();
   const displayedPrice = savedPriceMinor === undefined ? sku.priceMinor : savedPriceMinor;
   const priceEditable = canManagePrices && view?.canManage !== false;
-  useAdminScopeGuard(
-    editing && view !== null && amount !== priceInputValue(view.currentPriceMinor),
-    loading || command !== null || intent.pending || intent.uncertain,
-  );
+  const dirty = editing && view !== null && amount !== priceInputValue(view.currentPriceMinor);
+  const locked = loading || command !== null || intent.pending || intent.uncertain;
+  useAdminScopeGuard(dirty, locked);
+  useAdminRouteGuard(dirty, locked);
 
   useEffect(() => {
     onRecoveryStateChange(sku.skuId, command !== null || intent.pending);
@@ -287,10 +288,12 @@ function LocationSkuPriceRow({
                   size="sm"
                   variant="outline"
                   disabled={command !== null || intent.pending}
-                  onClick={() => {
-                    setEditing(false);
-                    setNotice(null);
-                  }}
+                  onClick={() =>
+                    tryChangeAdminWorkspace(() => {
+                      setEditing(false);
+                      setNotice(null);
+                    })
+                  }
                 >
                   Cancel
                 </Button>

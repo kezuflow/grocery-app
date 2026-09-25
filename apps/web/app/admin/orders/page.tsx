@@ -21,6 +21,7 @@ import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-mast
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { OrderProgressStatus } from "../../../components/admin/order-progress-status";
 import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
+import { tryChangeAdminWorkspace } from "../../../components/admin/use-admin-route-guard";
 import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
@@ -164,8 +165,10 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   }
 
   function openOrderPreview(order: AdminOrderSummary) {
-    setSelectedOrder(order);
-    setPanelOpen(true);
+    tryChangeAdminWorkspace(() => {
+      setSelectedOrder(order);
+      setPanelOpen(true);
+    });
   }
 
   const updateSelectedOrder = useCallback(
@@ -377,7 +380,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   const detail = selectedOrder ? (
     <OrderPreviewPanel
       order={selectedOrder}
-      onClose={() => setPanelOpen(false)}
+      onClose={() => tryChangeAdminWorkspace(() => setPanelOpen(false))}
       onUpdated={updateSelectedOrder}
     />
   ) : null;

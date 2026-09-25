@@ -21,6 +21,7 @@ import { AdminStatusPill } from "./admin-status-pill";
 import { useCategoryOptions } from "./category-authoring-state";
 import { useCatalogCommand } from "./catalog-command-state";
 import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 function date(value: string | null): string {
   if (!value) return "Not recorded";
@@ -87,6 +88,7 @@ export function GlobalProductPreviewPanel({
     JSON.stringify(categoryIds) !==
     JSON.stringify(product.categories.map((item) => item.categoryId));
   useAdminScopeGuard(hasDraft || categoriesChanged, frozen);
+  useAdminRouteGuard(hasDraft || categoriesChanged, frozen);
   const selectedCategoryNames = categoryIds.map((categoryId) => {
     const category =
       categoryOptions.items.find((item) => item.categoryId === categoryId) ??

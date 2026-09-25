@@ -40,10 +40,37 @@ for (const width of [1440, 390])
         else await route.fulfill({ response });
       });
       await page.goto(`/admin/orders/${id}`);
+      if (width === 1440 && previouslyRefunded === 0) {
+        await expect(page.getByRole("heading", { level: 1, name: /^Order / })).toBeVisible();
+        let releaseRead!: () => void;
+        const heldRead = new Promise<void>((resolve) => {
+          releaseRead = resolve;
+        });
+        await page.route(`**/api/admin/orders/${id}`, async (route) => {
+          await heldRead;
+          await route.continue();
+        });
+        const scope = page.getByRole("combobox", { name: "Active admin scope" });
+        await scope.click();
+        await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
+        await expect(page.getByRole("heading", { level: 1, name: /^Order / })).toHaveCount(0);
+        await expect(page.getByText("Cancellation Customer", { exact: true })).toHaveCount(0);
+        releaseRead();
+        await expect(page.getByRole("heading", { level: 1, name: /^Order / })).toBeVisible();
+        await page.unroute(`**/api/admin/orders/${id}`);
+        await scope.click();
+        await page.getByRole("option", { name: "Global", exact: true }).click();
+        await expect(page.getByRole("heading", { level: 1, name: /^Order / })).toBeVisible();
+      }
       await page.getByRole("button", { name: "Cancel order", exact: true }).click();
       await page.getByLabel("Confirmation reason").fill("Unable to fulfill; refund customer");
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
       await expect(page.getByRole("button", { name: "Retry saved cancellation" })).toBeVisible();
+      if (width === 1440) {
+        await page.getByRole("link", { name: "Home", exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/admin/orders/${id}$`));
+        await expect(page.getByRole("button", { name: "Retry saved cancellation" })).toBeVisible();
+      }
       await page.getByRole("button", { name: "Retry saved cancellation" }).click();
       await expect(
         page.getByText("Cancellation accepted. Current refund progress is shown below.", {

@@ -84,6 +84,7 @@ export function ProductListView({
   fromQuery,
   canManage = false,
   deactivationPending = false,
+  deactivationRecoveryVersion = 0,
   onDeactivateSelected,
   onOpenProduct,
   openProductId,
@@ -97,6 +98,7 @@ export function ProductListView({
   fromQuery: string;
   canManage?: boolean;
   deactivationPending?: boolean;
+  deactivationRecoveryVersion?: number;
   onDeactivateSelected?: (
     products: ReadonlyArray<BulkProductSelection>,
     reason: string,
@@ -114,6 +116,7 @@ export function ProductListView({
   const [rowToDeactivate, setRowToDeactivate] = useState<ProductListItem | null>(null);
   const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
   const [result, setResult] = useState<BulkProductDeactivationResult | null>(null);
+  useEffect(() => setResult(null), [deactivationRecoveryVersion]);
   const [visibleColumns, setVisibleColumns] = useState<ReadonlySet<ProductColumnKey>>(
     () => new Set(PRODUCT_COLUMN_OPTIONS.map((column) => column.key)),
   );

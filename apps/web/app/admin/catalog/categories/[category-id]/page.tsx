@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
 export default function CategoryDetailPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
@@ -24,10 +25,11 @@ export default function CategoryDetailPage() {
   const intent = useCatalogCommand(adminCategorySummarySchema);
   const [result, setResult] = useState<RpcResult<AdminCategoryDetail> | null>(null);
   const [reason, setReason] = useState("");
-  useAdminScopeGuard(reason.trim().length > 0, intent.pending || intent.uncertain, () =>
-    setReason(""),
-  );
   const [confirming, setConfirming] = useState(false);
+  const dirty = reason.trim().length > 0;
+  const locked = intent.pending || intent.uncertain || confirming;
+  useAdminScopeGuard(dirty, locked, () => setReason(""));
+  useAdminRouteGuard(dirty, locked);
   const statusTrigger = useRef<HTMLButtonElement>(null);
   const [notice, setNotice] = useState(
     searchParams.get("created")

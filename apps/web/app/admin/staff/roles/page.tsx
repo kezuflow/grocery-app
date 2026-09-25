@@ -17,6 +17,8 @@ import {
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
+import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
+import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -28,11 +30,20 @@ type LoadState =
   | { phase: "ready"; page: AdminRolePage };
 
 export default function RolesPage() {
+  const admin = useAdminContext();
+  const globalScope = admin.state.phase === "ready" && admin.state.selectedScope?.kind === "GLOBAL";
   const [state, setState] = useState<LoadState>({ phase: "loading" });
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const command = useAdminCommand();
   const { notice, setNotice, busy, uncertain } = command;
+  const dirty = code.trim() !== "" || name.trim() !== "";
+  const locked = busy || uncertain;
+  useAdminScopeGuard(dirty, locked, () => {
+    setCode("");
+    setName("");
+  });
+  useAdminRouteGuard(dirty, locked);
   const pagination = useAdminPagination();
 
   const load = useCallback((cursor: string | null) => {
@@ -61,7 +72,9 @@ export default function RolesPage() {
     })();
   }, []);
 
-  useEffect(() => load(pagination.cursor), [load, pagination.cursor]);
+  useEffect(() => {
+    if (globalScope) load(pagination.cursor);
+  }, [load, pagination.cursor, globalScope]);
 
   async function createRole(event: React.FormEvent) {
     event.preventDefault();
@@ -97,14 +110,21 @@ export default function RolesPage() {
       />
       <WorkspaceNavigation parentCode="staff" label="Staff administration" />
 
-      {state.phase === "loading" ? (
+      {admin.state.phase === "ready" && !globalScope ? (
+        <Alert>
+          <AlertTitle>Global scope required</AlertTitle>
+          <AlertDescription>Select Global scope to administer roles.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {globalScope && state.phase === "loading" ? (
         <div className="space-y-3" role="status" aria-label="Loading roles">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
       ) : null}
 
-      {state.phase === "error" ? (
+      {globalScope && state.phase === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>Roles could not be loaded</AlertTitle>
           <AlertDescription>
@@ -119,7 +139,7 @@ export default function RolesPage() {
         </Alert>
       ) : null}
 
-      {state.phase === "ready" ? (
+      {globalScope && state.phase === "ready" ? (
         <>
           {notice ? (
             <p

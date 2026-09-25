@@ -13,6 +13,7 @@ import { ProductImagesEditor } from "@/components/admin/product-images-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
@@ -46,6 +47,7 @@ export default function EditProductPage() {
     value !== null &&
     JSON.stringify(value) !== JSON.stringify(initialValue.current);
   useAdminScopeGuard(dirty, intent.pending || intent.uncertain || imageBusy);
+  useAdminRouteGuard(dirty, intent.pending || intent.uncertain || imageBusy);
   useEffect(() => {
     // Keep the complete image intent mounted while its outcome is unknown.
     if (imageBusy || intent.pending || intent.uncertain) return;
@@ -279,7 +281,10 @@ export default function EditProductPage() {
             type="button"
             variant="outline"
             disabled={intent.pending || intent.uncertain || imageBusy}
-            onClick={() => router.push(detailHref)}
+            onClick={() => {
+              if (dirty && !window.confirm("Discard this unsaved product?")) return;
+              router.push(detailHref);
+            }}
           >
             Cancel
           </Button>

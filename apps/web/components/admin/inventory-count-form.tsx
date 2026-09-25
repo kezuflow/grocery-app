@@ -5,8 +5,9 @@ import { z, adminProductDetailSchema } from "@freshmarkets/validation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../ui/sheet";
-import { useAdminContext } from "../../app/admin/admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminCommand } from "./use-admin-command";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 export function InventoryCountForm({
   item,
@@ -30,6 +31,19 @@ export function InventoryCountForm({
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const command = useAdminCommand();
+  const dirty =
+    open &&
+    (grams.trim() !== "" ||
+      reason.trim() !== "" ||
+      Object.values(counts).some((value) => value.trim() !== ""));
+  const locked = command.busy || command.uncertain;
+  useAdminScopeGuard(dirty, locked, () => {
+    setOpen(false);
+    setGrams("");
+    setCounts({});
+    setReason("");
+  });
+  useAdminRouteGuard(dirty, locked);
   useEffect(() => {
     if (!open || !marketId) return;
     const controller = new AbortController();
@@ -64,7 +78,12 @@ export function InventoryCountForm({
       <Sheet
         open={open}
         onOpenChange={(value) => {
-          if (!command.busy && !command.uncertain) setOpen(value);
+          if (
+            locked ||
+            (!value && dirty && !window.confirm("Discard this unsaved inventory count?"))
+          )
+            return;
+          setOpen(value);
         }}
       >
         <SheetContent className="overflow-y-auto">

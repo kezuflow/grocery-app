@@ -78,6 +78,22 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("All five photo spaces are used.", { exact: false })).toBeVisible();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
+    if (width === 1440) {
+      const firstAlt = page.getByLabel("Alt text for Abiu photo 1");
+      const secondOrder = page.getByLabel("Order for Abiu photo 2");
+      await firstAlt.fill("Unsaved first image draft");
+      await secondOrder.fill("7");
+      page.once("dialog", async (dialog) => {
+        expect(dialog.message()).toContain("Discard other unsaved image changes?");
+        await dialog.dismiss();
+      });
+      await page.getByRole("button", { name: "Save Abiu photo 2" }).click();
+      await expect(firstAlt).toHaveValue("Unsaved first image draft");
+      await expect(secondOrder).toHaveValue("7");
+      page.once("dialog", async (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Save Abiu photo 2" }).click();
+      await expect(page.getByLabel("Alt text for Abiu photo 1")).toHaveValue("Abiu photo 1");
+    }
     const productId = new URL(page.url()).pathname.split("/").at(-1);
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
@@ -169,6 +185,14 @@ for (const width of [1440, 390]) {
       await expect(customer.getByRole("img", { name: "Abiu photo 1", exact: true })).toBeVisible();
       await page.goto(`/admin/catalog/products/${productId}/edit`);
       await page.getByRole("button", { name: "Replace Fresh abiu preview", exact: true }).click();
+      if (width === 1440) {
+        await page
+          .getByLabel("Product media image", { exact: true })
+          .setInputFiles(resolve("public/produce/abiu.webp"));
+        page.once("dialog", async (dialog) => dialog.accept());
+        await page.getByRole("button", { name: "Cancel replacement", exact: true }).click();
+        await page.getByRole("button", { name: "Replace Fresh abiu preview", exact: true }).click();
+      }
       await page
         .getByLabel("Product media image", { exact: true })
         .setInputFiles(resolve("public/produce/abiu.webp"));

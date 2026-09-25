@@ -30,7 +30,11 @@ import { ListPageSection, PageHeader, StatusBadge } from "../../../components/ad
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
 import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
-import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
+import {
+  tryChangeAdminWorkspace,
+  useAdminRouteGuard,
+} from "../../../components/admin/use-admin-route-guard";
+import { useAdminScopeGuard } from "../admin-context-provider";
 import {
   AdminCursorPagination,
   useAdminPagination,
@@ -108,7 +112,9 @@ export default function ReceivingPage() {
       Boolean(value?.trim()),
     ),
   );
-  useAdminRouteGuard(hasDraft, commandIntent.pending || commandIntent.uncertain || !!unresolved);
+  const locked = commandIntent.pending || commandIntent.uncertain || !!unresolved;
+  useAdminScopeGuard(hasDraft, locked, () => setLineValues({}));
+  useAdminRouteGuard(hasDraft, locked);
   const scopeKey = JSON.stringify([locationId, cycleId]);
   const pagination = useAdminPagination(scopeKey);
   const pageKey = JSON.stringify([locationId, cycleId, pagination.cursor]);
@@ -545,8 +551,8 @@ export default function ReceivingPage() {
               pageNumber={pagination.pageNumber}
               nextCursor={visiblePage.nextCursor}
               pending={commandIntent.pending || commandIntent.uncertain || unresolved !== null}
-              onPrevious={pagination.previous}
-              onNext={pagination.next}
+              onPrevious={() => tryChangeAdminWorkspace(pagination.previous)}
+              onNext={(nextCursor) => tryChangeAdminWorkspace(() => pagination.next(nextCursor))}
             />
           </ListPageSection>
         </>

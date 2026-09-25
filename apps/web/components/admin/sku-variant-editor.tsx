@@ -14,6 +14,8 @@ import {
 } from "../ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useCatalogCommand } from "./catalog-command-state";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 function fields(sku: AdminCatalogSkuSummary) {
   return {
@@ -42,6 +44,12 @@ export function SkuVariantEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const command = useCatalogCommand(adminCatalogSkuSummarySchema);
   const frozen = command.pending || command.uncertain;
+  const dirty = open && JSON.stringify(value) !== JSON.stringify(fields(sku));
+  useAdminScopeGuard(dirty, frozen, () => {
+    setOpen(false);
+    setValue(fields(sku));
+  });
+  useAdminRouteGuard(dirty, frozen);
   async function save(event: FormEvent) {
     event.preventDefault();
     if (command.pending) return;
@@ -85,6 +93,7 @@ export function SkuVariantEditor({
       open={open}
       onOpenChange={(next) => {
         if (frozen) return;
+        if (!next && dirty && !window.confirm("Discard this unsaved variant?")) return;
         if (next) {
           setValue(fields(sku));
           setNotice(null);

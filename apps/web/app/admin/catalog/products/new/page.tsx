@@ -29,6 +29,7 @@ import { X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
 const CREATE_PRODUCT_FORM_ID = "create-product-form";
 
@@ -119,10 +120,16 @@ export function NewProductWorkspace({
     ],
   });
   const initialSnapshot = useRef(JSON.stringify(value));
-  useAdminScopeGuard(
-    JSON.stringify(value) !== initialSnapshot.current || savedSetup.current !== null,
-    intent.pending || recovering,
-  );
+  const dirty = JSON.stringify(value) !== initialSnapshot.current || savedSetup.current !== null;
+  const locked = intent.pending || recovering;
+  useAdminScopeGuard(dirty, locked);
+  useAdminRouteGuard(dirty, locked);
+  function cancelCreation() {
+    if (locked) return;
+    if (dirty && !window.confirm("Discard this unsaved product?")) return;
+    if (onCancel) onCancel();
+    else router.push("/admin/catalog/products");
+  }
   useEffect(() => {
     let current = true;
     setUnitsLoading(true);
@@ -349,7 +356,7 @@ export function NewProductWorkspace({
           size="sm"
           variant="outline"
           disabled={creationLocked}
-          onClick={onCancel}
+          onClick={cancelCreation}
         >
           Cancel
         </Button>
@@ -359,7 +366,7 @@ export function NewProductWorkspace({
           size="sm"
           variant="outline"
           disabled={creationLocked}
-          onClick={() => router.push("/admin/catalog/products")}
+          onClick={cancelCreation}
         >
           Cancel
         </Button>
@@ -396,7 +403,7 @@ export function NewProductWorkspace({
             size="icon-sm"
             aria-label="Close product creation"
             disabled={creationLocked}
-            onClick={onCancel}
+            onClick={cancelCreation}
           >
             <X aria-hidden="true" />
           </Button>

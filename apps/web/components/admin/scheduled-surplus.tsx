@@ -6,6 +6,7 @@ import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
 import { useAdminCommand } from "./use-admin-command";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 export function ScheduledSurplus({
   items,
   scopeKey,
@@ -23,7 +24,15 @@ export function ScheduledSurplus({
     [reason, setReason] = useState(""),
     [inspected, setInspected] = useState(false);
   const command = useAdminCommand();
-  useAdminRouteGuard(selected !== null, command.busy || command.uncertain);
+  const hasDraft = quantity !== "" || reason !== "" || inspected;
+  useAdminRouteGuard(hasDraft, command.busy || command.uncertain);
+  useAdminScopeGuard(hasDraft, command.busy || command.uncertain, () => {
+    setSelected(null);
+    setSelectedScopeKey(null);
+    setQuantity("");
+    setReason("");
+    setInspected(false);
+  });
   useEffect(() => {
     if (selectedScopeKey && selectedScopeKey !== scopeKey && !command.busy && !command.uncertain) {
       setSelected(null);
@@ -80,7 +89,12 @@ export function ScheduledSurplus({
       <Sheet
         open={selected !== null && selectedScopeKey === scopeKey}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) {
+          if (
+            !open &&
+            !command.busy &&
+            !command.uncertain &&
+            (!hasDraft || window.confirm("Discard unsaved surplus changes?"))
+          ) {
             setSelected(null);
             setSelectedScopeKey(null);
           }

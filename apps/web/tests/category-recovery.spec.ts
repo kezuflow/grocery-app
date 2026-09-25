@@ -52,6 +52,10 @@ for (const width of [1440, 390]) {
     await loseNextResponse(page, "POST", "/api/admin/catalog/categories");
     await page.getByRole("button", { name: "Create category", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved category" })).toBeVisible();
+    if (width === 1440) {
+      await page.getByRole("link", { name: "Home", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/catalog\/categories\/new$/);
+    }
     await expect(page.getByLabel("Category name")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Retry saved category" }).click();
@@ -64,6 +68,10 @@ for (const width of [1440, 390]) {
     await loseNextResponse(page, "PATCH", categoryPath);
     await page.getByRole("button", { name: "Save category", exact: true }).click();
     await expect(page.getByRole("button", { name: "Retry saved category" })).toBeVisible();
+    if (width === 1440) {
+      await page.getByRole("link", { name: "Home", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/catalog\/categories\/[^/]+\/edit(?:\?.*)?$/);
+    }
     await expect(page.getByLabel("Category name")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Retry saved category" }).click();

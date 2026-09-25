@@ -10,6 +10,7 @@ import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
 const initialCategory: CategoryFormValue = {
   code: "",
@@ -41,6 +42,7 @@ export function NewCategoryWorkspace({
   const dirty = JSON.stringify(value) !== initialSnapshot.current;
   const locked = intent.pending || intent.uncertain;
   useAdminScopeGuard(dirty, locked, () => setValue(initialCategory));
+  useAdminRouteGuard(dirty, locked);
   useEffect(() => onEditorStateChange?.({ dirty, locked }), [dirty, locked, onEditorStateChange]);
   function cancel() {
     if (locked) return;

@@ -45,6 +45,11 @@ import { useAdminContext } from "../../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { NewCategoryWorkspace } from "./new/page";
 import { useCatalogCommand } from "@/components/admin/catalog-command-state";
+import {
+  tryChangeAdminWorkspace,
+  tryNavigateAdminRoute,
+  useAdminRouteGuard,
+} from "@/components/admin/use-admin-route-guard";
 
 type CategoriesPageClientProps = {
   initialPayload: RpcResult<AdminCategoryPage>;
@@ -83,12 +88,10 @@ export function CategoriesPageClient({
     adminContext.state.phase === "ready" &&
     adminContext.state.selectedScope?.kind === "GLOBAL" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
-  function canLeaveCreator() {
-    if (!panelOpen || panelMode !== "create") return true;
-    if (creatorState.locked) return false;
-    return !creatorState.dirty || window.confirm("Discard this unsaved category?");
-  }
-
+  useAdminRouteGuard(
+    categoryToDeactivate !== null,
+    deactivationIntent.pending || deactivationIntent.uncertain,
+  );
   useEffect(() => {
     let current = true;
     if (
@@ -128,13 +131,14 @@ export function CategoriesPageClient({
 
   const items = payload?.ok ? payload.value.items : [];
   function setFilter(key: string, value: string) {
-    if (!canLeaveCreator()) return;
-    if (panelOpen && panelMode === "create") setPanelOpen(false);
-    const next = new URLSearchParams(searchParams.toString());
-    if (value && value !== "all") next.set(key, value);
-    else next.delete(key);
-    pagination.reset(next);
-    router.replace(`/admin/catalog/categories${next.size ? `?${next}` : ""}`);
+    tryNavigateAdminRoute(() => {
+      if (panelOpen && panelMode === "create") setPanelOpen(false);
+      const next = new URLSearchParams(searchParams.toString());
+      if (value && value !== "all") next.set(key, value);
+      else next.delete(key);
+      pagination.reset(next);
+      router.replace(`/admin/catalog/categories${next.size ? `?${next}` : ""}`);
+    });
   }
 
   async function copyCategoryId(categoryId: string) {
@@ -192,10 +196,11 @@ export function CategoriesPageClient({
   }
 
   function openCategory(item: AdminCategorySummary) {
-    if (!canLeaveCreator()) return;
-    setSelectedCategory(item);
-    setPanelMode("detail");
-    setPanelOpen(true);
+    tryChangeAdminWorkspace(() => {
+      setSelectedCategory(item);
+      setPanelMode("detail");
+      setPanelOpen(true);
+    });
   }
 
   function categoryActions(item: AdminCategorySummary) {
@@ -218,12 +223,7 @@ export function CategoriesPageClient({
             View details
           </DropdownMenuItem>
           {canManage ? (
-            <DropdownMenuItem
-              asChild
-              onSelect={(event) => {
-                if (!canLeaveCreator()) event.preventDefault();
-              }}
-            >
+            <DropdownMenuItem asChild>
               <a
                 href={`/admin/catalog/categories/${item.categoryId}/edit${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
               >
@@ -269,9 +269,10 @@ export function CategoriesPageClient({
               aria-controls="category-detail-panel"
               disabled={panelOpen && panelMode === "create" && creatorState.locked}
               onClick={() => {
-                if (!canLeaveCreator()) return;
-                setPanelMode("create");
-                setPanelOpen((open) => (panelMode === "create" ? !open : true));
+                tryChangeAdminWorkspace(() => {
+                  setPanelMode("create");
+                  setPanelOpen((open) => (panelMode === "create" ? !open : true));
+                });
               }}
             >
               <Plus aria-hidden="true" />
@@ -421,9 +422,6 @@ export function CategoriesPageClient({
                   href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
                   prefetch={false}
                   className="inline-flex text-sm font-medium underline underline-offset-4"
-                  onClick={(event) => {
-                    if (!canLeaveCreator()) event.preventDefault();
-                  }}
                 >
                   Full details
                 </Link>

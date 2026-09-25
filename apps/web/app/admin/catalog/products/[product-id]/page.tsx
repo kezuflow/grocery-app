@@ -28,7 +28,8 @@ import { ConfirmCommandDialog } from "../../../../../components/admin/admin-cont
 import { ProductImagesEditor } from "@/components/admin/product-images-editor";
 import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
-import { useAdminContext } from "../../../admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAdminProductQueries } from "@/lib/query/admin-products";
 import {
@@ -98,6 +99,27 @@ export default function ProductDetailPage({
     pending:
       imageBusy || command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain,
   };
+  const dirty =
+    reason.trim() !== "" ||
+    newSku.code.trim() !== "" ||
+    newSku.name.trim() !== "" ||
+    newSku.unitId !== "" ||
+    newSku.sellQuantity.trim() !== "" ||
+    newSku.sellingLabel !== "Piece" ||
+    newSku.estimatedShippingWeightGrams.trim() !== "";
+  const locked = commandIntent.pending || confirmingStatus !== null || variantCommand !== null;
+  useAdminScopeGuard(dirty, locked, () => {
+    setReason("");
+    setNewSku({
+      code: "",
+      name: "",
+      unitId: "",
+      sellQuantity: "",
+      sellingLabel: "Piece",
+      estimatedShippingWeightGrams: "",
+    });
+  });
+  useAdminRouteGuard(dirty, locked);
   const variantNotice = skuCommand.uncertain
     ? "The variant could not be confirmed. Select Add variant to try again."
     : skuCommand.notice;

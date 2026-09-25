@@ -6,6 +6,7 @@ import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
 import { useAdminCommand } from "./use-admin-command";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 type Group = {
   productId: string;
   productName: string;
@@ -62,7 +63,18 @@ export function ScheduledCountedReceiving({
     Record<string, { accepted: string; rejected: string; shortage: string }>
   >({});
   const command = useAdminCommand();
-  useAdminRouteGuard(selected !== null, command.busy || command.uncertain);
+  const hasDraft =
+    weight !== "" ||
+    note !== "" ||
+    Object.values(counts).some((value) => Object.values(value).some(Boolean));
+  useAdminRouteGuard(hasDraft, command.busy || command.uncertain);
+  useAdminScopeGuard(hasDraft, command.busy || command.uncertain, () => {
+    setSelected(null);
+    setSelectedScopeKey(null);
+    setCounts({});
+    setWeight("");
+    setNote("");
+  });
   useEffect(() => {
     if (selectedScopeKey && selectedScopeKey !== scopeKey && !command.busy && !command.uncertain) {
       setSelected(null);
@@ -126,7 +138,12 @@ export function ScheduledCountedReceiving({
       <Sheet
         open={selected !== null && selectedScopeKey === scopeKey}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) {
+          if (
+            !open &&
+            !command.busy &&
+            !command.uncertain &&
+            (!hasDraft || window.confirm("Discard unsaved receiving changes?"))
+          ) {
             setSelected(null);
             setSelectedScopeKey(null);
           }

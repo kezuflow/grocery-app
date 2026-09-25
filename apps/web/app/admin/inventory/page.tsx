@@ -22,7 +22,11 @@ import {
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
-import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
+import {
+  tryChangeAdminWorkspace,
+  useAdminRouteGuard,
+} from "../../../components/admin/use-admin-route-guard";
+import { useAdminScopeGuard } from "../admin-context-provider";
 import { notifyCommandSuccess } from "../../../components/admin/admin-feedback";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import {
@@ -110,8 +114,15 @@ export default function InventoryPage() {
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adjustmentIntent = useAdminCommandIntent();
-  useAdminRouteGuard(false, adjustmentIntent.pending || adjustmentIntent.uncertain);
   const [unresolved, setUnresolved] = useState<StockCommand | null>(null);
+  const dirty =
+    confirming !== null || Object.values(adjustQuantity).some((value) => value.trim() !== "");
+  const locked = adjustmentIntent.pending || adjustmentIntent.uncertain || unresolved !== null;
+  useAdminScopeGuard(dirty, locked, () => {
+    setConfirming(null);
+    setAdjustQuantity({});
+  });
+  useAdminRouteGuard(dirty, locked);
   const pagination = useAdminPagination(locationId);
   const pageKey = JSON.stringify([locationId, pagination.cursor]);
   const visibleState: LoadState =
@@ -541,8 +552,10 @@ export default function InventoryPage() {
                 <AdminCursorPagination
                   pageNumber={pagination.pageNumber}
                   nextCursor={visibleState.page.nextCursor}
-                  onPrevious={pagination.previous}
-                  onNext={pagination.next}
+                  onPrevious={() => tryChangeAdminWorkspace(pagination.previous)}
+                  onNext={(nextCursor) =>
+                    tryChangeAdminWorkspace(() => pagination.next(nextCursor))
+                  }
                 />
               </>
             )}
@@ -638,8 +651,10 @@ export default function InventoryPage() {
                 nextCursor={
                   visibleLedgerState.phase === "ready" ? visibleLedgerState.page.nextCursor : null
                 }
-                onPrevious={ledgerPagination.previous}
-                onNext={ledgerPagination.next}
+                onPrevious={() => tryChangeAdminWorkspace(ledgerPagination.previous)}
+                onNext={(nextCursor) =>
+                  tryChangeAdminWorkspace(() => ledgerPagination.next(nextCursor))
+                }
               />
             </ListPageSection>
           ) : null}

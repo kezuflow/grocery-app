@@ -6,6 +6,8 @@ import { useCatalogCommand } from "./catalog-command-state";
 import { ProductMediaUpload } from "./product-media-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { tryChangeAdminWorkspace, useAdminRouteGuard } from "./use-admin-route-guard";
 
 /** Ordinary image editing, shared by Product detail and Edit Product. */
 export function ProductImagesEditor({
@@ -24,9 +26,23 @@ export function ProductImagesEditor({
   const command = useCatalogCommand(adminProductMediaViewSchema);
   const [replacement, setReplacement] = useState<AdminProductMediaView>();
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadDirty, setUploadDirty] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [dirtyImages, setDirtyImages] = useState<ReadonlySet<string>>(new Set());
   const busy = command.pending || command.uncertain || uploadBusy;
+  const dirty = replacement !== undefined || dirtyImages.size > 0;
+  useAdminScopeGuard(dirty, busy, () => {
+    setReplacement(undefined);
+    setDirtyImages(new Set());
+  });
+  useAdminRouteGuard(dirty, busy);
+  function canDiscardOtherDrafts(mediaId?: string, ignoreUpload = false): boolean {
+    const otherImageDraft = [...dirtyImages].some((id) => id !== mediaId);
+    if (!otherImageDraft && (ignoreUpload || !uploadDirty)) return true;
+    return window.confirm("Discard other unsaved image changes?");
+  }
   async function mutate(mediaId: string, body: unknown, remove = false, retry = false) {
+    if (!retry && !canDiscardOtherDrafts(mediaId)) return;
     setMessage(null);
     onBusyChange?.(true);
     try {
@@ -45,6 +61,11 @@ export function ProductImagesEditor({
         return;
       }
       setMessage(remove ? "Image removed." : "Image saved.");
+      setDirtyImages((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       setReplacement(undefined);
       onComplete();
     } catch {
@@ -81,11 +102,14 @@ export function ProductImagesEditor({
               productId={productId}
               productVersion={version}
               replacement={replacement}
+              beforeSubmit={() => canDiscardOtherDrafts(replacement?.mediaId, true)}
+              onDraftChange={setUploadDirty}
               onBusyChange={(value) => {
                 setUploadBusy(value);
                 onBusyChange?.(value);
               }}
               onComplete={() => {
+                setUploadDirty(false);
                 setReplacement(undefined);
                 onComplete();
               }}
@@ -101,7 +125,12 @@ export function ProductImagesEditor({
             type="button"
             variant="outline"
             disabled={busy}
-            onClick={() => setReplacement(undefined)}
+            onClick={() =>
+              tryChangeAdminWorkspace(() => {
+                setUploadDirty(false);
+                setReplacement(undefined);
+              })
+            }
           >
             Cancel replacement
           </Button>
@@ -119,6 +148,20 @@ export function ProductImagesEditor({
               />
               <form
                 className="grid gap-3"
+                onChange={(event) => {
+                  const form = event.currentTarget;
+                  const fields = new FormData(form);
+                  const changed =
+                    String(fields.get("altText")) !== image.altText ||
+                    Number(fields.get("sortOrder")) !== image.sortOrder ||
+                    (fields.get("isPrimary") === "true") !== image.isPrimary;
+                  setDirtyImages((current) => {
+                    const next = new Set(current);
+                    if (changed) next.add(image.mediaId);
+                    else next.delete(image.mediaId);
+                    return next;
+                  });
+                }}
                 onSubmit={(event) => {
                   event.preventDefault();
                   const fields = new FormData(event.currentTarget);
@@ -161,7 +204,17 @@ export function ProductImagesEditor({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setReplacement(image)}
+                    onClick={() =>
+                      tryChangeAdminWorkspace(() => {
+                        setDirtyImages((current) => {
+                          const next = new Set(current);
+                          next.delete(image.mediaId);
+                          return next;
+                        });
+                        setUploadDirty(false);
+                        setReplacement(image);
+                      })
+                    }
                     aria-label={`Replace ${image.altText}`}
                   >
                     Replace

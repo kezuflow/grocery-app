@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { notifyCommandSuccess } from "./admin-feedback";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: adminProductMediaViewSchema }),
@@ -19,12 +21,16 @@ export function ProductMediaUpload({
   onComplete,
   replacement,
   onBusyChange,
+  beforeSubmit,
+  onDraftChange,
 }: {
   productId: string;
   productVersion: number;
   onComplete(): void;
   replacement?: AdminProductMediaView;
   onBusyChange?(busy: boolean): void;
+  beforeSubmit?(): boolean;
+  onDraftChange?(dirty: boolean): void;
 }) {
   const intent = useRef<{ key: string; body: FormData } | null>(null);
   const active = useRef(false);
@@ -32,7 +38,19 @@ export function ProductMediaUpload({
   const [message, setMessage] = useState<string | null>(null);
   const [primary, setPrimary] = useState(replacement?.isPrimary ?? false);
   const [file, setFile] = useState<File | null>(null);
+  const [metadataDirty, setMetadataDirty] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const locked = pending || intent.current !== null;
+  useEffect(
+    () => onDraftChange?.(file !== null || metadataDirty),
+    [file, metadataDirty, onDraftChange],
+  );
+  useAdminScopeGuard(file !== null || metadataDirty, locked, () => {
+    setFile(null);
+    setMetadataDirty(false);
+    setPrimary(replacement?.isPrimary ?? false);
+  });
+  useAdminRouteGuard(file !== null || metadataDirty, locked);
   useEffect(() => {
     if (!file) {
       setPreview(null);
@@ -53,6 +71,7 @@ export function ProductMediaUpload({
         setMessage("Choose a JPEG, PNG or WebP image up to 5 MiB.");
         return;
       }
+      if (beforeSubmit && !beforeSubmit()) return;
       fields.set("file", file);
       fields.set("isPrimary", String(primary));
       fields.set("expectedProductVersion", String(productVersion));
@@ -83,6 +102,7 @@ export function ProductMediaUpload({
         notifyCommandSuccess("Product image uploaded", undefined, `product-media:${saved.key}`);
         intent.current = null;
         setFile(null);
+        setMetadataDirty(false);
         setPrimary(false);
         form.reset();
         setMessage("Image uploaded.");
@@ -115,6 +135,7 @@ export function ProductMediaUpload({
         disabled={pending || intent.current !== null}
         onChange={() => {
           intent.current = null;
+          setMetadataDirty(true);
           setMessage(null);
         }}
         className="grid gap-3 md:grid-cols-2"
@@ -145,7 +166,13 @@ export function ProductMediaUpload({
           />
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={primary} onCheckedChange={(checked) => setPrimary(checked === true)} />
+          <Checkbox
+            checked={primary}
+            onCheckedChange={(checked) => {
+              setPrimary(checked === true);
+              setMetadataDirty(true);
+            }}
+          />
           Primary image
         </label>
       </fieldset>

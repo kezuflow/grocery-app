@@ -3,9 +3,11 @@
 import type { AdminOrderDetail, AdminOrderSummary, RpcResult } from "@freshmarkets/contracts";
 import { ExternalLink, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminCancellationResponse } from "../../lib/order-cancellation-response";
 import { useAdminCommandIntent } from "./admin-command-state";
+import { useAdminRouteGuard } from "./use-admin-route-guard";
+import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
@@ -57,6 +59,12 @@ export function OrderPreviewPanel({
   const [confirming, setConfirming] = useState(false);
   const [savedCancellation, setSavedCancellation] = useState<string | null>(null);
   const cancelIntent = useAdminCommandIntent();
+  const onUpdatedRef = useRef(onUpdated);
+  onUpdatedRef.current = onUpdated;
+  const commandLocked =
+    cancelIntent.pending || cancelIntent.uncertain || savedCancellation !== null || confirming;
+  useAdminRouteGuard(false, commandLocked);
+  useAdminScopeGuard(false, commandLocked);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -75,14 +83,14 @@ export function OrderPreviewPanel({
         }
         setDetail(payload.value);
         setState("ready");
-        onUpdated(payload.value);
+        onUpdatedRef.current(payload.value);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setMessage("Network error loading the order preview.");
         setState("error");
       }
     },
-    [onUpdated, order.orderId],
+    [order.orderId],
   );
 
   useEffect(() => {

@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/admin/admin-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../../admin-context-provider";
+import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
 export default function EditCategoryPage() {
   const categoryId = useParams<{ "category-id": string }>()?.["category-id"];
@@ -35,6 +36,7 @@ export default function EditCategoryPage() {
   useAdminScopeGuard(dirty, locked, () => {
     if (initialSnapshot.current) setValue(JSON.parse(initialSnapshot.current) as CategoryFormValue);
   });
+  useAdminRouteGuard(dirty, locked);
   useEffect(() => {
     if (!categoryId) return;
     let current = true;
