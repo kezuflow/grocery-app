@@ -12,6 +12,8 @@ Strict Web deployment produced version `cec07e61-1cba-4664-aeb0-f555f90580c6` on
 
 Completion level: **1 of 1 focused Web corrections deployed and production denied-permission feedback verified; physical Android cause remains open**. Next action: check site-level Location access, browser-app Location permission and device Location on the owner's Android browser; use the updated message after a fresh tap to distinguish denial from timeout/unavailable position, then verify the real permission/pin journey. Wider Phase 7 journey/provider acceptance remains open.
 
+Owner follow-up: the owner confirmed that device Location was turned off. The blocked-access message now explicitly says to turn on device Location before retrying, alongside site and browser permission guidance. This identifies the reported phone setting but does not prove a complete live pin/confirmation journey. The copy correction is being released from an isolated checkout because other Deliver to edits are in progress in the shared working tree.
+
 ## Latest owner request — DELIVER-TO-BROWSER-COMPAT-INVESTIGATION-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `DELIVER-TO-BROWSER-COMPAT-INVESTIGATION-1`. The owner asked why loading `freshmarkets.ph` in older Chrome/Brave immediately opens Deliver to with a green highlight, what older other browsers do, and for a proposed fix. Acceptance for this investigation: identify the exact first-visit trigger and visual focus cause, separate observed browser behavior from compatibility inference, and recommend an accessible fix without claiming untested historical-browser acceptance.

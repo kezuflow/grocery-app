@@ -762,6 +762,9 @@ describe("AddressEditor", () => {
     expect(deniedMount.container.querySelector('[role="alert"]')?.textContent).toContain(
       "Location access is blocked",
     );
+    expect(deniedMount.container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Turn on device Location",
+    );
     expect(deniedMount.container.textContent).not.toContain("private browser detail");
     act(() => deniedMount.root.unmount());
   });

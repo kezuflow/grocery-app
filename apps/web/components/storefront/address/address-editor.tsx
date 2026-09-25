@@ -590,7 +590,7 @@ export function AddressEditor({
         if (generation !== coordinateActionGenerationRef.current) return;
         if (error.code === 1) {
           setLocationError(
-            "Location access is blocked. Allow location for this site and your browser in device settings, then try again. You can also choose a point on the map.",
+            "Location access is blocked. Turn on device Location and allow location for this site and your browser, then try again. You can also choose a point on the map.",
           );
         } else if (error.code === 3) {
           setLocationError(
