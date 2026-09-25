@@ -97,7 +97,7 @@ The boundary stays `Web -> typed Service Binding -> Core application command/que
 
 ### D. Physical warehouse inventory and transfers
 
-- Provide warehouse opening receipt/replenishment and reasoned inventory correction through authorized commands, not manual SQL. Local adjustment remains capability/scoped and auditable; it does not grant price authority.
+- Provide warehouse opening receipt/replenishment and inventory correction through authorized commands, not manual SQL. Local Add stock/Remove stock records an automatic movement label without an operator-entered reason, following the 2026-09-25 owner correction. Adjustment remains capability/scoped and auditable; it does not grant price authority.
 - Global dispatches a transfer to one destination with Product-pool quantities. Deduct source stock and create transit atomically, excluding checkout holds and committed reservations.
 - Destination staff accept all or part of a transfer. Credit only accepted quantities; keep outstanding transit, damage, shortage, and reasoned discrepancy resolution visible.
 - Global resolves losses or verified physical returns; no deletion reverses a dispatched transfer. Repeated dispatch/receipt must replay without duplicate movement, and simultaneous transfers cannot overspend source stock.

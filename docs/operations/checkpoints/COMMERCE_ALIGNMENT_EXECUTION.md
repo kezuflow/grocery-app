@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — ADMIN-INVENTORY-REASON-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `ADMIN-INVENTORY-REASON-1`. The owner requested removal of the operator-entered Reason field from `/admin/inventory` Add stock and Remove stock. Acceptance: both actions retain quantity and confirmation, submit stable adjustment intent, preserve Core authorization/stock/ledger/audit/replay behavior, and show automatic movement labels in history without requiring staff prose.
+
+Started on `main` at `3ab89548`, with only unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` preserved. Web now hides the Reason input for these two confirmation actions, sends `Manual stock addition` or `Manual stock removal` as a truthful automatic movement label through the existing required Core field, and calls the history column Details. Core, contracts, schema, provider integrations and live stock have not changed. PRODUCT, the active plan, API and Design guidance reflect the owner's correction to the earlier removal-reason rule. Existing browser specifications were adjusted to assert no confirmation Reason field and the automatic history labels.
+
+Verification on the working tree: focused Web Vitest inventory UI/route tests **4/4 passed**; Web typecheck passed; focused `oxfmt --check`, naming, terminology and `git diff --check` passed. `pnpm lint` passed with two existing unrelated unused-variable warnings in `apps/web/test/app/account/addresses/address-book-client.test.tsx`. No browser test, production release, provider operation, live adjustment or remote D1 write was performed. Completion level: **1 of 1 source UI changes locally verified and pushed; 0 of 1 production releases requested or accepted**. Next action: on any separately authorized production release, confirm both dialogs in the authenticated inventory page; verify the automatic movement label through an actual authorized adjustment when one occurs in normal operations.
+
 ## Latest owner request — STOCK-TRANSFER-ROUTE-DIAG-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-ROUTE-DIAG-1`. The owner asked why Global cannot transfer stock to Cebu Fulfillment Center. Acceptance: trace the transfer option and route rules, inspect the published choices without issuing a command, and explain the observed restriction.

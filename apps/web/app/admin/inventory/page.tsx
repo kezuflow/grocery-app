@@ -290,12 +290,7 @@ export default function InventoryPage() {
       );
     }
   }
-  async function adjust(
-    poolId: string,
-    expectedVersion: number,
-    movement: StockMovement,
-    reason: string,
-  ) {
+  async function adjust(poolId: string, expectedVersion: number, movement: StockMovement) {
     if (
       !locationId ||
       !confirming ||
@@ -320,7 +315,7 @@ export default function InventoryPage() {
         inventoryPoolId: poolId,
         operation: movement,
         quantityBase: quantity,
-        reason,
+        reason: movement === "ADD" ? "Manual stock addition" : "Manual stock removal",
         expectedVersion,
       }),
     });
@@ -330,7 +325,7 @@ export default function InventoryPage() {
     <div className="w-full space-y-6">
       <PageHeader
         title="Inventory"
-        description="Review physical, reserved, held, and available stock at the selected location. Adjustments record a date, reason, and staff actor."
+        description="Review physical, reserved, held, and available stock at the selected location. Adjustments record the movement, date, and staff actor."
       />
 
       {unresolved ? (
@@ -596,7 +591,7 @@ export default function InventoryPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Physical change</TableHead>
                       <TableHead>Reservation / hold change</TableHead>
-                      <TableHead>Reason</TableHead>
+                      <TableHead>Details</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="block lg:table-row-group">
@@ -637,7 +632,7 @@ export default function InventoryPage() {
                         </TableCell>
                         <TableCell className="col-span-2 whitespace-normal break-words text-sm">
                           <span className="block text-[var(--fm-text-muted)] lg:hidden">
-                            Reason
+                            Details
                           </span>
                           {entry.reasonCode ?? "—"}
                         </TableCell>
@@ -669,17 +664,12 @@ export default function InventoryPage() {
                 : "Inventory balance"
             }
             scope={locationLabel}
-            consequence="This changes sellable stock and records the current date, staff actor, and reason in immutable activity history."
+            consequence="This changes sellable stock and records the movement, date, and staff actor in immutable activity history."
+            reasonRequired={false}
             pending={adjustmentIntent.pending}
             onCancel={() => setConfirming(null)}
-            onConfirm={(confirmedReason) =>
-              confirming &&
-              void adjust(
-                confirming.poolId,
-                confirming.version,
-                confirming.movement,
-                confirmedReason,
-              )
+            onConfirm={() =>
+              confirming && void adjust(confirming.poolId, confirming.version, confirming.movement)
             }
           />
         </>

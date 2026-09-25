@@ -115,7 +115,7 @@ for (const width of [1280, 390]) {
       .filter({ has: page.getByText(productName, { exact: true }) });
     await stockRow.getByRole("button", { name: "Add stock", exact: true }).click();
     const dialog = page.getByRole("alertdialog");
-    await dialog.getByLabel("Confirmation reason").fill("Opening warehouse stock");
+    await expect(dialog.getByLabel("Confirmation reason")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(stockRow).toContainText("20,000 g");
@@ -202,7 +202,7 @@ for (const width of [1280, 390]) {
     await row(`${productName} — Small`)
       .getByRole("button", { name: "Remove stock", exact: true })
       .click();
-    await dialog.getByLabel("Confirmation reason").fill("One damaged counted pack removed");
+    await expect(dialog.getByLabel("Confirmation reason")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(row(`${productName} — Small`)).toContainText("21");

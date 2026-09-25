@@ -16,16 +16,8 @@ vi.mock("@/components/admin/admin-controls", async () => {
   );
   return {
     ...actual,
-    AdminConfirmationDialog: ({
-      open,
-      onConfirm,
-    }: {
-      open: boolean;
-      onConfirm: (reason: string) => void;
-    }) =>
-      open ? (
-        <button onClick={() => onConfirm("Inspected count")}>Confirm test stock</button>
-      ) : null,
+    AdminConfirmationDialog: ({ open, onConfirm }: { open: boolean; onConfirm: () => void }) =>
+      open ? <button onClick={onConfirm}>Confirm test stock</button> : null,
   };
 });
 const fetchMock = vi.fn<typeof fetch>();
@@ -118,7 +110,7 @@ it("retains exact stock details after an unknown result and shows Core's hold-ad
     inventoryPoolId: "pool",
     operation: "ADD",
     quantityBase: 5,
-    reason: "Inspected count",
+    reason: "Manual stock addition",
     expectedVersion: 1,
   });
   expect(container.textContent).toContain("Stock added");

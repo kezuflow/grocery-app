@@ -32,7 +32,7 @@ for (const width of [1440, 390])
       await route.abort("failed");
     });
     await row.getByRole("button", { name: "Add stock", exact: true }).click();
-    await page.getByLabel("Confirmation reason").fill("Inspected opening count");
+    await expect(page.getByLabel("Confirmation reason")).toHaveCount(0);
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(page.getByText("The stock result is unknown.", { exact: false })).toBeVisible();
     await expect(row.getByRole("button", { name: "Add stock", exact: true })).toBeDisabled();
@@ -45,11 +45,11 @@ for (const width of [1440, 390])
       page
         .getByRole("table", { name: "Stock activity" })
         .locator("tbody tr")
-        .filter({ hasText: "Inspected opening count" }),
+        .filter({ hasText: "Manual stock addition" }),
     ).toHaveCount(1);
     await row.getByLabel(`Stock quantity for ${name}`).fill("100");
     await row.getByRole("button", { name: "Remove stock", exact: true }).click();
-    await page.getByLabel("Confirmation reason").fill("Inspected damaged stock");
+    await expect(page.getByLabel("Confirmation reason")).toHaveCount(0);
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(row).toContainText("400 g");
     await page.reload();
@@ -59,13 +59,13 @@ for (const width of [1440, 390])
       page
         .getByRole("table", { name: "Stock activity" })
         .locator("tbody tr")
-        .filter({ hasText: "Inspected opening count" }),
+        .filter({ hasText: "Manual stock addition" }),
     ).toHaveCount(1);
     await expect(
       page
         .getByRole("table", { name: "Stock activity" })
         .locator("tbody tr")
-        .filter({ hasText: "Inspected damaged stock" }),
+        .filter({ hasText: "Manual stock removal" }),
     ).toHaveCount(1);
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
