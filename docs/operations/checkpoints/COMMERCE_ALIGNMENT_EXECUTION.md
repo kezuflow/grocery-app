@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-ANNOUNCEMENT-POPUP-1 (2026-09-26)
+
+Active focused plan: `docs/product/STOREFRONT_ANNOUNCEMENT_POPUP_PLAN.md`, **Storefront announcement popup — plan and assets**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. The owner asked for a welcome popup that precedes storefront reading, Monday–Friday ordering/Sunday delivery marketing copy, a branded Filipina shopper image, a happy 3D grass mascot, and an independent announcement system able to add pages later. Acceptance for this request: a saved, reviewable plan, relevant Mobbin references, and two project image assets. Popup runtime/browser acceptance is a later implementation obligation.
+
+Started on `main` at `908fa4a4` with existing unrelated Core/Web/contracts/PRODUCT/DESIGN modifications and untracked `docs/freshmarkets-shopify-admin-plan.zip`; these were preserved. Mobbin's Faire and Walmart web announcement screens were visually inspected. Generated the fictional shopper with the existing FreshMarkets mark as a visual reference and the transparent 3D mascot, then copied both to `apps/web/public/announcements/`. The plan specifies a first-visit accessible dialog, independent versioned campaign/pages, later second/third-page support, and cycle-accurate copy. PRODUCT GD-D14 makes the stated weekdays examples; current customer guidance allows Saturday or Sunday delivery, so the literal Sunday promise remains conditional on verified active Scheduled cycle facts. No storefront code, Core business rule, live cycle, provider operation, deployment or customer message changed.
+
+Verification: `git diff --check` passed on the working tree; both PNG assets exist in the project, with the mascot PNG using alpha color type 6. The images and Mobbin references were visually inspected. Completion level: **1 of 1 planning/asset requests prepared; 0 of 1 popup runtime implementations accepted**. Next action: reconcile the intended Sunday-only public promise with active cycle configuration, then implement and browser-verify the announcement from the focused plan. Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — SCHEDULED-CUTOFF-BACKDATE-1 (2026-09-26)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SCHEDULED-CUTOFF-BACKDATE-1`. The owner requested changing the Sep 27 Scheduled week's order cutoff to Sep 25, 2026 at 11:59 PM Asia/Manila. Acceptance would be the live cycle displaying that cutoff and preserving payment/Order commitments. This request could not be executed through the approved cycle command.
