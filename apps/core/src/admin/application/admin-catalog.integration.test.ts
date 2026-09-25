@@ -1057,7 +1057,45 @@ describe("catalog administration", () => {
     expect(
       units.value.every((item) => item.dimension === "MASS" || item.dimension === "COUNT"),
     ).toBe(true);
+    expect(units.value.some((item) => item.code === "PACK")).toBe(false);
     if (unit.ok) expect(units.value.some((item) => item.unitId === unit.value.unitId)).toBe(true);
+
+    const packagingUnit = await core.createAdminUnit({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      code: "BUNCH",
+      displayName: "Bunch",
+      dimension: "COUNT",
+      canonicalBaseCode: "PIECE",
+      conversionNumerator: 1,
+      conversionDenominator: 1,
+      idempotencyKey: `unit-${crypto.randomUUID()}`,
+    });
+    expect(packagingUnit).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+  });
+
+  it("keeps historical pack SKUs but rejects a new SKU using the legacy pack unit", async () => {
+    const manager = await seedManager();
+    const code = `PACK_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+    const result = await core.createAdminSku({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      productId: "product-eggs",
+      code,
+      name: "New egg pack",
+      sellableUnitId: "unit-pack",
+      sellQuantity: 1,
+      consumptionBaseQuantity: 1,
+      idempotencyKey: `sku-${crypto.randomUUID()}`,
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const created = await env.DB.prepare("SELECT id FROM sku WHERE code=?").bind(code).first();
+    expect(created).toBeNull();
+    const historical = await env.DB.prepare("SELECT id FROM sku WHERE id='sku-eggs-6'").first();
+    expect(historical).not.toBeNull();
   });
 
   it("creates SKUs with matching dimensions, sets prices and availability, and audits", async () => {

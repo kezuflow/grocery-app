@@ -125,9 +125,10 @@ export default function CatalogPage() {
             <div className="border-b border-[var(--fm-border)] px-5 py-4">
               <h2 className="text-base font-semibold">Controlled units</h2>
               <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-                Shared-weight variants consume one exact base-unit stock pool. Counted sizes use
-                actual counted PIECE stock after counting. Shipping weight is a logistics reference,
-                never a conversion from grams to pieces.
+                Weighed options use exact gram stock. For a named size sold as a piece or pack,
+                count the actual ready-to-sell items at the fulfillment location: 10 Small packs
+                means 10 Small units available, and selling 2 leaves 8. Pack is a selling label, not
+                a universal pieces-per-pack conversion. Approximate weight never creates a count.
               </p>
             </div>
             {state.phase === "loading" ? (

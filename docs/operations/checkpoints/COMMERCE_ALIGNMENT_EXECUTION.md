@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — CATALOG-PACK-UNIT-CLARITY-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `CATALOG-PACK-UNIT-CLARITY-1`. Acceptance: remove the misleading universal `1 PACK = 1 PIECE` Catalog overview row from current authoring, explain how staff count actual named-size packs, reject new packaging-unit authoring, and preserve historical SKUs. This request authorizes a reviewed source commit and main push; it does not authorize production deployment or a live stock command.
+
+Started on synchronized `main` at `bc9ac762` with the unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` preserved. The active read now omits legacy `PACK` and other packaging-label codes, and Core rejects new packaging unit definitions and SKUs using those units. Historical SKUs and their recorded exact consumption remain untouched. The Catalog overview now explains that 10 ready-to-sell Small packs means 10 Small counted units and two sales leave eight. API and Design guidance match the source. No schema, provider, live inventory or production Worker changed.
+
+Focused Core Worker/D1 catalog tests passed **22/22**, including rejected new pack authoring and retained historical egg-pack data. Core and Web typechecks, formatting, naming, terminology, harness, migrations, architecture, readiness and lint passed. The aggregate `pnpm check` was stopped during the full Core suite after the owner objected to broad verification for this change; its Web suite had passed **697/697**. The planned browser test was not started, per the owner's correction. The working-tree source is locally verified only; production Catalog behavior remains unchanged until a separately authorized Core/Web release.
+
+Completion level: **1 of 1 requested source corrections implemented; 0 of 1 production releases accepted**. Next action: on a separately authorized paired Core/Web production release, check the published Catalog overview and new Product unit choices.
+
 ## Latest owner request — STOCK-TRANSFER-NAME-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-NAME-1`. Acceptance: rename the Admin-facing “Warehouse Transfers” workspace to the owner's exact “Stock Transfer” label in navigation and on the transfer pages, while preserving the `/admin/transfers` route, source-warehouse requirement, authorization and stock movement behavior. This authorizes a reviewed source commit and main push, not production deployment or a live stock command.

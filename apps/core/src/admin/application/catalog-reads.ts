@@ -238,6 +238,7 @@ export async function listAdminUnits(
               status, version
        FROM unit
        WHERE status='active' AND dimension IN ('MASS','COUNT')
+         AND code NOT IN ('PACK','BUNCH','TRAY')
        ORDER BY dimension, code`,
     )
     .all<AdminUnitSummary>();

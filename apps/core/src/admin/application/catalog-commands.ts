@@ -109,10 +109,14 @@ export async function createAdminUnit(
     conversionNumerator,
     conversionDenominator,
   } = request;
-  if (dimension === "VOLUME" || (dimension === "MASS" ? "GRAM" : "PIECE") !== canonicalBaseCode)
+  if (
+    dimension === "VOLUME" ||
+    ["PACK", "BUNCH", "TRAY"].includes(code) ||
+    (dimension === "MASS" ? "GRAM" : "PIECE") !== canonicalBaseCode
+  )
     return failure(
       "VALIDATION_FAILED",
-      "Use a same-dimension Gram or Piece conversion; volume units are retired",
+      "Use a same-dimension Gram or Piece conversion; packaging labels are not units and volume units are retired",
       request.requestId,
     );
   const body = {
@@ -179,6 +183,7 @@ const variantEligibility = `SELECT 1 FROM product p JOIN inventory_pool pool ON 
   AND ((base.code='GRAM' AND base.dimension='MASS') OR (base.code='PIECE' AND base.dimension='COUNT'))
   AND base.code=base.canonical_base_code AND base.conversion_numerator=1 AND base.conversion_denominator=1
   AND sell.dimension=base.dimension AND sell.canonical_base_code=base.code
+  AND sell.code NOT IN ('PACK','BUNCH','TRAY')
   AND ?*sell.conversion_numerator<=9007199254740991
   AND (?*sell.conversion_numerator)%sell.conversion_denominator=0
   AND (?*sell.conversion_numerator)/sell.conversion_denominator=?

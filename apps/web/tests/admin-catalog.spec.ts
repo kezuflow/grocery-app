@@ -40,8 +40,9 @@ test("Catalog overview keeps the controlled-unit reference distinct from Product
   await adminPage.goto("/admin/catalog");
   await expect(adminPage.getByRole("table", { name: "Controlled units" })).toBeVisible();
   await expect(
-    adminPage.getByText("Counted sizes use actual counted PIECE stock", { exact: false }),
+    adminPage.getByText("10 Small packs means 10 Small units available", { exact: false }),
   ).toBeVisible();
+  await expect(adminPage.getByRole("row", { name: /Pack COUNT/ })).toHaveCount(0);
   await expect(adminPage.getByRole("link", { name: "Open Products" })).toBeVisible();
   await expect(adminPage.getByRole("link", { name: "Open Categories" })).toBeVisible();
   await expect(adminPage.getByLabel("Category code")).toHaveCount(0);
