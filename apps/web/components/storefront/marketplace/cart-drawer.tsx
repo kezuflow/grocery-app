@@ -335,6 +335,7 @@ export function CartDrawer() {
                 actionHref={guest ? undefined : "/checkout"}
                 actionTextClassName="text-white hover:text-white"
                 actionTextStyle={{ color: "#ffffff" }}
+                actionClassName="max-w-60"
                 surface="flat"
                 onAction={
                   guest

@@ -218,6 +218,7 @@ export default function CartPage() {
               }
               actionHref={!canCheckout ? "/" : guest ? undefined : "/checkout"}
               onAction={guest && canCheckout ? () => setAuthOpen(true) : undefined}
+              actionClassName={guest && canCheckout ? "max-w-60" : undefined}
               disabled={
                 loading ||
                 quantityQueue.busy ||

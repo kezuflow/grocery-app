@@ -80,10 +80,7 @@ export type StorefrontHomeView = {
   marketplace: MarketplaceHomeView;
   banners: ReadonlyArray<PublishedBanner>;
   bannersAvailable: boolean;
-  announcementSchedule: StorefrontAnnouncementSchedule;
 };
-
-export type StorefrontAnnouncementSchedule = "GENERAL" | "MONDAY_FRIDAY_SUNDAY";
 
 export type MarketplaceSearchView = {
   page: CatalogSearchPage;

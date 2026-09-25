@@ -2,17 +2,12 @@
 
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { StorefrontAnnouncementSchedule } from "@freshmarkets/contracts";
 import { FreshMarketsMark } from "../../brand/freshmarkets-mark";
-import {
-  ANNOUNCEMENT_COOKIE,
-  WELCOME_CAMPAIGN_KEY,
-  welcomeAnnouncementPages,
-} from "./announcement-campaign";
+import { welcomeAnnouncementPages } from "./announcement-campaign";
 import "./announcement-popup.css";
 
-export function AnnouncementPopup({ schedule }: { schedule: StorefrontAnnouncementSchedule }) {
-  const pages = welcomeAnnouncementPages(schedule);
+export function AnnouncementPopup() {
+  const pages = welcomeAnnouncementPages();
   const [pageIndex, setPageIndex] = useState(0);
   const [open, setOpen] = useState(true);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -37,11 +32,6 @@ export function AnnouncementPopup({ schedule }: { schedule: StorefrontAnnounceme
   }, [pageIndex]);
 
   function dismiss(shop: boolean) {
-    try {
-      document.cookie = `${ANNOUNCEMENT_COOKIE}=${encodeURIComponent(WELCOME_CAMPAIGN_KEY)}; Path=/; Max-Age=15552000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
-    } catch {
-      // Storage denial must not trap the customer in an announcement.
-    }
     dialogRef.current?.close();
     setOpen(false);
     requestAnimationFrame(() => {
@@ -96,12 +86,14 @@ export function AnnouncementPopup({ schedule }: { schedule: StorefrontAnnounceme
         </div>
         <div className="fm-announcement-media">
           <img
-            src="/announcements/welcome-shopper.png"
-            alt="Smiling shopper holding a FreshMarkets bag of vegetables"
-            width={1024}
-            height={1536}
-            className="fm-announcement-shopper"
+            src="/announcements/welcome-market-scene.webp"
+            alt="Smiling FreshMarkets shopper holding a branded produce bag in a supermarket"
+            width={1536}
+            height={1024}
+            className="fm-announcement-scene"
           />
+        </div>
+        <div className="fm-announcement-content">
           <img
             src="/announcements/grass-mascot.png"
             alt=""
@@ -110,16 +102,12 @@ export function AnnouncementPopup({ schedule }: { schedule: StorefrontAnnounceme
             height={1254}
             className="fm-announcement-mascot"
           />
-        </div>
-        <div className="fm-announcement-content">
-          <p className="fm-announcement-eyebrow">{page.eyebrow}</p>
           <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
             {page.title}
           </h2>
           <p id="fm-announcement-body" className="fm-announcement-body">
             {page.body}
           </p>
-          <p className="fm-announcement-note">{page.note}</p>
           {pages.length > 1 ? (
             <div className="fm-announcement-pagination">
               <span>{`${pageIndex + 1} of ${pages.length}`}</span>

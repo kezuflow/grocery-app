@@ -37,6 +37,7 @@ export function OrderSummary({
   surface = "card",
   actionTextClassName,
   actionTextStyle,
+  actionClassName,
 }: {
   cart: CartView | null;
   actionLabel: string;
@@ -54,6 +55,7 @@ export function OrderSummary({
   surface?: "card" | "flat";
   actionTextClassName?: string;
   actionTextStyle?: CSSProperties;
+  actionClassName?: string;
 }) {
   const currency = quote?.currency ?? cart?.currency ?? "PHP";
   const subtotal = cart?.totalMinor ?? 0;
@@ -378,35 +380,39 @@ export function OrderSummary({
         </p>
       ) : null}
 
-      {actionHref ? (
-        <Link
-          href={actionHref}
-          aria-disabled={disabled}
-          style={actionTextStyle}
-          className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white! transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white! active:scale-[0.985]",
-            disabled && "pointer-events-none opacity-50",
-            actionTextClassName,
-          )}
-        >
-          {actionLabel}
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={onAction}
-          disabled={disabled}
-          style={actionTextStyle}
-          className={cn(
-            "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-white disabled:active:scale-100",
-            actionTextClassName,
-          )}
-        >
-          {actionLabel}
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </button>
-      )}
+      <div className={actionClassName ? "flex justify-center" : undefined}>
+        {actionHref ? (
+          <Link
+            href={actionHref}
+            aria-disabled={disabled}
+            style={actionTextStyle}
+            className={cn(
+              "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white! transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white! active:scale-[0.985]",
+              disabled && "pointer-events-none opacity-50",
+              actionTextClassName,
+              actionClassName,
+            )}
+          >
+            {actionLabel}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={onAction}
+            disabled={disabled}
+            style={actionTextStyle}
+            className={cn(
+              "mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white transition-[background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-[var(--fm-storefront-action-hover)] hover:text-white active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-white disabled:active:scale-100",
+              actionTextClassName,
+              actionClassName,
+            )}
+          >
+            {actionLabel}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </aside>
   );
 }

@@ -66,43 +66,34 @@
 
 .fm-announcement-media {
   position: relative;
-  display: grid;
-  place-items: center;
-  height: clamp(210px, 36dvh, 310px);
+  height: clamp(230px, 33dvh, 300px);
   overflow: hidden;
-  background: color-mix(in srgb, var(--fm-primary-lime) 32%, white);
+  background: var(--fm-surface-soft);
 }
 
-.fm-announcement-shopper {
-  position: absolute;
-  inset: 0;
+.fm-announcement-scene {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
 }
 
 .fm-announcement-mascot {
   position: absolute;
-  right: 18px;
-  bottom: 14px;
-  width: clamp(64px, 18%, 84px);
+  z-index: 1;
+  right: 24px;
+  top: -42px;
+  width: 82px;
   height: auto;
+  animation: fm-announcement-float 3s var(--fm-ease-in-out) infinite alternate;
 }
 
 .fm-announcement-content {
-  padding: 22px 26px 26px;
-}
-
-.fm-announcement-eyebrow {
-  color: var(--fm-primary-dark);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  position: relative;
+  padding: 52px 26px 26px;
 }
 
 .fm-announcement-content h2 {
-  margin-top: 6px;
   color: var(--fm-text);
   font-size: clamp(23px, 5vw, 28px);
   line-height: 1.15;
@@ -113,13 +104,6 @@
   margin-top: 10px;
   font-size: 14px;
   line-height: 1.5;
-}
-
-.fm-announcement-note {
-  margin-top: 10px;
-  color: var(--fm-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
 }
 
 .fm-announcement-pagination {
@@ -155,11 +139,28 @@
 
 @media (max-width: 400px) {
   .fm-announcement-content {
-    padding: 18px 20px 20px;
+    padding: 48px 20px 20px;
   }
 
   .fm-announcement-mascot {
-    right: 10px;
-    width: 62px;
+    right: 18px;
+    top: -36px;
+    width: 72px;
+  }
+}
+
+@keyframes fm-announcement-float {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-announcement-mascot {
+    animation: none;
   }
 }

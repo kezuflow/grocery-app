@@ -43,7 +43,6 @@ import {
 } from "@freshmarkets/validation";
 import { acceptCustomerInvitation, getMyCustomerInvitation } from "./customer/invitations";
 import { getPublishedProductMedia } from "./catalog/published-product-media";
-import { readStorefrontAnnouncementSchedule } from "./catalog/storefront-announcement";
 import {
   adminCategoryCreateBodySchema,
   adminCategoryUpdateBodySchema,
@@ -3052,10 +3051,9 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.catalogRpc.getMarketplaceHome(input);
   }
   async getStorefrontHome(input: import("@freshmarkets/contracts").MarketplaceHomeRequest) {
-    const [marketplace, banners, announcementSchedule] = await Promise.all([
+    const [marketplace, banners] = await Promise.all([
       this.catalogRpc.getMarketplaceHome(input),
       listPublishedBanners(this.env.DB, { requestId: input.requestId }),
-      readStorefrontAnnouncementSchedule(this.env.DB, Date.now()),
     ]);
     if (!marketplace.ok) return marketplace;
     return {
@@ -3064,7 +3062,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         marketplace: marketplace.value,
         banners: banners.ok ? banners.value.items : [],
         bannersAvailable: banners.ok,
-        announcementSchedule,
       },
       requestId: input.requestId,
     };

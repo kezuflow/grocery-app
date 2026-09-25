@@ -150,6 +150,10 @@ for (const width of [1440, 390]) {
       }
     });
     await page.goto("/");
+    await page
+      .getByRole("dialog", { name: "Welcome to FreshMarkets" })
+      .getByRole("button", { name: "Close welcome announcement" })
+      .click();
     const locationDialog = page.getByRole("dialog", {
       name: "Choose delivery address",
       exact: true,
@@ -259,6 +263,9 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("button", { name: "Sign in to checkout", exact: true }),
     ).toBeVisible();
+    const cartAction = page.getByRole("button", { name: "Sign in to checkout", exact: true });
+    const cartActionBounds = await cartAction.boundingBox();
+    expect(cartActionBounds!.width).toBeLessThanOrEqual(240);
     await page.reload();
     await expect(locationDialog).toHaveCount(0);
     await expect(

@@ -196,6 +196,21 @@ test("guest cart remains visible and asks for sign-in before checkout", async ({
   await expect(drawer.getByRole("heading", { name: "Your cart" })).toBeVisible();
   await expect(drawer.getByText("Red onion", { exact: true })).toBeVisible();
   await expect(drawer.getByText("Sign in to checkout")).toBeVisible();
+  const signInAction = drawer.getByRole("button", { name: "Sign in to checkout" });
+  await expect
+    .poll(() => signInAction.evaluate((element) => element.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(240);
+  await expect
+    .poll(() =>
+      signInAction.evaluate((element) => {
+        const actionBounds = element.getBoundingClientRect();
+        const parentBounds = element.parentElement!.getBoundingClientRect();
+        return Math.abs(
+          actionBounds.x + actionBounds.width / 2 - (parentBounds.x + parentBounds.width / 2),
+        );
+      }),
+    )
+    .toBeLessThan(2);
   await expect(drawer.getByText(/minimum order/i)).toHaveCount(0);
 });
 
