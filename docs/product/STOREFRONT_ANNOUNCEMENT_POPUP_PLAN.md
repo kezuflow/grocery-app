@@ -1,6 +1,6 @@
 # Storefront announcement popup — plan and assets
 
-Status: **popup and rounded Storefront/Admin buttons implemented locally; release evidence remains in the active checkpoint**. Owner request `STOREFRONT-ANNOUNCEMENT-POPUP-1`, 2026-09-26, with subsequent `STOREFRONT-ADMIN-BUTTON-RADIUS-1` extension. This is a focused presentation slice under [the commerce alignment Phase 7 journey](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). PRODUCT and the current Core cycle remain the authority for ordering and delivery promises.
+Status: **popup and rounded Storefront/Admin buttons deployed; live storefront browser acceptance is recorded in the active checkpoint**. Owner request `STOREFRONT-ANNOUNCEMENT-POPUP-1`, 2026-09-26, with subsequent `STOREFRONT-ADMIN-BUTTON-RADIUS-1` and release follow-ups. Production Admin appearance remains to be checked in an authorized operator session. This is a focused presentation slice under [the commerce alignment Phase 7 journey](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). PRODUCT and the current Core cycle remain the authority for ordering and delivery promises.
 
 ## Desired experience
 
