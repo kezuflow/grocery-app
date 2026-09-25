@@ -378,7 +378,6 @@ const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "fulfillment-setup",
   "locations",
   "locations-service-areas",
-  "transfers",
   "procurement",
 ]);
 

@@ -444,7 +444,7 @@ describe("admin navigation mapping", () => {
         label: "Stock Transfer",
         href: "/admin/transfers",
         section: "operations" as const,
-        scopeKinds: ["GLOBAL", "LOCATION"] as const,
+        scopeKinds: ["GLOBAL"] as const,
         parentCode: null,
         kind: "workspace" as const,
       },
@@ -479,7 +479,6 @@ describe("admin navigation mapping", () => {
       }),
     );
     expect(groupAdminNavigation(centralCebu)[1]?.items.map((item) => item.code)).toEqual([
-      "transfers",
       "procurement",
       "receiving",
     ]);

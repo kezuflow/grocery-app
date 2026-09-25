@@ -129,7 +129,11 @@ describe("scoped admin context", () => {
     ).toMatchObject({ scopeKinds: ["GLOBAL"] });
     expect(
       adminNavigationFor(["transfers.read"]).find((item) => item.code === "transfers"),
-    ).toMatchObject({ label: "Stock Transfer", href: "/admin/transfers" });
+    ).toMatchObject({
+      label: "Stock Transfer",
+      href: "/admin/transfers",
+      scopeKinds: ["GLOBAL"],
+    });
   });
 
   it("denies context and scopes for an unauthenticated request", async () => {

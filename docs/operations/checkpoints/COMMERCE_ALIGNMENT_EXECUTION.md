@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOCK-TRANSFER-GLOBAL-NAV-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-GLOBAL-NAV-1`. The owner requested Stock Transfer only in the Global navigation panel. Acceptance: Core advertises the authorized link with Global-only scope applicability; Web shows it in Global and hides it in selected locations, while direct location-scoped transfer detail/receipt authorization stays intact.
+
+Started on `main` at `74d788f1`, synchronized with `origin/main`; unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. Core removed `transfers` from the Global-and-Location navigation set, leaving the default Global-only applicability and existing `transfers.read` capability gate. Web navigation grouping continues to follow Core metadata. The direct transfer route, list/detail RPCs, destination receipt permission, transfer commands, schema and provider integrations were not changed. API and Design guidance now state the navigation distinction.
+
+Verification on this source working tree: focused Core Admin context Worker/D1 tests **17/17 passed**; focused Web navigation tests **17/17 passed**; Core/Web typechecks, focused formatting, lint, naming, terminology and `git diff --check` passed. Lint reported two existing unrelated unused-variable warnings in an address-book test. Managed local Web/Core/D1 browser acceptance with disposable `E2E_STATE_NAME=e2e-transfer-global-nav`, `E2E_START_STACK=1`, `--workers=1 --retries=0` passed **1/1**: the Global sidebar showed Stock Transfer, Central Cebu did not, and direct `/admin/transfers` still opened at location scope. No production browser acceptance, deployment, live stock command, remote D1 write/migration or provider operation occurred.
+
+Completion level: **1 of 1 requested source navigation changes locally verified and pushed; 0 of 1 production releases requested or accepted**. Next action: on a separately authorized paired Core/Web production release, verify the published Global and Central Cebu sidebars; wider Phase 7 journey/provider acceptance remains open.
+
 ## Latest owner request — ADMIN-INVENTORY-REASON-RELEASE-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `ADMIN-INVENTORY-REASON-RELEASE-1`. The owner requested commit, push and deployment of the Add stock/Remove stock Reason-field removal. Acceptance: release the committed source to production Web, retain production bindings and data, verify Core/Web readiness and 100% traffic, and inspect both authenticated confirmation dialogs without submitting a live adjustment.

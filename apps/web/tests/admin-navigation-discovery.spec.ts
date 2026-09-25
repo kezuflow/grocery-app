@@ -1,8 +1,6 @@
 import { expect, test } from "./admin-authenticated-fixture";
 
-test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog in the right scopes", async ({
-  adminPage,
-}) => {
+test("real Core navigation shows Stock Transfer only in Global scope", async ({ adminPage }) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
   await expect(adminPage.getByRole("button", { name: "Collapse admin navigation" })).toBeVisible({
@@ -19,14 +17,14 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
   await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
   await expect(navigation.locator('a[href="/admin/procurement"]')).toBeVisible();
   await expect(navigation.locator('a[href="/admin/receiving"]')).toBeVisible();
-  await expect(navigation.getByRole("link", { name: "Stock Transfer" })).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Stock Transfer" })).toHaveCount(0);
   await expect(navigation.getByRole("link", { name: "Catalog overview" })).toHaveCount(0);
 
   await navigation.locator('a[href="/admin/receiving"]').click();
   await expect(adminPage.getByRole("heading", { level: 1, name: "Receiving" })).toBeVisible();
   await navigation.locator('a[href="/admin/procurement"]').click();
   await expect(adminPage.getByRole("heading", { level: 1, name: "Delivery weeks" })).toBeVisible();
-  await navigation.getByRole("link", { name: "Stock Transfer" }).click();
+  await adminPage.goto("/admin/transfers");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Stock Transfer" })).toBeVisible();
 });
 
