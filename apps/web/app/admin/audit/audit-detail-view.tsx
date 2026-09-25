@@ -1,4 +1,5 @@
 import type { AdminAuditEventView } from "@freshmarkets/contracts";
+import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 
@@ -16,9 +17,29 @@ function JsonEvidence({ value }: { value: Readonly<Record<string, unknown>> | nu
   );
 }
 
-export function AuditDetailView({ state }: { state: AuditDetailState }) {
+export function AuditDetailView({
+  state,
+  returnHref = "/admin/audit",
+}: {
+  state: AuditDetailState;
+  returnHref?: string;
+}) {
+  const backLink = (
+    <Link
+      href={returnHref}
+      prefetch={false}
+      className="text-sm font-medium text-[var(--fm-info)] underline"
+    >
+      Back to audit log
+    </Link>
+  );
   if (state.phase === "loading") {
-    return <p role="status">Loading audit event…</p>;
+    return (
+      <div className="space-y-4">
+        {backLink}
+        <p role="status">Loading audit event…</p>
+      </div>
+    );
   }
   if (state.phase === "error") {
     const title =
@@ -28,19 +49,23 @@ export function AuditDetailView({ state }: { state: AuditDetailState }) {
           ? "Audit access denied"
           : "Audit event unavailable";
     return (
-      <Alert variant="destructive">
-        <AlertTitle>{title}</AlertTitle>
-        <AlertDescription>
-          {state.message}
-          {state.requestId ? ` Request reference: ${state.requestId}` : ""}
-        </AlertDescription>
-      </Alert>
+      <div className="space-y-4">
+        {backLink}
+        <Alert variant="destructive">
+          <AlertTitle>{title}</AlertTitle>
+          <AlertDescription>
+            {state.message}
+            {state.requestId ? ` Request reference: ${state.requestId}` : ""}
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   const event = state.event;
   return (
     <div className="w-full space-y-6">
+      {backLink}
       <PageHeader title={event.action} description={`Audit event ${event.auditEventId}`} />
       <ListPageSection title="Event" description="Immutable action and scope metadata.">
         <dl className="grid gap-4 p-4 text-sm sm:grid-cols-2">

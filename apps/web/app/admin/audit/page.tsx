@@ -15,7 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { FilterBar } from "../../../components/admin/admin-controls";
+import {
+  AdminCursorPagination,
+  FilterBar,
+  useAdminUrlPagination,
+} from "../../../components/admin/admin-controls";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 
 type PageState =
@@ -25,6 +29,7 @@ type PageState =
 
 type AuditFilters = {
   action: string;
+  resourceType: string;
   actorId: string;
   locationId: string;
   from: string;
@@ -33,6 +38,7 @@ type AuditFilters = {
 
 const EMPTY_FILTERS: AuditFilters = {
   action: "",
+  resourceType: "",
   actorId: "",
   locationId: "",
   from: "",
@@ -64,10 +70,12 @@ function AuditWorkspace() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const pagination = useAdminUrlPagination(pathname);
 
   const filters = useMemo<AuditFilters>(
     () => ({
       action: searchParams.get("action") ?? "",
+      resourceType: searchParams.get("resourceType") ?? "",
       actorId: searchParams.get("actorId") ?? "",
       locationId: searchParams.get("locationId") ?? "",
       from: searchParams.get("from") ?? "",
@@ -75,7 +83,7 @@ function AuditWorkspace() {
     }),
     [searchParams],
   );
-  const cursor = searchParams.get("cursor") ?? "";
+  const cursor = pagination.cursor ?? "";
   const limit = searchParams.get("limit") ?? "50";
 
   const [draft, setDraft] = useState<AuditFilters>(filters);
@@ -86,6 +94,7 @@ function AuditWorkspace() {
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (filters.action) params.set("action", filters.action);
+    if (filters.resourceType) params.set("resourceType", filters.resourceType);
     if (filters.actorId) params.set("actorId", filters.actorId);
     if (filters.locationId) params.set("locationId", filters.locationId);
     if (filters.from) params.set("from", filters.from);
@@ -149,16 +158,6 @@ function AuditWorkspace() {
     [router, pathname],
   );
 
-  const gotoCursor = useCallback(
-    (nextCursor: string | null) => {
-      const params = new URLSearchParams(query);
-      if (nextCursor) params.set("cursor", nextCursor);
-      else params.delete("cursor");
-      router.replace(`${pathname}${params.size > 0 ? `?${params}` : ""}`, { scroll: false });
-    },
-    [router, pathname, query],
-  );
-
   const hasFilters = Object.values(filters).some((value) => value !== "");
 
   return (
@@ -171,6 +170,13 @@ function AuditWorkspace() {
             value={draft.action}
             onChange={(event) => setDraft({ ...draft, action: event.target.value })}
             className="sm:w-56"
+          />
+          <Input
+            aria-label="Filter by resource type"
+            placeholder="Resource type"
+            value={draft.resourceType}
+            onChange={(event) => setDraft({ ...draft, resourceType: event.target.value })}
+            className="sm:w-48"
           />
           <Input
             aria-label="Filter by actor ID"
@@ -251,6 +257,14 @@ function AuditWorkspace() {
                 ? "No audit events match the applied filters. Clear filters to see the permitted history."
                 : "No audit events exist for your permitted scope yet."}
             </p>
+            {pagination.pageNumber > 1 ? (
+              <AdminCursorPagination
+                pageNumber={pagination.pageNumber}
+                nextCursor={state.page.nextCursor}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
+              />
+            ) : null}
           </ListPageSection>
         ) : (
           <ListPageSection
@@ -262,6 +276,7 @@ function AuditWorkspace() {
                 <TableRow>
                   <TableHead>When</TableHead>
                   <TableHead>Action</TableHead>
+                  <TableHead>Actor</TableHead>
                   <TableHead>Resource</TableHead>
                   <TableHead>Scope</TableHead>
                   <TableHead>Reason</TableHead>
@@ -277,6 +292,7 @@ function AuditWorkspace() {
                       {formatInstant(item.occurredAt)}
                     </TableCell>
                     <TableCell className="font-medium">{item.action}</TableCell>
+                    <TableCell className="font-mono text-xs">{item.actorId ?? "System"}</TableCell>
                     <TableCell className="text-xs">
                       {item.resourceType}:{item.resourceId}
                     </TableCell>
@@ -288,7 +304,7 @@ function AuditWorkspace() {
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/admin/audit/${item.auditEventId}`}
+                        href={`/admin/audit/${item.auditEventId}${searchParams.size ? `?${searchParams}` : ""}`}
                         prefetch={false}
                         className="text-xs font-medium text-[var(--fm-info)] underline"
                       >
@@ -299,27 +315,12 @@ function AuditWorkspace() {
                 ))}
               </TableBody>
             </Table>
-            <div className="flex items-center justify-between gap-3 border-t border-[var(--fm-border)] px-4 py-3">
-              <span className="text-xs text-[var(--fm-text-muted)]">
-                {state.page.items.length} event{state.page.items.length === 1 ? "" : "s"} on this
-                page
-              </span>
-              <div className="flex gap-2">
-                {cursor ? (
-                  <Button size="sm" variant="outline" onClick={() => gotoCursor(null)}>
-                    First page
-                  </Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={state.page.nextCursor === null}
-                  onClick={() => gotoCursor(state.page.nextCursor)}
-                >
-                  Older events
-                </Button>
-              </div>
-            </div>
+            <AdminCursorPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={state.page.nextCursor}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
           </ListPageSection>
         )
       ) : null}

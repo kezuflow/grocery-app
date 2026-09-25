@@ -75,6 +75,44 @@ test("staff invitation succeeds with capability and is denied without it", async
   expect(await denied.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
 });
 
+test("audit filters retain context through a real role event at 1440px", async ({
+  adminPage,
+  deniedAdminPage,
+}, testInfo) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  const code = `audit-reader-${crypto.randomUUID()}`;
+  const created = await (
+    await adminPage.request.post("/api/admin/roles", {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: { code, name: "Audit reader", description: "Browser acceptance", capabilityCodes: [] },
+    })
+  ).json();
+  expect(created).toMatchObject({ ok: true });
+  await adminPage.goto("/admin/audit");
+  await adminPage.getByRole("textbox", { name: "Filter by action" }).fill("ROLE.CREATED");
+  await adminPage.getByRole("textbox", { name: "Filter by resource type" }).fill("role");
+  await adminPage.getByRole("button", { name: "Apply filters" }).click();
+  await expect(adminPage).toHaveURL(/action=ROLE\.CREATED.*resourceType=role/);
+  const row = adminPage.getByRole("row").filter({ hasText: created.value.roleId });
+  await expect(row).toContainText("ROLE.CREATED");
+  await expect(row).toContainText("role:");
+  await adminPage.screenshot({ path: testInfo.outputPath("audit-filtered.png"), fullPage: true });
+  await row.getByRole("link", { name: "Detail" }).click();
+  await expect(adminPage.getByRole("heading", { name: "ROLE.CREATED" })).toBeVisible();
+  await adminPage.screenshot({ path: testInfo.outputPath("audit-detail.png"), fullPage: true });
+  await expect(adminPage.getByRole("link", { name: "Back to audit log" })).toHaveAttribute(
+    "href",
+    /action=ROLE\.CREATED.*resourceType=role/,
+  );
+  await adminPage.getByRole("link", { name: "Back to audit log" }).click();
+  await expect(adminPage.getByRole("textbox", { name: "Filter by resource type" })).toHaveValue(
+    "role",
+  );
+  await expect(row).toBeVisible();
+  const denied = await (await deniedAdminPage.request.get("/api/admin/audit")).json();
+  expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+});
+
 for (const width of [1440, 390]) {
   test(`operator creates and safely revokes an invitation after a lost response at ${width}px`, async ({
     adminPage,
@@ -125,18 +163,25 @@ for (const width of [1440, 390]) {
       else await route.fulfill({ response });
     });
     await row.getByRole("button", { name: "Revoke", exact: true }).click();
+    const revokeDialog = adminPage.getByRole("alertdialog");
+    await expect(revokeDialog).toContainText(displayName);
+    await revokeDialog.getByRole("button", { name: "Keep unchanged" }).click();
+    await expect(row.getByRole("button", { name: "Revoke", exact: true })).toBeFocused();
+    expect(requests).toHaveLength(0);
+    await row.getByRole("button", { name: "Revoke", exact: true }).click();
+    await revokeDialog.getByRole("button", { name: "Revoke invitation" }).click();
     await expect(
-      adminPage.getByText(
+      revokeDialog.getByText(
         "The action could not be confirmed. Retry the original request before starting another action.",
         { exact: true },
       ),
     ).toBeVisible();
-    await expect(row.getByRole("button", { name: "Revoke", exact: true })).toBeDisabled();
-    await adminPage
-      .getByRole("textbox", { name: "Invitation revocation reason" })
-      .fill("Edited after uncertainty");
-    await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
+    await expect(revokeDialog.getByRole("textbox", { name: "Confirmation reason" })).toBeDisabled();
+    await revokeDialog.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(row).toContainText("REVOKED");
+    await expect(
+      adminPage.getByRole("button", { name: "Create invitation", exact: true }),
+    ).toBeFocused();
     await expect(row).toContainText("Pending invitation email canceled.");
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
@@ -190,6 +235,10 @@ for (const width of [1440, 390]) {
     expect(creations[1]).toEqual(creations[0]);
     await roleRow.getByRole("link", { name: "Edit", exact: true }).click();
     await adminPage.getByRole("checkbox", { name: /^inventory.read / }).click();
+    await adminPage
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Confirm change" })
+      .click();
     await expect(adminPage.getByRole("checkbox", { name: /^inventory.read / })).toBeChecked();
     const role = await (await adminPage.request.get(`/api/admin/roles/${createdRoleId}`)).json();
     expect(role).toMatchObject({ ok: true, value: { capabilityCodes: ["inventory.read"] } });
@@ -266,8 +315,11 @@ for (const width of [1440, 390]) {
       .getByRole("textbox", { name: "Reason for access change" })
       .fill("Temporary leave");
     await adminPage.getByRole("button", { name: "Suspend", exact: true }).click();
+    const staffDialog = adminPage.getByRole("alertdialog");
+    await expect(staffDialog).toContainText("Renamed operator");
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
-    await expect(adminPage.getByRole("button", { name: "Save profile" })).toBeDisabled();
+    await expect(staffDialog.getByRole("button", { name: "Keep unchanged" })).toBeDisabled();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByRole("button", { name: "Activate", exact: true })).toBeVisible();
     expect(accessRequests).toHaveLength(2);
@@ -276,6 +328,7 @@ for (const width of [1440, 390]) {
       .getByRole("textbox", { name: "Reason for access change" })
       .fill("Returned to work");
     await adminPage.getByRole("button", { name: "Activate", exact: true }).click();
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("button", { name: "Suspend", exact: true })).toBeVisible();
     // Keep a real bounded role page so the previously assigned role is off-page.
     await adminPage.route("**/api/admin/roles?*", async (route) => {
@@ -299,23 +352,31 @@ for (const width of [1440, 390]) {
       else await route.fulfill({ response });
     });
     await adminPage.getByRole("checkbox").first().click();
+    await expect(staffDialog).toContainText("Grant");
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByRole("checkbox").first()).toBeChecked();
+    await expect(adminPage.getByRole("checkbox").first()).toBeFocused();
     expect(roleRequests).toHaveLength(2);
     expect(roleRequests[1]).toEqual(roleRequests[0]);
     await adminPage.getByRole("button", { name: "Set global", exact: true }).click();
+    await expect(staffDialog).toContainText("Global");
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("combobox", { name: "Staff location" })).toContainText(
       "Choose a location",
     );
     await adminPage.getByRole("combobox", { name: "Staff location" }).click();
     await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await adminPage.getByRole("button", { name: "Set location", exact: true }).click();
+    await expect(staffDialog).toContainText("Central Cebu");
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(
       adminPage.getByText("Current: Central Cebu", {
         exact: true,
       }),
     ).toBeVisible();
+    await expect(staffDialog).toHaveCount(0);
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -343,6 +404,7 @@ for (const width of [1440, 390]) {
       .getByRole("textbox", { name: "Reason for access change" })
       .fill("Session security review");
     await adminPage.getByRole("button", { name: "Revoke sessions", exact: true }).click();
+    await staffDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toHaveCount(
@@ -360,7 +422,11 @@ for (const width of [1440, 390]) {
       adminPage.getByRole("heading", { name: "Reviewed inventory role", exact: true }),
     ).toBeVisible();
     await adminPage.getByRole("checkbox", { name: /^orders.read / }).click();
+    const roleDialog = adminPage.getByRole("alertdialog");
+    await expect(roleDialog).toContainText("Grant orders.read");
+    await roleDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("checkbox", { name: /^orders.read / })).toBeChecked();
+    await expect(adminPage.getByRole("checkbox", { name: /^orders.read / })).toBeFocused();
     const archives: { key: string | undefined; body: string | null }[] = [];
     await adminPage.route(`**/api/admin/roles/${role.value.roleId}/archive`, async (route) => {
       archives.push({
@@ -374,9 +440,11 @@ for (const width of [1440, 390]) {
     });
     await adminPage.getByRole("textbox", { name: "Archive reason" }).fill("Replaced role");
     await adminPage.getByRole("button", { name: "Archive role", exact: true }).click();
+    await roleDialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(adminPage.getByRole("button", { name: "Retry unconfirmed action" })).toBeVisible();
     await adminPage.getByRole("button", { name: "Retry unconfirmed action" }).click();
     await expect(adminPage.getByText("ARCHIVED", { exact: true })).toBeVisible();
+    await expect(adminPage.getByRole("link", { name: "Back to roles" })).toBeFocused();
     expect(archives).toHaveLength(2);
     expect(archives[1]).toEqual(archives[0]);
     await expect(adminPage.getByRole("checkbox", { name: /^orders.read / })).toBeDisabled();

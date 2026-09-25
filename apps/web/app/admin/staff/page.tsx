@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
@@ -30,7 +30,14 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
+import {
+  AdminConfirmationDialog,
+  AdminCursorPagination,
+  useAdminPagination,
+} from "../../../components/admin/admin-controls";
 import { WorkspaceNavigation } from "../../../components/admin/workspace-navigation";
+import { useAdminScopeGuard } from "../../../app/admin/admin-context-provider";
+import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 
 type LoadState =
   | { phase: "loading" }
@@ -48,57 +55,129 @@ export default function StaffPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
+  const [confirmation, setConfirmation] = useState<
+    AdminStaffInvitationPage["items"][number] | null
+  >(null);
+  const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [readLoading, setReadLoading] = useState(false);
+  const readSequence = useRef(0);
+  const confirmationTrigger = useRef<HTMLElement | null>(null);
+  const inviteButton = useRef<HTMLButtonElement | null>(null);
+  const staffPagination = useAdminPagination();
+  const invitationPagination = useAdminPagination();
   const { notice, setNotice, run, retry, busy, uncertain } = useAdminCommand();
+  const dirty = Boolean(
+    inviteRole || inviteScope || inviteEmail.trim() || inviteName.trim() || revokeReason.trim(),
+  );
+  const locked = busy || uncertain || confirmation !== null;
+  useAdminScopeGuard(dirty, locked, () => {
+    setInviteRole("");
+    setInviteScope("");
+    setInviteEmail("");
+    setInviteName("");
+    setRevokeReason("");
+  });
+  useAdminRouteGuard(dirty, locked);
 
   const load = useCallback(() => {
-    setState({ phase: "loading" });
+    const sequence = ++readSequence.current;
+    setReadLoading(true);
+    setState((current) => (current.phase === "ready" ? current : { phase: "loading" }));
     void (async () => {
       try {
-        const [staffResponse, invitationResponse, rolesResponse, scopesResponse] =
-          await Promise.all([
-            fetch("/api/admin/staff"),
-            fetch("/api/admin/staff/invitations"),
-            fetch("/api/admin/roles?limit=100"),
-            fetch("/api/admin/scopes"),
-          ]);
-        const staffPayload = (await staffResponse.json()) as RpcResult<AdminStaffPage>;
+        const [staffResult, invitationResult, rolesResult, scopesResult] = await Promise.allSettled(
+          [
+            fetch(
+              `/api/admin/staff${staffPagination.cursor ? `?cursor=${encodeURIComponent(staffPagination.cursor)}` : ""}`,
+            ).then(async (response) => (await response.json()) as RpcResult<AdminStaffPage>),
+            fetch(
+              `/api/admin/staff/invitations${invitationPagination.cursor ? `?cursor=${encodeURIComponent(invitationPagination.cursor)}` : ""}`,
+            ).then(
+              async (response) => (await response.json()) as RpcResult<AdminStaffInvitationPage>,
+            ),
+            (async () => {
+              let cursor: string | null = null;
+              const items: AdminRolePage["items"][number][] = [];
+              for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+                const response = await fetch(
+                  `/api/admin/roles?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+                );
+                const payload = (await response.json()) as RpcResult<AdminRolePage>;
+                if (!payload.ok) throw new Error(payload.error.message);
+                items.push(...payload.value.items);
+                cursor = payload.value.nextCursor;
+                if (!cursor) return { items, nextCursor: null } satisfies AdminRolePage;
+              }
+              throw new Error("Role choices exceed the supported list size.");
+            })(),
+            fetch("/api/admin/scopes").then(
+              async (response) =>
+                (await response.json()) as RpcResult<ReadonlyArray<AdminScopeOptionView>>,
+            ),
+          ],
+        );
+        if (sequence !== readSequence.current) return;
+        if (staffResult.status === "rejected") throw new Error("Staff read failed");
+        const staffPayload = staffResult.value;
         if (!staffPayload.ok) {
-          setState({
-            phase: "error",
-            message:
-              staffPayload.error.code === "FORBIDDEN"
-                ? "Staff administration requires the staff.read capability with a global scope."
-                : (staffPayload.error.message ?? "Staff could not be loaded."),
-            requestId: staffPayload.error.requestId,
-          });
+          const message =
+            staffPayload.error.code === "FORBIDDEN"
+              ? "Staff administration requires the staff.read capability with a global scope."
+              : (staffPayload.error.message ?? "Staff could not be loaded.");
+          setReadError(message);
+          setState((current) =>
+            current.phase === "ready" && staffPayload.error.code !== "FORBIDDEN"
+              ? current
+              : { phase: "error", message, requestId: staffPayload.error.requestId },
+          );
           return;
         }
+        setReadError(null);
         const invitationPayload =
-          (await invitationResponse.json()) as RpcResult<AdminStaffInvitationPage>;
-        const rolePayload = (await rolesResponse.json()) as RpcResult<AdminRolePage>;
-        const scopePayload = (await scopesResponse.json()) as RpcResult<
-          ReadonlyArray<AdminScopeOptionView>
-        >;
-        if (!rolePayload.ok || !scopePayload.ok) throw new Error("Access options unavailable");
-        setRoles(rolePayload.value);
-        setScopeOptions(scopePayload.value);
+          invitationResult.status === "fulfilled" ? invitationResult.value : null;
+        const rolePage = rolesResult.status === "fulfilled" ? rolesResult.value : null;
+        const scopePayload = scopesResult.status === "fulfilled" ? scopesResult.value : null;
+        setInvitationError(
+          invitationPayload?.ok ? null : "Invitations could not be loaded. Retry read.",
+        );
+        setRoleError(rolePage ? null : "Role choices could not be loaded. Retry read.");
+        setScopeError(scopePayload?.ok ? null : "Scope choices could not be loaded. Retry read.");
+        if (rolePage) setRoles(rolePage);
+        if (scopePayload?.ok) setScopeOptions(scopePayload.value);
         setStaff(staffPayload.value);
-        setInvitations(invitationPayload.ok ? invitationPayload.value : null);
+        setInvitations(invitationPayload?.ok ? invitationPayload.value : null);
         setState({ phase: "ready" });
       } catch {
-        setState({ phase: "error", message: "Network error loading staff.", requestId: null });
+        if (sequence !== readSequence.current) return;
+        setReadError("Network error loading staff.");
+        setState((current) =>
+          current.phase === "ready"
+            ? current
+            : { phase: "error", message: "Network error loading staff.", requestId: null },
+        );
+      } finally {
+        if (sequence === readSequence.current) setReadLoading(false);
       }
     })();
-  }, []);
+  }, [staffPagination.cursor, invitationPagination.cursor]);
 
   useEffect(() => load(), [load]);
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
+    if (readError || roleError || scopeError) {
+      setNotice("Role and scope choices must load before creating an invitation.");
+      return;
+    }
     if (inviteEmail.trim() === "" || inviteName.trim() === "" || !inviteRole || !inviteScope) {
       setNotice("Email, display name, role and scope are required.");
       return;
     }
+    readSequence.current += 1;
+    setReadLoading(false);
     const ok = await run(
       `invite:${inviteEmail.trim().toLowerCase()}`,
       "/api/admin/staff/invitations",
@@ -118,6 +197,8 @@ export default function StaffPage() {
     if (ok) {
       setInviteEmail("");
       setInviteName("");
+      setInviteRole("");
+      setInviteScope("");
       load();
     }
   }
@@ -150,11 +231,25 @@ export default function StaffPage() {
               </>
             ) : null}
           </AlertDescription>
+          <Button type="button" size="sm" variant="outline" className="mt-3" onClick={load}>
+            Retry read
+          </Button>
         </Alert>
       ) : null}
 
       {state.phase === "ready" ? (
         <>
+          {readError || invitationError || roleError || scopeError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Staff setup choices need attention</AlertTitle>
+              <AlertDescription>
+                {[readError, invitationError, roleError, scopeError].filter(Boolean).join(" ")}
+                <Button type="button" size="sm" variant="outline" className="ml-3" onClick={load}>
+                  Retry read
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {notice ? (
             <p
               role="status"
@@ -164,7 +259,7 @@ export default function StaffPage() {
             </p>
           ) : null}
 
-          {uncertain ? (
+          {uncertain && !confirmation ? (
             <Button
               disabled={busy}
               onClick={() =>
@@ -172,6 +267,8 @@ export default function StaffPage() {
                   if (ok) {
                     setInviteEmail("");
                     setInviteName("");
+                    setInviteRole("");
+                    setInviteScope("");
                     setRevokeReason("");
                     load();
                   }
@@ -191,6 +288,7 @@ export default function StaffPage() {
                 placeholder="work email"
                 type="email"
                 value={inviteEmail}
+                disabled={busy || uncertain}
                 onChange={(event) => setInviteEmail(event.target.value)}
                 className="sm:w-64"
               />
@@ -198,10 +296,15 @@ export default function StaffPage() {
                 aria-label="Invitee display name"
                 placeholder="display name"
                 value={inviteName}
+                disabled={busy || uncertain}
                 onChange={(event) => setInviteName(event.target.value)}
                 className="sm:w-56"
               />
-              <Select value={inviteRole} onValueChange={setInviteRole}>
+              <Select
+                value={inviteRole}
+                onValueChange={setInviteRole}
+                disabled={busy || uncertain || Boolean(roleError)}
+              >
                 <SelectTrigger aria-label="Invitation role" className="w-56">
                   <SelectValue placeholder="Choose role" />
                 </SelectTrigger>
@@ -215,7 +318,11 @@ export default function StaffPage() {
                     ))}
                 </SelectContent>
               </Select>
-              <Select value={inviteScope} onValueChange={setInviteScope}>
+              <Select
+                value={inviteScope}
+                onValueChange={setInviteScope}
+                disabled={busy || uncertain || Boolean(scopeError)}
+              >
                 <SelectTrigger aria-label="Invitation scope" className="w-56">
                   <SelectValue placeholder="Choose scope" />
                 </SelectTrigger>
@@ -232,7 +339,12 @@ export default function StaffPage() {
                     )}
                 </SelectContent>
               </Select>
-              <Button type="submit" size="sm" disabled={busy || uncertain}>
+              <Button
+                type="submit"
+                size="sm"
+                ref={inviteButton}
+                disabled={busy || uncertain || Boolean(readError || roleError || scopeError)}
+              >
                 Create invitation
               </Button>
             </form>
@@ -241,11 +353,21 @@ export default function StaffPage() {
                 aria-label="Invitation revocation reason"
                 placeholder="revocation reason (required)"
                 value={revokeReason}
+                disabled={busy || uncertain}
                 onChange={(event) => setRevokeReason(event.target.value)}
                 className="sm:w-80"
               />
             </div>
-            {invitations && invitations.items.length > 0 ? (
+            {readLoading ? (
+              <p className="border-t border-[var(--fm-border)] p-4 text-sm" role="status">
+                Loading invitation page…
+              </p>
+            ) : readError || invitationError ? (
+              <p className="border-t border-[var(--fm-border)] p-4 text-sm" role="status">
+                Invitations for this page are unavailable. Retry the read or return to the previous
+                page.
+              </p>
+            ) : invitations && invitations.items.length > 0 ? (
               <ul className="divide-y divide-[var(--fm-border)] border-t border-[var(--fm-border)]">
                 {invitations.items.map((invitation) => (
                   <li
@@ -267,24 +389,10 @@ export default function StaffPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={busy || uncertain}
-                        onClick={() => {
-                          if (revokeReason.trim() === "") {
-                            setNotice("A revocation reason is required.");
-                            return;
-                          }
-                          void run(
-                            `revoke:${invitation.invitationId}`,
-                            `/api/admin/staff/invitations/${encodeURIComponent(invitation.invitationId)}/revoke`,
-                            { reason: revokeReason.trim(), expectedVersion: invitation.version },
-                            "POST",
-                            { title: "Staff invitation revoked" },
-                          ).then((ok) => {
-                            if (ok) {
-                              setRevokeReason("");
-                              load();
-                            }
-                          });
+                        disabled={busy || uncertain || Boolean(readError)}
+                        onClick={(event) => {
+                          confirmationTrigger.current = event.currentTarget;
+                          setConfirmation(invitation);
                         }}
                       >
                         Revoke
@@ -293,11 +401,33 @@ export default function StaffPage() {
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className="border-t border-[var(--fm-border)] p-4 text-sm text-[var(--fm-text-muted)]">
+                No invitations on this page.
+              </p>
+            )}
+            {invitations || invitationPagination.pageNumber > 1 ? (
+              <AdminCursorPagination
+                pageNumber={invitationPagination.pageNumber}
+                nextCursor={readError || invitationError ? null : (invitations?.nextCursor ?? null)}
+                pending={locked || readLoading}
+                onPrevious={invitationPagination.previous}
+                onNext={invitationPagination.next}
+              />
             ) : null}
           </ListPageSection>
 
           <ListPageSection title="Staff identities">
-            {staff === null || staff.items.length === 0 ? (
+            {readLoading ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+                Loading staff page…
+              </p>
+            ) : readError ? (
+              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+                Staff identities for this page are unavailable. Retry the read or return to the
+                previous page.
+              </p>
+            ) : staff === null || staff.items.length === 0 ? (
               <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
                 No staff identities are visible to you yet.
               </p>
@@ -347,37 +477,67 @@ export default function StaffPage() {
                     ))}
                   </TableBody>
                 </Table>
-                <div className="flex items-center justify-between border-t border-[var(--fm-border)] px-4 py-3">
-                  <span className="text-xs text-[var(--fm-text-muted)]">
-                    {staff.items.length} member{staff.items.length === 1 ? "" : "s"} on this page
-                  </span>
-                  {staff.nextCursor ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        void (async () => {
-                          const response = await fetch(
-                            `/api/admin/staff?cursor=${encodeURIComponent(staff.nextCursor!)}`,
-                          );
-                          const payload = (await response.json()) as RpcResult<AdminStaffPage>;
-                          if (payload.ok)
-                            setStaff({
-                              items: [...(staff?.items ?? []), ...payload.value.items],
-                              nextCursor: payload.value.nextCursor,
-                            });
-                        })();
-                      }}
-                    >
-                      Older members
-                    </Button>
-                  ) : null}
-                </div>
               </>
             )}
+            {staff ? (
+              <AdminCursorPagination
+                pageNumber={staffPagination.pageNumber}
+                nextCursor={readError ? null : staff.nextCursor}
+                pending={locked || readLoading}
+                onPrevious={staffPagination.previous}
+                onNext={staffPagination.next}
+              />
+            ) : null}
           </ListPageSection>
         </>
       ) : null}
+      <AdminConfirmationDialog
+        open={confirmation !== null}
+        title="Revoke this invitation?"
+        resource={confirmation?.displayName ?? "Invitation"}
+        scope="Global"
+        consequence="The pending invitation will no longer be accepted. This action is audited."
+        initialReason={revokeReason}
+        reasonLocked={uncertain}
+        pending={busy}
+        cancelDisabled={uncertain}
+        restoreFocusRef={confirmationTrigger}
+        error={confirmation && notice && notice !== "Done." ? notice : undefined}
+        confirmLabel={uncertain ? "Retry unconfirmed action" : "Revoke invitation"}
+        onCancel={() => {
+          if (!uncertain) setConfirmation(null);
+        }}
+        onConfirm={(reason) => {
+          if (!confirmation) return;
+          if (uncertain) {
+            void retry().then((ok) => {
+              if (ok) {
+                confirmationTrigger.current = inviteButton.current;
+                setConfirmation(null);
+                setRevokeReason("");
+                load();
+              }
+            });
+            return;
+          }
+          readSequence.current += 1;
+          setReadLoading(false);
+          void run(
+            `revoke:${confirmation.invitationId}`,
+            `/api/admin/staff/invitations/${encodeURIComponent(confirmation.invitationId)}/revoke`,
+            { reason, expectedVersion: confirmation.version },
+            "POST",
+            { title: "Staff invitation revoked" },
+          ).then((ok) => {
+            if (ok) {
+              confirmationTrigger.current = inviteButton.current;
+              setConfirmation(null);
+              setRevokeReason("");
+              load();
+            }
+          });
+        }}
+      />
     </div>
   );
 }
