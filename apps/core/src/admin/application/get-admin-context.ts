@@ -185,7 +185,7 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "transfers",
-    label: "Warehouse transfers",
+    label: "Stock Transfer",
     href: "/admin/transfers",
     section: "products",
     parentCode: null,

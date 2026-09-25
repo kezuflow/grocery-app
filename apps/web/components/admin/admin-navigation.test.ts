@@ -441,7 +441,7 @@ describe("admin navigation mapping", () => {
       overview,
       {
         code: "transfers",
-        label: "Warehouse transfers",
+        label: "Stock Transfer",
         href: "/admin/transfers",
         section: "operations" as const,
         scopeKinds: ["GLOBAL", "LOCATION"] as const,

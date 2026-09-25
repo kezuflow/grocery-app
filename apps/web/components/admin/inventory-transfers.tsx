@@ -85,7 +85,7 @@ export function InventoryTransfersPage() {
   return (
     <div className="w-full space-y-6">
       <PageHeader
-        title="Warehouse transfers"
+        title="Stock Transfer"
         description="Dispatch physical stock from the central warehouse. Destinations credit only goods they have checked and accepted."
       />
       {scopeKey === "global" ? <InventoryDistribution key={reload} /> : null}
@@ -142,7 +142,7 @@ export function InventoryTransfersPage() {
                 <p>No transfers match this scope and status.</p>
               ) : (
                 <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
-                  <Table className="block lg:table" aria-label="Warehouse transfers">
+                  <Table className="block lg:table" aria-label="Stock Transfer">
                     <TableHeader className="hidden lg:table-header-group">
                       <TableRow>
                         <TableHead>Movement</TableHead>
@@ -292,9 +292,9 @@ function CreateTransfer({ onCreated }: { onCreated: () => void }) {
     <form
       onSubmit={(event) => void submit(event)}
       className="space-y-4 rounded-lg border p-4"
-      aria-label="Create warehouse transfer"
+      aria-label="Create stock transfer"
     >
-      <h2 className="text-lg font-semibold">New warehouse transfer</h2>
+      <h2 className="text-lg font-semibold">New stock transfer</h2>
       {visibleError ? <p role="alert">{visibleError}</p> : null}
       <fieldset disabled={frozen} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
@@ -636,7 +636,7 @@ export function InventoryTransferDetail({ transferId }: { transferId: string }) 
   return (
     <div className="w-full space-y-6">
       <Link className="underline" href="/admin/transfers">
-        Warehouse transfers
+        Stock Transfer
       </Link>
       <PageHeader
         title="Transfer details"

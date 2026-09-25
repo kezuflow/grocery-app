@@ -11,7 +11,7 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
 
   const navigation = adminPage.getByRole("navigation", { name: "Admin navigation" });
   await expect(navigation.locator('a[href="/admin/procurement"]')).toBeVisible();
-  await expect(navigation.locator('a[href="/admin/transfers"]')).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Stock Transfer" })).toBeVisible();
   await expect(navigation.locator('a[href="/admin/receiving"]')).toHaveCount(0);
   await navigation.getByRole("button", { name: "Products" }).click();
   await expect(navigation.getByRole("link", { name: "Catalog overview" })).toBeVisible();
@@ -19,13 +19,15 @@ test("real Core navigation exposes Procurement, Receiving, Transfers and Catalog
   await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
   await expect(navigation.locator('a[href="/admin/procurement"]')).toBeVisible();
   await expect(navigation.locator('a[href="/admin/receiving"]')).toBeVisible();
-  await expect(navigation.locator('a[href="/admin/transfers"]')).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Stock Transfer" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Catalog overview" })).toHaveCount(0);
 
   await navigation.locator('a[href="/admin/receiving"]').click();
   await expect(adminPage.getByRole("heading", { level: 1, name: "Receiving" })).toBeVisible();
   await navigation.locator('a[href="/admin/procurement"]').click();
   await expect(adminPage.getByRole("heading", { level: 1, name: "Delivery weeks" })).toBeVisible();
+  await navigation.getByRole("link", { name: "Stock Transfer" }).click();
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Stock Transfer" })).toBeVisible();
 });
 
 test("Fulfillment setup is one sidebar link with four authorized areas", async ({

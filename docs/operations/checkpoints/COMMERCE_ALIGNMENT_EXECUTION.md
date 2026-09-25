@@ -1,5 +1,15 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOCK-TRANSFER-NAME-1 (2026-09-25)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `STOCK-TRANSFER-NAME-1`. Acceptance: rename the Admin-facing “Warehouse Transfers” workspace to the owner's exact “Stock Transfer” label in navigation and on the transfer pages, while preserving the `/admin/transfers` route, source-warehouse requirement, authorization and stock movement behavior. This authorizes a reviewed source commit and main push, not production deployment or a live stock command.
+
+Started on synchronized `main` at `f90cb63cc1607922e84d31b79ef9aba2b1300dfa`; the unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was preserved. Core now emits `Stock Transfer` as the authorized navigation label. Web uses the same label for the list heading, table accessibility name and detail backlink, and says “New stock transfer” in the form. API and Design guidance record the display label. Internal permission codes, transfer contracts, URL, Core route rules, persistence and provider integration did not change.
+
+Verification on the `f90cb63c` working tree plus this slice: focused Core Admin context Worker/D1 tests **17/17**; focused Web navigation tests **17/17**; Core and Web typechecks passed; `pnpm lint` passed with two unrelated existing test warnings; formatting, naming and `git diff --check` passed. A managed local Web/Core/D1 browser run with disposable `E2E_STATE_NAME=e2e-stock-transfer-name`, `E2E_START_STACK=1`, `--workers=1 --retries=0` passed **1/1**, checking the real Core sidebar label in Global and Central Cebu scopes and the Stock Transfer page heading. The managed run built Web and used local disposable D1. No production browser acceptance or deployment was attempted.
+
+Completion level: **1 of 1 requested source labels updated and locally verified; 0 of 1 production releases accepted**. Next action: on a separately authorized paired Core/Web production release, verify the published sidebar and page title. Wider Phase 7 provider and journey obligations remain open.
+
 ## Latest owner request — POS-PREPARATION-RELEASE-1 (2026-09-25)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `POS-PREPARATION-RELEASE-1`. The owner explicitly requested push and production deployment of the Point of Sale preparation station. Acceptance: release the already pushed `4d471605` Core/Web pair, preserve production bindings and secrets, verify production readiness and 100% traffic, and inspect the authenticated location-scoped POS page. This does not authorize live Order transitions, payments, provider transactions, D1 migrations or outbound messages.

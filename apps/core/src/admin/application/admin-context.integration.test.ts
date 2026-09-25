@@ -127,6 +127,9 @@ describe("scoped admin context", () => {
     expect(
       adminNavigationFor(["fulfillment.read"]).find((item) => item.code === "fulfillment-setup"),
     ).toMatchObject({ scopeKinds: ["GLOBAL"] });
+    expect(
+      adminNavigationFor(["transfers.read"]).find((item) => item.code === "transfers"),
+    ).toMatchObject({ label: "Stock Transfer", href: "/admin/transfers" });
   });
 
   it("denies context and scopes for an unauthenticated request", async () => {
