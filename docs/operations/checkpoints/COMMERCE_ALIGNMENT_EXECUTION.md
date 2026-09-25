@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Latest owner request — STOREFRONT-ANNOUNCEMENT-IMAGE-REVISION-1 (2026-09-26)
+
+Active focused plan: `docs/product/STOREFRONT_ANNOUNCEMENT_POPUP_PLAN.md`, **Storefront announcement popup — plan and assets**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. The owner rejected the shopper image's cropped body and background and requested a full-body transparent popup image made with imagegen. Acceptance: the project asset shows the complete shopper and branded tote on a transparent canvas.
+
+Started on `main` at `4a9ff7f3`; concurrent commerce work advanced HEAD during this request, and its changes were preserved. Unrelated untracked `docs/freshmarkets-shopify-admin-plan.zip` was untouched. Used imagegen with the prior shopper and FreshMarkets mark as references, then generated a final head-to-toe cutout with both shoes and the complete tote. Replaced only `apps/web/public/announcements/welcome-shopper.png` and updated the focused plan's asset description. The grass mascot and popup behavior remain unchanged. PNG alpha inspection found zero-alpha pixels outside the figure in sampled corners and side areas. No storefront code, Core business rule, live cycle, deployment, provider operation or customer message changed.
+
+Verification: generated image visually inspected; `System.Drawing.Bitmap.GetPixel` confirmed zero-alpha background samples; `git diff --check` and binary diff inspection are the final checks. Completion level: **1 of 1 requested shopper asset revisions prepared; 0 of 1 popup runtime implementations accepted**. Next action: implement and browser-verify the separate popup from the focused plan after reconciling the Sunday-only delivery wording with active cycle facts. Wider Phase 7 acceptance remains open.
+
 ## Latest owner request — SCHEDULED-EARLY-CLOSE-LIVE-1 (2026-09-26)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Stable ID: `SCHEDULED-EARLY-CLOSE-LIVE-1`. The owner clarified the Sep 27 live-week request: close new ordering as soon as safely possible while preserving existing customers' cancellation rights through the original Sep 26, 2026 11:59 PM Asia/Manila cutoff. Acceptance: an idempotent Global-only early-close command changes the Open cycle to Cutoff Reached without moving `cutoff_at`; new checkout admission stops, started payments and existing cancellation commitments remain valid, purchase/receiving remain gated by original cutoff and payment reconciliation; deploy paired Core/Web and execute the command on the specified live cycle.

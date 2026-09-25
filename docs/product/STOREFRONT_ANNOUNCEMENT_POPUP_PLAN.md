@@ -8,7 +8,7 @@ On a customer's first eligible visit to the storefront home, show a centered ann
 
 Use the [Faire image-first announcement](https://mobbin.com/screens/e5373a39-735f-44ed-9430-50c7382715a4) for a compact image, headline, short body and single action. Use the [Walmart grocery explainer](https://mobbin.com/screens/747f1102-6638-4223-8c11-a2387af38c7b) for the clear shop action and delivery explanation. These are layout references, not assets or wording to copy. The two generated FreshMarkets images are:
 
-- [Welcome shopper](../../apps/web/public/announcements/welcome-shopper.png): fictional happy Filipina mixed-heritage model in her 30s with a branded reusable produce bag. Use as the main visual, cropped to keep the face and bag logo visible.
+- [Welcome shopper](../../apps/web/public/announcements/welcome-shopper.png): fictional happy Filipina mixed-heritage model in her 30s, shown head to toe with a branded reusable produce bag on a transparent PNG canvas. Use as the main cutout without cropping her body or the bag logo.
 - [Grass mascot](../../apps/web/public/announcements/grass-mascot.png): original happy 3D grass-ball character with transparent PNG alpha. Use as a small overlapping accent; hide it if it obscures text on narrow screens.
 
 ## Page 1 copy
