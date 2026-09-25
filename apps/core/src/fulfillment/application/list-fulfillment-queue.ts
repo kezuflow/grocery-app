@@ -75,6 +75,13 @@ export async function listFulfillmentQueue(
     binds.push(query.cycleId);
   }
   switch (query.filter ?? "ALL") {
+    case "ACTIVE":
+      clauses.push("f.status IN ('NOT_STARTED','PICKING','READY_TO_PACK','PACKING','SHORTED')");
+      clauses.push(
+        "(f.status<>'NOT_STARTED' OR o.fulfillment_mode='INSTANT' OR cycle.cutoff_at<=?)",
+      );
+      binds.push(now);
+      break;
     case "HISTORY":
       clauses.push("f.status IN ('COMPLETED','CANCELED','HANDED_OFF')");
       break;

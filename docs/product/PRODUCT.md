@@ -1,5 +1,11 @@
 # FreshMarkets Product Rules
 
+Owner decision, 2026-09-25: Point of Sale in the Admin Sales channels group opens a
+location-scoped paid-order preparation station for staff tablets. Its first version uses the
+existing Fulfillment status actions and ordered quantities; it does not create in-person
+sales or take in-person payments. Core's current Fulfillment authorization, goods checks,
+delivery policies and command receipts remain authoritative.
+
 Owner correction, 2026-09-23: Scheduled customer cancellation remains available only before both
 the snapshotted cutoff and the first Start packing transition. Once packing has started, the online
 Cancel order control is disabled even if cutoff is still in the future; a later shortage or return

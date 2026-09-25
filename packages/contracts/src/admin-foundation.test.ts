@@ -23,6 +23,7 @@ describe("admin foundation contracts", () => {
       "discounts",
       "content",
       "analytics",
+      "sales_channels",
       "settings",
       "overview",
       "commerce",

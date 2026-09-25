@@ -115,6 +115,7 @@ export type OperationalOrderLineView = {
 
 export const fulfillmentQueueFilters = [
   "ALL",
+  "ACTIVE",
   "NEW",
   "PREPARING",
   "READY_FOR_DISPATCH",
@@ -123,7 +124,7 @@ export const fulfillmentQueueFilters = [
 ] as const;
 
 export type FulfillmentQueueFilter = (typeof fulfillmentQueueFilters)[number];
-export type FulfillmentProgress = Exclude<FulfillmentQueueFilter, "ALL">;
+export type FulfillmentProgress = Exclude<FulfillmentQueueFilter, "ALL" | "ACTIVE">;
 
 /** Location-safe paid-order projection. Financial and payment fields are deliberately absent. */
 export type OperationalOrderDetailView = {

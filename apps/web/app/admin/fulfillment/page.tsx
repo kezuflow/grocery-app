@@ -67,6 +67,7 @@ const awaitingOriginalFulfillmentOutcome = (error: AppError) =>
 
 const queueViewLabels: Record<FulfillmentQueueFilter, string> = {
   ALL: "All",
+  ACTIVE: "Work now",
   NEW: "New",
   PREPARING: "Preparing",
   READY_FOR_DISPATCH: "Ready for dispatch",
@@ -133,7 +134,11 @@ function nextStep(item: FulfillmentQueueView): string {
     : "View Lalamove delivery";
 }
 
-export default function FulfillmentPage() {
+export function FulfillmentWorkspace({
+  presentation = "queue",
+}: {
+  presentation?: "queue" | "station";
+}) {
   const admin = useAdminContext();
   const { locationId, label } = useAdminLocation();
   const canManage =
@@ -154,7 +159,9 @@ export default function FulfillmentPage() {
   const [unresolved, setUnresolved] = useState<FrozenFulfillmentIntent | null>(null);
   const [reason, setReason] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
-  const [view, setView] = useState<FulfillmentQueueFilter>("ALL");
+  const [view, setView] = useState<FulfillmentQueueFilter>(
+    presentation === "station" ? "ACTIVE" : "ALL",
+  );
   const operationalRefresh = useAdminOperationalRefresh();
   const actionIntent = useAdminCommandIntent({
     retainConflict: awaitingOriginalFulfillmentOutcome,
@@ -207,7 +214,9 @@ export default function FulfillmentPage() {
         setSelectedOrderId((current) =>
           current && payload.value.items.some((item) => item.orderId === current)
             ? current
-            : (payload.value.items[0]?.orderId ?? null),
+            : presentation === "station"
+              ? null
+              : (payload.value.items[0]?.orderId ?? null),
         );
         setState("ready");
       } catch {
@@ -218,7 +227,7 @@ export default function FulfillmentPage() {
         setState("error");
       }
     },
-    [locationId, orderId, cycleId, view],
+    [locationId, orderId, cycleId, view, presentation],
   );
   useEffect(() => {
     if (locationId) void load(pagination.cursor);
@@ -324,6 +333,186 @@ export default function FulfillmentPage() {
     if (commandLocked) return;
     setSelectedOrderId(nextOrderId);
     setReason("");
+  }
+  if (presentation === "station") {
+    return (
+      <div className="mx-auto w-full max-w-[88rem] space-y-5 px-4 py-5 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <PageHeader
+            title="Point of Sale"
+            description={`Paid order preparation for ${locationId ? label : "a selected location"}.`}
+          />
+          <Link href="/admin/fulfillment" className="min-h-11 py-2 text-sm font-medium underline">
+            Open fulfillment workspace
+          </Link>
+        </div>
+        {unresolved ? (
+          <Alert role="alert" className="border-[var(--fm-warning-border)]">
+            <AlertTitle>Preparation action awaiting confirmation</AlertTitle>
+            <AlertDescription>
+              {commandNotice} Order {unresolved.orderId} remains selected until Core returns a final
+              result.
+              <Button
+                type="button"
+                className="mt-3 min-h-11"
+                disabled={actionIntent.pending}
+                onClick={() => void submitIntent(unresolved)}
+              >
+                {actionIntent.pending ? "Checking…" : "Retry the same request"}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : commandNotice ? (
+          <p role="status" className="rounded-lg border border-[var(--fm-border)] p-4 text-sm">
+            {commandNotice}
+          </p>
+        ) : null}
+        {locationId ? (
+          <div className="overflow-hidden rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+            <AdminIndexViews<FulfillmentQueueFilter>
+              label="Point of Sale order views"
+              views={queueViews}
+              value={view}
+              disabled={commandLocked}
+              onChange={(next) => {
+                if (commandLocked) return;
+                setReason("");
+                setView(next);
+              }}
+            />
+          </div>
+        ) : (
+          <AdminPageState
+            state="permission-empty"
+            title="Select a permitted location"
+            message="Choose a location in the Admin header to open its order preparation station."
+          />
+        )}
+        {locationId && (state === "loading" || (!currentPage && state !== "error")) ? (
+          <AdminPageState state="loading" title="Loading paid orders" />
+        ) : null}
+        {locationId && state === "error" ? (
+          <AdminPageState
+            state="error"
+            title="Orders could not be loaded"
+            message={notice ?? undefined}
+            requestId={requestId ?? undefined}
+            onRetry={() => void load(pagination.cursor)}
+          />
+        ) : null}
+        {locationId && state === "ready" && currentPage ? (
+          <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(18rem,0.38fr)_minmax(0,0.62fr)]">
+            <section
+              aria-label="Paid order list"
+              className={`min-w-0 space-y-3 ${selected ? "hidden xl:block" : ""}`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">Orders</h2>
+                <span
+                  role={operationalRefresh.stale ? "status" : undefined}
+                  className="text-sm text-[var(--fm-text-muted)]"
+                >
+                  {operationalRefresh.stale
+                    ? "Updates delayed"
+                    : `${currentPage.items.length} on this page`}
+                </span>
+              </div>
+              {notice ? (
+                <p role="status" className="text-sm">
+                  {notice}
+                </p>
+              ) : null}
+              {currentPage.items.length === 0 ? (
+                <AdminPageState
+                  state="filtered-empty"
+                  title="No orders in this view"
+                  message="Try another order view or wait for a paid order."
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  {currentPage.items.map((item) => (
+                    <button
+                      key={item.orderId}
+                      type="button"
+                      aria-label={`Open order ${item.operational?.orderNumber ?? item.orderId}`}
+                      aria-pressed={selectedOrderId === item.orderId}
+                      aria-controls="point-of-sale-order"
+                      disabled={commandLocked}
+                      onClick={() => selectOrder(item.orderId)}
+                      className={`min-h-28 w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] ${
+                        selectedOrderId === item.orderId
+                          ? "border-[var(--fm-focus)] bg-[var(--fm-admin-surface)]"
+                          : "border-[var(--fm-border)] bg-[var(--fm-admin-surface)] hover:bg-[var(--fm-hover)]"
+                      }`}
+                    >
+                      <span className="flex items-start justify-between gap-3">
+                        <span className="text-lg font-semibold">
+                          {item.operational?.orderNumber ?? item.orderId}
+                        </span>
+                        <StatusBadge>{preparationStatus(item.status)}</StatusBadge>
+                      </span>
+                      <span className="mt-1 block text-sm text-[var(--fm-text-muted)]">
+                        {item.operational?.fulfillmentMode === "SCHEDULED"
+                          ? "Scheduled"
+                          : "Instant"}
+                        {" · "}
+                        {item.operational?.recipient.name ?? "Recipient unavailable"}
+                      </span>
+                      <span className="mt-2 block text-sm">{lineSummary(item)}</span>
+                      <span className="mt-2 block text-sm font-medium">{nextStep(item)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <AdminCursorPagination
+                pageNumber={pagination.pageNumber}
+                nextCursor={currentPage.nextCursor}
+                pending={commandLocked}
+                onPrevious={() => {
+                  if (!commandLocked) pagination.previous();
+                }}
+                onNext={(cursor) => {
+                  if (!commandLocked) pagination.next(cursor);
+                }}
+              />
+            </section>
+            <div
+              id="point-of-sale-order"
+              className={`min-w-0 xl:sticky xl:top-20 xl:self-start ${selected ? "" : "hidden xl:block"}`}
+            >
+              {selected ? (
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 xl:hidden"
+                    disabled={commandLocked}
+                    onClick={() => setSelectedOrderId(null)}
+                  >
+                    Back to orders
+                  </Button>
+                  <OperationalOrderDetail
+                    item={selected}
+                    reason={reason}
+                    setReason={setReason}
+                    pending={commandLocked}
+                    canManage={canManage}
+                    onAction={(action) => void act(selected.orderId, action, selected.version)}
+                    presentation="station"
+                  />
+                </div>
+              ) : (
+                <AdminPageState
+                  state="empty"
+                  title="Select an order"
+                  message="Open an order to see its items and available preparation actions."
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   }
   return (
     <div className="w-full space-y-6">
@@ -541,4 +730,8 @@ export default function FulfillmentPage() {
       ) : null}
     </div>
   );
+}
+
+export default function FulfillmentPage() {
+  return <FulfillmentWorkspace />;
 }

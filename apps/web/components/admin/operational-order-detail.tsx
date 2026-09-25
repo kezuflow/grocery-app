@@ -76,6 +76,7 @@ export function OperationalOrderDetail({
   pending,
   canManage,
   onAction,
+  presentation = "queue",
 }: {
   item: FulfillmentQueueView;
   reason: string;
@@ -83,6 +84,7 @@ export function OperationalOrderDetail({
   pending: boolean;
   canManage: boolean;
   onAction: (action: string) => void;
+  presentation?: "queue" | "station";
 }) {
   const detail = item.operational;
   if (!detail) return null;
@@ -100,7 +102,9 @@ export function OperationalOrderDetail({
   return (
     <aside
       aria-label={`Order ${detail.orderNumber} details`}
-      className="space-y-5 rounded-xl border border-[var(--fm-border)] bg-[var(--fm-surface)] p-5"
+      className={`space-y-5 rounded-xl border border-[var(--fm-border)] bg-[var(--fm-surface)] p-5 ${
+        presentation === "station" ? "[&_button]:min-h-11 [&_input]:min-h-11" : ""
+      }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

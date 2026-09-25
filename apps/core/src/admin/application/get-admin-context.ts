@@ -264,6 +264,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["analytics.read"],
   },
   {
+    code: "point-of-sale",
+    label: "Point of Sale",
+    href: "/admin/point-of-sale",
+    section: "sales_channels",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["fulfillment.read"],
+  },
+  {
     code: "locations",
     label: "Locations",
     href: "/admin/locations",
@@ -369,6 +378,7 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
   "inventory",
   "receiving",
   "fulfillment",
+  "point-of-sale",
   "delivery",
 ]);
 

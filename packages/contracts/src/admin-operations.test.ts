@@ -51,6 +51,7 @@ describe("admin operations contracts", () => {
     ]);
     expect(fulfillmentQueueFilters).toEqual([
       "ALL",
+      "ACTIVE",
       "NEW",
       "PREPARING",
       "READY_FOR_DISPATCH",

@@ -58,6 +58,7 @@ export const adminNavigationSectionCodes = [
   "discounts",
   "content",
   "analytics",
+  "sales_channels",
   "settings",
   // Compatibility for previously serialized Admin context fixtures.
   "overview",

@@ -53,6 +53,7 @@ const LABELED_NAVIGATION_GROUPS = new Set([
   "discounts",
   "content",
   "finance",
+  "sales_channels",
   "settings",
   "commerce",
   "operations",
@@ -78,6 +79,7 @@ const FULL_BLEED_WORKSPACE_PATHS = [
   "/admin/orders",
   "/admin/customers",
   "/admin/banners",
+  "/admin/point-of-sale",
 ] as const;
 
 function scopeSummary(scopes: ReadonlyArray<{ kind: string }>): string {
@@ -492,6 +494,17 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
                 </p>
               ) : null}
               <div className="space-y-1">
+                {group.code === "sales_channels" ? (
+                  <SheetClose asChild>
+                    <Link
+                      href="/"
+                      prefetch={false}
+                      className="block min-h-11 rounded px-3 py-2 text-sm"
+                    >
+                      Online Store
+                    </Link>
+                  </SheetClose>
+                ) : null}
                 {group.items.map((item) => (
                   <div
                     key={item.code}
@@ -507,20 +520,22 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
             </div>
           ))}
           <div className="space-y-1 border-t border-[var(--fm-border)] pt-4">
-            <p className="px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-              Sales channels
-            </p>
-            <SheetClose asChild>
-              <Link href="/" prefetch={false} className="block min-h-11 rounded px-3 py-2 text-sm">
-                Online Store
-              </Link>
-            </SheetClose>
-            <span
-              aria-disabled="true"
-              className="block px-3 py-2 text-sm text-[var(--fm-text-muted)]"
-            >
-              Point of Sale · Coming soon
-            </span>
+            {!groups.some((group) => group.code === "sales_channels") ? (
+              <>
+                <p className="px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+                  Sales channels
+                </p>
+                <SheetClose asChild>
+                  <Link
+                    href="/"
+                    prefetch={false}
+                    className="block min-h-11 rounded px-3 py-2 text-sm"
+                  >
+                    Online Store
+                  </Link>
+                </SheetClose>
+              </>
+            ) : null}
             <p className="px-3 pt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
               Apps
             </p>
@@ -659,6 +674,15 @@ function AdminSidebar({
             {group.label}
           </p>
         ) : null}
+        {group.code === "sales_channels" && !collapsed ? (
+          <Link
+            href="/"
+            prefetch={false}
+            className="mx-2 block rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--fm-admin-sidebar-active)]"
+          >
+            Online Store
+          </Link>
+        ) : null}
         <div className="space-y-0">
           {group.items.map((item) => (
             <div
@@ -752,22 +776,20 @@ function AdminSidebar({
                 {scrollingGroups.map(renderGroup)}
                 {!collapsed ? (
                   <div className="space-y-1 border-t border-[var(--fm-border)] px-4 py-3 text-sm">
-                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
-                      Sales channels
-                    </p>
-                    <Link
-                      href="/"
-                      prefetch={false}
-                      className="block rounded px-2 py-1.5 hover:bg-[var(--fm-admin-sidebar-active)]"
-                    >
-                      Online Store
-                    </Link>
-                    <span
-                      aria-disabled="true"
-                      className="block px-2 py-1.5 text-[var(--fm-text-muted)]"
-                    >
-                      Point of Sale · Coming soon
-                    </span>
+                    {!groups.some((group) => group.code === "sales_channels") ? (
+                      <>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
+                          Sales channels
+                        </p>
+                        <Link
+                          href="/"
+                          prefetch={false}
+                          className="block rounded px-2 py-1.5 hover:bg-[var(--fm-admin-sidebar-active)]"
+                        >
+                          Online Store
+                        </Link>
+                      </>
+                    ) : null}
                     <p className="pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
                       Apps
                     </p>

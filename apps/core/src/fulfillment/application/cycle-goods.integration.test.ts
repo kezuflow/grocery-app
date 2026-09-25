@@ -54,7 +54,7 @@ async function fixture() {
       }),
     ).toMatchObject({ ok: true });
   }
-  async function order() {
+  async function order(prepare = true) {
     const id = crypto.randomUUID();
     await env.DB.batch([
       env.DB.prepare(
@@ -92,18 +92,19 @@ async function fixture() {
         ),
       ]);
     }
-    for (const [index, action] of (
-      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-    ).entries())
-      expect(
-        await core.advanceAdminFulfillment({
-          ...common,
-          orderId: id,
-          action,
-          expectedVersion: index + 1,
-          idempotencyKey: crypto.randomUUID(),
-        }),
-      ).toMatchObject({ ok: true });
+    if (prepare)
+      for (const [index, action] of (
+        ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
+      ).entries())
+        expect(
+          await core.advanceAdminFulfillment({
+            ...common,
+            orderId: id,
+            action,
+            expectedVersion: index + 1,
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        ).toMatchObject({ ok: true });
     return {
       ...common,
       orderId: id,
@@ -115,6 +116,30 @@ async function fixture() {
   return { cycleId, receive, order };
 }
 describe("Scheduled receipt to packing commands", () => {
+  it("shows a new Scheduled order in Work now only after its cycle cutoff", async () => {
+    const fx = await fixture();
+    const request = await fx.order(false);
+    const readActive = () =>
+      core.listFulfillmentQueue({
+        headers: request.headers,
+        locationId,
+        orderId: request.orderId,
+        filter: "ACTIVE",
+        requestId: crypto.randomUUID(),
+        limit: 50,
+      });
+    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=? WHERE id=?")
+      .bind(Date.now() + 60_000, fx.cycleId)
+      .run();
+    expect(await readActive()).toMatchObject({ ok: true, value: { items: [] } });
+    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=? WHERE id=?")
+      .bind(Date.now() - 1_000, fx.cycleId)
+      .run();
+    expect(await readActive()).toMatchObject({
+      ok: true,
+      value: { items: [{ orderId: request.orderId, status: "NOT_STARTED" }] },
+    });
+  });
   it.each(["movement", "balance"])(
     "rolls back packing when one pool's %s write is omitted",
     async (effect) => {
@@ -169,6 +194,7 @@ describe("Scheduled receipt to packing commands", () => {
       headers: request.headers,
       locationId,
       orderId: request.orderId,
+      filter: "ACTIVE",
       requestId: crypto.randomUUID(),
       limit: 50,
     });
@@ -213,6 +239,7 @@ describe("Scheduled receipt to packing commands", () => {
       headers: request.headers,
       locationId,
       orderId: request.orderId,
+      filter: "ACTIVE",
       requestId: crypto.randomUUID(),
       limit: 50,
     });
@@ -226,6 +253,16 @@ describe("Scheduled receipt to packing commands", () => {
     });
     const packed = await core.advanceAdminFulfillment(request);
     expect(packed).toMatchObject({ ok: true, value: { status: "PACKED", version: 5 } });
+    expect(
+      await core.listFulfillmentQueue({
+        headers: request.headers,
+        locationId,
+        orderId: request.orderId,
+        filter: "ACTIVE",
+        requestId: crypto.randomUUID(),
+        limit: 50,
+      }),
+    ).toMatchObject({ ok: true, value: { items: [] } });
     expect(await core.advanceAdminFulfillment(request)).toEqual(packed);
     expect(
       (
