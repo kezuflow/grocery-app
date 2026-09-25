@@ -295,6 +295,12 @@ export default function ProcurementPage() {
                     </div>
                   ))}
                 </dl>
+                {week.status === "CUTOFF_REACHED" && week.cutoffAt > Date.now() ? (
+                  <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+                    New ordering was closed early. The displayed cutoff still governs existing paid
+                    orders and when purchasing can begin.
+                  </p>
+                ) : null}
                 {canReceive || canPrepare ? (
                   <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--fm-border)] pt-4">
                     {canReceive ? (

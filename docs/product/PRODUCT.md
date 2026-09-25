@@ -1,5 +1,13 @@
 # FreshMarkets Product Rules
 
+Owner decision, 2026-09-26: Global may close new ordering early for an already Open Scheduled
+cycle. This stops new checkout and payment admission without backdating the published cutoff,
+canceling paid Orders, invalidating started Payments, or shortening each paid Order's immutable
+customer-cancellation window. An already-started Payment may still reach its canonical commitment.
+Purchase and receiving continue to wait for the original scheduled cutoff and resolution of
+unsettled payment commitments. The cycle cannot reopen. This is a separate action from Deactivate,
+which remains unavailable when the cycle has commitments.
+
 Owner decision, 2026-09-25: Point of Sale in the Admin Sales channels group opens a
 location-scoped paid-order preparation station for staff tablets. Its first version uses the
 existing Fulfillment status actions and ordered quantities; it does not create in-person

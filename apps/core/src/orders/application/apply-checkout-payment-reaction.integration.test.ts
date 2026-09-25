@@ -1141,7 +1141,7 @@ describe("order commitment from canonical payment reactions", () => {
     expect(quote.ok).toBe(true);
   });
 
-  it("commits late paid Scheduled demand before purchasing without subscription or stock and replays once", async () => {
+  it("commits a started Scheduled payment after early ordering close before later purchasing", async () => {
     const fixture = await seededCheckout({ onHand: 0 });
     const cycleId = crypto.randomUUID();
     await seedTestCycle(env.DB, cycleId);
@@ -1173,8 +1173,8 @@ describe("order commitment from canonical payment reactions", () => {
     const payment = await startPayment();
     if (!payment.ok) throw new Error(payment.error.message);
     expect(await startPayment()).toEqual(payment);
-    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=?,status='CUTOFF_REACHED' WHERE id=?")
-      .bind(Date.now() - 1, cycleId)
+    await env.DB.prepare("UPDATE delivery_cycle SET status='CUTOFF_REACHED' WHERE id=?")
+      .bind(cycleId)
       .run();
     expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(true);
     await env.DB.batch([
@@ -1234,6 +1234,9 @@ describe("order commitment from canonical payment reactions", () => {
       }),
     ).toEqual({ applied: true, reason: "ALREADY_APPLIED", orderId: outcome.orderId });
     expect(await hasUnresolvedScheduledCommitment(env.DB, cycleId)).toBe(false);
+    await env.DB.prepare("UPDATE delivery_cycle SET cutoff_at=? WHERE id=?")
+      .bind(Date.now() - 1, cycleId)
+      .run();
     const manager = await locationManager("location");
     await env.DB.prepare(
       "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='procurement.manage'",

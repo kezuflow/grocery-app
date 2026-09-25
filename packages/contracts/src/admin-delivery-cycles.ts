@@ -70,9 +70,18 @@ export type CancelAdminDeliveryCycleRequest = AuthenticatedRequest & {
   idempotencyKey: string;
   reason: string;
 };
+export type CloseAdminDeliveryCycleOrderingRequest = AuthenticatedRequest & {
+  cycleId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+};
 export interface AdminDeliveryCyclesService {
   cancelAdminDeliveryCycle(
     request: CancelAdminDeliveryCycleRequest,
+  ): Promise<RpcResult<AdminDeliveryCycleView>>;
+  closeAdminDeliveryCycleOrdering(
+    request: CloseAdminDeliveryCycleOrderingRequest,
   ): Promise<RpcResult<AdminDeliveryCycleView>>;
   listAdminCycleDestinations(
     request: AuthenticatedRequest & { marketId: string; cursor?: string },

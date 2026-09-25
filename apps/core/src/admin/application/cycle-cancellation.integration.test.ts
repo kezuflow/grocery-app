@@ -5,7 +5,11 @@ import { openDueDeliveryCycles } from "../../commerce/application/open-due-deliv
 import { createCheckoutQuote } from "../../checkout/application/create-checkout-quote";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
-import { cancelAdminDeliveryCycle } from "./delivery-cycle-administration";
+import { operationalCandidates } from "../../geography/application/operational-candidates";
+import {
+  cancelAdminDeliveryCycle,
+  closeAdminDeliveryCycleOrdering,
+} from "./delivery-cycle-administration";
 import { createAuth } from "../../auth/service";
 
 async function openCycleWithQuote() {
@@ -190,5 +194,86 @@ describe("unpaid cycle cancellation", () => {
       .bind(paymentId)
       .run();
     expect(await exports.default.cancelAdminDeliveryCycle(command)).toMatchObject({ ok: true });
+  });
+});
+
+describe("early ordering close", () => {
+  it("stops new ordering while retaining the original cutoff, active quote and started payment", async () => {
+    const { command, quote, customerId } = await openCycleWithQuote();
+    const paymentId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,?,'PHP','INITIATED',?,1,1,1)",
+    )
+      .bind(paymentId, quote.quoteId, customerId, quote.totalMinor, paymentId)
+      .run();
+    const before = await env.DB.prepare("SELECT cutoff_at FROM delivery_cycle WHERE id=?")
+      .bind(command.cycleId)
+      .first<{ cutoff_at: number }>();
+    const closed = await exports.default.closeAdminDeliveryCycleOrdering(command);
+    expect(closed).toMatchObject({ ok: true, value: { status: "CUTOFF_REACHED", version: 4 } });
+    expect(await exports.default.closeAdminDeliveryCycleOrdering(command)).toEqual(closed);
+    expect(
+      await exports.default.closeAdminDeliveryCycleOrdering({
+        ...command,
+        reason: "Different intent",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT status,version,cutoff_at FROM delivery_cycle WHERE id=?")
+        .bind(command.cycleId)
+        .first(),
+    ).toEqual({ status: "CUTOFF_REACHED", version: 4, cutoff_at: before?.cutoff_at });
+    expect(
+      await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?")
+        .bind(quote.quoteId)
+        .first(),
+    ).toEqual({ status: "ACTIVE" });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(paymentId).first(),
+    ).toEqual({ status: "INITIATED" });
+    expect(
+      await operationalCandidates(
+        env.DB,
+        { latitude: 10.32, longitude: 123.9 },
+        { mode: "SCHEDULED", cycleId: command.cycleId, now: Date.now() },
+      ),
+    ).toHaveLength(0);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=? AND action='delivery_cycle.ordering_closed_early'",
+      )
+        .bind(command.cycleId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
+  it("rolls back when audit is missing, then retries with the same request", async () => {
+    const { command } = await openCycleWithQuote();
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_early_close_audit BEFORE INSERT ON audit_event BEGIN SELECT RAISE(IGNORE); END;",
+    );
+    try {
+      expect(
+        await closeAdminDeliveryCycleOrdering({ auth: createAuth(env), db: env.DB }, command),
+      ).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM delivery_cycle WHERE id=?")
+          .bind(command.cycleId)
+          .first(),
+      ).toEqual({ status: "OPEN", version: 3 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(command.idempotencyKey)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_early_close_audit");
+    }
+    expect(await exports.default.closeAdminDeliveryCycleOrdering(command)).toMatchObject({
+      ok: true,
+      value: { status: "CUTOFF_REACHED" },
+    });
   });
 });

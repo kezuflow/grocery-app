@@ -9,6 +9,7 @@ import type {
   SaveAdminDeliveryCycleRequest,
   ScheduleAdminDeliveryCycleRequest,
   CancelAdminDeliveryCycleRequest,
+  CloseAdminDeliveryCycleOrderingRequest,
 } from "@freshmarkets/contracts";
 import {
   z,
@@ -293,7 +294,7 @@ function participationGuard(
 
 type Mutation =
   | { kind: "SAVE"; request: z.infer<typeof saveSchema> }
-  | { kind: "SCHEDULE" | "CANCEL"; request: z.infer<typeof scheduleSchema> };
+  | { kind: "SCHEDULE" | "CANCEL" | "CLOSE_ORDERING"; request: z.infer<typeof scheduleSchema> };
 async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminDeliveryCycleView>> {
   const { request } = mutation;
   const permitted = await access(deps, request, "fulfillment.manage");
@@ -339,7 +340,11 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
     return failure("NOT_FOUND", "Cycle not found", request.requestId);
   if (current && current.version !== request.expectedVersion)
     return failure("STALE_VERSION", "Cycle changed; refresh and review", request.requestId);
-  if (current && mutation.kind !== "CANCEL" && current.status !== "DRAFT")
+  if (
+    current &&
+    !["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind) &&
+    current.status !== "DRAFT"
+  )
     return failure(
       "ILLEGAL_TRANSITION",
       "Only a draft cycle can be edited or scheduled",
@@ -352,13 +357,21 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
     return failure("VALIDATION_FAILED", "The cycle market cannot change", request.requestId);
   const market = await deps.db
     .prepare("SELECT name,timezone FROM market WHERE id=? AND (?=1 OR status='active')")
-    .bind(marketId, mutation.kind === "CANCEL" ? 1 : 0)
+    .bind(marketId, ["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind) ? 1 : 0)
     .first<{ name: string; timezone: string }>();
   if (!market)
     return failure("CONFIGURATION_ERROR", "An active market is required", request.requestId);
   const now = deps.now?.() ?? Date.now();
   let next: AdminDeliveryCycleView;
-  if (mutation.kind === "CANCEL") {
+  if (mutation.kind === "CLOSE_ORDERING") {
+    if (!current || current.status !== "OPEN" || Date.parse(current.cutoffAt) <= now)
+      return failure(
+        "ILLEGAL_TRANSITION",
+        "Only an open cycle before its planned cutoff can close ordering early",
+        request.requestId,
+      );
+    next = { ...current, status: "CUTOFF_REACHED", version: current.version + 1 };
+  } else if (mutation.kind === "CANCEL") {
     if (!current) return failure("NOT_FOUND", "Cycle not found", request.requestId);
     if (current.cancellationUnavailableReason)
       return failure("CONFLICT", current.cancellationUnavailableReason, request.requestId);
@@ -436,11 +449,11 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
         permitted.value.staffId,
         permitted.value.authUserId,
         marketId,
-        mutation.kind === "CANCEL" ? 1 : 0,
+        ["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind) ? 1 : 0,
         market.name,
         market.timezone,
       ),
-    ...(mutation.kind === "CANCEL"
+    ...(["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind)
       ? []
       : [participationGuard(deps.db, marketId, next.participation)]),
     deps.db
@@ -581,6 +594,15 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
         .bind(next.cycleId, marketId, request.expectedVersion, now),
       required(deps.db),
     );
+  } else if (mutation.kind === "CLOSE_ORDERING") {
+    statements.push(
+      deps.db
+        .prepare(
+          "UPDATE delivery_cycle SET status='CUTOFF_REACHED',version=version+1 WHERE id=? AND market_id=? AND version=? AND status='OPEN' AND cutoff_at=? AND cutoff_at>?",
+        )
+        .bind(next.cycleId, marketId, request.expectedVersion, Date.parse(next.cutoffAt), now),
+      required(deps.db),
+    );
   }
   if (mutation.kind === "CANCEL") {
     statements.push(
@@ -625,7 +647,9 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
           ? "delivery_cycle.draft_saved"
           : mutation.kind === "SCHEDULE"
             ? "delivery_cycle.scheduled"
-            : "delivery_cycle.canceled",
+            : mutation.kind === "CLOSE_ORDERING"
+              ? "delivery_cycle.ordering_closed_early"
+              : "delivery_cycle.canceled",
       resourceType: "delivery_cycle",
       resourceId: next.cycleId,
       marketId,
@@ -685,4 +709,13 @@ export async function cancelAdminDeliveryCycle(
   return parsed.success
     ? execute(deps, { kind: "CANCEL", request: parsed.data })
     : failure("VALIDATION_FAILED", "Check cycle version and cancellation reason", input.requestId);
+}
+export async function closeAdminDeliveryCycleOrdering(
+  deps: Deps,
+  input: CloseAdminDeliveryCycleOrderingRequest,
+): Promise<RpcResult<AdminDeliveryCycleView>> {
+  const parsed = scheduleSchema.safeParse(input);
+  return parsed.success
+    ? execute(deps, { kind: "CLOSE_ORDERING", request: parsed.data })
+    : failure("VALIDATION_FAILED", "Check cycle version and reason", input.requestId);
 }

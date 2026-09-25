@@ -55,7 +55,12 @@ const commandResult = z.union([
 ]);
 type Command =
   | ({ action: "SAVE" } & DeliveryCycleDraft)
-  | { action: "SCHEDULE" | "CANCEL"; cycleId: string; expectedVersion: number; reason: string };
+  | {
+      action: "SCHEDULE" | "CANCEL" | "CLOSE_ORDERING";
+      cycleId: string;
+      expectedVersion: number;
+      reason: string;
+    };
 type EditorMode = "new" | "edit" | "duplicate";
 type Range = { rangeStart: string; rangeEnd: string };
 
@@ -376,11 +381,13 @@ export function DeliveryCyclesWorkspace({
       setPending(null);
       if (result.ok) {
         notifyCommandSuccess(
-          result.value.status === "DRAFT"
-            ? "Delivery cycle draft saved"
-            : result.value.status === "CANCELED"
-              ? "Delivery cycle deactivated"
-              : "Delivery cycle activated",
+          submitted.action === "CLOSE_ORDERING"
+            ? "Ordering closed for this cycle"
+            : result.value.status === "DRAFT"
+              ? "Delivery cycle draft saved"
+              : result.value.status === "CANCELED"
+                ? "Delivery cycle deactivated"
+                : "Delivery cycle activated",
         );
         setPage((current) =>
           current
@@ -396,11 +403,13 @@ export function DeliveryCyclesWorkspace({
         setDraft(null);
         setSelectedCycleId(result.value.cycleId);
         setNotice(
-          result.value.status === "DRAFT"
-            ? "Draft saved. Activate it when the plan is ready for customers."
-            : result.value.status === "CANCELED"
-              ? "Cycle deactivated. Unstarted checkout quotes are no longer usable."
-              : "Cycle activated. Orders become eligible at the configured opening time.",
+          submitted.action === "CLOSE_ORDERING"
+            ? "New checkouts are closed. Existing paid-order cancellation uses the original cutoff; purchase waits for that cutoff and pending payments."
+            : result.value.status === "DRAFT"
+              ? "Draft saved. Activate it when the plan is ready for customers."
+              : result.value.status === "CANCELED"
+                ? "Cycle deactivated. Unstarted checkout quotes are no longer usable."
+                : "Cycle activated. Orders become eligible at the configured opening time.",
         );
       } else setNotice(result.error.message);
     } catch {

@@ -1,4 +1,4 @@
-import { test, expect } from "./admin-authenticated-fixture";
+import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 
 function manilaDate(daysFromNow: number) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -195,3 +195,51 @@ for (const width of [1440, 390]) {
     );
   });
 }
+
+test("Global closes new ordering early without moving the planned cutoff", async ({
+  adminPage: page,
+}) => {
+  const id = crypto.randomUUID();
+  const name = `Early close ${id.slice(0, 8)}`;
+  const now = Date.now();
+  const cutoff = now + 24 * 60 * 60 * 1000;
+  executeAdminE2eSql(`
+    INSERT INTO delivery_cycle(id,market_id,name,order_opens_at,cutoff_at,delivery_date,status,capacity,allocated,version)
+      VALUES ('${id}','market-metro-cebu','${name}',${now - 3600000},${cutoff},${now + 48 * 3600000},'OPEN',0,0,3);
+    INSERT INTO delivery_cycle_schedule(cycle_id,timezone,procurement_at,preparation_at,pickup_at,created_at,updated_at)
+      VALUES ('${id}','Asia/Manila',${cutoff + 3600000},${cutoff + 7200000},${cutoff + 10800000},${now},${now});
+    INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at)
+      VALUES ('window-${id}','${id}','Delivery',${now + 48 * 3600000},${now + 51 * 3600000},${now});
+    INSERT INTO delivery_cycle_zone(cycle_id,zone_id,location_id,status,version,created_at,updated_at)
+      VALUES ('${id}','zone-cebu-city-core','location-cebu-central','ACTIVE',1,${now},${now});
+  `);
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await page.goto("/admin/settings/scheduled-cycles");
+  const scope = page.getByRole("combobox", { name: "Active admin scope" });
+  if (await scope.evaluate((element) => element.tagName === "SELECT"))
+    await scope.selectOption({ label: "Global" });
+  else {
+    await scope.click();
+    await page.getByRole("option", { name: "Global", exact: true }).click();
+  }
+  await page
+    .getByRole("button", { name: new RegExp(name) })
+    .first()
+    .click();
+  const details = page.getByRole("complementary", { name: "Cycle workspace panel" });
+  await expect(details.getByRole("heading", { name, exact: true })).toBeVisible();
+  const cutoffBefore = await details.locator("li").filter({ hasText: "Order cutoff" }).innerText();
+  await expect(details.getByRole("button", { name: "Close ordering now" })).toBeVisible();
+  await details.getByRole("button", { name: "Close ordering now" }).click();
+  const confirmation = page.getByRole("alertdialog");
+  await expect(confirmation).toContainText(
+    "Existing paid orders keep their original cancellation cutoff",
+  );
+  await confirmation.getByRole("button", { name: "Close ordering", exact: true }).click();
+  await expect(details).toContainText("Cutoff Reached");
+  await expect(details).toContainText("New ordering was closed early");
+  await expect(details.getByRole("button", { name: "Close ordering now" })).toHaveCount(0);
+  expect(await details.locator("li").filter({ hasText: "Order cutoff" }).innerText()).toBe(
+    cutoffBefore,
+  );
+});

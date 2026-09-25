@@ -10,6 +10,7 @@ import { CycleTimeline } from "./cycle-timeline";
 
 const activationReason = "Activated from the Scheduled cycles workspace.";
 const deactivationReason = "Deactivated from the Scheduled cycles workspace.";
+const earlyCloseReason = "Closed new ordering early from the Scheduled cycles workspace.";
 
 function formatWindow(start: string, end: string, timezone: string) {
   const date = new Intl.DateTimeFormat("en-PH", {
@@ -46,11 +47,13 @@ export function CycleDetailsPanel({
   onClose(): void;
   onEdit(): void;
   onDuplicate(): void;
-  onCommand(action: "SCHEDULE" | "CANCEL", reason: string): void;
+  onCommand(action: "SCHEDULE" | "CANCEL" | "CLOSE_ORDERING", reason: string): void;
   onRetry(): void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [confirmation, setConfirmation] = useState<"activate" | "deactivate" | null>(null);
+  const [confirmation, setConfirmation] = useState<
+    "activate" | "deactivate" | "close-ordering" | null
+  >(null);
   const primaryWindow = cycle.windows[0];
   const locationNames = [...new Set(cycle.participation.map((item) => item.locationName))];
   const editable = canManage && cycle.status === "DRAFT";
@@ -58,6 +61,8 @@ export function CycleDetailsPanel({
     canManage &&
     ["SCHEDULED", "OPEN"].includes(cycle.status) &&
     !cycle.cancellationUnavailableReason;
+  const canCloseOrdering =
+    canManage && cycle.status === "OPEN" && Date.parse(cycle.cutoffAt) > Date.now();
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] p-4">
@@ -92,6 +97,17 @@ export function CycleDetailsPanel({
                 onClick={() => setConfirmation("deactivate")}
               >
                 <PowerOff aria-hidden className="size-3.5" /> Deactivate
+              </Button>
+            ) : null}
+            {!retryAvailable && canCloseOrdering ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => setConfirmation("close-ordering")}
+              >
+                Close ordering now
               </Button>
             ) : null}
           </div>
@@ -165,6 +181,12 @@ export function CycleDetailsPanel({
               },
             ]}
           />
+          {cycle.status === "CUTOFF_REACHED" && Date.parse(cycle.cutoffAt) > Date.now() ? (
+            <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
+              New ordering was closed early. The displayed cutoff remains the original customer
+              cancellation and purchase boundary.
+            </p>
+          ) : null}
         </section>
         <section aria-labelledby="cycle-locations-heading">
           <h3
@@ -213,24 +235,50 @@ export function CycleDetailsPanel({
       ) : null}
       <AdminConfirmationDialog
         open={confirmation !== null}
-        title={confirmation === "activate" ? "Activate this cycle?" : "Deactivate this cycle?"}
+        title={
+          confirmation === "activate"
+            ? "Activate this cycle?"
+            : confirmation === "close-ordering"
+              ? "Close new ordering now?"
+              : "Deactivate this cycle?"
+        }
         resource={cycle.name}
         scope="Global"
         consequence={
           confirmation === "activate"
             ? "Activation makes the cycle eligible for ordering at its opening time and locks the schedule for editing."
-            : "Deactivation closes unstarted checkout quotes and cannot be undone for this cycle."
+            : confirmation === "close-ordering"
+              ? "New checkouts stop now. Started payments may still complete. Existing paid orders keep their original cancellation cutoff, so purchase and receiving still wait for that cutoff and payment confirmation. This cycle cannot reopen."
+              : "Deactivation closes unstarted checkout quotes and cannot be undone for this cycle."
         }
         reasonRequired={false}
-        destructive={confirmation === "deactivate"}
-        confirmLabel={confirmation === "activate" ? "Activate cycle" : "Deactivate cycle"}
+        destructive={confirmation === "deactivate" || confirmation === "close-ordering"}
+        confirmLabel={
+          confirmation === "activate"
+            ? "Activate cycle"
+            : confirmation === "close-ordering"
+              ? "Close ordering"
+              : "Deactivate cycle"
+        }
         restoreFocusRef={closeRef}
         pending={pending}
         onCancel={() => setConfirmation(null)}
         onConfirm={() => {
-          const action = confirmation === "activate" ? "SCHEDULE" : "CANCEL";
+          const action =
+            confirmation === "activate"
+              ? "SCHEDULE"
+              : confirmation === "close-ordering"
+                ? "CLOSE_ORDERING"
+                : "CANCEL";
           setConfirmation(null);
-          onCommand(action, action === "SCHEDULE" ? activationReason : deactivationReason);
+          onCommand(
+            action,
+            action === "SCHEDULE"
+              ? activationReason
+              : action === "CLOSE_ORDERING"
+                ? earlyCloseReason
+                : deactivationReason,
+          );
         }}
       />
     </div>

@@ -66,6 +66,7 @@ import {
   saveAdminDeliveryCycleDraft,
   scheduleAdminDeliveryCycle,
   cancelAdminDeliveryCycle,
+  closeAdminDeliveryCycleOrdering,
 } from "./admin/application/delivery-cycle-administration";
 import { readCustomerProfile, updateMyCustomerProfile } from "./customer/profile";
 import { manageMyCustomerAddress } from "./customer/manage-address";
@@ -2298,6 +2299,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").CancelAdminDeliveryCycleRequest,
   ) {
     return cancelAdminDeliveryCycle(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async closeAdminDeliveryCycleOrdering(
+    input: import("@freshmarkets/contracts").CloseAdminDeliveryCycleOrderingRequest,
+  ) {
+    return closeAdminDeliveryCycleOrdering(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

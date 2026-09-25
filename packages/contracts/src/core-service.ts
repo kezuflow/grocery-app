@@ -254,6 +254,7 @@ export const coreServiceMethodNames = [
   "saveAdminDeliveryCycleDraft",
   "scheduleAdminDeliveryCycle",
   "cancelAdminDeliveryCycle",
+  "closeAdminDeliveryCycleOrdering",
   "createAdminLocation",
   "getAdminLocationSchedule",
   "saveAdminLocationSchedule",

@@ -11,7 +11,7 @@ const command = z.discriminatedUnion("action", [
   deliveryCycleDraftSchema.extend({ action: z.literal("SAVE") }),
   z
     .object({
-      action: z.enum(["SCHEDULE", "CANCEL"]),
+      action: z.enum(["SCHEDULE", "CANCEL", "CLOSE_ORDERING"]),
       cycleId: identifierSchema,
       expectedVersion: z.number().int().safe().positive(),
       reason: z.string().trim().min(1).max(500),
@@ -62,6 +62,10 @@ export const POST = observeAdminRoute("admin.delivery-cycles.command", async (re
   if (parsed.data.action === "CANCEL")
     return adminJson(
       await coreClient(env.CORE).cancelAdminDeliveryCycle({ ...schedule, ...metadata }),
+    );
+  if (parsed.data.action === "CLOSE_ORDERING")
+    return adminJson(
+      await coreClient(env.CORE).closeAdminDeliveryCycleOrdering({ ...schedule, ...metadata }),
     );
   return adminJson(
     await coreClient(env.CORE).scheduleAdminDeliveryCycle({ ...schedule, ...metadata }),

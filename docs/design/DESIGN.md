@@ -93,7 +93,12 @@ Owner follow-up, 2026-09-13: each cycle summary places its primary lifecycle act
 name. Complete drafts show Activate; Scheduled/Open cycles show Deactivate when guarded cancellation is
 available. The ordinary workspace has no separate activation/deactivation reason fields. Deactivate
 requires a concise confirmation that it closes unstarted quotes and cannot be undone for that cycle;
-Core continues to block it when committed or unresolved work exists.
+Core continues to block it when committed or unresolved work exists. For an Open cycle before its
+planned cutoff, Global also shows Close ordering now. Its confirmation states that new checkout
+stops, started payments can still complete, existing paid Orders keep their original cancellation
+cutoff, and purchase/receiving still wait for that cutoff and payment readiness. After early close,
+the details panel explains why the original cutoff remains displayed. This action does not appear as
+Deactivate and does not offer reopening.
 
 Owner redesign, 2026-09-20: Scheduled cycles keeps the calendar as the primary workspace under
 `/admin/settings/scheduled-cycles`. Month is the default desktop view and shows one connected cycle as
