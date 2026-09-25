@@ -1,6 +1,6 @@
 # Storefront announcement popup — plan and assets
 
-Status: **popup and rounded storefront actions implemented and browser-verified locally; release evidence remains in the active checkpoint**. Owner request `STOREFRONT-ANNOUNCEMENT-POPUP-1`, 2026-09-26. This is a focused storefront presentation slice under [the commerce alignment Phase 7 journey](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). PRODUCT and the current Core cycle remain the authority for ordering and delivery promises.
+Status: **popup and rounded Storefront/Admin buttons implemented locally; release evidence remains in the active checkpoint**. Owner request `STOREFRONT-ANNOUNCEMENT-POPUP-1`, 2026-09-26, with subsequent `STOREFRONT-ADMIN-BUTTON-RADIUS-1` extension. This is a focused presentation slice under [the commerce alignment Phase 7 journey](COMMERCE_ALIGNMENT_E2E_PLAN.md#phase-7--complete-journeys-and-activation-evidence). PRODUCT and the current Core cycle remain the authority for ordering and delivery promises.
 
 ## Desired experience
 
@@ -13,7 +13,7 @@ Owner direction, 2026-09-26: use the attached [X announcement modal](https://mob
 
 Place the full-body shopper with `object-fit: contain` in a soft green visual field, leaving all of her body and tote visible. Place the mascot as a small accent away from her face and branding. Let the visual field grow enough to keep both images legible instead of cropping the shopper to match the exact X banner height. The primary CTA uses FreshMarkets' current green fill and a Grab-inspired fully rounded pill shape; [Grab's order action](https://mobbin.com/screens/843520c2-c0f1-4f3a-8910-4b8e65347011) is the shape reference. Keep a visible focus style and at least a 44px touch target.
 
-The owner subsequently approved the rounded storefront treatment and asked for the simple CSS change. Storefront buttons and links now override the existing `--fm-radius-control` token to a full pill wherever they already consume it. Fields and non-action containers retain their existing shape; intentionally different component shapes retain their explicit styles. Admin remains outside this scope. Grab's published [Duxton account](https://www.figma.com/customers/how-grab-scales-hyperlocal-experiences-across-southeast-asia-with-figma-and-ai/) describes configurable component corner radius, not a universal public pill specification.
+The owner subsequently approved the rounded storefront treatment and then explicitly extended it to Admin buttons. The shared CSS gives buttons on both surfaces a full pill radius, even where a button had an explicit corner radius, and aligns links that already use `--fm-radius-control`. Fields and non-button containers retain their existing shape. Grab's published [Duxton account](https://www.figma.com/customers/how-grab-scales-hyperlocal-experiences-across-southeast-asia-with-figma-and-ai/) describes configurable component corner radius, not a universal public pill specification.
 
 ## Page 1 copy
 

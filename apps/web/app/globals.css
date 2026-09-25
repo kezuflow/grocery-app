@@ -117,8 +117,21 @@ body {
   font-weight: 400;
 }
 
-.fm-storefront :is(button, a) {
+:is(.fm-storefront, .fm-admin) :is(button, a) {
   --fm-radius-control: 9999px;
+}
+
+:is(.fm-storefront, .fm-admin) button {
+  border-radius: 9999px;
+}
+
+/* Dialog portals sit outside the surface wrapper in browsers that support :has(). */
+body:has(.fm-storefront, .fm-admin) :is(button, a) {
+  --fm-radius-control: 9999px;
+}
+
+body:has(.fm-storefront, .fm-admin) button {
+  border-radius: 9999px;
 }
 
 .fm-order-progress-fill {
