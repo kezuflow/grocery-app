@@ -3317,10 +3317,6 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.checkoutRpc.clearCart(input);
   }
 
-  async evaluateCheckout(input: import("@freshmarkets/contracts").CheckoutEligibilityRequest) {
-    return this.checkoutRpc.evaluateCheckout(input);
-  }
-
   async createCheckoutQuote(input: import("@freshmarkets/contracts").CheckoutQuoteCommandRequest) {
     return this.checkoutRpc.createCheckoutQuote(input);
   }

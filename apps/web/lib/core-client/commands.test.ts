@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { requireExpectedVersion, requireIdempotencyKey } from "./commands";
 
 function requestWith(headers: Record<string, string>, body?: unknown): Request {
-  return new Request("https://freshmarkets.ph/api/commerce/checkout", {
+  return new Request("https://freshmarkets.ph/api/checkout/payment", {
     method: "POST",
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

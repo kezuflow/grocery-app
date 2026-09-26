@@ -1,7 +1,6 @@
 import type {
   AbandonCheckoutAttemptRequest,
   AuthenticatedRequest,
-  CheckoutEligibilityRequest,
   CheckoutQuoteCommandRequest,
   CheckoutQuoteRefreshRequest,
   DeliveryCycleRequest,
@@ -24,12 +23,10 @@ import {
   createCheckoutQuote,
   refreshCustomerCheckoutQuote,
 } from "../checkout/application/create-checkout-quote";
-import { evaluateCheckout } from "../checkout/application/evaluate-checkout";
 import { createCheckoutRepository } from "../checkout/infrastructure/d1-checkout-repository";
 import {
   abandonCheckoutAttemptSchema,
   authenticatedRequestSchema,
-  checkoutRequestSchema,
   createCheckoutQuoteSchema,
   refreshCheckoutQuoteSchema,
   clearCartRequestSchema,
@@ -145,17 +142,6 @@ export function createCheckoutRpc(context: CoreRpcContext) {
       if (!customer.ok) return customer;
       return mergeGuestCart(context.env.DB, { ...input, customerId: customer.value.customerId });
     },
-    async evaluateCheckout(input: CheckoutEligibilityRequest) {
-      const validation = checkoutRequestSchema.safeParse(input);
-      if (!validation.success) return validationFailure(input.requestId, validation.error);
-      const customer = await context.access.resolveAuthenticatedCustomer(input);
-      if (!customer.ok) return customer;
-      return evaluateCheckout(context.env.DB, {
-        ...input,
-        customerId: customer.value.customerId,
-      });
-    },
-
     async createCheckoutQuote(input: CheckoutQuoteCommandRequest) {
       const validation = createCheckoutQuoteSchema.safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);

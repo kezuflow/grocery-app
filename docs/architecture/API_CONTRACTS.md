@@ -244,7 +244,7 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 
 ## Checkout Eligibility and Quote
 
-- `checkout.evaluate({ cartId, addressId, cycleId }) -> CheckoutEligibilityView` is a deprecated Scheduled-only compatibility read; current Web uses `listFulfillmentOptions` followed by authoritative `createQuote` and does not call it.
+- Checkout admission uses `listFulfillmentOptions` followed by authoritative `createQuote`. The retired Scheduled-only `checkout.evaluate` compatibility read and its Web route are no longer exposed.
 - `checkout.getCheckoutBootstrap() -> { addresses, profile }` authenticates once and supplies the bounded customer data needed by initial checkout without two Web/Core calls.
 - `checkout.createQuote({ cartId, cartVersion, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutQuoteView`; the opaque option binds address/cart versions, mode, internal routing, Lalamove quotation and the Instant promise or Scheduled cycle/window. Web never submits a provider code, location, or cycle as fulfillment authority. Customer promotion entry, Web transport and Core RPC accept at most five trimmed codes of up to 80 characters each, matching the Admin authoring length bound; codes normalize to uppercase before evaluation.
 - `checkout.refreshQuote({ checkoutAttemptId }) -> CheckoutQuoteView`

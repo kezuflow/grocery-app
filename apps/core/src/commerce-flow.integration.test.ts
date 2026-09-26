@@ -125,19 +125,6 @@ describe("customer checkout flow", () => {
       idempotencyKey: `cart-set-${crypto.randomUUID()}`,
     });
     expect(item.ok).toBe(true);
-    const cycles = await core.listDeliveryCycles({ requestId: requestId() });
-    expect(cycles.ok).toBe(true);
-    if (!cycles.ok || cycles.value.length === 0) return;
-    const checkoutInput = {
-      headers,
-      requestId: requestId(),
-      addressId: address.value.id,
-      cartId: cart.value.id,
-      cycleId: cycles.value[0].id,
-    };
-    const eligibility = await core.evaluateCheckout(checkoutInput);
-    expect(eligibility).toMatchObject({ ok: true, value: { eligible: true } });
-
     // Canonical authoritative quote (idempotent replay, no payment artifacts).
     const cartNow = await core.getCart(request());
     if (!cartNow.ok) throw new Error("cart unavailable");

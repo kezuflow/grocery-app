@@ -113,14 +113,6 @@ function addressAndProfileReads(addressRead: () => Promise<Response>) {
   );
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-}
-
 async function flush(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -196,7 +188,7 @@ describe("AddressBookClient", () => {
     const base = addressAndProfileReads(addressRead);
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string, init?: RequestInit) =>
+      vi.fn((url: string) =>
         url === "/api/commerce/address/manage"
           ? Promise.resolve(Response.json({ ok: true, value: { status: "default" } }))
           : base(url),

@@ -8,7 +8,6 @@ import * as marketDefaults from "../geography/market-defaults";
 import * as subscriptionEligibility from "../membership/application/subscription-eligibility";
 import * as cycleQueries from "../commerce/cycle-queries";
 import * as cart from "../checkout/application/cart";
-import * as evaluateCheckout from "../checkout/application/evaluate-checkout";
 import * as listCustomerOrders from "../orders/application/list-customer-orders";
 import * as createProcurementRequirement from "../procurement/application/create-procurement-requirement";
 import * as receiveProcurement from "../procurement/application/receive-procurement";
@@ -49,7 +48,6 @@ describe("core architecture ownership (runtime checks)", () => {
     expect(typeof cycleQueries.listDeliveryCycles).toBe("function");
     expect(typeof cart.getCart).toBe("function");
     expect(typeof cart.setCartItem).toBe("function");
-    expect(typeof evaluateCheckout.evaluateCheckout).toBe("function");
     expect(typeof listCustomerOrders.listCustomerOrders).toBe("function");
     expect(typeof createProcurementRequirement.createProcurementRequirement).toBe("function");
     expect(typeof receiveProcurement.receiveProcurement).toBe("function");

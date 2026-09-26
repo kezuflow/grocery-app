@@ -269,10 +269,6 @@ function successfulFetch(options?: {
       );
     if (path === "/api/checkout/bootstrap")
       return Promise.resolve(addressesResponse(options?.addresses ?? [home, office]));
-    if (path === "/api/commerce/checkout")
-      return Promise.resolve(
-        json({ ok: true, value: { eligible: true, failures: [] }, requestId: "eligible" }),
-      );
     if (path === "/api/checkout/quote") {
       options?.onQuote?.(init);
       const input = JSON.parse(String(init?.body)) as {

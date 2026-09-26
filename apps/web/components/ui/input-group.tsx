@@ -27,7 +27,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
         "has-[[data-slot=input-group-control]:focus-visible]:border-[var(--fm-primary-dark)] has-[[data-slot=input-group-control]:focus-visible]:ring-[3px] has-[[data-slot=input-group-control]:focus-visible]:ring-[color:var(--fm-focus)]/20",
 
         // Error state.
-        "has-[[data-slot][aria-invalid=true]]:border-oklch(0.577 0.245 27.325) has-[[data-slot][aria-invalid=true]]:ring-oklch(0.577 0.245 27.325)/20 dark:has-[[data-slot][aria-invalid=true]]:ring-oklch(0.577 0.245 27.325)/40 dark:has-[[data-slot][aria-invalid=true]]:border-oklch(0.704 0.191 22.216) dark:has-[[data-slot][aria-invalid=true]]:ring-oklch(0.704 0.191 22.216)/20 dark:dark:has-[[data-slot][aria-invalid=true]]:ring-oklch(0.704 0.191 22.216)/40",
+        "has-[[data-slot][aria-invalid=true]]:border-oklch(0.577 0.245 27.325) has-[[data-slot][aria-invalid=true]]:ring-oklch(0.577 0.245 27.325)/20 dark:has-[[data-slot][aria-invalid=true]]:border-oklch(0.704 0.191 22.216) dark:has-[[data-slot][aria-invalid=true]]:ring-oklch(0.704 0.191 22.216)/20",
 
         className,
       )}

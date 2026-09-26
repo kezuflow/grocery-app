@@ -200,16 +200,6 @@ export const addressUpdateRequestSchema = headersRequest
       });
   });
 
-export const checkoutRequestSchema = headersRequest.extend({
-  addressId: identifierSchema,
-  cycleId: identifierSchema,
-  cartId: identifierSchema,
-});
-
-export const commitOrderRequestSchema = checkoutRequestSchema.extend({
-  idempotencyKey: idempotencyKeySchema,
-});
-
 export const setCartItemRequestSchema = headersRequest.extend({
   cartId: identifierSchema,
   skuId: identifierSchema,

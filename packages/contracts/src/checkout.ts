@@ -78,19 +78,6 @@ export type CheckoutBootstrapView = {
   profile: CustomerProfileView;
 };
 
-export type CheckoutEligibilityRequest = AuthenticatedRequest & {
-  addressId: string;
-  cycleId: string;
-  cartId: string;
-};
-
-export type CheckoutEligibilityView = {
-  eligible: boolean;
-  failures: ReadonlyArray<string>;
-  totalMinor: number;
-  currency: string;
-};
-
 export type CheckoutQuoteCommandRequest = AuthenticatedRequest & {
   cartId: string;
   cartVersion: number;
@@ -287,9 +274,6 @@ export type GuestCartMerge = { cartId: string; version: number };
  * The retired sandbox commitment path has no representation here.
  */
 export type CheckoutService = {
-  evaluateCheckout(
-    request: CheckoutEligibilityRequest,
-  ): Promise<RpcResult<CheckoutEligibilityView>>;
   getCart(request: AuthenticatedRequest): Promise<RpcResult<CartView>>;
   getCheckoutBootstrap(request: AuthenticatedRequest): Promise<RpcResult<CheckoutBootstrapView>>;
   selectCartLocation(request: SelectCartLocationRequest): Promise<RpcResult<CartLocationSelection>>;
