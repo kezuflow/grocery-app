@@ -70,6 +70,11 @@ export function AnnouncementPopup() {
         }}
       >
         <div className="fm-announcement-topbar">
+          <span className="fm-announcement-topbar-spacer" aria-hidden="true" />
+          <div className="fm-announcement-brand" aria-label="FreshMarkets">
+            <FreshMarketsMark className="size-6" />
+            <span>freshmarkets</span>
+          </div>
           <button
             type="button"
             className="fm-announcement-close"
@@ -78,11 +83,6 @@ export function AnnouncementPopup() {
           >
             <X aria-hidden="true" size={18} />
           </button>
-          <div className="fm-announcement-brand" aria-label="FreshMarkets">
-            <FreshMarketsMark className="size-6" />
-            <span>freshmarkets</span>
-          </div>
-          <span className="fm-announcement-topbar-spacer" aria-hidden="true" />
         </div>
         <div className="fm-announcement-media">
           <img

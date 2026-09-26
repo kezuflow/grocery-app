@@ -16,6 +16,11 @@ test("welcome announcement opens on every home visit with the scheduled delivery
     .poll(() => scene.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
   await expect(dialog.locator("img.fm-announcement-mascot")).toBeVisible();
+  const closeBounds = await dialog
+    .getByRole("button", { name: "Close welcome announcement" })
+    .boundingBox();
+  const brandBounds = await dialog.locator(".fm-announcement-brand").boundingBox();
+  expect(closeBounds!.x).toBeGreaterThanOrEqual(brandBounds!.x + brandBounds!.width);
   const imageBounds = await scene.boundingBox();
   const visualBounds = await dialog.locator(".fm-announcement-media").boundingBox();
   expect(imageBounds!.height).toBeLessThanOrEqual(visualBounds!.height + 1);
