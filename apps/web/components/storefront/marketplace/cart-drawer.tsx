@@ -317,12 +317,6 @@ export function CartDrawer() {
                     )
                   }
                 />
-                {guest ? (
-                  <p className="rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-soft)] p-3 text-xs leading-5 text-[var(--fm-text-muted)]">
-                    Your cart is saved on this browser. Sign in only when you are ready to check
-                    out.
-                  </p>
-                ) : null}
               </div>
             )}
           </div>

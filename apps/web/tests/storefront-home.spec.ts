@@ -196,6 +196,9 @@ test("guest cart remains visible and asks for sign-in before checkout", async ({
   await expect(drawer.getByRole("heading", { name: "Your cart" })).toBeVisible();
   await expect(drawer.getByText("Red onion", { exact: true })).toBeVisible();
   await expect(drawer.getByText("Sign in to checkout")).toBeVisible();
+  await expect(
+    drawer.getByText("Your cart is saved on this browser.", { exact: false }),
+  ).toHaveCount(0);
   const signInAction = drawer.getByRole("button", { name: "Sign in to checkout" });
   await expect
     .poll(() => signInAction.evaluate((element) => element.getBoundingClientRect().width))
