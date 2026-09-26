@@ -19,6 +19,8 @@ export type PaymentActionView = {
   redirectUrl: string | null;
   clientToken: string | null;
   expiresAt: string | null;
+  /** Scheduled checkout only: no new QR action may be generated at or after this time. */
+  qrGenerationEndsAt?: string | null;
 };
 
 export const paymentPurposesContract = [

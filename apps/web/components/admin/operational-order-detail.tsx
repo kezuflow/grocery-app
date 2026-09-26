@@ -88,16 +88,18 @@ export function OperationalOrderDetail({
 }) {
   const detail = item.operational;
   if (!detail) return null;
-  const receivingNeeded =
-    detail.fulfillmentMode === "SCHEDULED" &&
-    item.status === "PACKING" &&
-    !item.allowedActions.includes("MARK_PACKED");
-  const shortageAllowed = item.allowedActions.includes("RECORD_SHORTAGE");
-  const escalationAllowed = item.allowedActions.includes("ESCALATE");
+  const scheduled = detail.fulfillmentMode === "SCHEDULED";
+  const blockers = scheduled
+    ? detail.blockers.filter(
+        (blocker) => blocker !== "Goods for this delivery week are not fully recorded as received.",
+      )
+    : detail.blockers;
+  const shortageAllowed = !scheduled && item.allowedActions.includes("RECORD_SHORTAGE");
+  const escalationAllowed = !scheduled && item.allowedActions.includes("ESCALATE");
   const issueAction = shortageAllowed ? "RECORD_SHORTAGE" : escalationAllowed ? "ESCALATE" : null;
-  const preparationActions = item.allowedActions.filter(
-    (action) => action !== "RECORD_SHORTAGE" && action !== "ESCALATE",
-  );
+  const preparationActions = scheduled
+    ? []
+    : item.allowedActions.filter((action) => action !== "RECORD_SHORTAGE" && action !== "ESCALATE");
   const nextAction = preparationActions[0];
   return (
     <aside
@@ -132,35 +134,25 @@ export function OperationalOrderDetail({
           <dd>{deliveryLabel(detail)}</dd>
         </div>
       </dl>
-      {detail.blockers.length ? (
+      {blockers.length ? (
         <div
           role="alert"
           className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          <p className="font-semibold">{receivingNeeded ? "Packing blocked" : "Needs attention"}</p>
+          <p className="font-semibold">Needs attention</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
-            {detail.blockers.map((blocker, index) => (
+            {blockers.map((blocker, index) => (
               <li key={`${index}-${blocker}`}>{blocker}</li>
             ))}
           </ul>
-          {receivingNeeded ? (
-            <Link
-              className="mt-3 inline-flex min-h-9 items-center font-semibold underline underline-offset-2"
-              href={
-                item.cycleId
-                  ? `/admin/receiving?cycleId=${encodeURIComponent(item.cycleId)}`
-                  : "/admin/receiving"
-              }
-            >
-              Open receiving for this delivery week
-            </Link>
-          ) : null}
         </div>
       ) : null}
       <div>
-        <h3 className="font-semibold">Ordered item checklist</h3>
+        <h3 className="font-semibold">Ordered items</h3>
         <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
-          Prepare each immutable paid quantity using the goods evidence shown below.
+          {detail.fulfillmentMode === "SCHEDULED"
+            ? "Use the Delivery week actions after the supplier purchase and physical packing are complete."
+            : "Prepare each immutable paid quantity using the goods evidence shown below."}
         </p>
         <ol className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
           {detail.lines.map((line, index) => (
@@ -185,31 +177,33 @@ export function OperationalOrderDetail({
                 <span className="font-semibold">
                   {line.quantity} {line.unit}
                 </span>
-                <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
-                  {line.goods.kind === "INSTANT_RESERVATION" ? (
-                    <>
-                      {reservationEvidence(line.goods.status)} · {line.goods.allocatedBase}{" "}
-                      {line.baseUnit ?? "base units"}
-                    </>
-                  ) : line.goods.receivedBase === null ? (
-                    <>
-                      {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated · no
-                      receipt recorded
-                    </>
-                  ) : (
-                    <>
-                      {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated to this
-                      line · {line.goods.receivedBase} {line.baseUnit ?? "base units"} received for
-                      the delivery week pool
-                    </>
-                  )}
-                </span>
+                {detail.fulfillmentMode === "INSTANT" ? (
+                  <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                    {line.goods.kind === "INSTANT_RESERVATION" ? (
+                      <>
+                        {reservationEvidence(line.goods.status)} · {line.goods.allocatedBase}{" "}
+                        {line.baseUnit ?? "base units"}
+                      </>
+                    ) : line.goods.receivedBase === null ? (
+                      <>
+                        {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated · no
+                        receipt recorded
+                      </>
+                    ) : (
+                      <>
+                        {line.goods.allocatedBase} {line.baseUnit ?? "base units"} allocated to this
+                        line · {line.goods.receivedBase} {line.baseUnit ?? "base units"} received
+                        for the delivery week pool
+                      </>
+                    )}
+                  </span>
+                ) : null}
               </span>
             </li>
           ))}
         </ol>
       </div>
-      {item.allowedActions.length ? (
+      {!scheduled && item.allowedActions.length ? (
         <div className="space-y-3 rounded-lg border border-[var(--fm-border)] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
@@ -218,9 +212,7 @@ export function OperationalOrderDetail({
             <p className="mt-1 font-semibold">
               {nextAction
                 ? (actionLabels[nextAction] ?? nextAction)
-                : receivingNeeded
-                  ? "Record received goods before finishing packing"
-                  : "Resolve the current shortage before preparation continues"}
+                : "Resolve the current shortage before preparation continues"}
             </p>
           </div>
           {canManage && nextAction ? (
@@ -277,6 +269,14 @@ export function OperationalOrderDetail({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {detail.fulfillmentMode === "SCHEDULED" && item.cycleId && item.status !== "PACKED" ? (
+        <Link
+          className="inline-flex min-h-11 items-center font-semibold underline"
+          href={`/admin/procurement?cycleId=${encodeURIComponent(item.cycleId)}`}
+        >
+          Open this delivery week
+        </Link>
       ) : null}
       {["PACKED", "HANDED_OFF", "COMPLETED"].includes(item.status) || detail.deliveryExecution ? (
         <Link

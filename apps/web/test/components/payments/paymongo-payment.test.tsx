@@ -254,6 +254,56 @@ describe("PayMongoPayment", () => {
     expect(container.querySelector('[role="timer"]')?.textContent).toContain("Refreshes in 10:00");
   });
 
+  it("keeps an issued QR usable after cutoff but never renews it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T01:00:00.000Z"));
+    sessionStorage.setItem(
+      "checkout-action",
+      JSON.stringify({
+        paymentIntentId: "payment-1",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
+        providerReference: "pi_1",
+        actionType: "SDK",
+        clientToken: "pi_1_client_secret",
+        expiresAt: new Date(Date.now() + 61 * 60_000).toISOString(),
+        qrGenerationEndsAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      }),
+    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { publicKey: "pk_test_public" } }))
+      .mockResolvedValueOnce(Response.json({ data: { id: "pm_qrph", attributes: {} } }))
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            id: "pi_1",
+            attributes: { next_action: { code: { image_url: "data:image/png;base64,first" } } },
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () =>
+      root.render(
+        <PayMongoPayment
+          storageKey="checkout-action"
+          title="Complete payment"
+          description="Secure payment"
+          returnPath="/orders?payment=return"
+          donePath="/orders?payment=submitted"
+          backPath="/orders?payment=return"
+        />,
+      ),
+    );
+    await flush();
+    expect(container.querySelector('img[alt="QR Ph payment code"]')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(6 * 60_000));
+    expect(container.querySelector('img[alt="QR Ph payment code"]')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(24 * 60_000));
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(container.textContent).toContain("No new QR code can be created");
+  });
+
   it("shows finalization before playing success once the order commitment exists", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-21T03:00:00.000Z"));

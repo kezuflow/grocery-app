@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OperationalOrderDetail } from "./operational-order-detail";
 
 describe("OperationalOrderDetail", () => {
-  it("routes a Scheduled packing blocker to receiving without offering Finish packing", () => {
+  it("routes retained Scheduled packing details to the two Delivery week actions", () => {
     const markup = renderToStaticMarkup(
       <OperationalOrderDetail
         item={{
@@ -56,12 +56,13 @@ describe("OperationalOrderDetail", () => {
         onAction={vi.fn()}
       />,
     );
-    expect(markup).toContain("/admin/receiving?cycleId=cycle-1");
-    expect(markup).toContain("Open receiving for this delivery week");
-    expect(markup).toContain("Report shortage");
-    expect(markup).toContain("Optional shortage reason");
-    expect(markup).toContain("Describe the shortage (optional)");
-    expect(markup).toContain("no receipt recorded");
+    expect(markup).toContain("/admin/procurement?cycleId=cycle-1");
+    expect(markup).toContain("Open this delivery week");
+    expect(markup).toContain("Use the Delivery week actions");
+    expect(markup).not.toContain("/admin/receiving");
+    expect(markup).not.toContain("Report shortage");
+    expect(markup).not.toContain("fully recorded as received");
+    expect(markup).not.toContain("no receipt recorded");
     expect(markup).not.toContain("Finish packing");
   });
 
@@ -185,7 +186,7 @@ describe("OperationalOrderDetail", () => {
         onAction={vi.fn()}
       />,
     );
-    expect(markup).toContain("Ordered item checklist");
+    expect(markup).toContain("Ordered items");
     expect(markup).toContain("Finish picking");
     expect(markup).toContain("Reserved");
     expect(markup).not.toContain("<button");

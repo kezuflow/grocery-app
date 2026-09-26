@@ -17,6 +17,7 @@ import {
 import { listAdminBanners, saveAdminBanner } from "./admin/application/storefront-banners";
 import { bookAutomaticInstantDeliveries } from "./delivery/application/book-automatic-instant-deliveries";
 import { getAdminScheduledWeek } from "./admin/application/scheduled-week";
+import { completeScheduledWeek } from "./admin/application/complete-scheduled-week";
 import { recordScheduledCountedReceipt } from "./procurement/application/scheduled-counted-receipts";
 import { releaseScheduledSurplus } from "./procurement/application/scheduled-surplus";
 import {
@@ -116,6 +117,7 @@ import {
   metricDefinitionStatuses,
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
+import { scheduledWeekCompletionBodySchema } from "@freshmarkets/validation";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { configuredInstantDeliveryPartners } from "./delivery/infrastructure/runtime-delivery-provider";
 import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
@@ -2471,6 +2473,25 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return getAdminScheduledWeek(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
+    );
+  }
+  async completeAdminScheduledWeek(
+    input: import("@freshmarkets/contracts").ScheduledWeekCompletionRequest,
+  ) {
+    const validation = scheduledWeekCompletionBodySchema
+      .extend({
+        requestId: validationSchema.string().min(1),
+        headers: validationSchema.record(validationSchema.string(), validationSchema.string()),
+        idempotencyKey: idempotencyKeySchema,
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return this.withOperationalPublication(
+      completeScheduledWeek(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      ),
     );
   }
   recordScheduledCountedReceipt(

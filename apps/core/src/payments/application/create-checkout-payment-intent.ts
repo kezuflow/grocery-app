@@ -57,6 +57,16 @@ export async function createCheckoutPaymentIntent(
   const existing = await paymentRepository.findIntentByIdempotencyKey(command.idempotencyKey);
   const repository = createCheckoutRepository(database);
   const quote = await repository.findQuoteById(command.checkoutAttemptId);
+  const qrGenerationEndsAt = (() => {
+    if (
+      quote?.fulfillmentMode !== "SCHEDULED" ||
+      !quote.cycleSnapshot ||
+      typeof quote.cycleSnapshot !== "object"
+    )
+      return null;
+    const value = (quote.cycleSnapshot as Record<string, unknown>).cutoffAt;
+    return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+  })();
   if (existing) {
     if (
       existing.purpose !== "GROCERY_CHECKOUT" ||
@@ -73,7 +83,7 @@ export async function createCheckoutPaymentIntent(
         "Idempotency key was used with a different checkout payment",
         command.requestId,
       );
-    return createPayment(database, registry, {
+    const replay = await createPayment(database, registry, {
       purpose: "GROCERY_CHECKOUT",
       subjectType: "checkout_quote",
       subjectId: command.checkoutAttemptId,
@@ -86,6 +96,7 @@ export async function createCheckoutPaymentIntent(
       idempotencyKey: command.idempotencyKey,
       requestId: command.requestId,
     });
+    return replay.ok ? { ...replay, value: { ...replay.value, qrGenerationEndsAt } } : replay;
   }
 
   const selling = await requireSellingOpen(database, command.requestId);
@@ -112,7 +123,7 @@ export async function createCheckoutPaymentIntent(
     deliveryProviders,
   );
   if (!current.ok) return failure(current.code, current.message, command.requestId);
-  return createPayment(database, registry, {
+  const created = await createPayment(database, registry, {
     purpose: "GROCERY_CHECKOUT",
     subjectType: "checkout_quote",
     subjectId: quote.id,
@@ -126,4 +137,5 @@ export async function createCheckoutPaymentIntent(
     idempotencyKey: command.idempotencyKey,
     requestId: command.requestId,
   });
+  return created.ok ? { ...created, value: { ...created.value, qrGenerationEndsAt } } : created;
 }

@@ -1120,6 +1120,107 @@ describe("order commitment from canonical payment reactions", () => {
       });
     },
   );
+
+  it("freezes Scheduled demand one hour after cutoff and records captured money for refund", async () => {
+    const fixture = await seededCheckout({ onHand: 0 });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(quote.error.message);
+    const cutoff = Date.now() + 10_000;
+    await env.DB.prepare(
+      "UPDATE checkout_quote SET cycle_snapshot_json=json_set(cycle_snapshot_json,'$.cutoffAt',?) WHERE id=?",
+    )
+      .bind(new Date(cutoff).toISOString(), quote.value.quoteId)
+      .run();
+    const intent = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+      quote.value.totalMinor,
+      cutoff - 1,
+    );
+    const outcome = await applyCheckoutPaymentReaction(
+      env.DB,
+      {
+        reactionId: intent.reactionId,
+        paymentIntentId: intent.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      },
+      { now: () => cutoff + 60 * 60_000 },
+    );
+    expect(outcome).toEqual({ applied: false, reason: "QUOTE_UNUSABLE" });
+    expect(
+      await env.DB.prepare("SELECT kind FROM finance_exception WHERE payment_intent_id=?")
+        .bind(intent.intentId)
+        .first(),
+    ).toEqual({ kind: "CYCLE_CLOSED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(intent.intentId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it("classifies a purchase that wins the reaction race as captured money requiring refund", async () => {
+    const fixture = await seededCheckout({ onHand: 0 });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(quote.error.message);
+    const cutoff = Date.now() + 10_000;
+    await env.DB.prepare(
+      "UPDATE checkout_quote SET cycle_snapshot_json=json_set(cycle_snapshot_json,'$.cutoffAt',?) WHERE id=?",
+    )
+      .bind(new Date(cutoff).toISOString(), quote.value.quoteId)
+      .run();
+    const intent = await intentWithReaction(
+      quote.value.quoteId,
+      fixture.customerId,
+      quote.value.totalMinor,
+      cutoff - 1,
+    );
+    const cycle = await env.DB.prepare(`SELECT
+      json_extract(cycle_snapshot_json,'$.cycleId') cycleId,
+      json_extract(cycle_snapshot_json,'$.locationId') locationId
+      FROM checkout_quote WHERE id=?`)
+      .bind(quote.value.quoteId)
+      .first<{ cycleId: string; locationId: string }>();
+    if (!cycle) throw new Error("Scheduled quote snapshot missing");
+    await env.DB.prepare(`INSERT INTO scheduled_week_completion
+      (cycle_id,location_id,version,demand_line_count,paid_order_count,total_quantity_base,
+       purchase_completed_at,purchase_actor_user_id)
+      VALUES (?,?,1,1,1,500,?,?)`)
+      .bind(cycle.cycleId, cycle.locationId, cutoff, "test-staff")
+      .run();
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "DELETE FROM scheduled_week_completion WHERE cycle_id=? AND location_id=?",
+      )
+        .bind(cycle.cycleId, cycle.locationId)
+        .run();
+    });
+    const outcome = await applyCheckoutPaymentReaction(
+      env.DB,
+      {
+        reactionId: intent.reactionId,
+        paymentIntentId: intent.intentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      },
+      { now: () => cutoff + 1 },
+    );
+    expect(outcome).toEqual({ applied: false, reason: "QUOTE_UNUSABLE" });
+    expect(
+      await env.DB.prepare("SELECT kind FROM finance_exception WHERE payment_intent_id=?")
+        .bind(intent.intentId)
+        .first(),
+    ).toEqual({ kind: "CYCLE_CLOSED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM order_payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(intent.intentId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
   it("accepts a small Scheduled basket without a general minimum", async () => {
     const fixture = await seededCheckout({ quantity: 1 });
 

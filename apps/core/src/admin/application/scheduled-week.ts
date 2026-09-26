@@ -6,13 +6,10 @@ import type {
   ScheduledOrderSummaryItem,
   ScheduledOrderSummaryTotals,
 } from "@freshmarkets/contracts";
-import {
-  hasUnresolvedScheduledCommitment,
-  scheduledPurchasePendingMessage,
-} from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 import { scheduledWeekQuerySchema, scheduledWeekViewSchema } from "@freshmarkets/validation";
 import {
   resolveOperationsAdministrationAccess,
+  resolveOperationsAdministrationAnyAccess,
   resolveGlobalOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
@@ -109,14 +106,63 @@ export async function getAdminScheduledWeek(
       .all<{ name: string; startsAt: number; endsAt: number }>(),
   ]);
   if (!schedule) return fail("NOT_FOUND", "Delivery week schedule is unavailable");
-  const purchasePending = await hasUnresolvedScheduledCommitment(deps.db, query.cycleId);
+  const now = Date.now();
+  const settlementEndsAt = selected.cutoffAt + 60 * 60_000;
+  const completion = query.locationId
+    ? await deps.db
+        .prepare(`SELECT cycle_id cycleId,location_id locationId,version,
+        paid_order_count paidOrderCount,purchase_completed_at purchaseCompletedAt,packed_at packedAt
+        FROM scheduled_week_completion WHERE cycle_id=? AND location_id=?`)
+        .bind(query.cycleId, query.locationId)
+        .first<NonNullable<ScheduledWeekView["week"]>["completion"]>()
+    : null;
+  const settled = now >= settlementEndsAt;
+  const demandCount =
+    query.locationId && settled && !completion
+      ? await deps.db
+          .prepare(`SELECT COUNT(*) count FROM committed_demand WHERE delivery_cycle_id=?
+        AND location_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`)
+          .bind(query.cycleId, query.locationId)
+          .first<{ count: number }>()
+      : null;
+  const manage = query.locationId
+    ? await resolveOperationsAdministrationAnyAccess(
+        deps,
+        input,
+        ["procurement.manage", "fulfillment.manage"],
+        query.locationId,
+      )
+    : null;
+  const canPurchase = manage?.ok && manage.value.capabilities.includes("procurement.manage");
+  const canPack = manage?.ok && manage.value.capabilities.includes("fulfillment.manage");
   result.week = {
     ...selected,
     ...schedule,
     windows: windows.results,
-    purchaseBlockedReason: purchasePending ? scheduledPurchasePendingMessage : null,
+    purchaseBlockedReason: settled
+      ? null
+      : now < selected.cutoffAt
+        ? selected.status === "CUTOFF_REACHED"
+          ? "Ordering closed early. Purchase quantities will be ready one hour after the published cutoff."
+          : "Ordering is still open. Purchase quantities will be ready one hour after cutoff."
+        : "Payments are settling. Purchase quantities will be ready one hour after cutoff.",
+    settlementEndsAt,
+    completion,
+    canCompletePurchase: Boolean(
+      query.locationId &&
+      settled &&
+      ["OPEN", "CUTOFF_REACHED"].includes(selected.status) &&
+      !completion &&
+      demandCount?.count &&
+      canPurchase,
+    ),
+    canFinishPacking: Boolean(
+      ["OPEN", "CUTOFF_REACHED"].includes(selected.status) &&
+      completion &&
+      !completion.packedAt &&
+      canPack,
+    ),
   };
-  const now = Date.now();
   if (query.section === "ORDER_SUMMARY") {
     const paidLines = `SELECT d.order_id,d.location_id,d.inventory_pool_id,d.sku_id,d.quantity_sellable,d.quantity_base_total,d.base_unit_code,
       s.product_id,
@@ -162,14 +208,6 @@ export async function getAdminScheduledWeek(
       nextCursor: rows.results.length > 50 ? (rows.results[49]?.rowCursor ?? null) : null,
     };
   } else if (query.section === "DEMAND") {
-    const manage = query.locationId
-      ? await resolveOperationsAdministrationAccess(
-          deps,
-          input,
-          "procurement.manage",
-          query.locationId,
-        )
-      : await resolveGlobalOperationsAdministrationAccess(deps, input, "procurement.manage");
     const rows = await deps.db
       .prepare(`WITH demand AS (
       SELECT sku_id,inventory_pool_id,location_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,
@@ -201,12 +239,7 @@ export async function getAdminScheduledWeek(
       kind: "DEMAND",
       items: rows.results.slice(0, 50).map(({ rowCursor: _rowCursor, ...row }) => ({
         ...row,
-        canConfirmPurchase:
-          !purchasePending &&
-          manage.ok &&
-          selected.cutoffAt <= now &&
-          !["DRAFT", "SCHEDULED", "CLOSED", "CANCELED"].includes(selected.status) &&
-          ["NOT_PURCHASED", "AGGREGATED"].includes(row.status),
+        canConfirmPurchase: false,
       })),
       nextCursor: rows.results.length > 50 ? (rows.results[49]?.rowCursor ?? null) : null,
     };

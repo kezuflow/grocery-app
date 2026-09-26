@@ -846,7 +846,7 @@ it("shows scoped week demand, purchase and receiving progress without stock nett
             quantityBase: 500,
             quantitySellable: 1,
             status: "NOT_PURCHASED",
-            canConfirmPurchase: true,
+            canConfirmPurchase: false,
           },
         ],
       },

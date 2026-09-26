@@ -121,26 +121,12 @@ function actions(input: {
   cancellationAvailable: boolean;
   cancellationDisabledReason: string | null;
 }): CustomerOrderActionView[] {
-  const amendable =
-    input.mode === "SCHEDULED" &&
-    ["COMMITTED", "IN_FULFILLMENT"].includes(input.status) &&
-    input.cutoffAt !== null &&
-    input.cutoffAt > Date.now();
   return [
     { action: "REORDER", available: true, disabledReason: null },
     {
       action: "SUBMIT_ISSUE",
       available: input.status === "DELIVERED",
       disabledReason: input.status === "DELIVERED" ? null : "Available after delivery",
-    },
-    {
-      action: "REQUEST_AMENDMENT",
-      available: amendable,
-      disabledReason: amendable
-        ? null
-        : input.mode === "INSTANT"
-          ? "INSTANT_AMENDMENT_POLICY_UNAVAILABLE"
-          : "AMENDMENT_WINDOW_CLOSED",
     },
     {
       action: "VIEW_TRANSACTION_SUMMARY",

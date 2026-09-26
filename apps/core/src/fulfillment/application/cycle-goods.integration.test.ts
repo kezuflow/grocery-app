@@ -186,7 +186,7 @@ describe("Scheduled receipt to packing commands", () => {
       }
     },
   );
-  it("rejects missing goods without consuming another pool and recovers after receipt", async () => {
+  it("retains the legacy packing stock guard without exposing per-order Scheduled actions", async () => {
     const fx = await fixture();
     await fx.receive(0, 1000);
     const request = await fx.order();
@@ -204,8 +204,8 @@ describe("Scheduled receipt to packing commands", () => {
         items: [
           {
             status: "PACKING",
-            allowedActions: ["RECORD_SHORTAGE"],
-            operational: { blockers: [expect.stringContaining("Review receiving")] },
+            allowedActions: [],
+            operational: { blockers: [] },
           },
         ],
       },
@@ -246,9 +246,7 @@ describe("Scheduled receipt to packing commands", () => {
     expect(queueAfter).toMatchObject({
       ok: true,
       value: {
-        items: [
-          { allowedActions: ["MARK_PACKED", "RECORD_SHORTAGE"], operational: { blockers: [] } },
-        ],
+        items: [{ allowedActions: [], operational: { blockers: [] } }],
       },
     });
     const packed = await core.advanceAdminFulfillment(request);

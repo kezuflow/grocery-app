@@ -29,6 +29,7 @@ type StoredAction = {
   actionType: "SDK";
   clientToken: string;
   expiresAt: string;
+  qrGenerationEndsAt?: string | null;
   qrCode?: string;
   qrCodeExpiresAt?: string;
 };
@@ -287,6 +288,14 @@ export function PayMongoPayment({
         return;
       const actionExpiresAt = Date.parse(action.expiresAt);
       const startedAt = Date.now();
+      if (action.qrGenerationEndsAt && Date.parse(action.qrGenerationEndsAt) <= startedAt) {
+        if (replaceExpiredCode) {
+          setQrCode(null);
+          setQrCodeExpiresAt(null);
+        }
+        setMessage("Ordering has closed for this delivery week. No new QR code can be created.");
+        return;
+      }
       const availableSeconds = Math.floor((actionExpiresAt - startedAt) / 1000);
       if (availableSeconds < 60) {
         clearStoredAction(storageKey);

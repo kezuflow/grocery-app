@@ -257,10 +257,8 @@ export async function listAdminFulfillmentQueue(
         status: row.status,
         version: row.version,
         allowedActions:
-          row.status === "PACKING" &&
-          row.operational.fulfillmentMode === "SCHEDULED" &&
-          !row.packingGoodsReady
-            ? allowedFulfillmentActions(row.status).filter((action) => action !== "MARK_PACKED")
+          row.operational.fulfillmentMode === "SCHEDULED"
+            ? []
             : allowedFulfillmentActions(row.status),
         operational: row.operational,
       })),

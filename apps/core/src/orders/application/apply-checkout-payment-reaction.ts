@@ -159,6 +159,8 @@ export async function applyCheckoutPaymentReaction(
   if (!instant) {
     if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= payment.created_at)
       return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
+    if (now >= Date.parse(routingSnapshot.cutoffAt) + 60 * 60_000)
+      return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
   } else if (!routingSnapshot)
     return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
   const cycleSnapshot = routingSnapshot;
@@ -238,6 +240,9 @@ export async function applyCheckoutPaymentReaction(
       WHERE p.id=? AND p.version=? AND p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=?
       AND p.customer_id=? AND p.amount_minor=? AND p.currency=? AND p.status='SUCCEEDED' AND p.created_at<?
       AND (?=1 OR p.created_at<?)
+      AND (?=1 OR (CAST(unixepoch('subsec')*1000 AS INTEGER)<?
+        AND NOT EXISTS(SELECT 1 FROM scheduled_week_completion finished
+          WHERE finished.cycle_id=? AND finished.location_id=?)))
       AND r.id=? AND r.status='PENDING' AND r.reaction_type='COMMIT_ORDER' AND r.subject_type=p.subject_type AND r.subject_id=p.subject_id
       AND NOT EXISTS (SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=p.id AND (refund.status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED') OR refund.next_retry_at IS NOT NULL)))`)
       .bind(
@@ -250,6 +255,10 @@ export async function applyCheckoutPaymentReaction(
         quote.expiresAt,
         instant ? 1 : 0,
         Date.parse(cycleSnapshot.cutoffAt),
+        instant ? 1 : 0,
+        instant ? 0 : Date.parse(cycleSnapshot.cutoffAt) + 60 * 60_000,
+        instant ? null : cycleSnapshot.cycleId,
+        cycleSnapshot.locationId,
         input.reactionId,
       ),
     database
@@ -731,6 +740,16 @@ export async function applyCheckoutPaymentReaction(
         outcomeCode: "QUOTE_ALREADY_CONSUMED",
       });
       return { applied: false, reason: "CAS_CONFLICT" };
+    }
+    if (!instant) {
+      const settled = Date.now() >= Date.parse(cycleSnapshot.cutoffAt) + 60 * 60_000;
+      const purchased = await database
+        .prepare(`SELECT 1 AS found FROM scheduled_week_completion
+        WHERE cycle_id=? AND location_id=? LIMIT 1`)
+        .bind(cycleSnapshot.cycleId, cycleSnapshot.locationId)
+        .first<{ found: number }>();
+      if (settled || purchased)
+        return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", Date.now());
     }
     if (
       message.includes("CHECK constraint failed") ||

@@ -15,6 +15,7 @@ import { providerSubscriptionReconciliationJob } from "./jobs/provider-subscript
 import { orderCancellationRefundsJob } from "./jobs/order-cancellation-refunds";
 
 import { refundReconciliationJob } from "./jobs/refund-reconciliation";
+import { scheduledLateCaptureRefundsJob } from "./jobs/scheduled-late-capture-refunds";
 
 const EVERY_MINUTE = "* * * * *";
 const EVERY_FIFTEEN_MINUTES = "*/15 * * * *";
@@ -38,6 +39,7 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
     deliveryObservationRedriveJob,
     deliveryCycleCloseoutJob,
     paymentsReactionRedriveJob,
+    scheduledLateCaptureRefundsJob,
     paymentsReconciliationRedriveJob,
     providerInboxRedriveJob,
     providerSubscriptionReconciliationJob,

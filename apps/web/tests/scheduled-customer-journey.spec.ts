@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import type { APIResponse, Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
-import { test, expect } from "./admin-authenticated-fixture";
-import { completeLocalCourierDelivery } from "./signed-delivery-events";
+import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 
 async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknown> {
   const data: unknown = await response.json();
@@ -22,7 +21,7 @@ const reason = "Synthetic Scheduled customer journey";
 test.describe.configure({ timeout: 300000 });
 
 for (const width of [1440, 390]) {
-  test(`retained Scheduled order, paid addition, packing and manual delivery at ${width}px`, async ({
+  test(`Scheduled paid order, week purchase, packing and delivery at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }, testInfo) => {
@@ -161,7 +160,7 @@ for (const width of [1440, 390]) {
       .parse(await read(admin, `/api/admin/delivery-cycles?marketId=${marketId}`));
     const destination = destinations.items.find((item) => item.locationId === locationId);
     if (!destination) throw new Error("Missing cycle destination");
-    const cutoff = Date.now() + 60000,
+    const cutoff = Date.now() + 5 * 60_000,
       at = (offset: number) => new Date(cutoff + offset).toISOString();
     const cycle = z.object({ cycleId: z.string(), version: z.number() }).parse(
       await post(admin, "/api/admin/delivery-cycles", {
@@ -342,113 +341,28 @@ for (const width of [1440, 390]) {
       if (!order) throw new Error("Missing committed Order");
       return order.id;
     }
-    await checkout(41);
     const orderId = await checkout(2);
-    expect(
-      await (
-        await admin.request.get(`/api/commerce/orders/${orderId}/amendments?query=Red`)
-      ).json(),
-    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
     await page.goto(`/orders/${orderId}`);
-    await page.getByLabel("Find a product", { exact: true }).fill("Red onion");
-    await page.getByRole("button", { name: "Search products", exact: true }).click();
-    const choice = page.getByRole("combobox", { name: "Product to add", exact: true });
-    await expect(choice).toBeVisible();
-    await choice.selectOption(skuId);
-    await page
-      .getByRole("region", { name: "Add items before cutoff", exact: true })
-      .screenshot({ path: testInfo.outputPath(`scheduled-addition-picker-${width}.png`) });
-    const draftAttempts: { body: string | null; key: string | undefined }[] = [];
-    await page.route(`**/api/commerce/orders/${orderId}/amendments`, async (route) => {
-      if (route.request().method() !== "POST") return route.continue();
-      draftAttempts.push({
-        body: route.request().postData(),
-        key: route.request().headers()["idempotency-key"],
-      });
-      if (draftAttempts.length > 1) return route.continue();
-      await value(await route.fetch());
-      await route.abort("failed");
+    await expect(page.getByRole("region", { name: "Add items before cutoff" })).toHaveCount(0);
+    const detail = z
+      .object({ version: z.number(), status: z.string() })
+      .parse(await read(page, `/api/commerce/orders/${orderId}`));
+    expect(detail.status).toBe("COMMITTED");
+    const rejectedAddition = await page.request.post(`/api/commerce/orders/${orderId}/amendments`, {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: { expectedOrderVersion: detail.version, additions: [{ skuId, quantity: 1 }] },
     });
-    await page.getByRole("button", { name: "Price addition", exact: true }).click();
-    await expect(
-      page.getByText("The addition could not be confirmed.", { exact: false }),
-    ).toBeVisible();
-    await expect(choice).toBeDisabled();
-    await expect(page.getByLabel("Quantity", { exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Price addition", exact: true }).click();
-    expect(draftAttempts).toHaveLength(2);
-    expect(draftAttempts[1]).toEqual(draftAttempts[0]);
-    const paymentAttempts: { body: string | null; key: string | undefined }[] = [];
-    await page.route("**/api/commerce/amendments/*/payment", async (route) => {
-      paymentAttempts.push({
-        body: route.request().postData(),
-        key: route.request().headers()["idempotency-key"],
-      });
-      if (paymentAttempts.length > 1) return route.continue();
-      await value(await route.fetch());
-      await route.abort("failed");
+    expect(await rejectedAddition.json()).toMatchObject({
+      ok: false,
+      error: { code: "ILLEGAL_TRANSITION" },
     });
-    await page.getByRole("button", { name: "Accept total and pay", exact: true }).click();
-    await expect(page.getByText("Payment could not be confirmed.", { exact: false })).toBeVisible();
-    await page.getByRole("button", { name: "Accept total and pay", exact: true }).click();
-    expect(paymentAttempts).toHaveLength(2);
-    expect(paymentAttempts[1]).toEqual(paymentAttempts[0]);
-    await confirmTestPayment(100000);
-    const courierOrderId = await checkout(1);
-    const canceledOrderId = await checkout(1);
-    await page.goto(`/orders/${canceledOrderId}`);
-    await page.getByRole("button", { name: "Cancel order", exact: true }).click();
-    await page
-      .getByLabel("Reason for cancellation", { exact: true })
-      .fill("Synthetic eligible cancellation");
-    await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
-    await expect
-      .poll(
-        async () =>
-          z
-            .object({ cancellation: z.object({ status: z.string().nullable() }) })
-            .parse(await read(page, `/api/commerce/orders/${canceledOrderId}`)).cancellation.status,
-      )
-      .toBe("REFUNDS_PROCESSING");
-    // Normal changeover must preserve outstanding paid Scheduled goods. Keep
-    // new selling paused in Instant while completing this existing cycle below.
-    const paidSnapshot = z.object({
-      status: z.string(),
-      version: z.number(),
-      financial: z.unknown(),
-      items: z.array(z.unknown()),
-      payments: z.array(z.unknown()),
-      amendments: z.array(z.unknown()),
-      fulfillment: z.object({ mode: z.literal("SCHEDULED"), cycleId: z.string() }).passthrough(),
-    });
-    const beforeChangeover = paidSnapshot.parse(
-      await read(page, `/api/commerce/orders/${orderId}`),
+
+    // Advance only the local E2E cycle clock; all customer and staff actions
+    // above and below still use their real Web -> Core -> D1 command paths.
+    const pastCutoff = Date.now() - 2 * 60 * 60_000;
+    executeAdminE2eSql(
+      `UPDATE delivery_cycle SET cutoff_at=${pastCutoff},status='CUTOFF_REACHED',version=version+1 WHERE id='${cycle.cycleId}' AND status='OPEN';`,
     );
-    config = configSchema.parse(await read(admin, "/api/admin/commerce-configuration"));
-    await post(admin, "/api/admin/commerce-configuration", {
-      action: "PAUSE",
-      expectedVersion: config.version,
-      reason: "Synthetic normal changeover with an outstanding Scheduled order",
-    });
-    config = configSchema.parse(await read(admin, "/api/admin/commerce-configuration"));
-    await post(admin, "/api/admin/commerce-configuration", {
-      action: "SWITCH_MODE",
-      fulfillmentMode: "INSTANT",
-      cadence: null,
-      expectedVersion: config.version,
-      reason: "Synthetic normal changeover with an outstanding Scheduled order",
-    });
-    expect(
-      configSchema.parse(await read(admin, "/api/admin/commerce-configuration")),
-    ).toMatchObject({
-      sellingState: "PAUSED",
-      fulfillmentMode: "INSTANT",
-    });
-    expect(paidSnapshot.parse(await read(page, `/api/commerce/orders/${orderId}`))).toEqual(
-      beforeChangeover,
-    );
-    await expect.poll(() => Date.now() >= cutoff, { timeout: 65000, intervals: [1000] }).toBe(true);
-    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
     await admin.goto("/admin/procurement");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
     await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
@@ -456,138 +370,36 @@ for (const width of [1440, 390]) {
       .getByRole("combobox", { name: "Delivery week", exact: true })
       .selectOption(cycle.cycleId);
     await admin.getByRole("button", { name: "Quantities to buy", exact: true }).click();
-    const demand = admin.getByRole("article").filter({ hasText: "Red onion · 500 g" });
-    await expect(demand).toContainText("22,500 g");
-    await demand.getByRole("button", { name: "Confirm purchase", exact: true }).click();
+    await expect(admin.getByRole("table", { name: "Paid quantities to buy" })).toContainText(
+      "1,000 g",
+    );
+    await expect(admin.getByRole("button", { name: "Confirm purchase", exact: true })).toHaveCount(
+      0,
+    );
+    await admin.getByRole("button", { name: "Purchase complete", exact: true }).click();
     await admin
       .getByRole("dialog")
-      .getByRole("button", { name: "Confirm purchase", exact: true })
+      .getByRole("button", { name: "Confirm purchase complete" })
       .click();
-    await expect(admin.getByRole("dialog")).toHaveCount(0);
-    await admin.getByRole("link", { name: "Receiving", exact: true }).click();
-    const row = admin.getByRole("row").filter({ hasText: "Red onion" });
-    await row.getByRole("button", { name: "Start receiving", exact: true }).click();
-    await row.getByLabel(/^Accepted quantity /).fill("22500");
-    await row.getByLabel(/^Receiving reason /).fill("Inspected all purchased goods");
-    await row.getByRole("button", { name: "Record line", exact: true }).click();
-    await expect(row).toContainText("Accepted: 22,500 g");
-    await expect(row).toContainText("Rejected: 0 g");
-    async function operationalOrderNumber(targetOrderId: string) {
-      const result = z
-        .object({
-          items: z.array(
-            z.object({
-              orderId: z.string(),
-              operational: z.object({ orderNumber: z.string() }).nullable(),
-            }),
-          ),
-        })
-        .parse(
-          await read(
-            admin,
-            `/api/admin/fulfillment?locationId=${locationId}&orderId=${targetOrderId}&limit=1`,
-          ),
-        )
-        .items.find((item) => item.orderId === targetOrderId);
-      if (!result?.operational) throw new Error("Missing operational Order");
-      return result.operational.orderNumber;
-    }
-    const courierOrderNumber = await operationalOrderNumber(courierOrderId);
-    const manualOrderNumber = await operationalOrderNumber(orderId);
-    await admin.goto("/admin/delivery");
-    const courierRow = admin.getByRole("row").filter({ hasText: courierOrderId });
-    await expect(courierRow).toContainText(
-      "Finish packing the paid order before choosing a delivery method.",
-    );
-    await admin.goto("/admin/fulfillment");
-    const courierFulfillment = admin.getByRole("row", { name: new RegExp(courierOrderNumber) });
-    await courierFulfillment.click();
-    await admin.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
-    await admin.goto("/admin/delivery");
-    await expect(courierRow).toContainText(
-      "Finish packing the paid order before choosing a delivery method.",
-    );
-    await admin.goto("/admin/fulfillment");
-    await courierFulfillment.click();
-    for (const name of ["Finish picking", "Start packing", "Finish packing"])
-      await admin.getByRole("button", { name, exact: true }).click();
-    await expect(courierFulfillment).toContainText("PACKED");
-    await admin.goto("/admin/delivery");
-    const pickupInput = await admin.evaluate(
-      (time) =>
-        new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 16),
-      cutoff + 5_400_000,
-    );
-    await courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }).check();
-    await courierRow.getByLabel("Pickup time", { exact: true }).fill(pickupInput);
-    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
-    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
-    await expect(courierRow).toContainText("Finding rider");
+    await expect(admin.getByText("Purchase completed", { exact: false })).toBeVisible();
+    await admin.getByRole("button", { name: "Finish packing all orders", exact: true }).click();
+    await admin
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm all orders packed" })
+      .click();
+    await expect(admin.getByText("All paid orders packed", { exact: false })).toBeVisible();
     await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-future-booking-${width}.png`),
+      path: testInfo.outputPath(`scheduled-week-complete-${width}.png`),
       fullPage: true,
     });
-    // Real booking/cancellation commands with the explicit local fake provider.
-    // Definite pre-handover closure must expose the same ordinary manual action.
-    admin.once("dialog", (dialog) => dialog.accept());
-    await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("Booking canceled");
-    await courierRow.getByRole("radio", { name: "Schedule pickup", exact: true }).check();
-    await courierRow.getByLabel("Pickup time", { exact: true }).fill(pickupInput);
-    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
-    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
-    await expect(courierRow).toContainText("Finding rider");
-    admin.once("dialog", (dialog) => dialog.accept());
-    await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("Booking canceled");
-    await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await courierRow
-      .getByLabel("Person delivering", { exact: true })
-      .fill("Synthetic delivery helper");
-    await courierRow
-      .getByLabel("Phone including country code", { exact: true })
-      .fill("+639171110002");
-    await courierRow
-      .getByLabel("Operational note (optional)", { exact: true })
-      .fill("Courier canceled before pickup");
-    await courierRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await expect(courierRow).toContainText("Manual · Synthetic delivery helper");
-    await expect(
-      courierRow.getByRole("button", { name: "Hand over packed order", exact: true }),
-    ).toBeVisible();
-    await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-manual-replacement-${width}.png`),
-      fullPage: true,
-    });
-    // The helper becomes unavailable before handover; the packed order can use a courier again.
-    await courierRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
-    await courierRow
-      .getByLabel("What went wrong", { exact: true })
-      .fill("Helper unavailable before pickup; groceries remain packed at the facility");
-    await courierRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
-    await expect(courierRow).toContainText("FAILED");
-    await courierRow.getByRole("radio", { name: "Request a driver now", exact: true }).check();
-    await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
-    await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
-    await expect(courierRow).toContainText("Finding rider");
-    await completeLocalCourierDelivery(admin, page, courierOrderId, locationId);
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-courier-delivered-${width}.png`),
-      fullPage: true,
-    });
-    await admin.goto("/admin/fulfillment");
-    const fulfillment = admin.getByRole("row", { name: new RegExp(manualOrderNumber) });
-    await fulfillment.click();
-    for (const name of [
-      "Accept order & start picking",
-      "Finish picking",
-      "Start packing",
-      "Finish packing",
-    ]) {
-      await admin.getByRole("button", { name, exact: true }).click();
-    }
-    await expect(fulfillment).toContainText("PACKED");
-    const finalStock = z
+
+    expect(
+      z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
+        .status,
+    ).toBe("FULFILLMENT_READY");
+    await page.goto(`/orders/${orderId}`);
+    await expect(page.getByText("Packed", { exact: true })).toBeVisible();
+    const stockAfterPacking = z
       .object({
         inventoryPool: z.object({
           position: z
@@ -601,173 +413,40 @@ for (const width of [1440, 390]) {
           `/api/admin/catalog/products/product-red-onion?scopeKind=LOCATION&marketId=${marketId}&locationId=${locationId}`,
         ),
       );
-    expect(finalStock.inventoryPool.position).toEqual(product.inventoryPool.position);
+    expect(stockAfterPacking.inventoryPool.position).toEqual(product.inventoryPool.position);
+    expect(
+      await admin.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+
+    await admin.goto("/admin/delivery");
+    const row = admin.getByRole("row").filter({ hasText: orderId });
+    await row.getByRole("button", { name: "Assign manual rider", exact: true }).click();
+    await row.getByLabel("Person delivering", { exact: true }).fill("Synthetic delivery helper");
+    await row.getByLabel("Phone including country code", { exact: true }).fill("+639171110002");
+    await row.getByRole("button", { name: "Review assign manual delivery" }).click();
+    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+    await row.getByRole("button", { name: "Hand over packed order", exact: true }).click();
+    await row.getByRole("button", { name: "Review hand over packed order" }).click();
+    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+    expect(
+      z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
+        .status,
+    ).toBe("OUT_FOR_DELIVERY");
+    await row.getByRole("button", { name: "Record delivered", exact: true }).click();
+    await row.getByRole("button", { name: "Review record delivered" }).click();
+    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+    expect(
+      z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
+        .status,
+    ).toBe("DELIVERED");
+    await page.goto(`/orders/${orderId}`);
+    await expect(page.getByRole("heading", { name: "Delivered", level: 1 })).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`scheduled-delivered-${width}.png`),
+      fullPage: true,
+    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-customer-packed-${width}.png`),
-      fullPage: true,
-    });
-    await expect(fulfillment.getByRole("button", { name: "Hand off", exact: true })).toHaveCount(0);
-    await admin.goto("/admin/delivery");
-    const manualRow = admin.getByRole("row").filter({ hasText: orderId });
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await manualRow
-      .getByLabel("Person delivering", { exact: true })
-      .fill("Synthetic delivery helper");
-    await manualRow
-      .getByLabel("Phone including country code", { exact: true })
-      .fill("+639171110000");
-    await manualRow
-      .getByLabel("Operational note (optional)", { exact: true })
-      .fill("Synthetic staff-selected delivery");
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await expect(manualRow).toContainText("Manual · Synthetic delivery helper");
-    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
-    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
-    await expect(manualRow).toContainText("Handed over");
-    await manualRow.scrollIntoViewIfNeeded();
-    await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-manual-handover-${width}.png`),
-      fullPage: true,
-    });
-    await manualRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
-    await manualRow
-      .getByLabel("What went wrong", { exact: true })
-      .fill("Customer unavailable; goods returned for review");
-    await manualRow.getByRole("button", { name: "Record delivery failure", exact: true }).click();
-    await expect(manualRow).toContainText("FAILED");
-    await expect(
-      manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }),
-    ).toHaveCount(0);
-    await manualRow.getByRole("button", { name: "Inspect returned order", exact: true }).click();
-    await manualRow
-      .getByRole("checkbox", {
-        name: "All groceries are back at the facility, inspected, suitable and packed for redelivery.",
-        exact: true,
-      })
-      .check();
-    await manualRow
-      .getByLabel("Return inspection", { exact: true })
-      .fill("All groceries returned, checked and packed for the same customer");
-    await manualRow
-      .getByLabel("Customer agreement", { exact: true })
-      .fill("Customer agreed by phone to redelivery this evening");
-    const redeliveryAt = new Date(Date.now() + 2 * 3600000);
-    await manualRow
-      .getByLabel("Deliver by (your local time)")
-      .fill(
-        new Date(redeliveryAt.getTime() - redeliveryAt.getTimezoneOffset() * 60000)
-          .toISOString()
-          .slice(0, 16),
-      );
-    await manualRow.scrollIntoViewIfNeeded();
-    await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-return-inspection-${width}.png`),
-      fullPage: true,
-    });
-    await manualRow
-      .getByRole("button", { name: "Save inspection and agreed time", exact: true })
-      .click();
-    await expect(manualRow).toContainText("Returned and inspected");
-    expect(
-      z
-        .object({
-          inventoryPool: z.object({
-            position: z
-              .object({
-                onHandBase: z.number(),
-                reservedBase: z.number(),
-                availableBase: z.number(),
-              })
-              .nullable(),
-          }),
-        })
-        .parse(
-          await read(
-            admin,
-            `/api/admin/catalog/products/product-red-onion?scopeKind=LOCATION&marketId=${marketId}&locationId=${locationId}`,
-          ),
-        ).inventoryPool.position,
-    ).toEqual(finalStock.inventoryPool.position);
-    await page.goto(`/orders/${orderId}`);
-    await expect(page.getByText("Original promise", { exact: true })).toBeVisible();
-    await expect(page.getByText("Agreed delivery time", { exact: true })).toBeVisible();
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await manualRow
-      .getByLabel("Person delivering", { exact: true })
-      .fill("Synthetic redelivery helper");
-    await manualRow
-      .getByLabel("Phone including country code", { exact: true })
-      .fill("+639171110004");
-    await manualRow
-      .getByLabel("Operational note (optional)", { exact: true })
-      .fill("Customer agreed after return inspection");
-    await manualRow.getByRole("button", { name: "Assign manual delivery", exact: true }).click();
-    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
-    await manualRow.getByRole("button", { name: "Hand over packed order", exact: true }).click();
-    await expect(manualRow).toContainText("Handed over");
-    let completedBody: string | null = null;
-    let completedKey: string | undefined;
-    let completionCalls = 0;
-    await admin.route("**/api/admin/manual-deliveries", async (route) => {
-      completionCalls++;
-      const body = route.request().postData();
-      const key = route.request().headers()["idempotency-key"];
-      if (completionCalls === 1) {
-        completedBody = body;
-        completedKey = key;
-        const response = await route.fetch();
-        expect(response.ok()).toBe(true);
-        await route.abort("failed");
-      } else {
-        expect(body).toBe(completedBody);
-        expect(key).toBe(completedKey);
-        await route.continue();
-      }
-    });
-    await manualRow.getByRole("button", { name: "Record delivered", exact: true }).click();
-    // Blank actual cost must remain unknown; the accepted customer charge stays fixed.
-    await manualRow.getByRole("button", { name: "Record delivered", exact: true }).click();
-    await expect(manualRow).toContainText("The result is unknown");
-    await manualRow.getByRole("button", { name: "Retry saved request", exact: true }).click();
-    await expect(manualRow).toHaveCount(0);
-    expect(completionCalls).toBe(2);
-    expect(
-      z
-        .object({ status: z.literal("DELIVERED") })
-        .parse(await read(page, `/api/commerce/orders/${orderId}`)).status,
-    ).toBe("DELIVERED");
-    // In the combined run, retain and operate the earlier Instant orders after switching.
-    const retained = z
-      .object({
-        items: z.array(
-          z.object({
-            orderId: z.string(),
-            fulfillmentMode: z.string(),
-            externalDispatch: z.object({ status: z.string() }).nullable(),
-          }),
-        ),
-      })
-      .parse(await read(admin, `/api/admin/delivery?locationId=${locationId}`))
-      .items.find(
-        (item) => item.fulfillmentMode === "INSTANT" && item.externalDispatch?.status === "ACTIVE",
-      );
-    if (retained) {
-      const retainedRow = admin.getByRole("row").filter({ hasText: retained.orderId });
-      admin.once("dialog", (dialog) => dialog.accept());
-      await retainedRow.getByRole("button", { name: "Cancel", exact: true }).click();
-      await expect(retainedRow).toContainText("Booking canceled");
-      await retainedRow
-        .getByRole("button", { name: "Review Lalamove booking", exact: true })
-        .click();
-      await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
-      await expect(retainedRow).toContainText("Finding rider");
-      await testInfo.attach("retained-instant-after-mode-switch", {
-        body: "Earlier Instant order remained eligible for its selected courier while new commerce was Scheduled.",
-        contentType: "text/plain",
-      });
-    }
   });
 }

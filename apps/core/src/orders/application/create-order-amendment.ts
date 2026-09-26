@@ -49,6 +49,26 @@ const SELECT = `SELECT a.id,a.order_id AS orderId,a.status,a.version,a.currency,
  FROM paid_order_amendment a JOIN grocery_order o ON o.id=a.order_id
  WHERE a.idempotency_key=? AND o.customer_id=?`;
 
+/** The public command only replays additions created before new additions closed. */
+export async function replayExistingOrderAmendment(
+  database: D1Database,
+  command: CreateOrderAmendmentCommand,
+): Promise<RpcResult<OrderAmendmentDraftView>> {
+  const prior = await database
+    .prepare(
+      "SELECT 1 AS found FROM paid_order_amendment WHERE order_id=? AND idempotency_key=? AND EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND customer_id=?)",
+    )
+    .bind(command.orderId, command.idempotencyKey, command.orderId, command.customerId)
+    .first<{ found: number }>();
+  if (!prior)
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Adding items to a paid order is no longer available",
+      command.requestId,
+    );
+  return createOrderAmendment(database, command);
+}
+
 async function toView(database: D1Database, row: AmendmentRow): Promise<OrderAmendmentDraftView> {
   const lines = await database
     .prepare(

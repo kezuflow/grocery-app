@@ -118,6 +118,10 @@ function week(cycleId: string, section: string): ScheduledWeekView {
           preparationAt: start + 3600000,
           pickupAt: start + 7200000,
           purchaseBlockedReason: null,
+          settlementEndsAt: start,
+          completion: null,
+          canCompletePurchase: false,
+          canFinishPacking: false,
           windows: [
             { name: "Customer delivery", startsAt: start + 10800000, endsAt: start + 18000000 },
           ],

@@ -2,10 +2,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { ScheduledWeekView, ScheduledDemandItem } from "@freshmarkets/contracts";
+import type { ScheduledWeekView } from "@freshmarkets/contracts";
 import { z, scheduledWeekViewSchema } from "@freshmarkets/validation";
 import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -21,11 +20,7 @@ import { useAdminContext } from "../admin-context-provider";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { ScheduledOrderSummary } from "../../../components/admin/scheduled-order-summary";
-import {
-  formatDemandQuantity,
-  purchaseVersionKey,
-  ScheduledDemand,
-} from "../../../components/admin/scheduled-demand";
+import { formatDemandQuantity, ScheduledDemand } from "../../../components/admin/scheduled-demand";
 
 const responseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: scheduledWeekViewSchema }),
@@ -43,12 +38,8 @@ export default function ProcurementPage() {
   const { state } = useAdminContext();
   const global = state.phase === "ready" && state.selectedScope?.kind === "GLOBAL";
   const capabilities = state.phase === "ready" ? state.context.capabilities : [];
-  const canReceive = Boolean(locationId) && capabilities.includes("procurement.manage");
   const canManageCycles =
     global &&
-    (capabilities.includes("fulfillment.read") || capabilities.includes("fulfillment.manage"));
-  const canPrepare =
-    Boolean(locationId) &&
     (capabilities.includes("fulfillment.read") || capabilities.includes("fulfillment.manage"));
   const search = useSearchParams();
   const linkedCycleId = search.get("cycleId") ?? "";
@@ -74,13 +65,9 @@ export default function ProcurementPage() {
     week: ScheduledWeekView["week"];
   } | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const [purchase, setPurchase] = useState<{
-    item: ScheduledDemandItem;
-    locationId: string;
-    cycleId: string;
-  } | null>(null);
-  const [note, setNote] = useState("");
-  const [confirmedPurchaseKey, setConfirmedPurchaseKey] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"PURCHASE_COMPLETE" | "FINISH_PACKING" | null>(
+    null,
+  );
   const command = useAdminCommand();
   useAdminRouteGuard(false, command.busy || command.uncertain);
   const scopeKey = global ? "GLOBAL" : (locationId ?? "NONE");
@@ -91,14 +78,14 @@ export default function ProcurementPage() {
   const cycles = cycleOptions.scopeKey === scopeKey ? cycleOptions.items : [];
   const visibleError = error?.key === readKey ? error.message : null;
   useEffect(() => {
-    const linked = locationId === linkedLocationId && !!linkedCycleId && !!linkedRequirementId;
+    const linked = !!linkedCycleId && (!linkedLocationId || locationId === linkedLocationId);
     setCycleId(linked ? linkedCycleId : "");
     setRequirementId(linked ? linkedRequirementId : "");
     setCycleCursor("");
     setCycleOptions({ scopeKey, items: [] });
     setCursor("");
     setPrevious([]);
-    setSection(linked ? "ORDERS" : "ORDER_SUMMARY");
+    setSection(linked && linkedRequirementId ? "ORDERS" : "ORDER_SUMMARY");
   }, [locationId, global, linkedCycleId, linkedRequirementId, linkedLocationId, scopeKey]);
   useEffect(() => {
     setError(null);
@@ -159,7 +146,10 @@ export default function ProcurementPage() {
   ]);
   useEffect(() => {
     if (!week?.purchaseBlockedReason || visibleError) return;
-    const timer = setTimeout(() => setReload((value) => value + 1), 5000);
+    const timer = setTimeout(
+      () => setReload((value) => value + 1),
+      Math.min(2_147_483_647, Math.max(1000, week.settlementEndsAt - Date.now())),
+    );
     return () => clearTimeout(timer);
   }, [week, visibleError]);
   const date = (value: number | null) =>
@@ -200,11 +190,11 @@ export default function ProcurementPage() {
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)]">
-            <label className="grid min-w-60 max-w-lg flex-1 gap-2 text-sm font-medium">
+            <label className="grid min-w-0 max-w-lg flex-1 gap-2 text-sm font-medium">
               Delivery week
               <select
                 aria-label="Delivery week"
-                className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                className="h-10 min-w-0 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
                 value={cycleId}
                 disabled={command.busy || command.uncertain}
                 onChange={(event) => {
@@ -283,8 +273,7 @@ export default function ProcurementPage() {
                   {[
                     ["Ordering opens", week.orderOpensAt],
                     ["Order cutoff", week.cutoffAt],
-                    ["Purchase planned", week.procurementAt],
-                    ["Preparation planned", week.preparationAt],
+                    ["Purchase available", week.settlementEndsAt],
                     ["Pickup planned", week.pickupAt],
                   ].map(([name, value]) => (
                     <div key={String(name)}>
@@ -301,18 +290,30 @@ export default function ProcurementPage() {
                     orders and when purchasing can begin.
                   </p>
                 ) : null}
-                {canReceive || canPrepare ? (
-                  <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--fm-border)] pt-4">
-                    {canReceive ? (
-                      <Button asChild variant="outline">
-                        <Link href={`/admin/receiving?cycleId=${encodeURIComponent(cycleId)}`}>
-                          Receiving
-                        </Link>
+                {locationId ? (
+                  <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--fm-border)] pt-4">
+                    {week.completion ? (
+                      <p className="text-sm">
+                        Purchase completed {date(week.completion.purchaseCompletedAt)}
+                        {week.completion.packedAt
+                          ? ` · All paid orders packed ${date(week.completion.packedAt)}`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {week.canCompletePurchase ? (
+                      <Button
+                        disabled={command.busy || command.uncertain}
+                        onClick={() => setPendingAction("PURCHASE_COMPLETE")}
+                      >
+                        Purchase complete
                       </Button>
                     ) : null}
-                    {canPrepare ? (
-                      <Button asChild variant="outline">
-                        <Link href="/admin/fulfillment">Preparation</Link>
+                    {week.canFinishPacking ? (
+                      <Button
+                        disabled={command.busy || command.uncertain}
+                        onClick={() => setPendingAction("FINISH_PACKING")}
+                      >
+                        Finish packing all orders
                       </Button>
                     ) : null}
                   </div>
@@ -369,21 +370,12 @@ export default function ProcurementPage() {
                     ) : view.page.kind === "DEMAND" ? (
                       <>
                         <p className="text-sm text-muted-foreground">
-                          Paid quantities include paid additions and exclude accepted cancellations.
-                          Contact your supplier outside FreshMarkets, then confirm what you bought.
-                          Physical stock is not subtracted from this list.
+                          These are exact paid quantities after accepted cancellations. Contact your
+                          supplier and buy the listed goods outside FreshMarkets. Once the whole
+                          purchase is complete, use the week action above. Physical stock is not
+                          subtracted from this list.
                         </p>
-                        <ScheduledDemand
-                          items={view.page.items}
-                          global={global}
-                          cycleId={cycleId}
-                          pending={command.busy || command.uncertain}
-                          confirmedPurchaseKey={confirmedPurchaseKey}
-                          onConfirm={(item) => {
-                            setNote("");
-                            setPurchase({ item, locationId: item.locationId, cycleId });
-                          }}
-                        />
+                        <ScheduledDemand items={view.page.items} global={global} />
                       </>
                     ) : view.page.kind === "ORDERS" ? (
                       view.page.denied ? (
@@ -494,69 +486,68 @@ export default function ProcurementPage() {
         </>
       )}
       <Sheet
-        open={purchase !== null}
+        open={pendingAction !== null}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) setPurchase(null);
+          if (!open && !command.busy && !command.uncertain) setPendingAction(null);
         }}
       >
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Confirm purchase</SheetTitle>
+            <SheetTitle>
+              {pendingAction === "PURCHASE_COMPLETE"
+                ? "Purchase complete"
+                : "Finish packing all orders"}
+            </SheetTitle>
             <SheetDescription>
-              Record the supplier purchase for these exact paid quantities.
+              {pendingAction === "PURCHASE_COMPLETE"
+                ? "Confirm you bought the complete paid quantity for this location and delivery week."
+                : "Confirm every paid order for this location and delivery week is physically packed. Customer timelines will show Packed."}
             </SheetDescription>
           </SheetHeader>
-          {purchase ? (
+          {pendingAction && locationId && week ? (
             <form
               className="mt-6 space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 void (async () => {
+                  const action = pendingAction;
                   const saved = command.uncertain
                     ? await command.retry()
                     : await command.run(
-                        `purchase:${purchase.cycleId}:${purchase.locationId}:${purchase.item.skuId}`,
-                        "/api/admin/procurement/purchase",
+                        `scheduled-week:${cycleId}:${locationId}:${action}`,
+                        "/api/admin/procurement/week/complete",
                         {
-                          locationId: purchase.locationId,
-                          cycleId: purchase.cycleId,
-                          skuId: purchase.item.skuId,
-                          inventoryPoolId: purchase.item.inventoryPoolId,
-                          expectedVersion: purchase.item.requirementVersion,
-                          expectedQuantityBase: purchase.item.quantityBase,
-                          expectedQuantitySellable: purchase.item.quantitySellable,
-                          reason: note.trim() || "Supplier purchase confirmed",
+                          locationId,
+                          cycleId,
+                          action,
+                          expectedVersion:
+                            action === "PURCHASE_COMPLETE" ? 0 : (week.completion?.version ?? 0),
                         },
                         "POST",
-                        { title: "Purchase recorded" },
+                        {
+                          title:
+                            action === "PURCHASE_COMPLETE"
+                              ? "Purchase recorded"
+                              : "Orders marked packed",
+                        },
                       );
                   if (saved) {
-                    setConfirmedPurchaseKey(purchaseVersionKey(purchase.cycleId, purchase.item));
-                    setPurchase(null);
+                    setPendingAction(null);
                     setReload((value) => value + 1);
                   }
                 })();
               }}
             >
               <p className="font-semibold">
-                {purchase.item.productName} · {purchase.item.variantName}
+                {week.name} · {label}
               </p>
-              <p>{purchase.item.locationName}</p>
-              <p>
-                {purchase.item.quantitySellable} sold units ·{" "}
-                {formatDemandQuantity(purchase.item.quantityBase, purchase.item.baseUnit)}
-              </p>
-              <label className="grid gap-2 text-sm">
-                Purchase note (optional)
-                <Input
-                  value={note}
-                  maxLength={500}
-                  disabled={command.busy || command.uncertain}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-              </label>
+              {week.completion ? <p>{week.completion.paidOrderCount} paid orders</p> : null}
               <Button type="submit" disabled={command.busy}>
-                {command.busy ? "Saving…" : "Confirm purchase"}
+                {command.busy
+                  ? "Saving…"
+                  : pendingAction === "PURCHASE_COMPLETE"
+                    ? "Confirm purchase complete"
+                    : "Confirm all orders packed"}
               </Button>
               {command.notice ? <p role="status">{command.notice}</p> : null}
             </form>

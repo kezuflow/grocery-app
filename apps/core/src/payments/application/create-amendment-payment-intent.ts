@@ -6,6 +6,31 @@ import type {
 import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { createPayment } from "./create-payment";
 
+/** The public command only replays addition payments initiated before closure. */
+export async function replayExistingAmendmentPaymentIntent(
+  database: D1Database,
+  registry: PaymentProviderRegistry,
+  providerCode: string,
+  command: AmendmentPaymentIntentRequest & { customerId: string },
+): Promise<RpcResult<PaymentActionView>> {
+  const prior = await database
+    .prepare(
+      "SELECT 1 AS found FROM payment_intent WHERE idempotency_key=? AND purpose='ORDER_AMENDMENT' AND subject_type='paid_order_amendment' AND subject_id=? AND customer_id=?",
+    )
+    .bind(command.idempotencyKey, command.amendmentId, command.customerId)
+    .first<{ found: number }>();
+  if (!prior)
+    return {
+      ok: false,
+      error: {
+        code: "ILLEGAL_TRANSITION",
+        message: "New payments for order additions are no longer available",
+        requestId: command.requestId,
+      },
+    };
+  return createAmendmentPaymentIntent(database, registry, providerCode, command);
+}
+
 export async function createAmendmentPaymentIntent(
   database: D1Database,
   registry: PaymentProviderRegistry,

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCoreRpcContext } from "./context";
 import { createOrdersRpc } from "./orders-rpc";
 
@@ -98,5 +98,36 @@ describe("Orders RPC adapter", () => {
       ok: false,
       error: { code: "UNAUTHENTICATED", requestId: "orders-submit-issue-adapter" },
     });
+  });
+  it("rejects new paid-order additions at the reachable customer boundary", async () => {
+    const context = createCoreRpcContext(env);
+    vi.spyOn(context.access, "resolveAuthenticatedCustomer").mockResolvedValue({
+      ok: true,
+      requestId: "addition-closed",
+      value: {
+        customerId: "customer-1",
+        principalId: "principal-1",
+        customerStatus: "active",
+        user: { id: "user-1", email: "test@example.com", name: "Test", emailVerified: true },
+      },
+    });
+    const rpc = createOrdersRpc(context);
+    expect(
+      await rpc.listOrderAdditionOptions({
+        requestId: "addition-closed",
+        headers: {},
+        orderId: "order-1",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(
+      await rpc.createOrderAmendment({
+        requestId: "addition-closed",
+        headers: {},
+        orderId: "order-1",
+        expectedOrderVersion: 1,
+        additions: [{ skuId: "sku-1", quantity: 1 }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
   });
 });

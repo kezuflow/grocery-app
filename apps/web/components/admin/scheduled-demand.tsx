@@ -1,5 +1,4 @@
 import type { ScheduledDemandItem } from "@freshmarkets/contracts";
-import { Button } from "../ui/button";
 import {
   Table,
   TableBody,
@@ -9,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { StatusBadge } from "./admin-shell";
 
 export function formatDemandQuantity(quantity: number, unit: string): string {
   const label =
@@ -17,51 +15,12 @@ export function formatDemandQuantity(quantity: number, unit: string): string {
   return `${quantity.toLocaleString("en-PH")} ${label}`;
 }
 
-export function purchaseVersionKey(cycleId: string, item: ScheduledDemandItem): string {
-  return JSON.stringify([
-    cycleId,
-    item.locationId,
-    item.skuId,
-    item.inventoryPoolId,
-    item.requirementVersion,
-  ]);
-}
-
-function DemandProgress({ item }: { item: ScheduledDemandItem }) {
-  return (
-    <div className="space-y-1 text-xs">
-      <StatusBadge>{item.status.toLowerCase().replaceAll("_", " ")}</StatusBadge>
-      {item.receivingStatus ? (
-        <p>Receiving: {item.receivingStatus.toLowerCase().replaceAll("_", " ")}</p>
-      ) : null}
-      <p>
-        Accepted {formatDemandQuantity(item.acceptedBase, item.baseUnit)} · Rejected{" "}
-        {formatDemandQuantity(item.rejectedBase, item.baseUnit)}
-      </p>
-      {item.shortageBase > 0 ? (
-        <p>Reported missing: {formatDemandQuantity(item.shortageBase, item.baseUnit)}</p>
-      ) : null}
-      {item.replacementBase > 0 ? (
-        <p>Replacement accepted: {formatDemandQuantity(item.replacementBase, item.baseUnit)}</p>
-      ) : null}
-    </div>
-  );
-}
-
 export function ScheduledDemand({
   items,
   global,
-  cycleId,
-  pending,
-  confirmedPurchaseKey,
-  onConfirm,
 }: {
   items: readonly ScheduledDemandItem[];
   global: boolean;
-  cycleId: string;
-  pending: boolean;
-  confirmedPurchaseKey: string | null;
-  onConfirm(item: ScheduledDemandItem): void;
 }) {
   if (items.length === 0) return <p>No paid quantities to buy for this week.</p>;
   return (
@@ -77,13 +36,10 @@ export function ScheduledDemand({
           <TableHead className="text-right">Sold units</TableHead>
           <TableHead className="text-right">Paid quantity</TableHead>
           {global ? <TableHead>All destinations</TableHead> : null}
-          <TableHead>Receiving progress</TableHead>
-          <TableHead>Purchase</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="block lg:table-row-group">
         {items.map((item) => {
-          const confirmed = confirmedPurchaseKey === purchaseVersionKey(cycleId, item);
           return (
             <TableRow
               key={JSON.stringify([item.skuId, item.inventoryPoolId, item.locationId])}
@@ -126,23 +82,6 @@ export function ScheduledDemand({
                   </span>
                 </TableCell>
               ) : null}
-              <TableCell className="col-span-2 align-top lg:col-span-1">
-                <span className="mb-1 block text-sm text-[var(--fm-text-muted)] lg:hidden">
-                  Receiving progress
-                </span>
-                <DemandProgress item={item} />
-              </TableCell>
-              <TableCell className="col-span-2 align-top lg:col-span-1">
-                {confirmed ? (
-                  <p role="status" className="text-sm">
-                    Purchase recorded. Refreshing current quantities.
-                  </p>
-                ) : item.canConfirmPurchase ? (
-                  <Button disabled={pending} onClick={() => onConfirm(item)}>
-                    Confirm purchase
-                  </Button>
-                ) : null}
-              </TableCell>
             </TableRow>
           );
         })}

@@ -6,7 +6,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/validation";
 import { createCheckoutPaymentIntent } from "../payments/application/create-checkout-payment-intent";
-import { createAmendmentPaymentIntent } from "../payments/application/create-amendment-payment-intent";
+import { replayExistingAmendmentPaymentIntent } from "../payments/application/create-amendment-payment-intent";
 import { authenticatedRequestSchema, createPaymentIntentSchema } from "../validation";
 import type { CoreRpcContext } from "./context";
 import { rpcFailure, validationFailure } from "./validation-errors";
@@ -81,7 +81,7 @@ export function createPaymentsRpc(context: CoreRpcContext) {
         );
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return createAmendmentPaymentIntent(
+      return replayExistingAmendmentPaymentIntent(
         context.env.DB,
         context.paymentProviders(),
         providerCode,

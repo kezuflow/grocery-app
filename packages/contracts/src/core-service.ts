@@ -273,6 +273,7 @@ export const coreServiceMethodNames = [
   "openSelling",
   "aggregateAdminProcurementDemand",
   "confirmAdminProcurementPurchase",
+  "completeAdminScheduledWeek",
   "recordScheduledCountedReceipt",
   "releaseScheduledSurplus",
   "getAdminScheduledWeek",

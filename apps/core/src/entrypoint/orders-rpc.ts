@@ -27,13 +27,12 @@ import { getCustomerOrderDetail } from "../orders/application/get-customer-order
 import { reorderOrder } from "../orders/application/reorder-order";
 import { listCustomerOrderIssues } from "../orders/application/list-customer-order-issues";
 import { submitCustomerOrderIssue } from "../orders/application/submit-customer-order-issue";
-import { createOrderAmendment } from "../orders/application/create-order-amendment";
-import { listOrderAdditionOptions } from "../orders/application/list-order-addition-options";
+import { replayExistingOrderAmendment } from "../orders/application/create-order-amendment";
 import { requestOrderCancellation } from "../orders/application/cancel-order";
 import { requestRefund } from "../payments/application/request-refund";
 import { getProvisionalTransactionSummary } from "../orders/application/get-provisional-transaction-summary";
 import type { CoreRpcContext } from "./context";
-import { validationFailure } from "./validation-errors";
+import { rpcFailure, validationFailure } from "./validation-errors";
 
 export function createOrdersRpc(context: CoreRpcContext) {
   return {
@@ -54,10 +53,11 @@ export function createOrdersRpc(context: CoreRpcContext) {
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return listOrderAdditionOptions(context.env.DB, {
-        ...validation.data,
-        customerId: customer.value.customerId,
-      });
+      return rpcFailure(
+        "ILLEGAL_TRANSITION",
+        "Adding items to a paid order is no longer available",
+        input.requestId,
+      );
     },
     async listCustomerOrders(input: ListCustomerOrdersRequest) {
       const validation = authenticatedRequestSchema
@@ -279,7 +279,7 @@ export function createOrdersRpc(context: CoreRpcContext) {
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return createOrderAmendment(context.env.DB, {
+      return replayExistingOrderAmendment(context.env.DB, {
         ...validation.data,
         customerId: customer.value.customerId,
         requestId: input.requestId,

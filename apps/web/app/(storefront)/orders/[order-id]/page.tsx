@@ -7,7 +7,6 @@ import type { CustomerOrderDetailView, RpcResult } from "@freshmarkets/contracts
 import { OrderTimeline } from "../../../../components/storefront/orders/order-timeline";
 import { ReorderAction } from "../../../../components/storefront/orders/reorder-action";
 import { OrderIssueForm } from "../../../../components/storefront/orders/order-issue-form";
-import { AmendmentFlow } from "../../../../components/storefront/orders/amendment-flow";
 import { CancelOrderAction } from "../../../../components/storefront/orders/cancel-order-action";
 
 function money(value: number | null, currency: string): string {
@@ -26,7 +25,6 @@ function label(value: string): string {
 export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }) {
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
-  const amendmentAction = order.actions.find((action) => action.action === "REQUEST_AMENDMENT");
   const cancelAction = order.actions.find((action) => action.action === "CANCEL");
   const summaryAction = order.actions.find(
     (action) => action.action === "VIEW_TRANSACTION_SUMMARY",
@@ -162,13 +160,6 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
               <h2 id="order-options-heading" className="text-xl font-bold">
                 Order options
               </h2>
-              {amendmentAction ? (
-                <AmendmentFlow
-                  orderId={order.orderId}
-                  orderVersion={order.version}
-                  available={amendmentAction.available}
-                />
-              ) : null}
               {cancelAction ? (
                 <div className="mt-4">
                   <CancelOrderAction

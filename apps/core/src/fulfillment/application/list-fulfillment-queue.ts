@@ -5,7 +5,6 @@ import type {
   OperationalOrderLineView,
 } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, type StateMap } from "../../commerce/state-machines";
-import { scheduledPackingGoodsReadyOrderIds } from "./consume-cycle-goods";
 
 const NEXT_ACTION: Readonly<
   Record<string, ReadonlyArray<FulfillmentQueueItem["allowedActions"][number]>>
@@ -159,16 +158,6 @@ export async function listFulfillmentQueue(
       delivery_provider_status: string | null;
     }>();
   const orderIds = rows.results.map((row) => row.order_id);
-  const packingGoodsReady = await scheduledPackingGoodsReadyOrderIds(
-    database,
-    rows.results
-      .filter((row) => row.fulfillment_mode === "SCHEDULED" && row.status === "PACKING")
-      .map((row) => ({
-        orderId: row.order_id,
-        cycleId: row.cycle_id,
-        locationId: row.location_id,
-      })),
-  );
   const lineRows = orderIds.length
     ? await database
         .prepare(`WITH requested(id) AS (SELECT value FROM json_each(?)),
@@ -263,7 +252,7 @@ export async function listFulfillmentQueue(
     version: r.version,
     cycleId: r.cycle_id,
     manualCustody: r.manual_custody !== 0,
-    packingGoodsReady: packingGoodsReady.has(r.order_id),
+    packingGoodsReady: false,
     sortAt: r.sort_at,
     operational: {
       orderNumber: r.order_number ?? r.order_id,
@@ -299,15 +288,9 @@ export async function listFulfillmentQueue(
             }
           : null,
       blockers:
-        r.status === "SHORTED" || r.status === "ESCALATED"
+        r.fulfillment_mode === "INSTANT" && (r.status === "SHORTED" || r.status === "ESCALATED")
           ? ["Fulfillment shortage requires resolution"]
-          : r.fulfillment_mode === "SCHEDULED" &&
-              r.status === "PACKING" &&
-              !packingGoodsReady.has(r.order_id)
-            ? [
-                "Goods for this delivery week are not fully recorded as received. Review receiving before finishing packing.",
-              ]
-            : [],
+          : [],
       lines: linesByOrder.get(r.order_id) ?? [],
     },
   }));

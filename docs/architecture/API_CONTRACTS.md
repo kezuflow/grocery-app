@@ -914,6 +914,32 @@ Global Product creation accepts `stockTracking` (`SHARED` by default or `COUNTED
 
 ### Delivery-week workspace (CA-5.1)
 
+Owner correction, 2026-09-26: the active Scheduled destination/week uses
+`completeAdminScheduledWeek` with `PURCHASE_COMPLETE` followed by `FINISH_PACKING`.
+Both commands require an explicit cycle and location, reviewed week version, stable
+idempotency key and currently scoped `procurement.manage` or `fulfillment.manage`,
+respectively. `getAdminScheduledWeek` returns `settlementEndsAt`, completion receipt
+and typed eligibility for each action. Purchase is available only after cutoff plus
+one hour and records the exact open paid demand snapshot. Packing requires that
+unchanged purchase snapshot, confirms all eligible paid Orders for that location,
+and atomically advances their Order/fulfillment state and audit. A stale, invalid,
+unauthorized or partial action has no success receipt or business effects. These
+attest physical work performed outside FreshMarkets; neither creates received
+goods nor touches Instant stock. Routine Scheduled receiving and per-order picking
+controls are absent from the operator path. Historical procurement/receiving
+commands and records remain for retained evidence; the detailed CA-5.x text below
+describes that earlier workflow and does not override this correction.
+
+No new paid Order amendments or amendment payment intents are admitted in either
+mode. Exact retries of historical commands and all existing financial/refund
+recovery remain available. Checkout payment actions for Scheduled expose
+`qrGenerationEndsAt` from the cycle's exclusive cutoff; Web stops normal QR
+generation or renewal then and may display an already issued QR until its own
+expiry. Core accepts only provider-verified captures committed within the following
+one-hour settlement window. A later captured, uncommitted checkout opens a
+financial exception and the scheduled refund job initiates the existing durable
+full-refund command. Unknown or unpaid outcomes are never treated as captures.
+
 `getAdminScheduledWeek` requires scoped `procurement.read` and returns named cycle choices, the selected location/week dates and one bounded page of Order summary rows, exact purchase demand, Orders/preparation, or current locally enabled catalog options. `ORDER_SUMMARY` is the Web workspace's initially selected cycle section. Its rows derive only from OPEN `EXACT_PAID_LINE` demand, including committed paid additions and excluding accepted cancellation, carts, quotes and pending Payments. A row groups only matching SKU, inventory pool, base unit and immutable paid Product/selling-option/unit labels; historical label differences remain separate rather than being rewritten. It returns distinct paid Order count, sold-unit count, exact total base quantity and destination count. Full authorized-scope totals for distinct paid Orders, Products, selling options and destinations are computed before the bounded 50-row stable cursor page. Order/preparation rows additionally require `fulfillment.read`; denied access is explicit, never an empty-success metric. Physical stock and forecasts are never subtracted. Current offers are labelled as current configuration, not historical cycle-specific catalog snapshots. Cycle choices and section rows paginate; this is an operational projection, not another owner of commerce state.
 
 `confirmAdminProcurementPurchase` requires currently scoped `procurement.manage`, cycle/location/SKU/pool, reviewed exact base and selling quantities, expected requirement version (zero for no requirement), a reason and stable key. The normal Web confirmation captures those read-model values internally. Core rechecks current cutoff, demand, scope, requirement/receiving state and every purchase/audit/result effect in one transaction. Changed reviewed quantities require refresh; replay returns the original receipt. Supplier contact stays manual and no supplier portal, outbound message or additional approval engine is introduced. Existing purchase storage is reused. Scheduled receiving/counting, shortages, packing, surplus and the complete provider-origin journey retain their separate Phase 5/7 acceptance obligations.

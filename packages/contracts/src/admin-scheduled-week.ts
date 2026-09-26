@@ -9,6 +9,21 @@ export type ScheduledWeekRequest = AuthenticatedRequest & {
   section?: "ORDER_SUMMARY" | "DEMAND" | "ORDERS" | "OFFERS";
   cursor?: string;
 };
+export type ScheduledWeekCompletionRequest = AuthenticatedRequest & {
+  cycleId: string;
+  locationId: string;
+  action: "PURCHASE_COMPLETE" | "FINISH_PACKING";
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+export type ScheduledWeekCompletionView = {
+  cycleId: string;
+  locationId: string;
+  version: number;
+  paidOrderCount: number;
+  purchaseCompletedAt: number;
+  packedAt: number | null;
+};
 export type ScheduledDemandItem = {
   locationId: string;
   locationName: string;
@@ -61,6 +76,10 @@ export type ScheduledWeekView = {
     orderOpensAt: number;
     cutoffAt: number;
     purchaseBlockedReason: string | null;
+    settlementEndsAt: number;
+    completion: ScheduledWeekCompletionView | null;
+    canCompletePurchase: boolean;
+    canFinishPacking: boolean;
     procurementAt: number | null;
     preparationAt: number | null;
     pickupAt: number | null;
@@ -106,4 +125,7 @@ export type ScheduledWeekView = {
 };
 export interface AdminScheduledWeekService {
   getAdminScheduledWeek(request: ScheduledWeekRequest): Promise<RpcResult<ScheduledWeekView>>;
+  completeAdminScheduledWeek(
+    request: ScheduledWeekCompletionRequest,
+  ): Promise<RpcResult<ScheduledWeekCompletionView>>;
 }
