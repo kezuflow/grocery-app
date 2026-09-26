@@ -121,7 +121,6 @@ function week(cycleId: string, section: string): ScheduledWeekView {
           settlementEndsAt: start,
           completion: null,
           canCompletePurchase: false,
-          canFinishPacking: false,
           windows: [
             { name: "Customer delivery", startsAt: start + 10800000, endsAt: start + 18000000 },
           ],

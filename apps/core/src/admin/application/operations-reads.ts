@@ -258,7 +258,9 @@ export async function listAdminFulfillmentQueue(
         version: row.version,
         allowedActions:
           row.operational.fulfillmentMode === "SCHEDULED"
-            ? []
+            ? row.canCompleteScheduledPacking
+              ? ["COMPLETE_SCHEDULED_PACKING"]
+              : []
             : allowedFulfillmentActions(row.status),
         operational: row.operational,
       })),

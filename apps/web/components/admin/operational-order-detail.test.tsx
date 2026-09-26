@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OperationalOrderDetail } from "./operational-order-detail";
 
 describe("OperationalOrderDetail", () => {
-  it("routes retained Scheduled packing details to the two Delivery week actions", () => {
+  it("shows the per-order Scheduled packing action after purchase", () => {
     const markup = renderToStaticMarkup(
       <OperationalOrderDetail
         item={{
@@ -12,7 +12,7 @@ describe("OperationalOrderDetail", () => {
           locationId: "location-1",
           status: "PACKING",
           version: 4,
-          allowedActions: ["RECORD_SHORTAGE"],
+          allowedActions: ["COMPLETE_SCHEDULED_PACKING"],
           operational: {
             orderNumber: "FM-1002",
             committedAt: "2026-09-22T01:00:00.000Z",
@@ -58,12 +58,11 @@ describe("OperationalOrderDetail", () => {
     );
     expect(markup).toContain("/admin/procurement?cycleId=cycle-1");
     expect(markup).toContain("Open this delivery week");
-    expect(markup).toContain("Use the Delivery week actions");
+    expect(markup).toContain("Finish packing order");
     expect(markup).not.toContain("/admin/receiving");
     expect(markup).not.toContain("Report shortage");
     expect(markup).not.toContain("fully recorded as received");
     expect(markup).not.toContain("no receipt recorded");
-    expect(markup).not.toContain("Finish packing");
   });
 
   it("shows the location-safe paid snapshot and automatic Instant dispatch without finance fields", () => {

@@ -65,9 +65,7 @@ export default function ProcurementPage() {
     week: ScheduledWeekView["week"];
   } | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const [pendingAction, setPendingAction] = useState<"PURCHASE_COMPLETE" | "FINISH_PACKING" | null>(
-    null,
-  );
+  const [purchasePending, setPurchasePending] = useState(false);
   const command = useAdminCommand();
   useAdminRouteGuard(false, command.busy || command.uncertain);
   const scopeKey = global ? "GLOBAL" : (locationId ?? "NONE");
@@ -145,7 +143,7 @@ export default function ProcurementPage() {
     scopeKey,
   ]);
   useEffect(() => {
-    if (!week?.purchaseBlockedReason || visibleError) return;
+    if (!week?.purchaseBlockedReason || week.settlementEndsAt === null || visibleError) return;
     const timer = setTimeout(
       () => setReload((value) => value + 1),
       Math.min(2_147_483_647, Math.max(1000, week.settlementEndsAt - Date.now())),
@@ -295,25 +293,14 @@ export default function ProcurementPage() {
                     {week.completion ? (
                       <p className="text-sm">
                         Purchase completed {date(week.completion.purchaseCompletedAt)}
-                        {week.completion.packedAt
-                          ? ` · All paid orders packed ${date(week.completion.packedAt)}`
-                          : ""}
                       </p>
                     ) : null}
                     {week.canCompletePurchase ? (
                       <Button
                         disabled={command.busy || command.uncertain}
-                        onClick={() => setPendingAction("PURCHASE_COMPLETE")}
+                        onClick={() => setPurchasePending(true)}
                       >
                         Purchase complete
-                      </Button>
-                    ) : null}
-                    {week.canFinishPacking ? (
-                      <Button
-                        disabled={command.busy || command.uncertain}
-                        onClick={() => setPendingAction("FINISH_PACKING")}
-                      >
-                        Finish packing all orders
                       </Button>
                     ) : null}
                   </div>
@@ -486,53 +473,40 @@ export default function ProcurementPage() {
         </>
       )}
       <Sheet
-        open={pendingAction !== null}
+        open={purchasePending}
         onOpenChange={(open) => {
-          if (!open && !command.busy && !command.uncertain) setPendingAction(null);
+          if (!open && !command.busy && !command.uncertain) setPurchasePending(false);
         }}
       >
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>
-              {pendingAction === "PURCHASE_COMPLETE"
-                ? "Purchase complete"
-                : "Finish packing all orders"}
-            </SheetTitle>
+            <SheetTitle>Purchase complete</SheetTitle>
             <SheetDescription>
-              {pendingAction === "PURCHASE_COMPLETE"
-                ? "Confirm you bought the complete paid quantity for this location and delivery week."
-                : "Confirm every paid order for this location and delivery week is physically packed. Customer timelines will show Packed."}
+              Confirm you bought the complete paid quantity for this location and delivery week.
+              Pack and finish each Order separately in Fulfillment.
             </SheetDescription>
           </SheetHeader>
-          {pendingAction && locationId && week ? (
+          {purchasePending && locationId && week ? (
             <form
               className="mt-6 space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 void (async () => {
-                  const action = pendingAction;
                   const saved = command.uncertain
                     ? await command.retry()
                     : await command.run(
-                        `scheduled-week:${cycleId}:${locationId}:${action}`,
+                        `scheduled-week:${cycleId}:${locationId}:purchase`,
                         "/api/admin/procurement/week/complete",
                         {
                           locationId,
                           cycleId,
-                          action,
-                          expectedVersion:
-                            action === "PURCHASE_COMPLETE" ? 0 : (week.completion?.version ?? 0),
+                          expectedVersion: 0,
                         },
                         "POST",
-                        {
-                          title:
-                            action === "PURCHASE_COMPLETE"
-                              ? "Purchase recorded"
-                              : "Orders marked packed",
-                        },
+                        { title: "Purchase recorded" },
                       );
                   if (saved) {
-                    setPendingAction(null);
+                    setPurchasePending(false);
                     setReload((value) => value + 1);
                   }
                 })();
@@ -541,13 +515,8 @@ export default function ProcurementPage() {
               <p className="font-semibold">
                 {week.name} · {label}
               </p>
-              {week.completion ? <p>{week.completion.paidOrderCount} paid orders</p> : null}
               <Button type="submit" disabled={command.busy}>
-                {command.busy
-                  ? "Saving…"
-                  : pendingAction === "PURCHASE_COMPLETE"
-                    ? "Confirm purchase complete"
-                    : "Confirm all orders packed"}
+                {command.busy ? "Saving…" : "Confirm purchase complete"}
               </Button>
               {command.notice ? <p role="status">{command.notice}</p> : null}
             </form>

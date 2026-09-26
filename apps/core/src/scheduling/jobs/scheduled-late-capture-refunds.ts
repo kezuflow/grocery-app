@@ -11,8 +11,11 @@ export const scheduledLateCaptureRefundsJob: ScheduledJob = {
     const rows = await database
       .prepare(`SELECT DISTINCT p.id,p.amount_minor amountMinor
       FROM finance_exception e JOIN payment_intent p ON p.id=e.payment_intent_id
+      JOIN checkout_quote q ON q.id=p.subject_id AND q.fulfillment_mode='SCHEDULED'
+      JOIN delivery_cycle_schedule schedule ON schedule.cycle_id=q.delivery_cycle_id
       WHERE e.status='OPEN' AND e.kind='CYCLE_CLOSED' AND p.purpose='GROCERY_CHECKOUT'
         AND p.subject_type='checkout_quote' AND p.status='SUCCEEDED'
+        AND e.created_at>=schedule.procurement_at
         AND EXISTS(SELECT 1 FROM payment_attempt a WHERE a.payment_intent_id=p.id AND a.status='SUCCEEDED')
         AND NOT EXISTS(SELECT 1 FROM order_payment_reaction link WHERE link.payment_intent_id=p.id)
         AND NOT EXISTS(SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=p.id)

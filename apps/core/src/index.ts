@@ -903,6 +903,7 @@ const adminFulfillmentAdvanceSchema = adminOperationsLocationSchema.extend({
     "MARK_READY_TO_PACK",
     "START_PACKING",
     "MARK_PACKED",
+    "COMPLETE_SCHEDULED_PACKING",
     "RECORD_SHORTAGE",
     "RESUME_PICKING",
     "RESUME_READY_TO_PACK",

@@ -48,6 +48,7 @@ const ACTION_TARGET = {
   MARK_READY_TO_PACK: "READY_TO_PACK",
   START_PACKING: "PACKING",
   MARK_PACKED: "PACKED",
+  COMPLETE_SCHEDULED_PACKING: "PACKED",
   RECORD_SHORTAGE: "SHORTED",
   RESUME_PICKING: "PICKING",
   RESUME_READY_TO_PACK: "READY_TO_PACK",
@@ -154,6 +155,32 @@ export async function advanceFulfillment(
       "Order is not eligible for preparation",
       command.requestId,
     );
+  const scheduledPack = command.action === "COMPLETE_SCHEDULED_PACKING";
+  if (
+    scheduledPack &&
+    (order.fulfillment_mode !== "SCHEDULED" ||
+      !cycleId ||
+      !["COMMITTED", "FULFILLMENT_PENDING"].includes(order.status) ||
+      !["NOT_STARTED", "PICKING", "READY_TO_PACK", "PACKING"].includes(row.status))
+  )
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "This Scheduled order cannot be packed",
+      command.requestId,
+    );
+  if (scheduledPack) {
+    const purchased = await database
+      .prepare(`SELECT 1 AS found FROM scheduled_week_completion
+      WHERE cycle_id=? AND location_id=?`)
+      .bind(cycleId, locationId)
+      .first<{ found: number }>();
+    if (!purchased)
+      return failure(
+        "CONFLICT",
+        "Confirm purchase for this delivery week before packing",
+        command.requestId,
+      );
+  }
   if (command.action === "START_PICKING" && order.status !== "COMMITTED")
     return failure(
       "ILLEGAL_TRANSITION",
@@ -165,12 +192,14 @@ export async function advanceFulfillment(
     (order.status !== "FULFILLMENT_PENDING" || row.status !== "PACKING")
   )
     return failure("ILLEGAL_TRANSITION", "Order is not being prepared", command.requestId);
-  const transitionResult = transitionToResult(
-    row.status,
-    ACTION_TARGET[command.action],
-    fulfillmentTransitions,
-    command.requestId,
-  );
+  const transitionResult = scheduledPack
+    ? { ok: true as const, value: "PACKED" as const, requestId: command.requestId }
+    : transitionToResult(
+        row.status,
+        ACTION_TARGET[command.action],
+        fulfillmentTransitions,
+        command.requestId,
+      );
   if (!transitionResult.ok) return transitionResult;
   const scheduledPackingOrder =
     command.action === "MARK_PACKED" && order.fulfillment_mode === "SCHEDULED"
@@ -221,6 +250,33 @@ export async function advanceFulfillment(
           "INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
         )
         .bind(command.orderId, order.status, order.version),
+      ...(scheduledPack
+        ? [
+            database
+              .prepare(`INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS(
+        SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
+        JOIN scheduled_week_completion purchase ON purchase.cycle_id=grocery.cycle_id AND purchase.location_id=fulfillment.location_id
+        JOIN payment_attempt attempt ON attempt.id=grocery.payment_id
+        LEFT JOIN payment_intent payment ON payment.id=attempt.payment_intent_id
+        WHERE grocery.id=? AND grocery.fulfillment_mode='SCHEDULED' AND grocery.status=? AND grocery.version=?
+          AND fulfillment.status=? AND fulfillment.version=? AND fulfillment.location_id=?
+          AND attempt.status='SUCCEEDED' AND attempt.customer_id=grocery.customer_id
+          AND attempt.amount_minor=grocery.total_minor AND attempt.currency=grocery.currency
+          AND (attempt.payment_intent_id IS NULL OR (payment.status='SUCCEEDED' AND payment.customer_id=grocery.customer_id
+            AND payment.amount_minor=grocery.total_minor AND payment.currency=grocery.currency))
+          AND EXISTS(SELECT 1 FROM committed_demand demand WHERE demand.order_id=grocery.id
+            AND demand.delivery_cycle_id=grocery.cycle_id AND demand.location_id=fulfillment.location_id
+            AND demand.status='OPEN' AND demand.demand_basis='EXACT_PAID_LINE'))`)
+              .bind(
+                command.orderId,
+                order.status,
+                order.version,
+                row.status,
+                row.version,
+                locationId,
+              ),
+          ]
+        : []),
       database
         .prepare(
           "UPDATE fulfillment_record SET status=?, updated_at=?, version=version+1 WHERE order_id=? AND version=? AND status=? AND location_id=?",
@@ -248,7 +304,7 @@ export async function advanceFulfillment(
           .bind(command.orderId),
       );
     }
-    if (command.action === "START_PICKING" || command.action === "MARK_PACKED") {
+    if (command.action === "START_PICKING" || command.action === "MARK_PACKED" || scheduledPack) {
       statements.push(
         database
           .prepare(

@@ -12,7 +12,6 @@ export type ScheduledWeekRequest = AuthenticatedRequest & {
 export type ScheduledWeekCompletionRequest = AuthenticatedRequest & {
   cycleId: string;
   locationId: string;
-  action: "PURCHASE_COMPLETE" | "FINISH_PACKING";
   expectedVersion: number;
   idempotencyKey: string;
 };
@@ -22,7 +21,6 @@ export type ScheduledWeekCompletionView = {
   version: number;
   paidOrderCount: number;
   purchaseCompletedAt: number;
-  packedAt: number | null;
 };
 export type ScheduledDemandItem = {
   locationId: string;
@@ -76,10 +74,9 @@ export type ScheduledWeekView = {
     orderOpensAt: number;
     cutoffAt: number;
     purchaseBlockedReason: string | null;
-    settlementEndsAt: number;
+    settlementEndsAt: number | null;
     completion: ScheduledWeekCompletionView | null;
     canCompletePurchase: boolean;
-    canFinishPacking: boolean;
     procurementAt: number | null;
     preparationAt: number | null;
     pickupAt: number | null;

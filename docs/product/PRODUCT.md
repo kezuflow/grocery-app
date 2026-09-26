@@ -7,33 +7,34 @@ paid Order additions in both modes, including the customer control and new addit
 payment admission. Retained addition/payment/refund history remains readable and must
 finish through its existing financial recovery path.
 
-Scheduled is a temporary preorder mode. Its ordinary Admin week flow has two actions
-after the payment-settlement deadline: **Purchase complete** records that staff bought
-the full, exact paid quantities shown for the week; **Finish packing all orders** is
-staff's confirmation that the eligible paid Orders have physically been packed. Staff
-contact suppliers and handle receiving, checking and packing outside the app. Do not
-require per-product receiving entry or per-order picking/packing steps in this routine
-Scheduled flow. The packing action must not claim an Order was packed when the staff
-confirmation did not cover it; shortages or exceptions remain visible for resolution.
+Scheduled is a temporary preorder mode. Its ordinary Admin week flow has one
+**Purchase complete** action after the configured Procurement starts time; it records
+that staff bought the full, exact paid quantities shown for the week. Staff contact
+suppliers and handle receiving and checking outside the app. Staff then physically pack
+each Order and use **Finish packing order** on that Order. No per-product receiving entry
+or per-order picking steps are required for this routine Scheduled flow. Each packing
+action must affect only the confirmed Order; shortages or exceptions remain visible for resolution.
 Scheduled goods do not become Instant stock by inference. The customer-facing progress
 is Payment, Packed, Out for delivery, and Delivered, with actual dispatch and delivery
 events still tracked for each Order. This supersedes the earlier detailed Scheduled
 purchase/receiving/preparation workflow and Scheduled paid-addition availability below;
 Instant preparation, stock, and courier safeguards remain unchanged.
 
-Owner decision, 2026-09-26: For Scheduled ordering, the advertised 11:59 PM closing
-minute ends at the exclusive 12:00 AM boundary in the cycle's market timezone. No new
+Owner correction, 2026-09-27: Scheduled Order cutoff and Procurement starts are both
+editable cycle schedule fields. The date picker defaults the exclusive Order cutoff to
+12:00 AM after the advertised 11:59 PM closing minute and Procurement starts to 1:00 AM
+in the cycle's market timezone. These are defaults, not a fixed one-hour policy. No new
 checkout/payment admission or QR generation/renewal for that cycle occurs at or after
 the order cutoff. A QR issued before cutoff may complete within its individual provider
-expiry of at most 30 minutes. The following hour is a bounded payment-settlement window:
-Core may commit verified paid Orders from those admitted attempts, then freezes the
-confirmed paid demand for supplier purchase at cutoff plus one hour. Unresolved attempts
+expiry of at most 30 minutes. Core may commit verified paid Orders from admitted attempts
+until the saved Procurement starts time, when confirmed paid demand freezes for supplier
+purchase. Unresolved attempts
 do not hold purchasing indefinitely after that freeze; they remain financial cases.
 Any subsequently confirmed captured money for an uncommitted checkout is flagged and
 automatically refunded in full through the verified provider/refund path, without a new
 Order or addition to frozen demand. An unknown or unpaid attempt is never refunded as
-though money were received. The one-hour deadline makes the week-level Purchase complete
-action eligible; the later Finish packing action attests physical completion. Early ordering closure does not
+though money were received. The configured Procurement starts time makes the week-level Purchase complete
+action eligible. Early ordering closure does not
 backdate the published cutoff or its settlement deadline. This decision supersedes the
 unbounded late-commitment/purchase-wait rules below.
 
@@ -95,7 +96,8 @@ Customer waiting and payment-window expiry do not create staff work. Group linke
 retain unmatched financial evidence, and automatically remove verified completed issues from the work
 list with required cleanup/audit evidence. Refund decisions and financial/Order safeguards remain.
 Technical diagnostics are collapsed and no separate overview/reconciliation dashboard is needed.
-Retain the existing one-hour payment continuation and up-to-30-minute QR lifetime; no 24-hour change
+Retain the up-to-30-minute QR lifetime; the 2026-09-27 correction above makes the
+payment continuation end at the editable Procurement starts time. No 24-hour change
 was approved. Window expiry never manufactures a terminal financial outcome or blocks a later valid
 provider confirmation. No deletion/retention period or purge is authorized by this simplification.
 These decisions are implemented locally by `PAYMENTS-SIMPLIFY-1` under
@@ -198,7 +200,7 @@ The decision map below names approved changes to the older baseline and the rema
 | GD-D11 — [Agreed: simple problem reporting after delivery](SIMPLIFICATION_DISCUSSION.md#agreed-simple-problem-reporting-after-delivery)                                                          | Single order-level Report a problem, without mandatory affected-item selection. Administrators handle reports and approve refunds; daily manual review is the operating practice.                                                                                                                                                                                                                                             | No automatic refund, deadline, guaranteed resolution, new review job or chat. One administrator Problems list links to Orders, with New / Being handled / Resolved, contact details and a short resolution note. Resolving a report cannot fabricate delivery/refund success.                                                                                                       |
 | GD-D12 — [Agreed: staff access and fulfillment locations](SIMPLIFICATION_DISCUSSION.md#agreed-staff-access-and-fulfillment-locations)                                                            | Administrator and Operations are starting responsibility groups, backed by capabilities and explicit location assignments. Individual login, invitations, access changes/disablement and material actor audit remain.                                                                                                                                                                                                         | Operations cannot gain global pricing/promotion/customer-report/refund/staff authority via a filter; role names are not a universal admin flag.                                                                                                                                                                                                                                     |
 | GD-D13 — [Agreed: dashboard overview and reports](SIMPLIFICATION_DISCUSSION.md#agreed-dashboard-overview-and-reports)                                                                            | Scoped work queues and mode/cutoff/purchase context; orders, received/refunded money separately, product quantities, discounts, accepted-versus-actual delivery costs, new customers, unique purchasing customers and repeat customers/orders. Administrators see across locations; Operations only assigned locations.                                                                                                       | Read access never grants financial/customer-report actions. Use the report definitions below and underlying authorized records; unknown cost is unavailable. Repeat purchases do not mean automatic recurring Orders or billing.                                                                                                                                                    |
-| GD-D14 — [Agreed: the typical Scheduled week](SIMPLIFICATION_DISCUSSION.md#agreed-the-typical-scheduled-week)                                                                                    | Configurable opening/cutoff/delivery dates/windows: offer products, accept paid orders, cutoff plus one-hour settlement, exact paid totals excluding accepted cancellations, then external purchase and packing confirmation before delivery.                                                                                                                                                                                                                   | Sunday/Monday-Friday/Friday night are examples, not hard-coded instants. One Admin view for the delivery week shows dates, offered products, paid Orders, quantities to buy and the two week completion actions. Supplier contact stays manual; no supplier portal/messages/approval engine.                                                                                         |
+| GD-D14 — [Agreed: the typical Scheduled week](SIMPLIFICATION_DISCUSSION.md#agreed-the-typical-scheduled-week)                                                                                    | Configurable opening/cutoff/delivery dates/windows: offer products, accept paid orders, editable Procurement starts boundary, exact paid totals excluding accepted cancellations, then external purchase and per-Order packing confirmation before delivery.                                                                                                                                                                                                                   | Sunday/Monday-Friday/Friday night are examples, not hard-coded instants. One Admin view for the delivery week shows dates, offered products, paid Orders, quantities to buy and the week Purchase complete action. Per-Order packing is in Fulfillment. Supplier contact stays manual; no supplier portal/messages/approval engine.                                                                                         |
 | GD-D15 — [Agreed: one initial fulfillment location and transition toward Instant](SIMPLIFICATION_DISCUSSION.md#agreed-one-initial-fulfillment-location-and-transition-toward-instant)            | Start Scheduled at one site receiving/packing/dispatching there; later Instant uses the same shop/catalog/history. Preserve multi-location and future transfers without requiring a separate warehouse in daily launch work.                                                                                                                                                                                                  | Normal changeover: finish the last planned Scheduled week, pause, receive/count Instant stock, check products/prices/location readiness, switch and reopen. No automatic date or all-history completion prerequisite. Outstanding cycle goods remain allocated; only inspected surplus becomes physical stock.                                                                      |
 | GD-D16 — [Agreed: simple Instant stock management](SIMPLIFICATION_DISCUSSION.md#agreed-simple-instant-stock-management)                                                                          | Location product list shows physical, held/reserved and available stock. Add stock/Remove stock uses quantity with actor/time; order movements and eligible releases are automatic. The 2026-09-25 owner follow-up removes the operator-entered reason from these two Admin actions; the movement label is recorded automatically. | No double subtraction or duplicate Scheduled-to-Instant stock entry.                                                                                                                                                                                                                                                                                                                |
 | GD-D17 — [Agreed: whole produce and packs can be sold by named sizes](SIMPLIFICATION_DISCUSSION.md#agreed-whole-produce-and-packs-can-be-sold-by-named-sizes)                                    | Bulk received weight and locally counted Small/Medium/Large pieces or packs describe the same goods. Actual counts control Instant sales; approximate per-option grams are optional logistics reference only. Bottled liquid counts pieces.                                                                                                                                                                                   | No fabricated gram-to-count conversion or duplicate bulk-plus-pack credit. The implementation must represent actual counted sizes and bulk receipt as the same goods, with ordinary receiving/sorting actions. Do not add packing/variation settings.                                                                                                                               |

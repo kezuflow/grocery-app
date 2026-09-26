@@ -86,8 +86,8 @@ describe("cycle planning presentation", () => {
       ),
     ).toEqual({
       orderOpensAt: { date: "2026-09-21", time: "00:00" },
-      cutoffAt: { date: "2026-09-25", time: "23:59" },
-      procurementAt: { date: "2026-09-26", time: "00:00" },
+      cutoffAt: { date: "2026-09-26", time: "00:00" },
+      procurementAt: { date: "2026-09-26", time: "01:00" },
       preparationAt: { date: "2026-09-26", time: "02:00" },
       pickupAt: { date: "2026-09-26", time: "04:00" },
     });

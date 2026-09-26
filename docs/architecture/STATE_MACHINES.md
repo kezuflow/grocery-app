@@ -10,7 +10,7 @@ Eligibility and transition prerequisites belong to Core policy and guarded comma
 
 External provider events are not client commands and never supply or invent an `expectedVersion`. Ingestion requires unique `(provider, providerEventId)` identity and a durable inbox. The handler loads current aggregate state, applies legal-transition and compare-and-swap protection, and safely retries or reconciles if another command changed the aggregate concurrently.
 
-A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid Orders and retained historical additions. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, the exclusive delivery-cycle cutoff ends new admission and cutoff plus one hour freezes confirmed paid demand for purchase. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate. Global `OPEN|PAUSED` selling state is a separate versioned lifecycle: `PAUSED` blocks new options, Quotes, and payment initiation but does not prevent reconciliation or exactly-once commitment of an already-started payment.
+A provider-confirmed canonical Payments outcome sufficient under the configured commitment policy is the customer commitment boundary for paid Orders and retained historical additions. For the current release, provider captured/success states map to canonical Payments `SUCCEEDED`. For `SCHEDULED`, the exclusive editable delivery-cycle cutoff ends new admission and the editable Procurement starts time freezes confirmed paid demand for purchase. `INSTANT` has no fabricated cycle transition; its operational boundary is expressed by the snapshotted promise, expiring checkout inventory hold, committed reservation, and Fulfillment transitions. These events are deliberately separate. Global `OPEN|PAUSED` selling state is a separate versioned lifecycle: `PAUSED` blocks new options, Quotes, and payment initiation but does not prevent reconciliation or exactly-once commitment of an already-started payment.
 
 ## Cart
 
@@ -47,8 +47,8 @@ Commands include `ScheduleCycle`, `OpenCycle`, `ReachCycleCutoff`, `CloseOrderin
 
 Rules:
 
-- New customer Orders and their payment initiation enter only while the cycle is `OPEN` and current time is before cutoff. New paid additions are closed in both modes. Under the approved Scheduled settlement rule in PRODUCT, normal QR creation/renewal also stops at cutoff; an already-issued QR may be paid until its individual expiry (at most 30 minutes), and verified paid Orders from admitted attempts may commit during the one-hour settlement window. At cutoff plus one hour, confirmed paid demand freezes for purchase; unresolved attempts remain financial cases without indefinitely blocking purchase. A later confirmed capture for an uncommitted checkout requires a flagged full-refund path and creates no new Order/demand. A cycle has no order, customer, zone, seat, or other capacity.
-- Reaching the planned cutoff prevents normal procurement-affecting customer modifications. Early ordering closure stops new checkout/payment admission through the cycle state but preserves existing paid Order cancellation rights through their immutable cutoff; procurement remains gated by the original cutoff and the approved one-hour settlement deadline. Unresolved started payments remain financial cases after the demand freeze.
+- New customer Orders and their payment initiation enter only while the cycle is `OPEN` and current time is before cutoff. New paid additions are closed in both modes. Normal QR creation/renewal also stops at the saved cutoff; an already-issued QR may be paid until its individual expiry (at most 30 minutes), and verified paid Orders from admitted attempts may commit until the saved Procurement starts time. Then confirmed paid demand freezes for purchase; unresolved attempts remain financial cases without indefinitely blocking purchase. A later confirmed capture for an uncommitted checkout requires a flagged full-refund path and creates no new Order/demand. A cycle has no order, customer, zone, seat, or other capacity.
+- Reaching the planned cutoff prevents normal procurement-affecting customer modifications. Early ordering closure stops new checkout/payment admission through the cycle state but preserves existing paid Order cancellation rights through their immutable cutoff; procurement remains gated by the saved Procurement starts time. Unresolved started payments remain financial cases after the demand freeze.
 - Time-based advancement is still an explicit idempotent command invoked by a request or scheduled trigger.
 - Draft save and `DRAFT -> SCHEDULED` require Global fulfillment authority, the reviewed version, complete ordered timing and eligible destination participation. Every required relation, audit and original command receipt shares the guarded transaction. Published schedules are not editable through draft save. `SCHEDULED -> OPEN` occurs no earlier than `order_opens_at`; `OPEN -> CUTOFF_REACHED` occurs at cutoff, each with stable transition identity and atomic audit/receipt. After scheduler downtime, opening followed by cutoff remains safe because checkout independently enforces the opening/cutoff interval.
 - Global `CloseOrderingEarly` may move an `OPEN` cycle to `CUTOFF_REACHED` before its planned cutoff, with current version, scope, audit and original receipt guarded in one batch. It leaves the published cutoff, active Quotes and started Payment evidence unchanged; the non-`OPEN` cycle blocks new payment admission. Purchase and receiving do not advance merely because this status changed early.
@@ -181,9 +181,9 @@ Commands include `StartReceiving`, `RecordReceivedLine`, `RecordQualityRejection
 Each receipt records expected, accepted, and rejected base-unit quantities. Accepted Scheduled quantities create cycle/location allocation movements; rejected quantities do not become usable goods. Inspected surplus release is a separate atomic allocation-to-physical-stock command. Completion requires every expected line to be received or explicitly resolved.
 
 Routine Scheduled operation no longer requires a separate in-app receiving command.
-Staff handle physical receipt and checking outside the app before the week-level
-**Finish packing all orders** confirmation. That confirmation is evidence of packed
-Orders, not an inferred quantity-level receipt or an Instant stock credit. Retained
+Staff handle physical receipt and checking outside the app before packing each Order.
+Each per-Order **Finish packing order** confirmation records only that Order as packed,
+not an inferred quantity-level receipt or an Instant stock credit. Retained
 receipt and allocation history remains readable for older work and exceptions.
 
 ## Fulfillment
@@ -198,11 +198,11 @@ SHORTED -> PICKING / READY_TO_PACK / CANCELED / ESCALATED
 
 The ordinary preparation command set includes `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, and `MarkPacked`. `HANDED_OFF` and `COMPLETED` remain readable historical states but only Delivery-owned commands or verified provider observations may enter them; generic fulfillment cancellation is not exposed.
 
-Instant packed quantities consume reservations/stock through explicit ledger movements. Scheduled packing consumes cycle/location allocation exactly once and never deducts the location inventory balance. For Instant, the staff acceptance/start-picking command requires successful payment evidence and atomically moves the Order from `COMMITTED` to `FULFILLMENT_PENDING`, closing customer cancellation. Scheduled customer cancellation closes at the first `START_PACKING` transition or the snapshotted cutoff, whichever occurs first; a later shortage does not reopen it. `PACKED` does not imply dispatched or delivered.
+Instant packed quantities consume reservations/stock through explicit ledger movements. Routine Scheduled packing records the physically packed Order without creating a receipt, allocation movement or location inventory change. For Instant, the staff acceptance/start-picking command requires successful payment evidence and atomically moves the Order from `COMMITTED` to `FULFILLMENT_PENDING`, closing customer cancellation. Scheduled customer cancellation closes at the first retained `START_PACKING` transition or the snapshotted cutoff, whichever occurs first; a later shortage does not reopen it. `PACKED` does not imply dispatched or delivered.
 
-The latest Scheduled owner correction replaces routine per-order picking/packing
-commands with a week-level **Finish packing all orders** confirmation after purchase.
-It advances only eligible paid Orders actually covered by that staff attestation,
+The latest Scheduled owner correction replaces routine per-order picking steps with
+one **Finish packing order** action for each physically packed Order after week purchase.
+It advances only that eligible paid Order,
 with guarded Order/Fulfillment/audit effects and no invented receipt or Instant stock.
 Customer cancellation still closes at the snapshotted cutoff; retained historical
 Start packing events keep their original effect. The storefront presents only Payment,

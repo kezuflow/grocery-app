@@ -156,10 +156,23 @@ export async function applyCheckoutPaymentReaction(
     [key: string]: unknown;
   }
   const routingSnapshot = quote.cycleSnapshot as CycleSnapshot | null;
+  const settlement =
+    !instant && routingSnapshot
+      ? await database
+          .prepare(
+            "SELECT procurement_at procurementAt FROM delivery_cycle_schedule WHERE cycle_id=?",
+          )
+          .bind(routingSnapshot.cycleId)
+          .first<{ procurementAt: number }>()
+      : null;
   if (!instant) {
     if (!routingSnapshot || Date.parse(routingSnapshot.cutoffAt) <= payment.created_at)
       return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
-    if (now >= Date.parse(routingSnapshot.cutoffAt) + 60 * 60_000)
+    if (
+      !settlement ||
+      settlement.procurementAt < Date.parse(routingSnapshot.cutoffAt) ||
+      now >= settlement.procurementAt
+    )
       return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
   } else if (!routingSnapshot)
     return recordException(database, input, "CYCLE_CLOSED", "QUOTE_UNUSABLE", now);
@@ -240,7 +253,9 @@ export async function applyCheckoutPaymentReaction(
       WHERE p.id=? AND p.version=? AND p.purpose='GROCERY_CHECKOUT' AND p.subject_type='checkout_quote' AND p.subject_id=?
       AND p.customer_id=? AND p.amount_minor=? AND p.currency=? AND p.status='SUCCEEDED' AND p.created_at<?
       AND (?=1 OR p.created_at<?)
-      AND (?=1 OR (CAST(unixepoch('subsec')*1000 AS INTEGER)<?
+      AND (?=1 OR (EXISTS(SELECT 1 FROM delivery_cycle_schedule schedule
+          WHERE schedule.cycle_id=? AND schedule.procurement_at=?
+            AND schedule.procurement_at>=? AND CAST(unixepoch('subsec')*1000 AS INTEGER)<schedule.procurement_at)
         AND NOT EXISTS(SELECT 1 FROM scheduled_week_completion finished
           WHERE finished.cycle_id=? AND finished.location_id=?)))
       AND r.id=? AND r.status='PENDING' AND r.reaction_type='COMMIT_ORDER' AND r.subject_type=p.subject_type AND r.subject_id=p.subject_id
@@ -256,7 +271,9 @@ export async function applyCheckoutPaymentReaction(
         instant ? 1 : 0,
         Date.parse(cycleSnapshot.cutoffAt),
         instant ? 1 : 0,
-        instant ? 0 : Date.parse(cycleSnapshot.cutoffAt) + 60 * 60_000,
+        instant ? null : cycleSnapshot.cycleId,
+        instant ? 0 : settlement!.procurementAt,
+        Date.parse(cycleSnapshot.cutoffAt),
         instant ? null : cycleSnapshot.cycleId,
         cycleSnapshot.locationId,
         input.reactionId,
@@ -742,7 +759,13 @@ export async function applyCheckoutPaymentReaction(
       return { applied: false, reason: "CAS_CONFLICT" };
     }
     if (!instant) {
-      const settled = Date.now() >= Date.parse(cycleSnapshot.cutoffAt) + 60 * 60_000;
+      const currentSchedule = await database
+        .prepare(
+          "SELECT procurement_at procurementAt FROM delivery_cycle_schedule WHERE cycle_id=?",
+        )
+        .bind(cycleSnapshot.cycleId)
+        .first<{ procurementAt: number }>();
+      const settled = !currentSchedule || Date.now() >= currentSchedule.procurementAt;
       const purchased = await database
         .prepare(`SELECT 1 AS found FROM scheduled_week_completion
         WHERE cycle_id=? AND location_id=? LIMIT 1`)

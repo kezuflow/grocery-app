@@ -45,6 +45,7 @@ const actionLabels: Record<string, string> = {
   MARK_READY_TO_PACK: "Finish picking",
   START_PACKING: "Start packing",
   MARK_PACKED: "Finish packing",
+  COMPLETE_SCHEDULED_PACKING: "Finish packing order",
   RECORD_SHORTAGE: "Report shortage",
   RESUME_PICKING: "Resume picking",
   RESUME_READY_TO_PACK: "Resume packing preparation",
@@ -56,6 +57,7 @@ const actionSuccessTitles: Record<string, string> = {
   MARK_READY_TO_PACK: "Picking finished",
   START_PACKING: "Packing started",
   MARK_PACKED: "Packing finished",
+  COMPLETE_SCHEDULED_PACKING: "Order packed",
   RECORD_SHORTAGE: "Shortage recorded",
   RESUME_PICKING: "Picking resumed",
   RESUME_READY_TO_PACK: "Packing preparation resumed",
@@ -120,13 +122,9 @@ function lineSummary(item: FulfillmentQueueView): string {
 }
 
 function nextStep(item: FulfillmentQueueView): string {
-  if (
-    item.status === "PACKING" &&
-    item.operational?.fulfillmentMode === "SCHEDULED" &&
-    !item.allowedActions.includes("MARK_PACKED")
-  )
-    return "Record received goods";
   if (item.allowedActions[0]) return actionLabels[item.allowedActions[0]] ?? item.allowedActions[0];
+  if (item.operational?.fulfillmentMode === "SCHEDULED" && item.status !== "PACKED")
+    return "Wait for purchase completion, then pack this order";
   if (item.status !== "PACKED") return "No preparation action";
   if (item.operational?.fulfillmentMode === "SCHEDULED") return "Choose dispatch";
   return item.operational?.deliveryExecution?.status === "FAILED"

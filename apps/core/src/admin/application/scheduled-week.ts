@@ -107,16 +107,16 @@ export async function getAdminScheduledWeek(
   ]);
   if (!schedule) return fail("NOT_FOUND", "Delivery week schedule is unavailable");
   const now = Date.now();
-  const settlementEndsAt = selected.cutoffAt + 60 * 60_000;
+  const settlementEndsAt = schedule.procurementAt;
   const completion = query.locationId
     ? await deps.db
         .prepare(`SELECT cycle_id cycleId,location_id locationId,version,
-        paid_order_count paidOrderCount,purchase_completed_at purchaseCompletedAt,packed_at packedAt
+        paid_order_count paidOrderCount,purchase_completed_at purchaseCompletedAt
         FROM scheduled_week_completion WHERE cycle_id=? AND location_id=?`)
         .bind(query.cycleId, query.locationId)
         .first<NonNullable<ScheduledWeekView["week"]>["completion"]>()
     : null;
-  const settled = now >= settlementEndsAt;
+  const settled = settlementEndsAt !== null && now >= settlementEndsAt;
   const demandCount =
     query.locationId && settled && !completion
       ? await deps.db
@@ -129,23 +129,25 @@ export async function getAdminScheduledWeek(
     ? await resolveOperationsAdministrationAnyAccess(
         deps,
         input,
-        ["procurement.manage", "fulfillment.manage"],
+        ["procurement.manage"],
         query.locationId,
       )
     : null;
   const canPurchase = manage?.ok && manage.value.capabilities.includes("procurement.manage");
-  const canPack = manage?.ok && manage.value.capabilities.includes("fulfillment.manage");
   result.week = {
     ...selected,
     ...schedule,
     windows: windows.results,
-    purchaseBlockedReason: settled
-      ? null
-      : now < selected.cutoffAt
-        ? selected.status === "CUTOFF_REACHED"
-          ? "Ordering closed early. Purchase quantities will be ready one hour after the published cutoff."
-          : "Ordering is still open. Purchase quantities will be ready one hour after cutoff."
-        : "Payments are settling. Purchase quantities will be ready one hour after cutoff.",
+    purchaseBlockedReason:
+      settlementEndsAt === null
+        ? "Configure the procurement start time before purchasing."
+        : settled
+          ? null
+          : now < selected.cutoffAt
+            ? selected.status === "CUTOFF_REACHED"
+              ? "Ordering closed early. Purchase quantities will be ready at the configured procurement start time."
+              : "Ordering is still open. Purchase quantities will be ready at the configured procurement start time."
+            : "Payments are settling until the configured procurement start time.",
     settlementEndsAt,
     completion,
     canCompletePurchase: Boolean(
@@ -155,12 +157,6 @@ export async function getAdminScheduledWeek(
       !completion &&
       demandCount?.count &&
       canPurchase,
-    ),
-    canFinishPacking: Boolean(
-      ["OPEN", "CUTOFF_REACHED"].includes(selected.status) &&
-      completion &&
-      !completion.packedAt &&
-      canPack,
     ),
   };
   if (query.section === "ORDER_SUMMARY") {

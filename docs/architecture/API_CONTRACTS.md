@@ -914,19 +914,19 @@ Global Product creation accepts `stockTracking` (`SHARED` by default or `COUNTED
 
 ### Delivery-week workspace (CA-5.1)
 
-Owner correction, 2026-09-26: the active Scheduled destination/week uses
-`completeAdminScheduledWeek` with `PURCHASE_COMPLETE` followed by `FINISH_PACKING`.
-Both commands require an explicit cycle and location, reviewed week version, stable
-idempotency key and currently scoped `procurement.manage` or `fulfillment.manage`,
-respectively. `getAdminScheduledWeek` returns `settlementEndsAt`, completion receipt
-and typed eligibility for each action. Purchase is available only after cutoff plus
-one hour and records the exact open paid demand snapshot. Packing requires that
-unchanged purchase snapshot, confirms all eligible paid Orders for that location,
-and atomically advances their Order/fulfillment state and audit. A stale, invalid,
-unauthorized or partial action has no success receipt or business effects. These
-attest physical work performed outside FreshMarkets; neither creates received
-goods nor touches Instant stock. Routine Scheduled receiving and per-order picking
-controls are absent from the operator path. Historical procurement/receiving
+Owner correction, 2026-09-27: the active Scheduled destination/week uses
+`completeAdminScheduledWeek` for one `Purchase complete` attestation. It requires an
+explicit cycle and location, reviewed week version, stable idempotency key and currently
+scoped `procurement.manage`. `getAdminScheduledWeek` returns `settlementEndsAt` from
+the saved `delivery_cycle_schedule.procurement_at`, purchase receipt and typed purchase
+eligibility. Purchase is available only after that configured time and records the exact
+open paid demand snapshot. After physically packing each Order, staff use
+`advanceAdminFulfillment` with `COMPLETE_SCHEDULED_PACKING` and current
+`fulfillment.manage` scope. Core requires purchase and paid Order evidence, then atomically
+advances only that Order and its fulfillment record to packed with audit and an idempotent
+receipt. A stale, invalid, unauthorized or partial action has no success receipt or
+business effects. Neither command creates received goods or touches Instant stock.
+Routine Scheduled receiving and per-order picking controls are absent from the operator path. Historical procurement/receiving
 commands and records remain for retained evidence; the detailed CA-5.x text below
 describes that earlier workflow and does not override this correction.
 
@@ -935,8 +935,8 @@ mode. Exact retries of historical commands and all existing financial/refund
 recovery remain available. Checkout payment actions for Scheduled expose
 `qrGenerationEndsAt` from the cycle's exclusive cutoff; Web stops normal QR
 generation or renewal then and may display an already issued QR until its own
-expiry. Core accepts only provider-verified captures committed within the following
-one-hour settlement window. A later captured, uncommitted checkout opens a
+expiry. Core accepts only provider-verified captures committed before the saved
+Procurement starts time. A later captured, uncommitted checkout opens a
 financial exception and the scheduled refund job initiates the existing durable
 full-refund command. Unknown or unpaid outcomes are never treated as captures.
 

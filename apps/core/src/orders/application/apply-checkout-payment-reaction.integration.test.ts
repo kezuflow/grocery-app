@@ -1121,7 +1121,7 @@ describe("order commitment from canonical payment reactions", () => {
     },
   );
 
-  it("freezes Scheduled demand one hour after cutoff and records captured money for refund", async () => {
+  it("freezes Scheduled demand at the configured procurement time and records captured money for refund", async () => {
     const fixture = await seededCheckout({ onHand: 0 });
     const quote = await createQuote(fixture);
     if (!quote.ok) throw new Error(quote.error.message);
@@ -1131,6 +1131,20 @@ describe("order commitment from canonical payment reactions", () => {
     )
       .bind(new Date(cutoff).toISOString(), quote.value.quoteId)
       .run();
+    const schedule = await env.DB.prepare(
+      "SELECT s.cycle_id cycleId,s.procurement_at procurementAt FROM delivery_cycle_schedule s JOIN checkout_quote q ON q.delivery_cycle_id=s.cycle_id WHERE q.id=?",
+    )
+      .bind(quote.value.quoteId)
+      .first<{ cycleId: string; procurementAt: number }>();
+    if (!schedule) throw new Error("Scheduled quote has no cycle schedule");
+    await env.DB.prepare("UPDATE delivery_cycle_schedule SET procurement_at=? WHERE cycle_id=?")
+      .bind(cutoff + 60 * 60_000, schedule.cycleId)
+      .run();
+    onTestFinished(async () => {
+      await env.DB.prepare("UPDATE delivery_cycle_schedule SET procurement_at=? WHERE cycle_id=?")
+        .bind(schedule.procurementAt, schedule.cycleId)
+        .run();
+    });
     const intent = await intentWithReaction(
       quote.value.quoteId,
       fixture.customerId,

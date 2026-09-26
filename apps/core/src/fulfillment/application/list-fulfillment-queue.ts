@@ -56,6 +56,7 @@ export async function listFulfillmentQueue(
       cycleId: string | null;
       manualCustody: boolean;
       packingGoodsReady: boolean;
+      canCompleteScheduledPacking: boolean;
       sortAt: number;
       operational: OperationalOrderDetailView;
     }
@@ -114,7 +115,9 @@ export async function listFulfillmentQueue(
   const rows = await database
     .prepare(
       `SELECT f.order_id, f.status, f.location_id, f.version, o.cycle_id,
-       o.order_number,o.fulfillment_mode,COALESCE(o.committed_at,o.created_at) sort_at,
+       o.order_number,o.status order_status,o.fulfillment_mode,COALESCE(o.committed_at,o.created_at) sort_at,
+       EXISTS(SELECT 1 FROM scheduled_week_completion purchase
+         WHERE purchase.cycle_id=o.cycle_id AND purchase.location_id=f.location_id) purchase_complete,
        COALESCE(json_extract(o.address_snapshot_json,'$.recipient'),'Recipient unavailable') recipient,
        COALESCE(json_extract(o.address_snapshot_json,'$.phone'),'Phone unavailable') phone,
        cycle.name cycle_name,delivery_window.name window_name,delivery_window.starts_at,delivery_window.ends_at,delivery_window.pickup_at,delivery_window.timezone,
@@ -143,6 +146,8 @@ export async function listFulfillmentQueue(
       manual_custody: number;
       order_number: string | null;
       fulfillment_mode: "INSTANT" | "SCHEDULED";
+      order_status: string;
+      purchase_complete: number;
       sort_at: number;
       recipient: string;
       phone: string;
@@ -253,6 +258,11 @@ export async function listFulfillmentQueue(
     cycleId: r.cycle_id,
     manualCustody: r.manual_custody !== 0,
     packingGoodsReady: false,
+    canCompleteScheduledPacking:
+      r.fulfillment_mode === "SCHEDULED" &&
+      r.purchase_complete !== 0 &&
+      ["COMMITTED", "FULFILLMENT_PENDING"].includes(r.order_status) &&
+      ["NOT_STARTED", "PICKING", "READY_TO_PACK", "PACKING"].includes(r.status),
     sortAt: r.sort_at,
     operational: {
       orderNumber: r.order_number ?? r.order_id,

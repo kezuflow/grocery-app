@@ -22,7 +22,7 @@ export const scheduledWeekViewSchema = z.object({
       orderOpensAt: integer,
       cutoffAt: integer,
       purchaseBlockedReason: z.string().nullable(),
-      settlementEndsAt: integer,
+      settlementEndsAt: integer.nullable(),
       completion: z
         .object({
           cycleId: identifierSchema,
@@ -30,11 +30,9 @@ export const scheduledWeekViewSchema = z.object({
           version: integer.positive(),
           paidOrderCount: integer.positive(),
           purchaseCompletedAt: integer,
-          packedAt: integer.nullable(),
         })
         .nullable(),
       canCompletePurchase: z.boolean(),
-      canFinishPacking: z.boolean(),
       procurementAt: integer.nullable(),
       preparationAt: integer.nullable(),
       pickupAt: integer.nullable(),
@@ -137,7 +135,6 @@ export const scheduledWeekCompletionBodySchema = z
   .object({
     cycleId: identifierSchema,
     locationId: identifierSchema,
-    action: z.enum(["PURCHASE_COMPLETE", "FINISH_PACKING"]),
     expectedVersion: integer,
   })
   .strict();

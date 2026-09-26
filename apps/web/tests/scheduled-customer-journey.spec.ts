@@ -171,10 +171,12 @@ for (const width of [1440, 390]) {
         reason,
         orderOpensAt: new Date(Date.now() - 1000).toISOString(),
         cutoffAt: at(0),
-        procurementAt: at(0),
-        preparationAt: at(1000),
-        pickupAt: at(3600000),
-        windows: [{ name: "Afternoon", startsAt: at(3600000), endsAt: at(7200000) }],
+        procurementAt: at(60 * 60_000),
+        preparationAt: at(61 * 60_000),
+        pickupAt: at(2 * 60 * 60_000),
+        windows: [
+          { name: "Afternoon", startsAt: at(2 * 60 * 60_000), endsAt: at(3 * 60 * 60_000) },
+        ],
         participation: [destination],
       }),
     );
@@ -361,7 +363,7 @@ for (const width of [1440, 390]) {
     // above and below still use their real Web -> Core -> D1 command paths.
     const pastCutoff = Date.now() - 2 * 60 * 60_000;
     executeAdminE2eSql(
-      `UPDATE delivery_cycle SET cutoff_at=${pastCutoff},status='CUTOFF_REACHED',version=version+1 WHERE id='${cycle.cycleId}' AND status='OPEN';`,
+      `UPDATE delivery_cycle SET cutoff_at=${pastCutoff},status='CUTOFF_REACHED',version=version+1 WHERE id='${cycle.cycleId}' AND status='OPEN'; UPDATE delivery_cycle_schedule SET procurement_at=${pastCutoff + 60 * 60_000} WHERE cycle_id='${cycle.cycleId}';`,
     );
     await admin.goto("/admin/procurement");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
@@ -382,12 +384,9 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: "Confirm purchase complete" })
       .click();
     await expect(admin.getByText("Purchase completed", { exact: false })).toBeVisible();
-    await admin.getByRole("button", { name: "Finish packing all orders", exact: true }).click();
-    await admin
-      .getByRole("dialog")
-      .getByRole("button", { name: "Confirm all orders packed" })
-      .click();
-    await expect(admin.getByText("All paid orders packed", { exact: false })).toBeVisible();
+    await admin.goto(`/admin/fulfillment?orderId=${orderId}`);
+    await admin.getByRole("button", { name: "Finish packing order", exact: true }).click();
+    await expect(admin.getByText("Order packed", { exact: false })).toBeVisible();
     await admin.screenshot({
       path: testInfo.outputPath(`scheduled-week-complete-${width}.png`),
       fullPage: true,

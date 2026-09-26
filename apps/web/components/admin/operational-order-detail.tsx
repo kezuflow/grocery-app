@@ -11,6 +11,7 @@ const actionLabels: Record<string, string> = {
   MARK_READY_TO_PACK: "Finish picking",
   START_PACKING: "Start packing",
   MARK_PACKED: "Finish packing",
+  COMPLETE_SCHEDULED_PACKING: "Finish packing order",
   RECORD_SHORTAGE: "Report shortage",
   RESUME_PICKING: "Resume picking",
   RESUME_READY_TO_PACK: "Resume packing preparation",
@@ -98,7 +99,7 @@ export function OperationalOrderDetail({
   const escalationAllowed = !scheduled && item.allowedActions.includes("ESCALATE");
   const issueAction = shortageAllowed ? "RECORD_SHORTAGE" : escalationAllowed ? "ESCALATE" : null;
   const preparationActions = scheduled
-    ? []
+    ? item.allowedActions.filter((action) => action === "COMPLETE_SCHEDULED_PACKING")
     : item.allowedActions.filter((action) => action !== "RECORD_SHORTAGE" && action !== "ESCALATE");
   const nextAction = preparationActions[0];
   return (
@@ -151,7 +152,7 @@ export function OperationalOrderDetail({
         <h3 className="font-semibold">Ordered items</h3>
         <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
           {detail.fulfillmentMode === "SCHEDULED"
-            ? "Use the Delivery week actions after the supplier purchase and physical packing are complete."
+            ? "After the delivery week purchase, physically pack this order, then finish packing this order here."
             : "Prepare each immutable paid quantity using the goods evidence shown below."}
         </p>
         <ol className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
@@ -203,7 +204,7 @@ export function OperationalOrderDetail({
           ))}
         </ol>
       </div>
-      {!scheduled && item.allowedActions.length ? (
+      {preparationActions.length || issueAction ? (
         <div className="space-y-3 rounded-lg border border-[var(--fm-border)] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
