@@ -25,8 +25,10 @@ type OperationalRefresh = {
 };
 
 const OperationalRefreshContext = createContext<OperationalRefresh | null>(null);
-const BASE_INTERVAL = 8_000;
-const MAX_INTERVAL = 32_000;
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 300_000;
+const DISCONNECTED_FALLBACK_MS = 60_000;
+const FAILED_READ_RETRY_MAX_MS = 32_000;
 const INERT_OPERATIONAL_REFRESH: OperationalRefresh = {
   enabled: false,
   activity: null,
@@ -64,8 +66,9 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
   const [refreshing, setRefreshing] = useState(false);
   const [stale, setStale] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const failures = useRef(0);
   const initialized = useRef(false);
+  const streamConnected = useRef(false);
+  const readFailures = useRef(0);
   const noticeIdsByLocation = useRef(new Map<string, string[]>());
   const controller = useRef<AbortController | null>(null);
   const refresh = useCallback(() => setAttempt((value) => value + 1), []);
@@ -73,7 +76,8 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
   useEffect(() => {
     controller.current?.abort();
     initialized.current = false;
-    failures.current = 0;
+    streamConnected.current = false;
+    readFailures.current = 0;
     setActivity(null);
     setStale(false);
   }, [locationId]);
@@ -82,6 +86,7 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
     if (!locationId) return;
     controller.current?.abort();
     const current = new AbortController();
+    let retryTimer = 0;
     controller.current = current;
     setRefreshing(true);
     void fetch(`/api/admin/operations-activity?locationId=${encodeURIComponent(locationId)}`, {
@@ -100,13 +105,17 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
           visibleActivity?.notifications.map((notice) => notice.id) ?? stored,
         );
         if (initialized.current) {
-          const newOrder = result.value.notifications.find(
+          const newOrders = result.value.notifications.filter(
             (notice) => notice.id.startsWith("order:") && !priorIds.has(notice.id),
           );
-          if (newOrder)
-            toast.info("New paid order", { description: `Order ${newOrder.orderNumber}` });
+          if (newOrders.length === 1)
+            toast.info("New paid order", {
+              description: `Order ${newOrders[0]!.orderNumber}`,
+            });
+          if (newOrders.length > 1) toast.info(`${newOrders.length} new paid orders`);
         }
         initialized.current = true;
+        readFailures.current = 0;
         const noticeIds = result.value.notifications.map((notice) => notice.id);
         noticeIdsByLocation.current.set(locationId, noticeIds);
         try {
@@ -114,45 +123,118 @@ export function AdminOperationalRefreshProvider({ children }: { children: ReactN
         } catch {
           // Session storage is optional; the fetched activity remains authoritative.
         }
-        failures.current = 0;
-        setStale(false);
+        setStale(!streamConnected.current);
         setActivity({ locationId, value: result.value });
         setRevision((value) => value + 1);
       })
       .catch(() => {
         if (!current.signal.aborted) {
-          failures.current += 1;
           setStale(true);
+          const delay = Math.min(
+            RECONNECT_BASE_MS * 2 ** readFailures.current,
+            FAILED_READ_RETRY_MAX_MS,
+          );
+          readFailures.current += 1;
+          retryTimer = window.setTimeout(() => {
+            if (document.visibilityState === "visible") refresh();
+          }, delay);
         }
       })
       .finally(() => {
         if (!current.signal.aborted) setRefreshing(false);
       });
-    return () => current.abort();
+    return () => {
+      current.abort();
+      window.clearTimeout(retryTimer);
+    };
     // `attempt` owns refresh scheduling; scope reset is separate so prior data stays mounted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationId, attempt]);
 
   useEffect(() => {
     if (!locationId) return;
-    let timer = 0;
-    const schedule = () => {
-      window.clearTimeout(timer);
-      const delay = Math.min(BASE_INTERVAL * 2 ** failures.current, MAX_INTERVAL);
-      timer = window.setTimeout(() => {
-        if (document.visibilityState === "visible") refresh();
-        schedule();
-      }, delay);
+    let socket: WebSocket | null = null;
+    let reconnectTimer = 0;
+    let reconnectFailures = 0;
+    let lastRevision = 0;
+    let disposed = false;
+    const connect = () => {
+      if (disposed || document.visibilityState !== "visible" || typeof WebSocket === "undefined")
+        return;
+      if (
+        socket &&
+        (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+      )
+        return;
+      const url = new URL("/api/admin/operational-stream", window.location.href);
+      url.searchParams.set("locationId", locationId);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      const connectedSocket = new WebSocket(url);
+      socket = connectedSocket;
+      connectedSocket.onopen = () => {
+        reconnectFailures = 0;
+        streamConnected.current = true;
+        setStale(false);
+        refresh();
+      };
+      connectedSocket.onmessage = (event) => {
+        try {
+          const value: unknown = JSON.parse(String(event.data));
+          if (
+            !value ||
+            typeof value !== "object" ||
+            !("revision" in value) ||
+            typeof value.revision !== "number" ||
+            !Number.isSafeInteger(value.revision) ||
+            value.revision <= lastRevision
+          )
+            return;
+          lastRevision = value.revision;
+          refresh();
+        } catch {
+          // An invalid hint cannot authorize or change operational state.
+        }
+      };
+      connectedSocket.onclose = () => {
+        if (socket !== connectedSocket) return;
+        socket = null;
+        streamConnected.current = false;
+        if (disposed || document.visibilityState !== "visible") return;
+        setStale(true);
+        const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectFailures, RECONNECT_MAX_MS);
+        reconnectFailures += 1;
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = window.setTimeout(connect, delay);
+      };
+      connectedSocket.onerror = () => connectedSocket.close();
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible") {
+        refresh();
+        connect();
+      } else {
+        window.clearTimeout(reconnectTimer);
+        streamConnected.current = false;
+        socket?.close();
+        socket = null;
+      }
     };
-    schedule();
+    connect();
+    const fallbackTimer = window.setInterval(() => {
+      if (
+        document.visibilityState === "visible" &&
+        (typeof WebSocket === "undefined" || socket?.readyState !== WebSocket.OPEN)
+      )
+        refresh();
+    }, DISCONNECTED_FALLBACK_MS);
     window.addEventListener("focus", onVisible);
     window.addEventListener("online", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.clearTimeout(timer);
+      disposed = true;
+      window.clearTimeout(reconnectTimer);
+      window.clearInterval(fallbackTimer);
+      socket?.close();
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("online", onVisible);
       document.removeEventListener("visibilitychange", onVisible);

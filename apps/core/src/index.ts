@@ -97,6 +97,9 @@ import {
   acceptStaffInvitation,
 } from "./iam/application/accept-staff-invitation";
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { OperationalHub } from "./operations/infrastructure/operational-hub";
+import { resolveOperationsAdministrationAnyAccess } from "./admin/application/operations-administration-access";
+import { publishOperationalRevisions } from "./operations/application/publish-operational-revisions";
 import {
   type AppErrorCode,
   type AuthContextRequest,
@@ -1016,6 +1019,7 @@ const issueActionSchema = authenticatedRequestSchema.extend({
 });
 
 export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
+export { OperationalHub };
 
 /**
  * Worker transport and dependency composition only. Every RPC validates its
@@ -1029,6 +1033,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly rpcContext = createCoreRpcContext(
     this.env as Env & AuthEnvironment,
     systemClock,
+    () => this.scheduleOperationalPublication(),
   );
   private readonly runtimeConfiguration = this.rpcContext.runtimeConfiguration;
   private readonly context = this.rpcContext.access;
@@ -1040,6 +1045,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly ordersRpc = createOrdersRpc(this.rpcContext);
   private readonly inventoryTransfersRpc = createInventoryTransfersRpc(this.rpcContext);
   private readonly operationsRpc = createOperationsRpc(this.rpcContext);
+  private readonly scheduleOperationalPublication = () => {
+    this.ctx.waitUntil(
+      publishOperationalRevisions(this.env.DB, this.env.OPERATIONAL_HUB).catch(() => {
+        log("error", "operations.revision.publish_failed", {});
+      }),
+    );
+  };
+  private readonly withOperationalPublication = async <T>(effect: Promise<T>): Promise<T> => {
+    const result = await effect;
+    if (typeof result === "object" && result !== null && "ok" in result && result.ok === true)
+      this.scheduleOperationalPublication();
+    return result;
+  };
 
   async getAdminOverview(input: import("@freshmarkets/contracts").AdminOverviewRequest) {
     return observeCoreRpc("admin.overview", input.requestId, async () => {
@@ -1075,6 +1093,33 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const id = requestId(request);
     const path = new URL(request.url).pathname;
+    if (path === "/api/admin/operational-stream") {
+      if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket")
+        return new Response(null, { status: 426 });
+      const locationId = new URL(request.url).searchParams.get("locationId");
+      const parsed = adminOperationsLocationSchema.safeParse({
+        requestId: id,
+        locationId,
+        headers: Object.fromEntries(
+          ["cookie", "origin", "referer", "user-agent", "x-request-id"]
+            .map((name) => [name, request.headers.get(name)])
+            .filter((entry): entry is [string, string] => entry[1] !== null),
+        ),
+      });
+      if (!parsed.success) return new Response(null, { status: 400 });
+      const access = await resolveOperationsAdministrationAnyAccess(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+        ["fulfillment.read", "delivery.read"],
+        parsed.data.locationId,
+        { concealOutOfScopeLocation: true },
+      );
+      if (!access.ok)
+        return new Response(null, {
+          status: access.error.code === "UNAUTHENTICATED" ? 401 : 403,
+        });
+      return this.env.OPERATIONAL_HUB.getByName(parsed.data.locationId).fetch(request);
+    }
     if (path === "/health")
       return Response.json(await this.health({ requestId: id }), {
         headers: { "x-request-id": id },
@@ -1086,17 +1131,26 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         headers: { "x-request-id": id },
       });
     }
-    if (path.startsWith("/webhooks/payments/"))
-      return handleProviderWebhook(
+    if (path.startsWith("/webhooks/payments/")) {
+      const response = await handleProviderWebhook(
         this.env.DB,
         buildProviderRegistry(this.runtimeConfiguration()),
         request,
         id,
       );
-    if (path === "/webhooks/delivery/grab-express")
-      return handleGrabExpressWebhook(this.env.DB, this.env, request, id);
-    if (path === "/webhooks/delivery/lalamove")
-      return handleLalamoveWebhook(this.env.DB, this.env, request, id);
+      if (response.ok) this.scheduleOperationalPublication();
+      return response;
+    }
+    if (path === "/webhooks/delivery/grab-express") {
+      const response = await handleGrabExpressWebhook(this.env.DB, this.env, request, id);
+      if (response.ok) this.scheduleOperationalPublication();
+      return response;
+    }
+    if (path === "/webhooks/delivery/lalamove") {
+      const response = await handleLalamoveWebhook(this.env.DB, this.env, request, id);
+      if (response.ok) this.scheduleOperationalPublication();
+      return response;
+    }
     if (path.startsWith("/api/auth"))
       return createAuth(this.env as Env & AuthEnvironment).handler(request);
     return Response.json(
@@ -2406,9 +2460,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminProcurementAggregateSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return aggregateAdminProcurementDemand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
+    return this.withOperationalPublication(
+      aggregateAdminProcurementDemand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      ),
     );
   }
   getAdminScheduledWeek(input: import("@freshmarkets/contracts").ScheduledWeekRequest) {
@@ -2420,15 +2476,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   recordScheduledCountedReceipt(
     input: import("@freshmarkets/contracts").RecordScheduledCountedReceiptRequest,
   ) {
-    return recordScheduledCountedReceipt(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+    return this.withOperationalPublication(
+      recordScheduledCountedReceipt(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        input,
+      ),
     );
   }
   releaseScheduledSurplus(input: import("@freshmarkets/contracts").ReleaseScheduledSurplusRequest) {
-    return releaseScheduledSurplus(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      input,
+    return this.withOperationalPublication(
+      releaseScheduledSurplus(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        input,
+      ),
     );
   }
   async confirmAdminProcurementPurchase(
@@ -2443,19 +2503,23 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return confirmAdminProcurementPurchase(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
+    return this.withOperationalPublication(
+      confirmAdminProcurementPurchase(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      ),
     );
   }
   async startAdminReceiving(input: import("@freshmarkets/contracts").StartAdminReceivingRequest) {
     const validation = adminReceivingStartSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return startAdminReceiving(
+    const result = await startAdminReceiving(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+    if (result.ok) this.scheduleOperationalPublication();
+    return result;
   }
   async recordAdminReceivedLine(
     input: import("@freshmarkets/contracts").RecordAdminReceivedLineRequest,
@@ -2463,10 +2527,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminReceivingLineSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return recordAdminReceivedLine(
+    const result = await recordAdminReceivedLine(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+    if (result.ok) this.scheduleOperationalPublication();
+    return result;
   }
   async completeAdminReceiving(
     input: import("@freshmarkets/contracts").CompleteAdminReceivingRequest,
@@ -2474,10 +2540,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminReceivingCompleteSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return completeAdminReceiving(
+    const result = await completeAdminReceiving(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
     );
+    if (result.ok) this.scheduleOperationalPublication();
+    return result;
   }
   async advanceAdminFulfillment(
     input: import("@freshmarkets/contracts").AdvanceAdminFulfillmentRequest,
@@ -2502,6 +2570,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
           requestId: validation.data.requestId,
         });
       }
+    if (result.ok) this.scheduleOperationalPublication();
     return result;
   }
   async resolveAdminOperationalException(
@@ -2510,9 +2579,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminOperationalExceptionResolveSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return resolveAdminOperationalException(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
+    return this.withOperationalPublication(
+      resolveAdminOperationalException(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      ),
     );
   }
   async listProcurementRequirements(
@@ -2605,18 +2676,22 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = adminOperationsLocationSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return reviseDeliveryPromise(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      { ...input, ...validation.data },
+    return this.withOperationalPublication(
+      reviseDeliveryPromise(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        { ...input, ...validation.data },
+      ),
     );
   }
   async manageManualDelivery(input: import("@freshmarkets/contracts").ManualDeliveryRequest) {
     const validation = adminOperationsLocationSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return manageManualDelivery(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      { ...input, ...validation.data },
+    return this.withOperationalPublication(
+      manageManualDelivery(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        { ...input, ...validation.data },
+      ),
     );
   }
   async requestExternalDelivery(
@@ -2642,15 +2717,17 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const provider = providers.get(validation.data.providerCode);
     if (!provider || !configuredServiceType)
       return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
-    return requestExternalDeliveryCommand(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        provider,
-        configuredServiceType,
-        now: () => this.context.now(),
-      },
-      validation.data,
+    return this.withOperationalPublication(
+      requestExternalDeliveryCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          provider,
+          configuredServiceType,
+          now: () => this.context.now(),
+        },
+        validation.data,
+      ),
     );
   }
   async refreshExternalDelivery(
@@ -2666,14 +2743,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     try {
       const provider = this.rpcContext.deliveryProviders().get("lalamove");
       if (!provider) throw new Error("unavailable");
-      return refreshExternalDeliveryCommand(
-        {
-          auth: createAuth(this.env as Env & AuthEnvironment),
-          db: this.env.DB,
-          provider,
-          now: () => this.context.now(),
-        },
-        validation.data,
+      return this.withOperationalPublication(
+        refreshExternalDeliveryCommand(
+          {
+            auth: createAuth(this.env as Env & AuthEnvironment),
+            db: this.env.DB,
+            provider,
+            now: () => this.context.now(),
+          },
+          validation.data,
+        ),
       );
     } catch {
       return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
@@ -2688,14 +2767,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     try {
       const provider = this.rpcContext.deliveryProviders().get("lalamove");
       if (!provider) throw new Error("unavailable");
-      return cancelExternalDeliveryCommand(
-        {
-          auth: createAuth(this.env as Env & AuthEnvironment),
-          db: this.env.DB,
-          provider,
-          now: () => this.context.now(),
-        },
-        validation.data,
+      return this.withOperationalPublication(
+        cancelExternalDeliveryCommand(
+          {
+            auth: createAuth(this.env as Env & AuthEnvironment),
+            db: this.env.DB,
+            provider,
+            now: () => this.context.now(),
+          },
+          validation.data,
+        ),
       );
     } catch {
       return fail("CONFIGURATION_ERROR", "Lalamove delivery is not configured", input.requestId);
@@ -2734,13 +2815,15 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = orderCancelSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return cancelAdminOrderCommand(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        payments: buildProviderRegistry(this.runtimeConfiguration()),
-      },
-      validation.data,
+    return this.withOperationalPublication(
+      cancelAdminOrderCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          payments: buildProviderRegistry(this.runtimeConfiguration()),
+        },
+        validation.data,
+      ),
     );
   }
   async listAdminPayments(input: import("@freshmarkets/contracts").AdminPaymentListRequest) {
@@ -2790,9 +2873,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .safeParse(input);
     if (!parsed.success)
       return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
-    return retryAdminPaymentReactionCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      parsed.data,
+    return this.withOperationalPublication(
+      retryAdminPaymentReactionCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+      ),
     );
   }
   async retryAdminProviderEvent(
@@ -2808,9 +2893,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .safeParse(input);
     if (!parsed.success)
       return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
-    return retryAdminProviderEventCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      parsed.data,
+    return this.withOperationalPublication(
+      retryAdminProviderEventCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+      ),
     );
   }
   async recheckAdminPayment(input: import("@freshmarkets/contracts").AdminPaymentRecheckRequest) {
@@ -2825,31 +2912,37 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       .safeParse(input);
     if (!parsed.success)
       return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
-    return recheckAdminPaymentCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      parsed.data,
+    return this.withOperationalPublication(
+      recheckAdminPaymentCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+      ),
     );
   }
   async recheckAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRecheckRequest) {
     const parsed = refundRecheckSchema.safeParse(input);
     if (!parsed.success)
       return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
-    return recheckAdminRefundCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      parsed.data,
+    return this.withOperationalPublication(
+      recheckAdminRefundCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+      ),
     );
   }
   async requestAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRequest) {
     const validation = refundRequestSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return requestAdminRefundCommand(
-      {
-        auth: createAuth(this.env as Env & AuthEnvironment),
-        db: this.env.DB,
-        payments: buildProviderRegistry(this.runtimeConfiguration()),
-      },
-      validation.data,
+    return this.withOperationalPublication(
+      requestAdminRefundCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          payments: buildProviderRegistry(this.runtimeConfiguration()),
+        },
+        validation.data,
+      ),
     );
   }
   async getMembershipPriceConfiguration(input: AuthenticatedRequest) {
@@ -2922,9 +3015,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     const validation = issueActionSchema.safeParse(input);
     if (!validation.success)
       return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
-    return applyAdminOrderIssueActionCommand(
-      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
-      validation.data,
+    return this.withOperationalPublication(
+      applyAdminOrderIssueActionCommand(
+        { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        validation.data,
+      ),
     );
   }
   async resolveServiceability(input: import("@freshmarkets/contracts").ServiceabilityRequest) {
@@ -3369,6 +3464,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
    */
   async scheduled(controller: { readonly cron: string }): Promise<void> {
     await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
+    if (controller.cron === "* * * * *")
+      await publishOperationalRevisions(this.env.DB, this.env.OPERATIONAL_HUB);
   }
 
   /** Queue delivery is per-message isolated; domain state remains D1-owned. */

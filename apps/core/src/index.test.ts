@@ -7,6 +7,7 @@ describe("Core Worker foundation", () => {
   it("exposes the typed health RPC", async () => {
     const response = buildHealthResponse({
       DB: {} as D1Database,
+      OPERATIONAL_HUB: {} as Env["OPERATIONAL_HUB"],
       PRODUCT_MEDIA: {} as R2Bucket,
       ENVIRONMENT: "development",
       INITIAL_GLOBAL_ADMIN_EMAIL: "",

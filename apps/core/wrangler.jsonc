@@ -22,6 +22,10 @@
       "head_sampling_rate": 0.05,
     },
   },
+  "durable_objects": {
+    "bindings": [{ "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" }],
+  },
+  "migrations": [{ "tag": "operational-hub-v1", "new_sqlite_classes": ["OperationalHub"] }],
   "vars": {
     "ENVIRONMENT": "development",
     // One-use setup is disabled until an explicitly chosen email is configured.
@@ -95,6 +99,9 @@
   "env": {
     "staging": {
       "workers_dev": true,
+      "durable_objects": {
+        "bindings": [{ "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" }],
+      },
       "vars": {
         "ENVIRONMENT": "staging",
         "BETTER_AUTH_URL": "https://freshmarkets.ph",
@@ -157,6 +164,9 @@
     },
     "production": {
       "workers_dev": true,
+      "durable_objects": {
+        "bindings": [{ "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" }],
+      },
       "vars": {
         "ENVIRONMENT": "production",
         // Existing retained staff data is promoted with the database; first-

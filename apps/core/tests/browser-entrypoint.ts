@@ -4,6 +4,7 @@ import { GoogleMapsGeocoder } from "../src/geography/infrastructure/google-maps-
 import type { GeocoderPort } from "../src/geography/ports/geocoder";
 
 export { BrowserEntrypoint as CoreEntrypoint };
+export { OperationalHub } from "../src/index";
 
 /** Test-only clock trigger: run the real scheduler at wall-clock time, never mutate fixtures. */
 export default class BrowserEntrypoint extends ProductionCoreEntrypoint {

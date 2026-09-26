@@ -213,7 +213,7 @@ KV is optional for cache/config-like workloads with acceptable staleness. It is 
 
 ### Durable Objects
 
-Durable Objects are not part of the current release architecture. Scheduled commerce has no capacity coordinator. A Durable Object may be introduced only after a separately approved, measured strong-coordination need.
+Core binds a location-keyed hibernatable Durable Object solely to fan out opaque operational revisions to authenticated WebSocket clients. Core checks current location scope and `fulfillment.read` or `delivery.read` before the upgrade. D1 remains authoritative for the revision and all Order, receiving, fulfillment and delivery facts; the hub stores no customer payload or business decision. A failed publication stays pending in D1 for the existing minute scheduler to retry. Scheduled commerce still has no capacity coordinator.
 
 ### Workflows
 

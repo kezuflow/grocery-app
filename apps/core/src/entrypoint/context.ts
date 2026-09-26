@@ -118,11 +118,13 @@ export type CoreRpcContext = Readonly<{
   paymentProviderCode: () => string | null;
   deliveryProviders: () => ReturnType<typeof buildDeliveryProviderRegistry>;
   routeDistance: () => ReturnType<typeof buildRouteDistancePort>;
+  publishOperational: () => void;
 }>;
 
 export function createCoreRpcContext(
   env: Env & AuthEnvironment,
   clock: Clock = systemClock,
+  publishOperational: () => void = () => undefined,
 ): CoreRpcContext {
   let cachedRuntime: CoreRuntimeConfiguration | undefined;
   let cachedProviders: ReturnType<typeof buildProviderRegistry> | undefined;
@@ -139,6 +141,7 @@ export function createCoreRpcContext(
     paymentProviderCode: () => selectedPaymentProviderCode(runtimeConfiguration()),
     deliveryProviders: () => (cachedDeliveryProviders ??= buildDeliveryProviderRegistry(env)),
     routeDistance: () => (cachedRouteDistance ??= buildRouteDistancePort(env)),
+    publishOperational,
   };
 }
 

@@ -279,6 +279,7 @@ export async function handleGrabExpressWebhook(
     return json(requestId, 202, { ok: true, reconciliationRequired: true, requestId });
   }
 
+  // RETURNING counts the guarded dispatch row; D1 meta.changes includes revision-trigger writes.
   const updated = await database
     .prepare(
       `UPDATE delivery_provider_dispatch
@@ -291,7 +292,8 @@ export async function handleGrabExpressWebhook(
            provider_observed_at IS NULL
            OR provider_observed_at < ?
            OR (provider_observed_at = ? AND provider_status_rank < ?)
-         )`,
+         )
+       RETURNING id`,
     )
     .bind(
       dispatchStatus(parsed.status),
@@ -308,8 +310,8 @@ export async function handleGrabExpressWebhook(
       parsed.observedAt,
       providerStatusRank(parsed.status),
     )
-    .run();
-  if ((updated.meta?.changes ?? 0) !== 1) {
+    .all<{ id: string }>();
+  if (updated.results.length !== 1) {
     const latest = await database
       .prepare(
         `SELECT version, provider_observed_at, provider_status_rank

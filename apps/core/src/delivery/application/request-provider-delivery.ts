@@ -316,16 +316,18 @@ export async function requestProviderDelivery(
       command.requestId,
     );
 
+  // RETURNING counts the guarded dispatch row; D1 meta.changes includes revision-trigger writes.
   const claimed = await database
     .prepare(
       `UPDATE delivery_provider_dispatch
        SET status='CREATING', attempt_count=attempt_count+1,
            last_error_code=NULL, version=version+1, updated_at=?
-       WHERE id=? AND version=? AND status IN ('PENDING', 'RETRY_REQUIRED')`,
+       WHERE id=? AND version=? AND status IN ('PENDING', 'RETRY_REQUIRED')
+       RETURNING id`,
     )
     .bind(now, dispatchId, current.version)
-    .run();
-  if ((claimed.meta?.changes ?? 0) !== 1)
+    .all<{ id: string }>();
+  if (claimed.results.length !== 1)
     return failure(
       "DELIVERY_DISPATCH_BUSY",
       "Another request is handling this provider booking",

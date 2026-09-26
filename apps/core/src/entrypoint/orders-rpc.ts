@@ -171,6 +171,7 @@ export function createOrdersRpc(context: CoreRpcContext) {
           },
         },
       );
+      if (result.ok) context.publishOperational();
       if (!result.ok)
         return {
           ok: false as const,
@@ -255,11 +256,13 @@ export function createOrdersRpc(context: CoreRpcContext) {
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
-      return submitCustomerOrderIssue(context.env.DB, {
+      const result = await submitCustomerOrderIssue(context.env.DB, {
         ...input,
         ...validation.data,
         customerId: customer.value.customerId,
       });
+      if (result.ok) context.publishOperational();
+      return result;
     },
     async createOrderAmendment(input: CreateOrderAmendmentRequest) {
       const validation = authenticatedRequestSchema

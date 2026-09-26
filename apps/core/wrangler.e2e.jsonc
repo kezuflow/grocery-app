@@ -4,6 +4,10 @@
   "main": "tests/browser-entrypoint.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" }],
+  },
+  "migrations": [{ "tag": "operational-hub-v1", "new_sqlite_classes": ["OperationalHub"] }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

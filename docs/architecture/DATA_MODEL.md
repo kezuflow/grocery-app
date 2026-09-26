@@ -492,3 +492,7 @@ CA-7 retains order_issue and optional order_issue_line records without rewriting
 ### Standalone banner storage (0096, 2026-09-11)
 
 storefront_banner owns name, optional href, DRAFT/ACTIVE/INACTIVE/ARCHIVED status, priority, effective dates and optimistic version. It has no Promotion foreign key. banner_media, banner_media_upload and banner_media_cleanup retain the established media attachment, immutable object identity/digest, durable unknown-upload evidence and bounded leased cleanup pattern with banner_id ownership. A partial unique index permits one active image per banner. Migration 0096 is additive and does not alter retained promotion media or financial facts.
+
+### Operational revisions (0103, 2026-09-26)
+
+Migration `0103_operational_revisions.sql` adds one `operational_revision(location_id PK/FK, revision, published_revision)` row per changed fulfillment location. Triggers on paid-order fulfillment creation, Order progress, preparation, Scheduled receiving, delivery job/dispatch and Order issue rows increment the revision in the same D1 transaction as the changed fact. `published_revision < revision` is indexed pending publication evidence; a successful opaque hub broadcast advances only the acknowledged revision, so concurrent newer changes remain pending. The hub has no authoritative business state. Existing paid Order, Fulfillment, Delivery, receiving, audit and command receipt records retain their owners and invariants.

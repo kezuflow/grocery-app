@@ -33,8 +33,22 @@ test("Scheduled paid preparation handles shortage and stops at unreceived goods"
   await expect(detail.getByRole("heading", { name: "Ordered item checklist" })).toBeVisible();
   await expect(detail).toContainText("1 pack");
 
+  const peer = await page.context().newPage();
+  await peer.goto(`/admin/fulfillment?orderId=${orderId}`);
+  await peer.getByRole("combobox", { name: "Active admin scope" }).click();
+  await peer.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  const peerDetail = peer.getByRole("complementary", { name: /Order .* details/ });
+  await expect(
+    peerDetail.getByRole("button", { name: "Accept order & start picking" }),
+  ).toBeVisible();
+
   await detail.getByRole("button", { name: "Accept order & start picking" }).click();
   await expect(detail.getByRole("button", { name: "Finish picking" })).toBeVisible();
+  await expect(peerDetail.getByRole("button", { name: "Finish picking" })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(peer.locator("[data-sonner-toast]")).toHaveCount(0);
+  await peer.close();
   await detail
     .getByRole("textbox", { name: "Optional shortage reason" })
     .fill("One pack requires review");

@@ -44,11 +44,33 @@ function Probe() {
 }
 
 let root: Root;
+class FakeWebSocket {
+  static readonly OPEN = 1;
+  static readonly CONNECTING = 0;
+  static readonly instances: FakeWebSocket[] = [];
+  readyState = FakeWebSocket.OPEN;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(readonly url: URL) {
+    FakeWebSocket.instances.push(this);
+  }
+  close() {
+    this.readyState = 3;
+    this.onclose?.();
+  }
+  emit(revision: number) {
+    this.onmessage?.({ data: JSON.stringify({ revision }) });
+  }
+}
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.state.selectedScope.locationId = "location";
   sessionStorage.clear();
   vi.mocked(toast.info).mockReset();
+  FakeWebSocket.instances.length = 0;
+  vi.stubGlobal("WebSocket", FakeWebSocket);
   const host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -56,7 +78,9 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 it("preserves activity during refresh and announces each new paid order once per session", async () => {
@@ -112,13 +136,62 @@ it("publishes valid activity and deduplicates notices when session storage throw
       </AdminOperationalRefreshProvider>,
     ),
   );
-  expect(document.querySelector("p")?.dataset.stale).toBe("false");
+  expect(document.querySelector("p")?.dataset.stale).toBe("true");
   expect(document.body.textContent).toContain("order:first");
 
   await act(async () => window.dispatchEvent(new Event("focus")));
-  expect(document.querySelector("p")?.dataset.stale).toBe("false");
+  expect(document.querySelector("p")?.dataset.stale).toBe("true");
   expect(document.body.textContent).toContain("order:second,order:first");
   expect(toast.info).toHaveBeenCalledOnce();
+});
+
+it("refreshes for newer location revisions without treating progress as a new paid order", async () => {
+  const replies = [
+    result(["order:first"]),
+    result(["order:first"]),
+    result(["order:first"]),
+    result(["order:second", "order:first"]),
+  ];
+  const fetcher = vi.fn(async () => ({ json: async () => replies.shift()! }));
+  vi.stubGlobal("fetch", fetcher);
+  await act(async () =>
+    root.render(
+      <AdminOperationalRefreshProvider>
+        <Probe />
+      </AdminOperationalRefreshProvider>,
+    ),
+  );
+  const socket = FakeWebSocket.instances[0]!;
+  await act(async () => socket.onopen?.());
+  await act(async () => socket.emit(1));
+  expect(toast.info).not.toHaveBeenCalled();
+  await act(async () => socket.emit(1));
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  await act(async () => socket.emit(2));
+  expect(toast.info).toHaveBeenCalledOnce();
+});
+
+it("retries a failed activity read while the stream remains open", async () => {
+  vi.useFakeTimers();
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce({ json: async () => result(["order:first"]) })
+    .mockRejectedValueOnce(new Error("temporary read failure"))
+    .mockResolvedValue({ json: async () => result(["order:first"]) });
+  vi.stubGlobal("fetch", fetcher);
+  await act(async () =>
+    root.render(
+      <AdminOperationalRefreshProvider>
+        <Probe />
+      </AdminOperationalRefreshProvider>,
+    ),
+  );
+  await act(async () => FakeWebSocket.instances[0]?.onopen?.());
+  expect(document.querySelector("p")?.dataset.stale).toBe("true");
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(document.body.textContent).toContain("order:first");
+  expect(document.querySelector("p")?.dataset.stale).toBe("false");
 });
 
 it("hides prior-location activity immediately while the next location loads", async () => {

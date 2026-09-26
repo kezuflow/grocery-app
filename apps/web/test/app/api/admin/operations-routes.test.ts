@@ -36,6 +36,7 @@ import {
 import { POST as refreshDelivery } from "@/app/api/admin/external-deliveries/[dispatch-id]/refresh/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
 import { GET as activityGet } from "@/app/api/admin/operations-activity/route";
+import { GET as streamGet } from "@/app/api/admin/operational-stream/route";
 import {
   GET as commerceConfigurationGet,
   POST as updateCommerceConfiguration,
@@ -58,6 +59,10 @@ function command(url: string, body: unknown, idempotencyKey = "command-1"): Requ
 }
 
 describe("admin operations BFF routes", () => {
+  it("requires a WebSocket upgrade for the operational stream", () => {
+    expect(streamGet().status).toBe(426);
+  });
+
   it("forwards a bounded provider recovery reference with the authorized command context", async () => {
     coreMocks.refreshExternalDelivery.mockResolvedValue(ok);
     const context = { params: Promise.resolve({ "dispatch-id": "dispatch-1" }) };

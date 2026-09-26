@@ -88,7 +88,7 @@ export function createOperationsRpc(context: CoreRpcContext) {
       const actor = await context.access.session(input);
       if (!actor)
         return rpcFailure("UNAUTHENTICATED", "Authentication is required", input.requestId);
-      return receiveProcurement(
+      const result = await receiveProcurement(
         context.env.DB,
         { ...input, actorId: actor.id },
         {
@@ -97,6 +97,8 @@ export function createOperationsRpc(context: CoreRpcContext) {
             context.access.requireOperationalAccess(input, "procurement.manage", locationId),
         },
       );
+      if (result.ok) context.publishOperational();
+      return result;
     },
 
     async advanceFulfillment(input: FulfillmentCommandRequest) {
@@ -123,6 +125,7 @@ export function createOperationsRpc(context: CoreRpcContext) {
             requestId: validation.data.requestId,
           });
         }
+      if (result.ok) context.publishOperational();
       return result.ok
         ? {
             ok: true as const,
