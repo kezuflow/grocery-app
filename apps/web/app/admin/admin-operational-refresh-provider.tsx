@@ -54,7 +54,10 @@ function storedNoticeIds(key: string): string[] {
 export function AdminOperationalRefreshProvider({ children }: { children: ReactNode }) {
   const { state } = useAdminContext();
   const locationId =
-    state.phase === "ready" && state.selectedScope?.kind === "LOCATION"
+    state.phase === "ready" &&
+    state.selectedScope?.kind === "LOCATION" &&
+    (state.context.capabilities.includes("fulfillment.read") ||
+      state.context.capabilities.includes("delivery.read"))
       ? state.selectedScope.locationId
       : null;
   const [activity, setActivity] = useState<{

@@ -11,6 +11,7 @@ import {
 const fixture = vi.hoisted(() => ({
   state: {
     phase: "ready",
+    context: { capabilities: ["fulfillment.read"] },
     selectedScope: { kind: "LOCATION", marketId: "market", locationId: "location" },
   },
 }));
@@ -67,6 +68,7 @@ class FakeWebSocket {
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.state.selectedScope.locationId = "location";
+  fixture.state.context.capabilities = ["fulfillment.read"];
   sessionStorage.clear();
   vi.mocked(toast.info).mockReset();
   FakeWebSocket.instances.length = 0;
@@ -192,6 +194,21 @@ it("retries a failed activity read while the stream remains open", async () => {
   expect(fetcher).toHaveBeenCalledTimes(3);
   expect(document.body.textContent).toContain("order:first");
   expect(document.querySelector("p")?.dataset.stale).toBe("false");
+});
+
+it("does not open the operational stream for staff without a relevant read capability", async () => {
+  fixture.state.context.capabilities = [];
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  await act(async () =>
+    root.render(
+      <AdminOperationalRefreshProvider>
+        <Probe />
+      </AdminOperationalRefreshProvider>,
+    ),
+  );
+  expect(FakeWebSocket.instances).toHaveLength(0);
+  expect(fetcher).not.toHaveBeenCalled();
 });
 
 it("hides prior-location activity immediately while the next location loads", async () => {
