@@ -1,5 +1,42 @@
 # Commerce alignment — active checkpoint
 
+## Current live-payment trace — FIRST-LIVE-PAYMENT-TRACE-1 (2026-09-27)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**, with the **Phase 1 — Commerce correctness** payment and **Phase 5 — Scheduled
+operations** fulfillment boundaries. The owner requested a read-only trace of the first real
+confirmed payment from customer checkout through PayMongo, webhook, Order and receiving. Acceptance
+for this audit: correlate the first confirmed production Payment with its protected downstream
+records, identify missing or unaccepted steps, and make no production business/provider change.
+Detailed redacted evidence and priorities are in
+[the first live payment trace](../FIRST_LIVE_PAYMENT_TRACE_20260927.md).
+
+Started from clean synchronized `main`/`origin/main` at
+`33742f6852f443ba5d71d3904d60b482b49bf7e3`, after the unrelated audit remediation finished in
+the shared checkout. Production read-only D1 proves one QR Ph grocery Payment `SUCCEEDED` for PHP
+71.00, a signed and applied `payment.paid` webhook at 2026-09-21 11:37:08 UTC, PHP 1.07 provider
+processing cost/PHP 69.93 reported net, and a unique `COMMIT_ORDER` link to one Scheduled paid-demand
+Order at 11:45:44 UTC. The historical 8 minute 36 second commitment delay preceded the deployed
+immediate-reaction/customer-polling fix; post-fix live presentation remains unaccepted. The
+Order-confirmed and cutoff emails show `SENT`; official invoice readiness is blocked on approved tax
+configuration. Provider settlement evidence does not establish bank payout.
+
+At the 2026-09-27 06:46–06:50 Manila read, this paid Order remained fulfillment `PACKING`, delivery
+`UNASSIGNED`, with no cycle purchase/receiving/counting/goods or courier dispatch attempt; its
+configured pickup time had passed and the customer window was 09:00–12:00 Manila. Five other cycle
+Payments remain `REQUIRES_ACTION` with seven open financial cases, no active actions and exhausted
+lookups. Production D1 ends at migration 0103; the approved 0104 Scheduled purchase/per-Order packing
+and Procurement-start rule are not deployed. Read-only
+`wrangler d1 execute DB --env production --remote --command <SELECT> --json` queries and
+`wrangler deployments list --config wrangler.jsonc --env production --json` supplied evidence;
+successful D1 reads had `rows_written: 0` and `changed_db: false`. Two malformed/misnamed exploratory
+SELECTs failed before correction and changed no data. No browser/provider dashboard/bank acceptance,
+actual transaction, production write, message, migration or deployment occurred. Completion level:
+**1 of 1 requested live-payment traces completed; 0 post-fix live payment journeys accepted; 1 paid
+Scheduled Order operationally unfinished**. Next action: have the authorized operator address this
+Order's immediate delivery risk and the five unresolved provider-evidence cases, then perform the
+separately authorized paired Scheduled rollout and a controlled post-fix live payment acceptance.
+
 ## Current audit remediation — CODEBASE-AUDIT-FIX-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, with the Instant checkout hold/Payment boundary from **Phase 1 — Commerce correctness**. The owner requested fixes for the read-only codebase audit: unsafe checkout expiry, an unused Scheduled-only eligibility route, redundant UI utilities, duplicate skill maintenance, an unreferenced brand PNG, lint warnings and opaque recovery SQL. Acceptance: unpaid due holds release without reducing committed reservations or writing false ledger movements; payment-owned holds remain protected; the obsolete route and typed method have no remaining active callers; cleanup preserves the current UI and financial predicates; the intended source passes relevant checks.
