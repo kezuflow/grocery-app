@@ -1,11 +1,28 @@
 # FreshMarkets Product Rules
 
+Owner decision, 2026-09-26: For Scheduled ordering, the advertised 11:59 PM closing
+minute ends at the exclusive 12:00 AM boundary in the cycle's market timezone. No new
+checkout/payment admission or QR generation/renewal for that cycle occurs at or after
+the order cutoff. A QR issued before cutoff may complete within its individual provider
+expiry of at most 30 minutes. The following hour is a bounded payment-settlement window:
+Core may commit verified paid Orders from those admitted attempts, then freezes the
+confirmed paid demand for supplier purchase at cutoff plus one hour. Unresolved attempts
+do not hold purchasing indefinitely after that freeze; they remain financial cases.
+Any subsequently confirmed captured money for an uncommitted checkout is flagged and
+automatically refunded in full through the verified provider/refund path, without a new
+Order or addition to frozen demand. An unknown or unpaid attempt is never refunded as
+though money were received. The one-hour deadline makes purchasing eligible; receiving
+still requires a confirmed purchase and actual goods. Early ordering closure does not
+backdate the published cutoff or its settlement deadline. This decision supersedes the
+unbounded late-commitment/purchase-wait rules below; implementation and actual-provider
+acceptance remain outstanding.
+
 Owner decision, 2026-09-26: Global may close new ordering early for an already Open Scheduled
 cycle. This stops new checkout and payment admission without backdating the published cutoff,
 canceling paid Orders, invalidating started Payments, or shortening each paid Order's immutable
-customer-cancellation window. An already-started Payment may still reach its canonical commitment.
-Purchase and receiving continue to wait for the original scheduled cutoff and resolution of
-unsettled payment commitments. The cycle cannot reopen. This is a separate action from Deactivate,
+customer-cancellation window. An already-started Payment may still reach canonical commitment
+within the Scheduled settlement window above. Purchase and receiving continue to wait for the
+original cutoff and the approved settlement deadline. The cycle cannot reopen. This is a separate action from Deactivate,
 which remains unavailable when the cycle has commitments.
 
 Owner decision, 2026-09-25: Point of Sale in the Admin Sales channels group opens a
@@ -38,7 +55,8 @@ unchanged: authorized staff choose Lalamove or Manual only after packing, and Ma
 Verified provider pickup/completion advances delivery, Order and fulfillment custody together. The
 accepted customer delivery charge, provider/service intent, address, item snapshots and promise remain
 immutable. A Scheduled payment admitted strictly before its cutoff may complete through the verified
-idempotent commitment reaction after cutoff; new admission at or after cutoff remains invalid. This
+idempotent commitment reaction after cutoff within the settlement window approved above; new admission
+at or after cutoff remains invalid. This
 correction supersedes the earlier same-day no-automatic-booking supplement and conflicting rules below.
 
 Owner supplement, 2026-09-21: while the QR Ph provider step is open, checkout automatically checks
