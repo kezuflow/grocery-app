@@ -1,10 +1,15 @@
 export const WELCOME_CAMPAIGN_ID = "welcome-freshmarkets";
-export const WELCOME_CAMPAIGN_REVISION = "2";
+export const WELCOME_CAMPAIGN_REVISION = "3";
+
+export type AnnouncementBodySegment = {
+  text: string;
+  emphasis?: boolean;
+};
 
 export type AnnouncementPage = {
   id: string;
   title: string;
-  body: string;
+  body: readonly AnnouncementBodySegment[];
   actionLabel: string;
 };
 
@@ -13,7 +18,13 @@ export function welcomeAnnouncementPages(): readonly AnnouncementPage[] {
     {
       id: "welcome",
       title: "Welcome to FreshMarkets",
-      body: "We're accepting scheduled orders Monday through Friday for delivery on Saturday or Sunday. Stay tuned for updates on instant delivery.",
+      body: [
+        { text: "We're accepting scheduled orders " },
+        { text: "Monday - Friday", emphasis: true },
+        { text: " for delivery on " },
+        { text: "Saturday -Sunday", emphasis: true },
+        { text: ". Stay tuned for updates on instant delivery." },
+      ],
       actionLabel: "Shop fresh picks",
     },
   ];

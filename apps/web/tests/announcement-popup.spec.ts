@@ -7,8 +7,16 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   const dialog = page.getByRole("dialog", { name: "Welcome to FreshMarkets" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText(
-    "We're accepting scheduled orders Monday through Friday for delivery on Saturday or Sunday. Stay tuned for updates on instant delivery.",
+    "We're accepting scheduled orders Monday - Friday for delivery on Saturday -Sunday. Stay tuned for updates on instant delivery.",
   );
+  const highlights = dialog.locator(".fm-announcement-emphasis");
+  await expect(highlights).toHaveText(["Monday - Friday", "Saturday -Sunday"]);
+  for (const highlight of await highlights.all()) {
+    expect(await highlight.evaluate((element) => getComputedStyle(element).color)).toBe(
+      "rgb(217, 45, 32)",
+    );
+    expect(await highlight.evaluate((element) => getComputedStyle(element).fontWeight)).toBe("700");
+  }
   await expect(dialog.getByRole("button", { name: "Shop fresh picks" })).toBeVisible();
   const scene = dialog.locator("img.fm-announcement-scene");
   await expect(scene).toBeVisible();

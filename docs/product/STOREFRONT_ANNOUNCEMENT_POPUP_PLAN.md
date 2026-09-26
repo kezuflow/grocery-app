@@ -15,7 +15,7 @@ Use the combined [market scene](../../apps/web/public/announcements/welcome-mark
 | Element | Approved copy |
 | --- | --- |
 | Headline | Welcome to FreshMarkets |
-| Body | We're accepting scheduled orders Monday through Friday for delivery on Saturday or Sunday. Stay tuned for updates on instant delivery. |
+| Body | We're accepting scheduled orders **Monday - Friday** for delivery on **Saturday -Sunday**. Stay tuned for updates on instant delivery. The two bold day ranges render in red. |
 | Primary action | Shop fresh picks |
 
 The earlier “Fresh goodness, on your schedule” eyebrow, promotional body and small factual note are removed. This is a general launch announcement, not an order-specific promise or checkout authority. Checkout continues to show the currently available Core-backed Scheduled cycle, delivery window and fee; the published weekly cadence and announcement must be revised before the underlying public offer changes. PRODUCT GD-D14 keeps cycle dates configurable.

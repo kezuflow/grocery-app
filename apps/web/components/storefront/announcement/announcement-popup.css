@@ -106,6 +106,11 @@
   line-height: 1.5;
 }
 
+.fm-announcement-emphasis {
+  color: var(--fm-destructive);
+  font-weight: 700;
+}
+
 .fm-announcement-pagination {
   display: flex;
   justify-content: space-between;

@@ -106,7 +106,15 @@ export function AnnouncementPopup() {
             {page.title}
           </h2>
           <p id="fm-announcement-body" className="fm-announcement-body">
-            {page.body}
+            {page.body.map((segment, index) =>
+              segment.emphasis ? (
+                <strong key={index} className="fm-announcement-emphasis">
+                  {segment.text}
+                </strong>
+              ) : (
+                <span key={index}>{segment.text}</span>
+              ),
+            )}
           </p>
           {pages.length > 1 ? (
             <div className="fm-announcement-pagination">
