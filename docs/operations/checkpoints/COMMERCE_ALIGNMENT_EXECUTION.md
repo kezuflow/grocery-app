@@ -1,5 +1,35 @@
 # Commerce alignment — active checkpoint
 
+## Account profile in Admin navigation — ADMIN-PROFILE-NAV-19 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to move the header profile and its
+Sign out dropdown into the left navigation. Acceptance: no header profile;
+an account footer below Settings shows identity when expanded, an accessible
+avatar when collapsed, and the existing dropdown/sign-out behavior; mobile
+navigation retains account access and sign-out.
+
+Started on clean `main` at `e38e94a7`. The Admin shell reuses the existing
+profile Popover and sign-out request in the desktop sidebar footer and mobile
+navigation sheet footer. Desktop and mobile menus keep the same error and
+pending states. The owning design guide records the placement. No Core,
+contracts, storage, provider, Storefront or authentication endpoint changed.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm --filter @freshmarkets/web test --
+components/admin/admin-accessibility.test.tsx` (15 tests, including rendered
+placement), focused `pnpm exec oxfmt --check` and `git diff --check` passed on
+the source working tree. Authenticated browser review of expanded, collapsed
+and mobile menu interactions remains unverified; no sign-out request was sent.
+This slice has no provider acceptance claim.
+
+Completion level: **one Admin profile placement correction implemented and
+source-verified**. Next action: inspect the account menu in expanded, collapsed
+and mobile navigation in an authenticated local browser, then resume the first
+unresolved Phase 7 provider journey under the commerce plan. No deployment or
+real provider transaction is authorized by this request.
+
 ## Remove Admin header Marketplace shortcut — ADMIN-HEADER-MARKETPLACE-18 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

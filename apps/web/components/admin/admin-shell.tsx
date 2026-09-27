@@ -234,7 +234,6 @@ function AdminHeader({
           <AdminSearchTrigger onOpen={onOpenSearch} />
           <AdminNotifications />
           <AdminThemeToggle />
-          <AdminIdentity />
         </div>
       </div>
     </header>
@@ -296,7 +295,13 @@ function AdminThemeToggle() {
   );
 }
 
-function AdminIdentity() {
+function AdminIdentity({
+  collapsed = false,
+  mobile = false,
+}: {
+  collapsed?: boolean;
+  mobile?: boolean;
+}) {
   const { state } = useAdminContext();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
@@ -330,21 +335,32 @@ function AdminIdentity() {
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size={collapsed ? "icon-sm" : "sm"}
           aria-label={`Open account menu for ${label}`}
-          className="ml-0.5 gap-1 px-1"
+          className={cn(
+            "w-full justify-start rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            collapsed ? "size-8 p-0" : "h-12 gap-2 px-2",
+          )}
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {initial}
           </span>
-          <ChevronDown
-            className="hidden size-3.5 text-muted-foreground sm:block"
-            aria-hidden="true"
-          />
+          {!collapsed ? (
+            <>
+              <span className="grid min-w-0 flex-1 text-left leading-tight">
+                <span className="truncate font-medium">{label}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {state.context.email}
+                </span>
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </>
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        side={mobile ? "top" : "right"}
+        align={mobile ? "start" : "end"}
         sideOffset={8}
         role="menu"
         aria-label="Account menu"
@@ -468,6 +484,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
       <SheetContent
         side="left"
         aria-label="Admin navigation"
+        className="gap-0"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           triggerRef.current?.focus();
@@ -476,7 +493,10 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
         <SheetHeader>
           <SheetTitle>Admin navigation</SheetTitle>
         </SheetHeader>
-        <nav aria-label="Admin navigation" className="flex flex-col gap-1">
+        <nav
+          aria-label="Admin navigation"
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
+        >
           {groups.map((group) => (
             <div key={group.code} className={cn(showNavigationGroupLabel(group.code) && "pt-3")}>
               {showNavigationGroupLabel(group.code) ? (
@@ -497,6 +517,9 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
             </div>
           ))}
         </nav>
+        <div className="shrink-0 border-t border-border p-2">
+          <AdminIdentity mobile />
+        </div>
       </SheetContent>
     </Sheet>
   );
@@ -736,6 +759,9 @@ function AdminSidebar({
                 </div>
               ) : null}
             </nav>
+            <div className="shrink-0 border-t border-sidebar-border p-2">
+              <AdminIdentity collapsed={collapsed} />
+            </div>
           </div>
         </div>
       </aside>

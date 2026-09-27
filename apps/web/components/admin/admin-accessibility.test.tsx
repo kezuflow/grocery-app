@@ -409,6 +409,9 @@ describe("shared Admin accessibility contract", () => {
     const markup = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
     expect(markup).toContain('aria-label="Active admin scope"');
     expect(markup).toContain("Location One");
+    expect(markup.split("</header>")[0]).not.toContain("Open account menu for Operator");
+    expect(markup.split("<aside")[1]).toContain("Open account menu for Operator");
+    expect(markup.split("<aside")[1]).toContain("operator@example.com");
     expect(shell).toContain("<SelectItem");
   });
 
