@@ -1,5 +1,49 @@
 # Commerce alignment — active checkpoint
 
+## Admin index table presentation — ADMIN-INDEX-TASKS-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested the established Admin Orders/shadcn
+Tasks table styling across Problems, Products, Catalog, Categories, Customers,
+Memberships, Promotion Codes, Promotion Sale, Banners, Payments, Staff and
+Roles. Acceptance: Admin-only near-black dark surface, unseparated page
+headings, subdued dense table rows and compact pagination where present; existing data, responsive lists,
+filters, actions and cursor behavior remain intact. Banners retains its image
+gallery because that route does not use a table. Storefront and auth are out of
+scope.
+
+Started from clean synchronized `main`/`origin/main` at `2f25a624`. The source
+changes add a scoped `fm-admin-task-index` marker to those twelve indexes,
+heading/table surface/divider/spacing rules in the Admin stylesheet, and an optional
+compact presentation of the existing cursor pagination control on the listed
+paginated pages. Problems no longer shows the internal seed Order ID beneath
+the public Order number. The Payments status filter now has room for its selected
+label, and its money headings and values are centered in readable minimum-width
+columns. No Core, contract, storage, provider or Storefront behavior changed.
+The existing domain status badges, tabs, columns, mobile layouts and actions
+remain in place.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the final source working tree. Direct local
+browser review confirmed the dark Admin canvas on all twelve requested routes.
+Problems, Products, Customers, Payments and Roles rendered populated tables
+with the subdued row borders; Problems and Roles showed compact pagination.
+Payments' selected filter displayed at 144px, and Amount/Refunded headings
+computed as centered columns at about 115px each. Banners rendered its empty
+gallery on the scoped dark canvas. The other six route shells rendered with
+their headings and dark canvas; their data or responsive states were not all
+exercised. The initial rapid navigation pass stalled in the Admin loading
+shell, then a slower route-by-route pass completed. This is local presentation
+evidence, not production or provider acceptance.
+
+The source commits `a42e46c3` and `a168a4f2` were pushed to `main`; the
+checkpoint commit records their verified scope. Completion level: **one Admin
+index presentation slice implemented and locally checked across twelve routes**.
+Next action: resume the first unresolved Phase 7 provider journey under the
+commerce plan. This request did not authorize deployment or real provider
+transactions.
+
 ## Latest completed owner correction — ADMIN-ORDERS-TASKS-5 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
