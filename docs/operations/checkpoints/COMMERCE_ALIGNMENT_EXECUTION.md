@@ -1,5 +1,42 @@
 # Commerce alignment — active checkpoint
 
+## Remaining Admin index cards — ADMIN-INDEX-CARDS-11 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to apply the `/admin/orders` and
+`/admin/issues` rounded page-card layout to every remaining applicable Admin
+index from the previously named list. Acceptance: one outer rounded card per
+index with title, controls, a distinct bordered result table or gallery, and
+a loaded-page count beside pagination where pagination exists. Keep existing
+filters, links, actions and business flow; keep Storefront untouched.
+
+Started on clean synchronized `main`/`origin/main` at `077a710d`. Source and
+design commit `88bbcabf` was pushed to `origin/main`. The change
+covers Products, Catalog overview, Categories, Customers, Memberships,
+Promotion Codes, Promotion Sale, Banners, Payments, Staff and Roles. A shared
+Admin-only stock shadcn Card composition frames these pages. Tables and the
+Banners gallery remain distinct within it; search and segmented views sit
+above results. Count text reflects the current loaded/visible page rather
+than an unqueried all-pages total. Payments received fitted column widths and
+an accessible icon-only row action so the action remains visible at desktop
+width. No Core, contracts, storage, provider, business-write, Storefront or
+auth changes were made.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree. Local authenticated
+browser review rendered all eleven named routes and their loaded-page counts;
+Products, Customers, Memberships, Promotion Codes and Payments were inspected
+visually, plus Categories at 500px. Payments Needs attention and Categories
+Active tabs still update URLs, rows and page counts. This is local UI
+acceptance, not production or provider acceptance.
+
+Completion level: **eleven remaining Admin index presentations implemented,
+locally verified and pushed**. Next action: review these index cards in the
+target Admin environment, then resume the first unresolved Phase 7 provider
+journey under the commerce plan. This request did not authorize deployment or
+real provider transactions.
+
 ## Admin sidebar spacing — ADMIN-SIDEBAR-10 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
