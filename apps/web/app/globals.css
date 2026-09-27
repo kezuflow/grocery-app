@@ -465,6 +465,18 @@ html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
   font-weight: 500;
 }
 
+.fm-admin-task-index [data-slot="table-head"]:first-child,
+.fm-admin-task-index [data-slot="table-cell"]:first-child {
+  padding-left: 1rem;
+}
+
+@media (min-width: 80rem) {
+  .fm-admin-task-index [data-slot="table-head"]:first-child,
+  .fm-admin-task-index [data-slot="table-cell"]:first-child {
+    padding-left: 1.5rem;
+  }
+}
+
 .fm-admin :is(h1, h2, h3) {
   font-family: var(--font-sans);
   text-wrap: balance;

@@ -11,7 +11,9 @@ import type {
 import { z } from "@freshmarkets/validation";
 import {
   CheckCircle2,
+  Circle,
   Clipboard,
+  Clock3,
   EllipsisVertical,
   Eye,
   PackageOpen,
@@ -32,7 +34,6 @@ import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
-import { OrderIssueStatusBadge } from "../../../components/admin/order-issue-status-badge";
 import { Button } from "@/components/admin/shadcn/button";
 import {
   DropdownMenu,
@@ -128,6 +129,19 @@ function categoryLabel(category: string): string {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function IssueProgressStatus({ status }: { status: OrderIssueStatus }) {
+  const label =
+    status === "SUBMITTED" ? "New" : status === "RESOLVED" ? "Resolved" : "Being handled";
+  const Icon = status === "SUBMITTED" ? Circle : status === "RESOLVED" ? CheckCircle2 : Clock3;
+
+  return (
+    <span className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+      <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+      {label}
+    </span>
+  );
 }
 
 export default function IssuesPage() {
@@ -283,6 +297,59 @@ export default function IssuesPage() {
     }, 2_000);
   }
 
+  function issueActions(issue: AdminOrderIssueSummary) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={commandLocked}
+            aria-label={`Open actions for ${categoryLabel(issue.category)} issue`}
+          >
+            <EllipsisVertical aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={recordHref(issue)} prefetch={false}>
+              <Eye aria-hidden="true" />
+              View issue
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/admin/orders/${issue.orderId}`} prefetch={false}>
+              <PackageOpen aria-hidden="true" />
+              View order
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copyIssueId(issue.issueId)}>
+            <Clipboard aria-hidden="true" />
+            {copiedId === issue.issueId ? "Copied" : "Copy issue ID"}
+          </DropdownMenuItem>
+          {canManage && issue.allowedActions.length > 0 ? <DropdownMenuSeparator /> : null}
+          {canManage &&
+            issue.allowedActions.map((action) => {
+              const presentation = actionPresentation[action];
+              const Icon = presentation.icon;
+              return (
+                <DropdownMenuItem
+                  key={action}
+                  onSelect={() => {
+                    if (!commandLocked) setPendingAction({ issue, action });
+                  }}
+                >
+                  <Icon aria-hidden="true" />
+                  {presentation.label}
+                </DropdownMenuItem>
+              );
+            })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   const issues = page?.items ?? [];
   const selectedPresentation = pendingAction ? actionPresentation[pendingAction.action] : null;
 
@@ -345,42 +412,26 @@ export default function IssuesPage() {
           </div>
         ) : null}
         {state.phase === "ready" && issues.length > 0 ? (
-          <Table aria-label="Order issue queue">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Issue</TableHead>
-                <TableHead>Reported</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div>
+            <ul aria-label="Order issue list" className="divide-y divide-border lg:hidden">
               {issues.map((issue) => (
-                <TableRow key={issue.issueId}>
-                  <TableCell>
-                    <Link
-                      className="font-medium hover:underline"
-                      href={`/admin/orders/${issue.orderId}`}
-                      prefetch={false}
-                    >
-                      {orderLabel(issue)}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-medium">{issue.customerName ?? "Customer"}</p>
-                    <p className="text-xs text-muted-foreground">{issue.customerEmail}</p>
-                    {issue.customerPhone && (
-                      <a href={`tel:${issue.customerPhone}`} className="text-xs underline">
-                        {issue.customerPhone}
-                      </a>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-72">
+                <li key={issue.issueId} className="flex flex-col gap-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <Link
+                        className="font-semibold hover:underline"
+                        href={`/admin/orders/${issue.orderId}`}
+                        prefetch={false}
+                      >
+                        {orderLabel(issue)}
+                      </Link>
+                      <span className="truncate text-sm text-muted-foreground">
+                        {issue.customerName ?? issue.customerEmail}
+                      </span>
+                    </div>
+                    {issueActions(issue)}
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Link
                       className="font-medium hover:underline"
                       href={recordHref(issue)}
@@ -388,73 +439,84 @@ export default function IssuesPage() {
                     >
                       {categoryLabel(issue.category)}
                     </Link>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {issue.details ?? "No details provided"}
-                    </p>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {date(issue.createdAt)}
-                  </TableCell>
-                  <TableCell>{issue.assignedStaffName ?? "Unassigned"}</TableCell>
-                  <TableCell>
-                    <OrderIssueStatusBadge status={issue.status} />
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={commandLocked}
-                          aria-label={`Open actions for ${categoryLabel(issue.category)} issue`}
-                        >
-                          <EllipsisVertical aria-hidden="true" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={recordHref(issue)} prefetch={false}>
-                            <Eye aria-hidden="true" />
-                            View issue
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/orders/${issue.orderId}`} prefetch={false}>
-                            <PackageOpen aria-hidden="true" />
-                            View order
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => void copyIssueId(issue.issueId)}>
-                          <Clipboard aria-hidden="true" />
-                          {copiedId === issue.issueId ? "Copied" : "Copy issue ID"}
-                        </DropdownMenuItem>
-                        {canManage && issue.allowedActions.length > 0 ? (
-                          <DropdownMenuSeparator />
-                        ) : null}
-                        {canManage &&
-                          issue.allowedActions.map((action) => {
-                            const presentation = actionPresentation[action];
-                            const Icon = presentation.icon;
-                            return (
-                              <DropdownMenuItem
-                                key={action}
-                                onSelect={() => {
-                                  if (!commandLocked) setPendingAction({ issue, action });
-                                }}
-                              >
-                                <Icon aria-hidden="true" />
-                                {presentation.label}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                    {issue.details ? (
+                      <p className="truncate text-sm text-muted-foreground" title={issue.details}>
+                        {issue.details}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <IssueProgressStatus status={issue.status} />
+                    <span className="text-sm text-muted-foreground">{date(issue.createdAt)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Owner: {issue.assignedStaffName ?? "Unassigned"}
+                  </p>
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+            <div className="hidden lg:block">
+              <Table aria-label="Order issue queue">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Issue</TableHead>
+                    <TableHead>Reported</TableHead>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {issues.map((issue) => (
+                    <TableRow key={issue.issueId} className="h-12 border-border">
+                      <TableCell>
+                        <Link
+                          className="font-medium hover:underline"
+                          href={`/admin/orders/${issue.orderId}`}
+                          prefetch={false}
+                        >
+                          {orderLabel(issue)}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">
+                          {issue.customerName ?? issue.customerEmail}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-72">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Link
+                            className="shrink-0 font-medium hover:underline"
+                            href={recordHref(issue)}
+                            prefetch={false}
+                          >
+                            {categoryLabel(issue.category)}
+                          </Link>
+                          {issue.details ? (
+                            <span className="truncate text-muted-foreground" title={issue.details}>
+                              {issue.details}
+                            </span>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {date(issue.createdAt)}
+                      </TableCell>
+                      <TableCell>{issue.assignedStaffName ?? "Unassigned"}</TableCell>
+                      <TableCell>
+                        <IssueProgressStatus status={issue.status} />
+                      </TableCell>
+                      <TableCell>{issueActions(issue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         ) : null}
 
         {state.phase === "ready" ? (
