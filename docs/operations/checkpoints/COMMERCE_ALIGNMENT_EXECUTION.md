@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Latest completed owner correction — ADMIN-ORDERS-TASKS-5 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested centered Mode and Amount columns in
+the Admin Orders table and corrected the cramped Amount/Date spacing shown in
+their screenshot. Acceptance: both headings and values align at center; Amount
+has clear space before Date at desktop width; narrow desktop remains readable;
+Order data and behavior and Storefront remain unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `75b9eff8`. Only the
+Admin Orders page and DESIGN changed in the source commit. Mode and Amount
+headings/cells now use center alignment, with a 128px Amount width at `xl`.
+The prior Amount column was approximately 70px with right-aligned currency
+against the following Date cell. Direct local browser inspection measured a
+128px Amount column at the owner's 1884px reference viewport and no table
+overflow at the ordinary 1106px viewport. The temporary browser viewport
+override was reset. `pnpm format:check`, `pnpm --filter @freshmarkets/web
+typecheck` and `git diff --check` passed. A new E2E fixture was unnecessary
+for this reversible alignment change; existing Order journey evidence remains
+recorded below. No Core, contract, storage, provider or Storefront code changed.
+
+The two-file source correction was committed and pushed to `main` as
+`359c823b`; `main` and `origin/main` matched after the push. This checkpoint
+records its verified outcome. Completion level: **one Admin Orders presentation
+correction locally verified, committed and pushed**. Next action: resume the
+first unresolved Phase 7 provider journey under the commerce plan. This request
+did not authorize deployment or a real provider transaction.
+
 ## Latest completed owner correction — ADMIN-ORDERS-TASKS-4 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
