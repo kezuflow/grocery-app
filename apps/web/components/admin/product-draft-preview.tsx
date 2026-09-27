@@ -38,8 +38,8 @@ export function ProductDraftPreview({
   const firstVariant = value.variants?.find((variant) => variant.name.trim());
 
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-sm">
-      <CardHeader className="border-b px-4 py-4">
+    <Card className="gap-0 overflow-hidden border-border py-0 shadow-none">
+      <CardHeader className="border-b border-border px-4 py-4">
         <CardTitle className="flex items-center gap-2">
           Product preview
           <Info className="size-4 text-muted-foreground" aria-hidden="true" />

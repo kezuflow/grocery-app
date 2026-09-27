@@ -19,7 +19,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
-import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
@@ -386,79 +385,91 @@ export function NewProductWorkspace({
     (category) => category.categoryId === value.categoryId,
   );
   return (
-    <div className={embedded ? "flex h-full min-h-0 flex-col" : "w-full space-y-5"}>
-      {embedded ? (
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-5">
-          <div>
-            <h2 id="create-product-panel-title" className="text-xl font-bold tracking-tight">
+    <div className={embedded ? "flex h-full min-h-0 flex-col" : "fm-admin-task-index p-5 sm:p-7"}>
+      <div className={embedded ? "contents" : "rounded-xl border border-border bg-card"}>
+        {embedded ? (
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-5">
+            <div>
+              <h2 id="create-product-panel-title" className="text-xl font-bold tracking-tight">
+                Add product
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create the product, selling options, and initial images.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close product creation"
+              disabled={creationLocked}
+              onClick={cancelCreation}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <div className="px-4 pt-6 pb-5 sm:px-6 sm:pt-8 sm:pb-7">
+            <h1 id="admin-page-title" className="text-2xl font-semibold tracking-tight">
               Add product
-            </h2>
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create the product, selling options, and initial images.
+              Create the Product, its selling options, and initial images.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Close product creation"
-            disabled={creationLocked}
-            onClick={cancelCreation}
-          >
-            <X aria-hidden="true" />
-          </Button>
+        )}
+        <div
+          className={
+            embedded
+              ? "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4"
+              : "space-y-5 px-4 pb-4 sm:px-6"
+          }
+        >
+          {error || categories.error || unitsError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{error ?? categories.error ?? unitsError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {unitsError ? (
+            <Button onClick={() => setUnitsAttempt((attempt) => attempt + 1)}>Retry units</Button>
+          ) : null}
+          {categories.hasMore || categories.error ? (
+            <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
+              {categories.error ? "Retry categories" : "More categories"}
+            </Button>
+          ) : null}
+          {embedded ? (
+            <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
+          ) : null}
+          <fieldset disabled={intent.pending || recovering || unitsLoading}>
+            <ProductForm
+              formId={CREATE_PRODUCT_FORM_ID}
+              hideSubmit
+              compact={embedded}
+              preview={
+                embedded ? null : (
+                  <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
+                )
+              }
+              value={value}
+              categories={categories.items}
+              units={units}
+              pending={intent.pending || recovering}
+              submitLabel="Create product"
+              onChange={setValue}
+              onSubmit={submit}
+            />
+          </fieldset>
         </div>
-      ) : (
-        <PageHeader
-          title="Add product"
-          description="Create the Product, its selling options, and initial images."
-        />
-      )}
-      <div className={embedded ? "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4" : "contents"}>
-        {error || categories.error || unitsError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error ?? categories.error ?? unitsError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {unitsError ? (
-          <Button onClick={() => setUnitsAttempt((attempt) => attempt + 1)}>Retry units</Button>
-        ) : null}
-        {categories.hasMore || categories.error ? (
-          <Button disabled={categories.loading} onClick={() => void categories.loadMore()}>
-            {categories.error ? "Retry categories" : "More categories"}
-          </Button>
-        ) : null}
-        {embedded ? (
-          <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
-        ) : null}
-        <fieldset disabled={intent.pending || recovering || unitsLoading}>
-          <ProductForm
-            formId={CREATE_PRODUCT_FORM_ID}
-            hideSubmit
-            compact={embedded}
-            preview={
-              embedded ? null : (
-                <ProductDraftPreview value={value} categoryName={selectedCategory?.name} />
-              )
-            }
-            value={value}
-            categories={categories.items}
-            units={units}
-            pending={intent.pending || recovering}
-            submitLabel="Create product"
-            onChange={setValue}
-            onSubmit={submit}
-          />
-        </fieldset>
-      </div>
-      <div
-        className={
-          embedded
-            ? "flex shrink-0 justify-end border-t border-border bg-card px-5 py-4"
-            : "sticky bottom-0 z-20 -mx-4 flex justify-end border-t border-border bg-card/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-        }
-      >
-        {actions}
+        <div
+          className={
+            embedded
+              ? "flex shrink-0 justify-end border-t border-border bg-card px-5 py-4"
+              : "sticky bottom-0 z-20 flex justify-end rounded-b-xl border-t border-border bg-card/95 px-4 py-4 backdrop-blur sm:px-6"
+          }
+        >
+          {actions}
+        </div>
       </div>
     </div>
   );

@@ -129,8 +129,8 @@ export function ProductForm({
         asideLabel="Product preview and organization"
         editor={
           <div className="space-y-4">
-            <Card className="gap-0 py-0 shadow-sm">
-              <CardHeader className="border-b px-4 py-4 sm:px-5">
+            <Card className="gap-0 border-border py-0 shadow-none">
+              <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
                 <CardTitle>Product details</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-5 px-4 py-5 sm:grid-cols-2 sm:px-5">
@@ -165,8 +165,8 @@ export function ProductForm({
             </Card>
 
             {value.media ? (
-              <Card className="gap-0 py-0 shadow-sm">
-                <CardHeader className="border-b px-4 py-4 sm:px-5">
+              <Card className="gap-0 border-border py-0 shadow-none">
+                <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
                   <CardTitle>Product images</CardTitle>
                   <CardDescription>
                     Add up to five JPEG, PNG, or WebP images, up to 5 MiB each.
@@ -283,8 +283,8 @@ export function ProductForm({
             ) : null}
 
             {value.variants ? (
-              <Card className="gap-0 py-0 shadow-sm">
-                <CardHeader className="border-b px-4 py-4 sm:px-5">
+              <Card className="gap-0 border-border py-0 shadow-none">
+                <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
                   <CardTitle>Selling options</CardTitle>
                   <CardDescription>Configure the sizes or packs customers can buy.</CardDescription>
                 </CardHeader>
@@ -462,8 +462,8 @@ export function ProductForm({
               </Card>
             ) : null}
 
-            <Card className="gap-0 py-0 shadow-sm">
-              <CardHeader className="border-b px-4 py-4 sm:px-5">
+            <Card className="gap-0 border-border py-0 shadow-none">
+              <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
                 <CardTitle>Customer-facing details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 px-4 py-5 sm:px-5">
@@ -529,8 +529,8 @@ export function ProductForm({
         aside={
           <div className="space-y-4">
             {preview}
-            <Card className="gap-0 py-0 shadow-sm">
-              <CardHeader className="border-b px-4 py-4">
+            <Card className="gap-0 border-border py-0 shadow-none">
+              <CardHeader className="border-b border-border px-4 py-4">
                 <CardTitle>Product classification</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5 px-4 py-5">
@@ -567,7 +567,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Stock sold by</span>
                       <select
-                        className="h-10 w-full rounded border bg-card px-3"
+                        className="h-10 w-full rounded-md border border-border bg-card px-3"
                         value={value.stockTracking ?? "SHARED"}
                         onChange={(event) =>
                           onChange({
@@ -666,7 +666,7 @@ export function ProductForm({
               </CardContent>
             </Card>
             {!hideSubmit ? (
-              <Card className="gap-3 py-4 shadow-sm">
+              <Card className="gap-3 border-border py-4 shadow-none">
                 <CardContent className="px-4">
                   <Button className=" w-full" type="submit" disabled={pending}>
                     {pending ? "Saving…" : submitLabel}

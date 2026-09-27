@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Add product styling aligned with Product list — ADMIN-PRODUCT-CREATE-21 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked for `/admin/catalog/products/new` to
+copy Product list styling, especially borders. Acceptance: the Add product
+page uses the Product list's rounded outer frame and near-black dark surface;
+cards, preview, controls, separators and sticky actions use the same subtle
+Admin border token in both themes; creation behavior and Storefront stay intact.
+
+Started on `main` at `e31148ee`. Separate unfinished edits to Product form
+wording, summary wording and related tests were present before this slice;
+their hunks are preserved outside this task. The Add product route now shares
+the Product list's full-bleed shell, frame inset and dark surface. The stock
+Admin Product form and draft preview cards use `border-border` and no added
+shadow; the stock-tracking select uses the same border and radius. No
+application command, validation, request or navigation action changed.
+
+Web typecheck, lint, focused Product form/preview tests (5/5), focused format
+check and `git diff --check` passed on the source working tree. The local
+authenticated browser showed the standalone page and embedded creation panel.
+Computed Add product card, separator and outer borders matched the Product
+list's Admin token in dark (`oklch(1 0 0 / 0.1)`) and light (`oklch(0.922 0
+0)`) appearances; dark appearance was restored. No creation command was
+submitted. No provider or production acceptance is claimed.
+
+Completion level: **one Add product presentation correction implemented and
+locally browser-verified**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Admin Edit and Sonner contrast — ADMIN-CONTRAST-20 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation** and

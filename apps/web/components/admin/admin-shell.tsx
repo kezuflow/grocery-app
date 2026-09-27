@@ -72,6 +72,7 @@ const FULL_BLEED_WORKSPACE_PATHS = [
   "/admin/promotions",
   "/admin/sales",
   "/admin/catalog/products",
+  "/admin/catalog/products/new",
   "/admin/catalog/categories",
   "/admin/orders",
   "/admin/customers",
