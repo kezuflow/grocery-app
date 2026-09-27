@@ -35,6 +35,7 @@ const draftSummary = {
 } as const;
 
 const activeSummary = { ...draftSummary, status: "ACTIVE", version: 4 } as const;
+const inactiveSummary = { ...draftSummary, status: "INACTIVE", version: 5 } as const;
 
 let root: Root;
 let host: HTMLDivElement;
@@ -52,9 +53,15 @@ function fail(): Response {
   });
 }
 
-function render(promotion: SwitchProps) {
+function render(promotion: SwitchProps, presentation: "switch" | "pill" = "switch") {
   act(() => {
-    root.render(<PromotionStatusSwitch promotion={promotion} onApplied={onApplied} />);
+    root.render(
+      <PromotionStatusSwitch
+        promotion={promotion}
+        onApplied={onApplied}
+        presentation={presentation}
+      />,
+    );
   });
 }
 
@@ -104,6 +111,62 @@ it("renders an on/off switch pill and keeps archived promotions as a plain pill"
   render({ ...draftSummary, status: "ARCHIVED" });
   expect(host.textContent).toContain("Archived");
   expect(switchControl()).toBeNull();
+});
+
+it("renders the full status pill as the action and leaves archived status read-only", () => {
+  render(draftSummary, "pill");
+  const draftPill = host.querySelector<HTMLButtonElement>("button[data-promotion-status-pill]");
+  expect(draftPill?.textContent).toBe("Draft");
+  expect(draftPill?.getAttribute("aria-label")).toBe("Activate Spring merch (Draft)");
+  expect(draftPill?.getAttribute("data-status")).toBe("DRAFT");
+
+  render({ ...draftSummary, status: "INACTIVE" }, "pill");
+  expect(host.querySelector("button[data-promotion-status-pill]")?.textContent).toBe("Inactive");
+  expect(
+    host.querySelector("button[data-promotion-status-pill]")?.getAttribute("data-status"),
+  ).toBe("INACTIVE");
+
+  render({ ...draftSummary, status: "ARCHIVED" }, "pill");
+  expect(host.textContent).toContain("Archived");
+  expect(host.querySelector("button[data-promotion-status-pill]")).toBeNull();
+});
+
+it("activates from the pill through the guarded Core command", async () => {
+  fetchMock.mockResolvedValue(ok(activeSummary));
+  render(draftSummary, "pill");
+  await act(async () => {
+    clickControl(host.querySelector("button[data-promotion-status-pill]")!);
+  });
+
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("/api/admin/promotions/promo-1/status");
+  expect(JSON.parse(String(init.body))).toEqual({ action: "ACTIVATE", expectedVersion: 3 });
+  expect(onApplied).toHaveBeenCalledWith(activeSummary);
+});
+
+it("deactivates from the active pill without changing its status before Core confirms", async () => {
+  let resolveResponse!: (response: Response) => void;
+  fetchMock.mockReturnValue(
+    new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    }),
+  );
+  render(activeSummary, "pill");
+  const pill = host.querySelector<HTMLButtonElement>("button[data-promotion-status-pill]")!;
+  clickControl(pill);
+
+  expect(pill.disabled).toBe(true);
+  expect(pill.getAttribute("data-status")).toBe("ACTIVE");
+  expect(onApplied).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveResponse(ok(inactiveSummary));
+  });
+  expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+    action: "DEACTIVATE",
+    expectedVersion: 4,
+  });
+  expect(onApplied).toHaveBeenCalledWith(inactiveSummary);
 });
 
 it("sends the Core status command directly, with version and idempotency key, then reports the confirmed status", async () => {

@@ -16,23 +16,33 @@ const statusLabels: Record<AdminPromotionSummary["status"], string> = {
   ARCHIVED: "Archived",
 };
 
+export function PromotionStatusPill({ status }: { status: AdminPromotionSummary["status"] }) {
+  return (
+    <Badge variant="outline" data-promotion-status-pill data-status={status}>
+      {statusLabels[status]}
+    </Badge>
+  );
+}
+
 /**
- * Switch control for promotion/sale rows. The switch sends the status command
- * directly; its checked position only follows Core-confirmed status, so it
- * never optimistically shows a state that has not been accepted by Core.
+ * Promotion/sale status control. The switch or pill sends the same status
+ * command; its displayed state follows Core confirmation, never an optimistic
+ * status that Core has not accepted.
  */
 export function PromotionStatusSwitch({
   promotion,
   onApplied,
+  presentation = "switch",
 }: {
   promotion: Pick<AdminPromotionSummary, "promotionId" | "name" | "status" | "version">;
   onApplied?(summary: AdminPromotionSummary): void;
+  presentation?: "switch" | "pill";
 }) {
   const command = useCatalogCommand(adminPromotionSummarySchema);
   const [error, setError] = useState<string | null>(null);
 
   if (promotion.status === "ARCHIVED") {
-    return <Badge variant="outline">Archived</Badge>;
+    return <PromotionStatusPill status="ARCHIVED" />;
   }
 
   const active = promotion.status === "ACTIVE";
@@ -73,20 +83,39 @@ export function PromotionStatusSwitch({
     <div className="space-y-1">
       <span
         data-pending={command.pending}
-        className="fm-status-switch relative inline-flex size-6 items-center justify-center"
+        className={
+          presentation === "pill"
+            ? "fm-status-switch relative inline-flex items-center justify-center"
+            : "fm-status-switch relative inline-flex size-6 items-center justify-center"
+        }
       >
         <span
           className="fm-status-switch-control"
           aria-hidden={command.pending}
           inert={command.pending}
         >
-          <Switch
-            aria-label={`${promotion.name} ${active ? "on" : "off"}`}
-            checked={active}
-            disabled={command.pending}
-            onCheckedChange={() => void commit()}
-            size="sm"
-          />
+          {presentation === "pill" ? (
+            <Badge asChild variant="outline" className="min-h-8 min-w-20 cursor-pointer px-3 py-1">
+              <button
+                type="button"
+                data-promotion-status-pill
+                data-status={promotion.status}
+                aria-label={`${active ? "Deactivate" : "Activate"} ${promotion.name} (${statusLabels[promotion.status]})`}
+                disabled={command.pending}
+                onClick={() => void commit()}
+              >
+                {statusLabels[promotion.status]}
+              </button>
+            </Badge>
+          ) : (
+            <Switch
+              aria-label={`${promotion.name} ${active ? "on" : "off"}`}
+              checked={active}
+              disabled={command.pending}
+              onCheckedChange={() => void commit()}
+              size="sm"
+            />
+          )}
         </span>
         <span
           role={command.pending ? "status" : undefined}

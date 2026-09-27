@@ -37,7 +37,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/admin/shadcn/table";
-import { PromotionStatusSwitch } from "../../../components/admin/promotion-status-switch";
+import {
+  PromotionStatusPill,
+  PromotionStatusSwitch,
+} from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { adminPromotionSummarySchema, adminPromotionPageSchema } from "@freshmarkets/validation";
@@ -47,7 +50,7 @@ import {
   useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
-import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { PageHeader } from "../../../components/admin/admin-shell";
 import { AdminIndexCard, AdminIndexPageCount } from "../../../components/admin/admin-index-card";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
@@ -1065,6 +1068,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                 {canManage ? (
                                   <PromotionStatusSwitch
                                     promotion={promotion}
+                                    presentation="pill"
                                     onApplied={(summary) =>
                                       setPage((current) =>
                                         current && !summary.productTargets?.length
@@ -1081,11 +1085,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                     }
                                   />
                                 ) : (
-                                  <StatusBadge
-                                    tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
-                                  >
-                                    {promotion.status === "ACTIVE" ? "Active" : promotion.status}
-                                  </StatusBadge>
+                                  <PromotionStatusPill status={promotion.status} />
                                 )}
                               </TableCell>
                               <TableCell

@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Promotion Codes clickable status pills — ADMIN-PROMOTION-PILL-22 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked for clickable status pills in
+`/admin/promotions`, with green Active and red Inactive. Acceptance: the full
+pill is an accessible status action for authorized staff, retains the existing
+Core-confirmed activation/deactivation flow and pending/error feedback, and
+uses readable green/red appearances without changing Storefront or Sales.
+
+Started on `main` at `d73257d5` with separate unfinished Product form,
+summary and related test edits in the working tree; those were preserved and
+left unstaged. Promotion Codes now renders an actionable shadcn Badge pill for
+manageable Draft, Active and Inactive rows, and a read-only badge otherwise.
+The existing version-guarded Core command, action eligibility, row preview,
+toast and failure handling remain. Status colors are scoped beneath
+`.fm-admin`; Promotion Sale retains its switch.
+
+Web typecheck, lint, focused status-control tests (7/7), focused formatting
+and `git diff --check` passed on the source working tree. The local
+authenticated browser showed clickable Draft and green Active pills in the
+Promotions table; the Active pill's computed light and dark colors were
+checked, and dark appearance was restored. The seed page had no Inactive row,
+so its red appearance was verified in source and its pill state in the focused
+component test. No status command was submitted in the browser, and no
+provider or production acceptance is claimed.
+
+Completion level: **one Admin Promotion Codes status-control correction
+implemented and locally browser-verified**. Next action: resume the first
+unresolved Phase 7 provider journey under the commerce plan. No deployment or
+real provider transaction is authorized by this request.
+
 ## Add product styling aligned with Product list — ADMIN-PRODUCT-CREATE-21 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
@@ -308,8 +340,7 @@ Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
 activation evidence**. The owner asked to remove the Global catalog ownership
 callout on `/admin/catalog/products` and place the readiness figures to the
 right of the pill-style status views. The owner clarified that each metric
-must be one inline label-value pair: Active 227, Inactive 0, Missing Media
-227. Acceptance: the three existing readiness values share the tabs row at
+must be one inline label-value pair: Active 227, Inactive 0, Missing Media 227. Acceptance: the three existing readiness values share the tabs row at
 desktop width and wrap cleanly on narrow screens; retain Product filters, table,
 preview, actions and scoped location behavior.
 
