@@ -1,5 +1,48 @@
 # Commerce alignment — active checkpoint
 
+## Latest completed owner correction — ADMIN-ORDERS-TASKS-2 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner supplied the shadcn Tasks screenshot and
+corrected the `/admin/orders` presentation: near-black surface, no header/status
+tab separator, compact status control, Tasks-style pagination and data density,
+plain progress instead of status pills, and no internal ID subtext. Acceptance:
+the dark Orders page closely follows that visible reference while retaining
+supported status/cursor URLs, Order links, preview, scope and business actions.
+Storefront and auth remain unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `6deee4a0`. The source
+changes are limited to Admin Orders, its scoped dark surface in
+`apps/web/app/globals.css`, focused Admin browser tests and DESIGN. The Orders
+table now uses one-line IDs and customer entries, type
+badges beside names, icon/text progress, and compact pagination. A truthful
+current-page text filter and the existing URL-backed status filter sit in one
+toolbar. Direct local browser review confirms the darker surface, denser rows
+and footer at desktop width, including a non-scrolling 759px table and one-line
+public Order ID. No Core, contract, storage, provider, Storefront or auth change
+is involved.
+
+Verification on the final source working tree: `pnpm format:check`, `pnpm lint`,
+`pnpm --filter @freshmarkets/web typecheck` and `git diff --check` passed. The
+first focused managed-stack Playwright run using isolated state
+`e2e-admin-orders-reference-0927` passed the Order URL/cursor/record and
+responsive layout tests **2/3**; its keyboard test selected All because the test
+pressed ArrowDown before opening the Select. After correcting the test to open
+the Select and press Enter on the named option, a fresh isolated run with
+`e2e-admin-orders-reference-retry-0927` passed **1/1**. Thus all three focused
+checks passed on the final implementation/test scope. Both runs built the Web
+Worker and used a local deterministic fixture, not production. No actual
+provider journey acceptance is claimed.
+
+The five-file source correction was committed and pushed to `main` as
+`d0a2bd8c`; `main` and `origin/main` matched at that revision after the push.
+This checkpoint records its verified outcome. Completion level: **one Admin
+presentation correction locally and browser verified, committed and pushed**.
+Next action: resume the first unresolved Phase 7 provider journey under the
+commerce plan. This request did not authorize deployment or a real provider
+transaction.
+
 ## Latest completed owner request — ADMIN-ORDERS-TASKS-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
