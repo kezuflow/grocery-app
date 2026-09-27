@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Orders first-column inset — ADMIN-ORDERS-TASKS-6 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner identified the Order ID column as visually
+cut against the left table border. Acceptance: the Order ID heading and values
+have a safe left inset; Customer, Mode, other columns, row actions, data and
+Storefront remain unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `803193b2`. Only the
+Admin Orders page and DESIGN changed in source commit `9f2a3b80`, pushed to
+`main`. The first desktop table heading and cells use 16px left padding,
+increasing to 24px at the wide (`xl`) breakpoint. The mobile order records
+already have their own 16px padding and were not changed. No Core, contract,
+storage, provider or business-flow code changed.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree. Direct local browser
+review at a 1280px viewport showed 24px computed padding on both the Order ID
+heading and first row cell, and the visible text cleared the border. The
+smaller desktop breakpoint was source-checked but not browser-resized because
+the available browser did not expose viewport override. This is local UI
+acceptance, not production or provider acceptance.
+
+Completion level: **one Orders table spacing correction implemented, locally
+verified, committed and pushed**. Next action: resume the first unresolved
+Phase 7 provider journey under the commerce plan. This request did not
+authorize deployment or real provider transactions.
+
 ## Admin index segmented views — ADMIN-INDEX-SEGMENTED-2 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
