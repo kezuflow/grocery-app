@@ -405,6 +405,14 @@ html.fm-admin-dark .fm-admin {
   color: var(--fm-text);
 }
 
+html.fm-admin-dark .fm-admin-orders {
+  --fm-background: oklch(0.09 0 0);
+  --fm-card: var(--fm-background);
+  --fm-surface-muted: oklch(0.2 0 0);
+  --fm-hover: oklch(0.2 0 0);
+  background: var(--fm-background);
+}
+
 .fm-admin :is(h1, h2, h3) {
   font-family: var(--font-sans);
   text-wrap: balance;

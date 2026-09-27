@@ -462,6 +462,15 @@ test("Order number opens the record and Back restores the filtered cursor page",
   );
   await adminPage.goto("/admin/orders");
   await expect(adminPage.getByRole("link", { name: "FM-RETURN-1" })).toBeVisible();
+  const orderRow = adminPage.getByRole("row", { name: "Preview order FM-RETURN-1" });
+  await expect(orderRow).not.toContainText("test-order-1");
+  await expect(orderRow).not.toContainText("fixture@example.test");
+  await expect(orderRow.getByText("Committed")).toBeVisible();
+  const filter = adminPage.getByRole("textbox", { name: "Filter orders on this page" });
+  await filter.fill("not-on-this-page");
+  await expect(adminPage.getByText("No orders on this page match the filter.")).toBeVisible();
+  await filter.clear();
+  await expect(adminPage.getByRole("link", { name: "FM-RETURN-1" })).toBeVisible();
   if (process.env.SAUI_CAPTURE_ORDERS === "1") {
     const path = fileURLToPath(
       new URL(
@@ -472,7 +481,8 @@ test("Order number opens the record and Back restores the filtered cursor page",
     mkdirSync(dirname(path), { recursive: true });
     await adminPage.screenshot({ path, fullPage: true });
   }
-  await adminPage.getByRole("button", { name: "Committed", exact: true }).click();
+  await adminPage.getByRole("combobox", { name: "Order status view" }).click();
+  await adminPage.getByRole("option", { name: "Committed", exact: true }).click();
   await expect(adminPage).toHaveURL(/\/admin\/orders\?status=COMMITTED$/);
   await adminPage
     .getByRole("navigation", { name: "Results pagination" })

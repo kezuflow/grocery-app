@@ -6,7 +6,18 @@ import type {
   AdminOrderSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Clipboard, EllipsisVertical, Eye } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  Clipboard,
+  Clock3,
+  EllipsisVertical,
+  Eye,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/admin/shadcn/dropdown-menu";
 import { Skeleton } from "../../../components/admin/shadcn/skeleton";
+import { Input } from "../../../components/admin/shadcn/input";
 import {
   Select,
   SelectContent,
@@ -52,7 +64,6 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/admin/shadcn/table";
-import { Tabs, TabsList, TabsTrigger } from "../../../components/admin/shadcn/tabs";
 
 type State =
   | { phase: "loading" }
@@ -89,25 +100,30 @@ function OrdersProgressStatus({ order }: { order: AdminOrderSummary }) {
   const facts = orderProgressFacts(order);
   return (
     <div
-      className="flex max-w-52 flex-wrap gap-1.5"
+      className="flex max-w-52 flex-wrap gap-x-3 gap-y-1"
       aria-label={`Order progress: ${facts.map((fact) => fact.label).join("; ")}`}
     >
-      {facts.map((fact) => (
-        <Badge
-          key={fact.code}
-          variant={
-            fact.tone === "danger"
-              ? "destructive"
-              : fact.tone === "success"
-                ? "default"
+      {facts.map((fact) => {
+        const Icon =
+          fact.tone === "success"
+            ? CircleCheck
+            : fact.tone === "danger"
+              ? CircleX
+              : fact.tone === "warning"
+                ? CircleHelp
                 : fact.tone === "neutral"
-                  ? "outline"
-                  : "secondary"
-          }
-        >
-          {fact.label}
-        </Badge>
-      ))}
+                  ? Circle
+                  : Clock3;
+        return (
+          <span
+            key={fact.code}
+            className="inline-flex items-center gap-2 text-sm whitespace-nowrap"
+          >
+            <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+            {fact.label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -124,28 +140,27 @@ function OrdersPagination({
   onNext(cursor: string): void;
 }) {
   return (
-    <nav
-      aria-label="Results pagination"
-      className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto"
-    >
+    <nav aria-label="Results pagination" className="flex items-center gap-2">
       <Button
         type="button"
-        size="sm"
+        size="icon-sm"
         variant="outline"
+        aria-label="Previous"
         disabled={pageNumber <= 1}
         onClick={onPrevious}
       >
-        Previous
+        <ChevronLeft aria-hidden="true" />
       </Button>
-      <span className="text-sm text-muted-foreground">Page {pageNumber}</span>
+      <span className="min-w-14 text-center text-sm text-muted-foreground">Page {pageNumber}</span>
       <Button
         type="button"
-        size="sm"
+        size="icon-sm"
         variant="outline"
+        aria-label="Next"
         disabled={nextCursor === null}
         onClick={() => nextCursor && onNext(nextCursor)}
       >
-        Next
+        <ChevronRight aria-hidden="true" />
       </Button>
     </nav>
   );
@@ -165,6 +180,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   const requestedStatus = searchParams.get("status") ?? "";
   const status = orderViews.some((view) => view.status === requestedStatus) ? requestedStatus : "";
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pageFilter, setPageFilter] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderSummary | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const pagination = useAdminUrlPagination("/admin/orders");
@@ -236,7 +252,22 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
     };
   }, [status, load, pagination.cursor]);
 
-  const visibleOrders = page?.items ?? [];
+  const pageOrders = page?.items ?? [];
+  const normalizedFilter = pageFilter.trim().toLocaleLowerCase();
+  const visibleOrders = normalizedFilter
+    ? pageOrders.filter((order) =>
+        [
+          order.orderNumber,
+          order.orderId,
+          order.customerName,
+          order.customerEmail,
+          order.fulfillmentMode,
+          ...orderProgressFacts(order).map((fact) => fact.label),
+        ]
+          .filter(Boolean)
+          .some((value) => value?.toLocaleLowerCase().includes(normalizedFilter)),
+      )
+    : pageOrders;
   async function copyOrderId(order: AdminOrderSummary) {
     const value = order.orderNumber ?? order.orderId;
     await navigator.clipboard.writeText(value);
@@ -270,62 +301,46 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   );
 
   const master = (
-    <section className="fm-admin-orders p-4 sm:p-6" aria-labelledby="admin-page-title">
-      <Card className="gap-0 overflow-hidden border-border py-0">
-        <CardHeader className="gap-1 border-b border-border px-4 py-5 sm:px-6">
+    <section
+      className="fm-admin-orders min-h-[calc(100svh-3.5rem)] p-4 sm:p-6"
+      aria-labelledby="admin-page-title"
+    >
+      <Card className="gap-0 overflow-hidden border-border py-0 shadow-none">
+        <CardHeader className="gap-1 px-4 pt-6 pb-5 sm:px-6 sm:pt-8 sm:pb-7">
           <CardTitle>
             <h1 id="admin-page-title" className="text-2xl font-semibold tracking-tight">
               Orders
             </h1>
           </CardTitle>
-          <CardDescription>
-            Review order progress and open the full record or a quick preview.
-          </CardDescription>
+          <CardDescription>Review and manage your orders.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 px-4 py-4 sm:px-6">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <div className="w-full sm:hidden">
-              <Select
-                value={status || "ALL"}
-                onValueChange={(nextStatus) => selectView(nextStatus === "ALL" ? "" : nextStatus)}
-              >
-                <SelectTrigger aria-label="Order status view" className="w-full">
-                  <SelectValue placeholder="All orders" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Status</SelectLabel>
-                    {orderViews.map((view) => (
-                      <SelectItem key={view.status} value={view.status || "ALL"}>
-                        {view.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <Tabs
-              value={status}
-              onValueChange={selectView}
-              className="hidden min-w-0 flex-1 sm:flex"
+        <CardContent className="flex flex-col gap-4 px-4 pb-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              aria-label="Filter orders on this page"
+              placeholder="Filter orders on this page..."
+              value={pageFilter}
+              onChange={(event) => setPageFilter(event.target.value)}
+              className="w-full sm:w-64"
+            />
+            <Select
+              value={status || "ALL"}
+              onValueChange={(nextStatus) => selectView(nextStatus === "ALL" ? "" : nextStatus)}
             >
-              <div className="fm-scrollbar-none overflow-x-auto pb-1">
-                <TabsList
-                  variant="line"
-                  aria-label="Order status views"
-                  className="w-full min-w-max justify-start border-b border-border px-1 py-2"
-                >
+              <SelectTrigger aria-label="Order status view" className="w-auto min-w-28">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Status</SelectLabel>
                   {orderViews.map((view) => (
-                    <TabsTrigger key={view.status} value={view.status} className="flex-none px-3">
+                    <SelectItem key={view.status} value={view.status || "ALL"}>
                       {view.label}
-                    </TabsTrigger>
+                    </SelectItem>
                   ))}
-                </TabsList>
-              </div>
-            </Tabs>
-            <span className="hidden shrink-0 text-xs text-muted-foreground lg:inline">
-              Newest first
-            </span>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
           {copiedId ? (
             <p className="sr-only" role="status">
@@ -370,8 +385,14 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
           {state.phase === "ready" && visibleOrders.length === 0 ? (
             <div>
               <Alert role="status">
-                <AlertTitle>{status ? "No matching results" : "Nothing to show"}</AlertTitle>
-                <AlertDescription>No orders are visible in this view.</AlertDescription>
+                <AlertTitle>
+                  {pageFilter || status ? "No matching results" : "Nothing to show"}
+                </AlertTitle>
+                <AlertDescription>
+                  {pageFilter
+                    ? "No orders on this page match the filter."
+                    : "No orders are visible in this view."}
+                </AlertDescription>
               </Alert>
             </div>
           ) : null}
@@ -419,7 +440,6 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     <TableRow className="border-border">
                       <TableHead>Order ID</TableHead>
                       <TableHead>Customer</TableHead>
-                      <TableHead>Type</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
@@ -434,7 +454,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                         key={order.orderId}
                         tabIndex={0}
                         aria-label={`Preview order ${orderLabel(order)}`}
-                        className="cursor-pointer border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        className="h-12 cursor-pointer border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                         onClick={(event) => {
                           if (
                             (event.target as Element).closest("button, a, input, [role='menuitem']")
@@ -450,28 +470,24 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                           }
                         }}
                       >
-                        <TableCell>
+                        <TableCell className="font-medium">
                           <Link
                             href={recordHref(order)}
-                            className="font-medium hover:underline"
+                            className="whitespace-nowrap hover:underline"
                             onClick={rememberReturn}
                           >
                             {orderLabel(order)}
                           </Link>
-                          {order.orderNumber ? (
-                            <p className="mt-0.5 max-w-40 truncate font-mono text-xs text-muted-foreground">
-                              {order.orderId}
-                            </p>
-                          ) : null}
                         </TableCell>
                         <TableCell>
-                          <p className="font-medium">{order.customerName ?? "Customer"}</p>
-                          <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {order.fulfillmentMode.toLowerCase()}
-                          </Badge>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Badge variant="outline" className="shrink-0 capitalize">
+                              {order.fulfillmentMode.toLowerCase()}
+                            </Badge>
+                            <span className="truncate font-medium">
+                              {order.customerName ?? "Customer"}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">
                           {money(order.totalMinor, order.currency)}
@@ -517,10 +533,10 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
           ) : null}
         </CardContent>
         {state.phase === "ready" ? (
-          <CardFooter className="flex-col items-start gap-3 border-t border-border px-4 py-4 sm:flex-row sm:justify-between sm:px-6">
+          <CardFooter className="flex-col items-start gap-3 px-4 pt-2 pb-5 sm:flex-row sm:justify-between sm:px-6">
             <span className="text-sm text-muted-foreground">
-              Showing {visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"} on
-              this page
+              Showing {visibleOrders.length} of {pageOrders.length}{" "}
+              {pageOrders.length === 1 ? "order" : "orders"} on this page
             </span>
             <OrdersPagination
               pageNumber={pagination.pageNumber}

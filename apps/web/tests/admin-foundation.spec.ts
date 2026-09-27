@@ -160,17 +160,15 @@ test("a legacy Payments deep link opens the authorized canonical workspace", asy
   await expect(adminPage.getByRole("tablist", { name: "Payment views" })).toBeVisible();
 });
 
-test("Admin status views use line tabs with keyboard selection", async ({ adminPage }) => {
+test("Orders status filter supports keyboard selection and keeps its URL", async ({
+  adminPage,
+}) => {
   await adminPage.goto("/admin/orders");
-  const views = adminPage.getByRole("tablist", { name: "Order status views" });
-  const all = views.getByRole("tab", { name: "All", exact: true });
-  const committed = views.getByRole("tab", { name: "Committed", exact: true });
-  await expect(all).toHaveAttribute("aria-selected", "true");
-  expect(await all.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
-  await all.focus();
-  await adminPage.keyboard.press("ArrowRight");
-  await adminPage.keyboard.press("Enter");
-  await expect(committed).toHaveAttribute("aria-selected", "true");
+  const status = adminPage.getByRole("combobox", { name: "Order status view" });
+  await expect(status).toContainText("All");
+  await status.press("Enter");
+  await adminPage.getByRole("option", { name: "Committed" }).press("Enter");
+  await expect(status).toContainText("Committed");
   await expect(adminPage).toHaveURL(/status=COMMITTED/);
 });
 
@@ -182,15 +180,15 @@ test("Orders uses the compact shadcn index and responsive status controls", asyn
   const orders = adminPage.locator(".fm-admin-orders");
   await expect(orders.locator('[data-slot="card"]')).toBeVisible();
   await expect(orders.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
-  await expect(orders.locator('[data-slot="tabs-list"][data-variant="line"]')).toBeVisible();
-  await expect(orders.getByText(/Showing \d+ orders? on this page/)).toBeVisible();
+  await expect(orders.getByRole("textbox", { name: "Filter orders on this page" })).toBeVisible();
+  await expect(orders.getByText(/Showing \d+ of \d+ orders? on this page/)).toBeVisible();
   const previous = orders.getByRole("button", { name: "Previous" });
   await expect(previous).toBeVisible();
   await expect(previous).toHaveAttribute("data-slot", "button");
   expect(await previous.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
   await adminPage.setViewportSize({ width: 1100, height: 800 });
   await expect(orders.locator('[data-slot="card"]')).toBeVisible();
-  await expect(orders.getByRole("tablist", { name: "Order status views" })).toBeVisible();
+  await expect(orders.getByRole("combobox", { name: "Order status view" })).toBeVisible();
   await adminPage.setViewportSize({ width: 390, height: 844 });
   const status = orders.getByRole("combobox", { name: "Order status view" });
   await expect(status).toBeVisible();
