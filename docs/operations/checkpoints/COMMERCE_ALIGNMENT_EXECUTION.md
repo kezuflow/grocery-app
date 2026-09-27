@@ -1,5 +1,42 @@
 # Commerce alignment — active checkpoint
 
+## Admin index segmented views — ADMIN-INDEX-SEGMENTED-2 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. Following the Problems correction, the owner asked for
+the same segmented control on the remaining Admin views where applicable.
+Acceptance: the existing in-page view/status selectors use the rounded shadcn
+Tabs track, longer labels remain readable, narrow tracks scroll, and route
+navigation, selection, URL filters, disabled/keyboard behavior, Storefront and
+auth remain unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `4a242562`. The shared
+`AdminIndexViews` now uses the stock Radix/new-york Tabs default presentation
+for all ten existing callsites: Problems, Products, Categories, Banners,
+Promotion Codes, Promotion Sale, Payments, Delivery weeks, and the two
+Fulfillment/Point of Sale contexts. Segments have a 128px minimum width and
+expand for longer text; the track is horizontally scrollable. The redundant
+Problems-only appearance option was removed. Orders retains its separate
+status Select, and route links remain links. No Core, contract, storage,
+provider or business-flow code changed.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`,
+`pnpm --filter @freshmarkets/web test -- admin-controls.test.tsx` (2/2 passed)
+and `git diff --check` passed on the source working tree. Direct local browser
+review showed segmented views on Banners, Products and Payments; the long
+Payments label remained readable. Selecting Draft on Banners selected that
+view. Selecting Active in Categories set `status=active` in the URL and marked
+the tab selected. The other callsites are covered by the shared component
+change but were not each exercised in the browser. Source/design commit
+`19516078` was pushed to `main`. This is local UI evidence, not production or
+provider acceptance.
+
+Completion level: **one shared Admin index view presentation change, locally
+checked and pushed**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan. This request did not authorize
+deployment or real provider transactions.
+
 ## Problems segmented status selector — ADMIN-ISSUES-SEGMENTED-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
