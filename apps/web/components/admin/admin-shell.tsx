@@ -231,14 +231,6 @@ function AdminHeader({
           <AdminScopeSelector fallbackLabel={scopeLabel} />
         </div>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link
-            href="/"
-            prefetch={false}
-            className="hidden rounded-md px-2 py-1 font-medium hover:bg-accent xl:inline-flex"
-          >
-            Marketplace
-          </Link>
-          <span className="mx-1 hidden h-5 w-px bg-border xl:block" aria-hidden="true" />
           <AdminSearchTrigger onOpen={onOpenSearch} />
           <AdminNotifications />
           <AdminThemeToggle />

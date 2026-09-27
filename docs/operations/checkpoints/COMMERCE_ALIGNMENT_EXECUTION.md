@@ -1,5 +1,32 @@
 # Commerce alignment — active checkpoint
 
+## Remove Admin header Marketplace shortcut — ADMIN-HEADER-MARKETPLACE-18 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to remove the Marketplace word and its
+adjacent separator from the Admin header. Acceptance: both disappear while
+search, notifications, theme, account, scope selection and navigation remain.
+
+Started on `main` at `ea701c70`. A separate Product-preview slice committed as
+`40ad3e28` while this header change was in progress; its files and evidence
+were preserved. The Admin shell removes only the presentation link and divider.
+The owning design guide records the correction. No Core, contracts, storage,
+provider, Storefront or authentication behavior changed.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm --filter @freshmarkets/web test --
+components/admin/admin-accessibility.test.tsx` (15 tests), focused
+`pnpm exec oxfmt --check` and `git diff --check` passed on the source working
+tree. Authenticated browser presentation remains unverified; there is no
+provider acceptance claim.
+
+Completion level: **one Admin header presentation correction implemented and
+source-verified**. Next action: inspect the header in an authenticated local
+browser, then resume the first unresolved Phase 7 provider journey under the
+commerce plan. No deployment or real provider transaction is authorized by
+this request.
+
 ## Neutral Product status text — ADMIN-PRODUCT-STATUS-TEXT-17 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
