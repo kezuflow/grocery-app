@@ -141,6 +141,37 @@ test("a legacy Payments deep link opens the authorized canonical workspace", asy
   await expect(adminPage.getByRole("tablist", { name: "Payment views" })).toBeVisible();
 });
 
+test("Admin status views use line tabs with keyboard selection", async ({ adminPage }) => {
+  await adminPage.goto("/admin/orders");
+  const views = adminPage.getByRole("tablist", { name: "Order status views" });
+  const all = views.getByRole("tab", { name: "All", exact: true });
+  const committed = views.getByRole("tab", { name: "Committed", exact: true });
+  await expect(all).toHaveAttribute("aria-selected", "true");
+  expect(await all.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("0px");
+  await all.focus();
+  await adminPage.keyboard.press("ArrowRight");
+  await adminPage.keyboard.press("Enter");
+  await expect(committed).toHaveAttribute("aria-selected", "true");
+  await expect(adminPage).toHaveURL(/status=COMMITTED/);
+});
+
+test("Payments uses the shared tabs and status select", async ({ adminPage }) => {
+  await adminPage.goto("/admin/payments");
+  const views = adminPage.getByRole("tablist", { name: "Payment views" });
+  await expect(views.getByRole("tab", { name: "Payments" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await adminPage.getByRole("combobox", { name: "Status" }).click();
+  await adminPage.getByRole("option", { name: "Paid", exact: true }).click();
+  await expect(adminPage).toHaveURL(/status=paid/);
+  await views.getByRole("tab", { name: /Needs attention/ }).click();
+  await expect(views.getByRole("tab", { name: /Needs attention/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("admin accent tokens stay isolated from the storefront", async ({ adminPage, page }) => {
   await adminPage.goto("/admin");
   const adminAccent = await adminPage

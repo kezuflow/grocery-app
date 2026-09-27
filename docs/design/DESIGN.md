@@ -158,7 +158,7 @@ Delivery weeks appears under Orders for authorized Global and selected-location 
 
 ## Admin visual foundation
 
-Use existing shadcn/ui primitives: buttons, inputs, selects, checkboxes/radio/switches, dialogs/sheets, menus/popovers/tooltips, tabs/breadcrumb/sidebar, table, skeleton/alert/badge, calendar/command/form and installed toast primitives. Preserve their accessible behavior. Custom compositions need a real repeated or domain-specific purpose; an old component inventory is not a build list.
+Use existing shadcn/ui primitives: buttons, inputs, selects, checkboxes/radio/switches, dialogs/sheets, menus/popovers/tooltips, tabs/breadcrumb/sidebar, table, skeleton/alert/badge, calendar/command/form and installed toast primitives. Preserve their accessible behavior. In-page Admin status views use the line Tabs variant, with an underline rather than a rounded button highlight. Route navigation remains a link. Custom compositions need a real repeated or domain-specific purpose; an old component inventory is not a build list.
 
 Owner-approved Shopify-style Admin direction, 2026-09-24: replace the earlier orange rail and universal master-detail presentation with the supplied [Spring ’26 reference](references/shopify-approved-reference.png) and the selected [Mobbin reference ledger](SHOPIFY_ADMIN_REFERENCES.md). FreshMarkets owns its implementation and identity. This visual approval does not add Shopify's draft orders, financial products, messaging, in-person POS checkout, supplier tools or other unsupported commands. The later owner decision adds a paid-order preparation station under Point of Sale. Product preview controls approved in PRODUCT remain available in their authoritative Global or selected-location context.
 

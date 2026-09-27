@@ -131,12 +131,14 @@ describe("ProductListView", () => {
       );
     });
 
-    const inactiveView = [...container.querySelectorAll("button")].find(
+    const inactiveView = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
       (button) => button.textContent?.trim() === "Inactive",
     );
-    expect(inactiveView?.getAttribute("aria-pressed")).toBe("false");
+    expect(inactiveView?.getAttribute("aria-selected")).toBe("false");
 
-    act(() => inactiveView?.click());
+    act(() =>
+      inactiveView?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
 
     expect(onStatusChange).toHaveBeenCalledWith("inactive");
   });

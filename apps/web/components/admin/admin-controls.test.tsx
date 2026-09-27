@@ -68,11 +68,17 @@ describe("useAdminPagination", () => {
         />,
       ),
     );
-    expect(container.querySelector('[role="group"]')?.getAttribute("aria-label")).toBe(
+    expect(container.querySelector('[role="tablist"]')?.getAttribute("aria-label")).toBe(
       "Order status views",
     );
-    expect(container.querySelectorAll("button")[0]?.getAttribute("aria-pressed")).toBe("true");
-    await act(async () => container.querySelectorAll("button")[1]?.click());
+    expect(container.querySelectorAll('[role="tab"]')[0]?.getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    await act(async () =>
+      container
+        .querySelectorAll('[role="tab"]')[1]
+        ?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
     expect(onChange).toHaveBeenCalledWith("COMMITTED");
   });
 });

@@ -15,6 +15,7 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import {
   AdminConfirmationDialog,
   AdminCursorPagination,
+  AdminIndexViews,
   useAdminUrlPagination,
 } from "./admin-controls";
 import { AdminMasterDetailWorkspace } from "./admin-master-detail-workspace";
@@ -23,7 +24,16 @@ import { PageHeader, StatusBadge } from "./admin-shell";
 import { PaymentRecovery } from "./payment-recovery";
 import { RefundRecovery } from "./refund-recovery";
 import { Button } from "../ui/button";
+import { Field, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { refundAmountMinor, refundResponse } from "@/lib/refund-response";
 import { notifyCommandSuccess } from "./admin-feedback";
@@ -443,49 +453,49 @@ export function PaymentsWorkspace({
     <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader title="Payments" />
       <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
-        <div
-          className="flex min-h-14 items-end gap-1 border-b border-[var(--fm-border)] px-3 pt-2"
-          role="tablist"
-          aria-label="Payment views"
-        >
-          <button
-            role="tab"
-            aria-selected={tab === "payments"}
-            className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === "payments" ? "border-[var(--fm-text)]" : "border-transparent text-[var(--fm-text-muted)]"}`}
-            onClick={() => changeTab("payments")}
-          >
-            Payments
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === "attention"}
-            className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === "attention" ? "border-[var(--fm-text)]" : "border-transparent text-[var(--fm-text-muted)]"}`}
-            onClick={() => changeTab("attention")}
-          >
-            Needs attention{attention && attention.total > 0 ? ` (${attention.total})` : ""}
-          </button>
-        </div>
+        <AdminIndexViews<Tab>
+          label="Payment views"
+          views={[
+            { status: "payments", label: "Payments" },
+            {
+              status: "attention",
+              label: `Needs attention${attention && attention.total > 0 ? ` (${attention.total})` : ""}`,
+            },
+          ]}
+          value={tab}
+          disabled={locked}
+          onChange={changeTab}
+        />
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--fm-border)] p-3">
           {tab === "payments" ? (
-            <label className="grid gap-1 text-sm">
-              <span>Status</span>
-              <select
-                className="h-9 rounded-md border border-[var(--fm-border)] bg-transparent px-3"
-                value={status}
-                disabled={locked}
-                onChange={(event) => {
-                  const next = event.target.value as StatusFilter;
-                  setStatus(next);
-                  replaceUrl({ status: next, cursor: null });
-                  void loadPayments(next, null);
-                }}
-              >
-                <option value="all">All payments</option>
-                <option value="paid">Paid</option>
-                <option value="partially-refunded">Partially refunded</option>
-                <option value="refunded">Refunded</option>
-              </select>
-            </label>
+            <FieldGroup className="w-auto gap-0">
+              <Field className="w-auto gap-1 text-sm">
+                <FieldLabel id="payment-status-label">Status</FieldLabel>
+                <Select
+                  value={status}
+                  disabled={locked}
+                  onValueChange={(next) => {
+                    if (!next) return;
+                    const selected = next as StatusFilter;
+                    setStatus(selected);
+                    replaceUrl({ status: selected, cursor: null });
+                    void loadPayments(selected, null);
+                  }}
+                >
+                  <SelectTrigger aria-labelledby="payment-status-label" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="all">All payments</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="partially-refunded">Partially refunded</SelectItem>
+                      <SelectItem value="refunded">Refunded</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </FieldGroup>
           ) : (
             <span className="text-sm text-[var(--fm-text-muted)]">
               Genuine unresolved payment and refund issues

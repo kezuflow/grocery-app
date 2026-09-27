@@ -130,11 +130,13 @@ describe("Fulfillment queue filters", () => {
     await flushPage();
     expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("cursor=all-next");
 
-    const preparing = [...container.querySelectorAll("button")].find(
+    const preparing = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
       (button) => button.textContent === "Preparing",
     );
     if (!preparing) throw new Error("Preparing filter missing");
-    await act(async () => preparing.click());
+    await act(async () =>
+      preparing.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
     await flushPage();
     const filteredUrl = String(fetchMock.mock.calls.at(-1)?.[0]);
     expect(filteredUrl).toContain("filter=PREPARING");

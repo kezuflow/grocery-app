@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -28,29 +29,19 @@ export function AdminIndexViews<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div
-      role="group"
-      className="flex min-h-14 items-end gap-1 overflow-x-auto border-b border-[var(--fm-border)] px-3 pt-2"
-      aria-label={label}
-    >
-      {views.map((view) => (
-        <button
-          type="button"
-          key={view.label}
-          aria-pressed={value === view.status}
-          disabled={disabled}
-          className={cn(
-            "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:opacity-50",
-            value === view.status
-              ? "border-[var(--fm-text)] text-[var(--fm-text)]"
-              : "border-transparent text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]",
-          )}
-          onClick={() => onChange(view.status)}
-        >
-          {view.label}
-        </button>
-      ))}
-    </div>
+    <Tabs value={value} onValueChange={(next) => onChange(next as T)} className="min-w-0">
+      <TabsList
+        variant="line"
+        aria-label={label}
+        className="min-h-14 w-full justify-start overflow-x-auto px-3 pt-2"
+      >
+        {views.map((view) => (
+          <TabsTrigger key={view.status} value={view.status} disabled={disabled} className="py-3">
+            {view.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 

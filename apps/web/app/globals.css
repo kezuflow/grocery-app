@@ -134,6 +134,10 @@ body:has(.fm-storefront, .fm-admin) button {
   border-radius: 9999px;
 }
 
+.fm-admin [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"] {
+  border-radius: 0;
+}
+
 .fm-order-progress-fill {
   opacity: 0;
   transition: opacity var(--fm-motion-base) var(--fm-ease-out);
