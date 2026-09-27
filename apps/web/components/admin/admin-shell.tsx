@@ -55,12 +55,7 @@ import {
 } from "./admin-navigation";
 
 const SIDEBAR_PREFERENCE_KEY = "fm-admin-sidebar-collapsed";
-const LABELED_NAVIGATION_GROUPS = new Set([
-  "sales_channels",
-  "settings",
-  "operations",
-  "administration",
-]);
+const LABELED_NAVIGATION_GROUPS = new Set(["settings", "operations", "administration"]);
 
 function showNavigationGroupLabel(code: string): boolean {
   return LABELED_NAVIGATION_GROUPS.has(code);
@@ -501,17 +496,6 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
                 <p className="px-3 pb-1 text-xs font-medium text-muted-foreground">{group.label}</p>
               ) : null}
               <div className="space-y-1">
-                {group.code === "sales_channels" ? (
-                  <SheetClose asChild>
-                    <Link
-                      href="/"
-                      prefetch={false}
-                      className="block min-h-11 rounded px-3 py-2 text-sm"
-                    >
-                      Online Store
-                    </Link>
-                  </SheetClose>
-                ) : null}
                 {group.items.map((item) => (
                   <div
                     key={item.code}
@@ -525,26 +509,6 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
               </div>
             </div>
           ))}
-          <div className="space-y-1 border-t border-border pt-4">
-            {!groups.some((group) => group.code === "sales_channels") ? (
-              <>
-                <p className="px-3 text-xs font-medium text-muted-foreground">Sales channels</p>
-                <SheetClose asChild>
-                  <Link
-                    href="/"
-                    prefetch={false}
-                    className="block min-h-11 rounded px-3 py-2 text-sm"
-                  >
-                    Online Store
-                  </Link>
-                </SheetClose>
-              </>
-            ) : null}
-            <p className="px-3 pt-2 text-xs font-medium text-muted-foreground">Apps</p>
-            <span aria-disabled="true" className="block px-3 py-2 text-sm text-muted-foreground">
-              Messaging · Coming soon
-            </span>
-          </div>
         </nav>
       </SheetContent>
     </Sheet>
@@ -680,15 +644,6 @@ function AdminSidebar({
             {group.label}
           </p>
         ) : null}
-        {group.code === "sales_channels" && !collapsed ? (
-          <Link
-            href="/"
-            prefetch={false}
-            className="mx-2 block rounded-lg px-2 py-1.5 text-sm hover:bg-sidebar-accent"
-          >
-            Online Store
-          </Link>
-        ) : null}
         <div className="flex flex-col gap-1">
           {group.items.map((item) => (
             <div
@@ -780,28 +735,6 @@ function AdminSidebar({
                 )}
               >
                 {scrollingGroups.map(renderGroup)}
-                {!collapsed ? (
-                  <div className="space-y-1 border-t border-border px-4 py-3 text-sm">
-                    {!groups.some((group) => group.code === "sales_channels") ? (
-                      <>
-                        <p className="text-xs font-medium text-sidebar-foreground/70">
-                          Sales channels
-                        </p>
-                        <Link
-                          href="/"
-                          prefetch={false}
-                          className="block rounded px-2 py-1.5 hover:bg-sidebar-accent"
-                        >
-                          Online Store
-                        </Link>
-                      </>
-                    ) : null}
-                    <p className="pt-2 text-xs font-medium text-sidebar-foreground/70">Apps</p>
-                    <span aria-disabled="true" className="block px-2 py-1.5 text-muted-foreground">
-                      Messaging · Coming soon
-                    </span>
-                  </div>
-                ) : null}
                 {items.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-muted-foreground">
                     No workspaces permitted.

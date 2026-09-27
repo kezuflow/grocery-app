@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Remove Admin sidebar extras — ADMIN-NAV-EXTRAS-15 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to remove the Sales channels heading,
+Online Store link, Apps heading, Messaging · Coming soon placeholder and their
+separator from Admin navigation. Acceptance: none of those presentation entries
+or the separator appears on desktop or mobile; the independently authorized
+Point of Sale link and pinned Settings remain available.
+
+Started on clean `main` at `acefa16b`. The Admin shell removes only those
+presentation entries and the divider. Core's Point of Sale entry, its
+`fulfillment.read` Location guard, and all business routes remain unchanged.
+The owning design and API guides record the new presentation rule. No Core,
+storage, provider, Storefront or authentication behavior changed.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm --filter @freshmarkets/web test --
+components/admin/admin-accessibility.test.tsx` (15 tests), focused
+`pnpm exec oxfmt --check` and `git diff --check` passed on the source working
+tree. No authenticated browser session was available for visual acceptance;
+runtime presentation is unverified. This slice has no provider acceptance claim.
+
+Completion level: **one Admin sidebar cleanup implemented and source-verified**.
+Next action: inspect expanded desktop and mobile navigation in an authenticated
+local browser, then resume the first unresolved Phase 7 provider journey under
+the commerce plan. No deployment or real provider transaction is authorized by
+this request.
+
 ## Global Product preview identity — ADMIN-PRODUCT-PREVIEW-14 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
