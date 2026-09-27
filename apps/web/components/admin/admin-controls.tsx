@@ -22,26 +22,40 @@ export function AdminIndexViews<T extends string>({
   value,
   onChange,
   disabled = false,
+  appearance = "line",
 }: {
   label: string;
   views: ReadonlyArray<{ label: string; status: T }>;
   value: T;
   onChange(status: T): void;
   disabled?: boolean;
+  appearance?: "line" | "segmented";
 }) {
+  const list = (
+    <TabsList
+      variant={appearance === "segmented" ? "default" : "line"}
+      aria-label={label}
+      className={cn(
+        appearance === "segmented"
+          ? "h-10 w-max rounded-full p-1"
+          : "min-h-14 w-full justify-start overflow-x-auto px-3 pt-2",
+      )}
+    >
+      {views.map((view) => (
+        <TabsTrigger
+          key={view.status}
+          value={view.status}
+          disabled={disabled}
+          className={appearance === "segmented" ? "w-32 rounded-full px-4" : "py-3"}
+        >
+          {view.label}
+        </TabsTrigger>
+      ))}
+    </TabsList>
+  );
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)} className="min-w-0">
-      <TabsList
-        variant="line"
-        aria-label={label}
-        className="min-h-14 w-full justify-start overflow-x-auto px-3 pt-2"
-      >
-        {views.map((view) => (
-          <TabsTrigger key={view.status} value={view.status} disabled={disabled} className="py-3">
-            {view.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {appearance === "segmented" ? <div className="overflow-x-auto px-4 py-3">{list}</div> : list}
     </Tabs>
   );
 }

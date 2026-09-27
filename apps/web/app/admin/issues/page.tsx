@@ -313,6 +313,7 @@ export default function IssuesPage() {
       <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Order issue queue</h2>
         <AdminIndexViews
+          appearance="segmented"
           label="Order issue status views"
           views={issueViews}
           value={status}
