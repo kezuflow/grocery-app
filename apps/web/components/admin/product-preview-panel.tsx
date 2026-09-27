@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shad
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -246,11 +247,12 @@ export function GlobalProductPreviewPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-        <p className="mb-5 text-xs text-muted-foreground">
-          {canManage
-            ? "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock."
-            : "This Global product is view-only with your current access. Select a fulfillment location to see its price and stock."}
-        </p>
+        {!canManage ? (
+          <p className="mb-5 text-xs text-muted-foreground">
+            This Global product is view-only with your current access. Select a fulfillment location
+            to see its price and stock.
+          </p>
+        ) : null}
         <section className="flex items-center gap-4" aria-label="Product identity">
           {image ? (
             <img
@@ -309,41 +311,37 @@ export function GlobalProductPreviewPanel({
             ) : (
               <h3 className="truncate text-lg font-bold">{product.name}</h3>
             )}
-            <p className="mt-1 truncate text-sm text-muted-foreground">{product.categoryName}</p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{product.slug}</p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <h3 id="product-preview-status" className="text-sm font-semibold">
+                Status
+              </h3>
+              {canManage ? (
+                <Select
+                  value={product.status}
+                  disabled={commandLocked}
+                  onValueChange={(status) => {
+                    if (status === "active" || status === "inactive") void setProductStatus(status);
+                  }}
+                >
+                  <SelectTrigger className="w-32" aria-label="Product status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <AdminStatusPill
+                  status={product.status}
+                  tone={product.status === "active" ? "success" : "danger"}
+                  label={product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                />
+              )}
+            </div>
           </div>
-        </section>
-
-        <section
-          className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-5"
-          aria-labelledby="product-preview-status"
-        >
-          <h3 id="product-preview-status" className="text-sm font-semibold">
-            Status
-          </h3>
-          {canManage ? (
-            <Select
-              value={product.status}
-              disabled={commandLocked}
-              onValueChange={(status) => {
-                if (status === "active" || status === "inactive") void setProductStatus(status);
-              }}
-            >
-              <SelectTrigger className="w-32" aria-label="Product status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : (
-            <AdminStatusPill
-              status={product.status}
-              tone={product.status === "active" ? "success" : "danger"}
-              label={product.status.charAt(0).toUpperCase() + product.status.slice(1)}
-            />
-          )}
         </section>
 
         {notice ? (
@@ -418,8 +416,10 @@ export function GlobalProductPreviewPanel({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectGroup>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   ) : (

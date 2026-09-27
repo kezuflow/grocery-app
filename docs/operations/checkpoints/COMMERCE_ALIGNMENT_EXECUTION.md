@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Global Product preview identity — ADMIN-PRODUCT-PREVIEW-14 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
+Product preview**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`,
+**Phase 7 — Complete journeys and activation evidence**. The owner asked to
+remove the Global ownership explanation from the Product preview and replace
+category/slug subtext beneath the name with Status and the existing
+Active/Inactive dropdown. Acceptance: the identity area shows image, editable
+name and status; the redundant status row disappears; category editing and
+all status command guards remain available.
+
+Started on clean synchronized `main`/`origin/main` at `13617149`. The Global
+preview now places the existing status Select inside Product identity, below
+the name. The category and slug text and managing-user ownership explanation
+were removed from that area. The view-only access explanation remains for
+read-only users. Selling options, Categories, metadata, Core command route,
+pending locks and recovery behavior are unchanged. No Storefront or auth files
+were touched.
+
+`pnpm --filter @freshmarkets/web test -- product-preview-panel.test.tsx`
+(6/6), Web typecheck, lint and `git diff --check` passed on the source working
+tree. Local authenticated browser review showed the populated Global Zucchini
+preview with Status beside the image/name and the Active/Inactive options in
+the existing dropdown; no status change was submitted. This is local UI
+acceptance, not production or provider acceptance.
+
+Completion level: **one Global Product preview presentation correction
+implemented and locally verified**. Next action: review this preview in the
+target Admin environment, then resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction
+was authorized by this request.
+
 ## Delivery weeks sidebar placement — ADMIN-NAV-WEEKS-13 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

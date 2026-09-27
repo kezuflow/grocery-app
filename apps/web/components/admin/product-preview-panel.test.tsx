@@ -66,12 +66,14 @@ describe("GlobalProductPreviewPanel", () => {
 
     expect(html).toContain('id="product-panel-title"');
     expect(html).toContain("Global product preview");
-    expect(html).toContain(
-      "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock.",
-    );
-    expect(html).toContain(
-      'class="mt-6 flex items-center justify-between gap-3 border-t border-border pt-5"',
-    );
+    expect(html).not.toContain("Global manages product identity");
+    const identity = html.match(
+      /<section[^>]*aria-label="Product identity"[^>]*>(.*?)<\/section>/,
+    )?.[1];
+    expect(identity).toContain('id="product-preview-status"');
+    expect(identity).toContain('aria-label="Product status"');
+    expect(identity).not.toContain("Vegetables");
+    expect(identity).not.toContain(">zucchini<");
     expect(html).not.toContain("min-h-11 items-center rounded-lg border");
     expect(html).toContain("Zucchini");
     expect(html).toContain("Vegetables");
