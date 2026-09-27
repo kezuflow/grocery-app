@@ -438,7 +438,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                 <Table aria-label="Order list">
                   <TableHeader>
                     <TableRow className="border-border">
-                      <TableHead>Order ID</TableHead>
+                      <TableHead className="pl-4 xl:pl-6">Order ID</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead className="text-center">Mode</TableHead>
                       <TableHead className="text-center xl:w-32">Amount</TableHead>
@@ -471,7 +471,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                           }
                         }}
                       >
-                        <TableCell className="font-medium">
+                        <TableCell className="pl-4 font-medium xl:pl-6">
                           <Link
                             href={recordHref(order)}
                             className="whitespace-nowrap hover:underline"
