@@ -1,6 +1,46 @@
 # Commerce alignment — active checkpoint
 
-## Current production rollout — SCHEDULED-NO-RECEIVING-DEPLOY-1 (2026-09-27)
+## Current source change — PACKING-MANUAL-RETRY-1 (2026-09-27)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**
+and **Phase 7 — Complete journeys and activation evidence**. The owner authorized the
+Scheduled packing confirmation, unlimited staff-requested Lalamove replacements,
+assignment plus handover for new Manual deliveries, and the Fulfillment label change.
+The owner then withdrew the proposed editable status field and Scheduled preview status
+setter: Preparing and Ready for dispatch already show the needed progress. Acceptance:
+Scheduled Finish packing order confirms every paid item and quantity physically packed
+accurately; a new Manual assignment moves the Order to Out for delivery and exposes
+Delivered/Failed outcomes through the existing Delivery workspace; staff-requested
+Lalamove replacement has no lifetime count cap after definite closure; the Fulfillment
+Preparation label becomes Status with no editable status control.
+
+Started from clean `main` at `6aff6cc8df7f274d80a3153e1385af86e30ee273`, after the
+prior production rollout. The protected paid Scheduled Order in production still lacks
+the week purchase attestation and has no dispatch, so no real packing or delivery status
+was inferred from the screenshot. This source change adds an accurate packing
+confirmation dialog, immediate Manual assignment and handover, a retry regression test,
+and Fulfillment Status labels. A drafted staff status command, migration, route and
+controls were removed after the owner's correction and are not part of this change.
+Core still derives legal delivery actions; the automatic Instant first-booking safety
+bound remains distinct from unlimited staff-requested replacements after closure.
+
+Verification on the corrected working tree: `pnpm check` passed exit 0, including
+format/naming/architecture/readiness gates, migration verifier, lint, typechecks,
+Web **705/705**, Core Worker/D1 **1743/1743**, and Core/Web builds. Focused delivery
+operations **39/39** and Fulfillment detail **3/3** passed; `git diff --check` passed.
+The fifth staff-requested Lalamove attempt after four definite closures, atomic Manual
+assignment/handover/notification, and packing presentation were exercised locally.
+The previous aggregate on the withdrawn status-control draft was interrupted during
+builds and is not acceptance evidence for this corrected source. No production
+migration, deployment, actual provider transaction, outbound message or real Order
+mutation was authorized or performed. Phase 5/7 acceptance remains open, including
+an authenticated browser journey and actual provider acceptance. Completion level:
+**one owner-corrected source slice locally verified; zero live delivery or packing
+actions accepted**. Next action: a separately authorized paired rollout, followed by
+authenticated browser and actual provider journey acceptance while preserving the
+unresolved payment cases from the prior rollout.
+
+## Prior production rollout — SCHEDULED-NO-RECEIVING-DEPLOY-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
 with **Phase 7 — Complete journeys and activation evidence** still open. The owner explicitly

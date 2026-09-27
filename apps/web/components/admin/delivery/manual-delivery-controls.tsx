@@ -15,13 +15,13 @@ import {
 import { notifyCommandSuccess } from "../admin-feedback";
 
 const labels: Record<ManualDeliveryAction, string> = {
-  ASSIGN: "Assign manual delivery",
+  ASSIGN: "Assign and hand over order",
   HAND_OVER: "Hand over packed order",
   COMPLETE: "Record delivered",
   FAIL: "Record delivery failure",
 };
 const successTitles: Record<ManualDeliveryAction, string> = {
-  ASSIGN: "Manual delivery assigned",
+  ASSIGN: "Manual delivery out for delivery",
   HAND_OVER: "Order handed over",
   COMPLETE: "Manual delivery completed",
   FAIL: "Manual delivery failure recorded",
@@ -263,7 +263,7 @@ export function ManualDeliveryControls({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {action === "ASSIGN"
-              ? `Assign ${personName} (${phoneE164}) to deliver this packed order. The assignment is recorded with staff audit evidence.`
+              ? `Confirm that this packed order is being handed to ${personName} (${phoneE164}) now. The customer status will become Out for delivery.`
               : action === "HAND_OVER"
                 ? "Record that the packed order has physically been handed to the assigned person."
                 : action === "COMPLETE"

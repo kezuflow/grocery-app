@@ -1,10 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import type { FulfillmentQueueView } from "@freshmarkets/contracts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { StatusBadge } from "./admin-shell";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 const actionLabels: Record<string, string> = {
   START_PICKING: "Accept order & start picking",
@@ -87,6 +95,7 @@ export function OperationalOrderDetail({
   onAction: (action: string) => void;
   presentation?: "queue" | "station";
 }) {
+  const [confirmPacking, setConfirmPacking] = useState(false);
   const detail = item.operational;
   if (!detail) return null;
   const scheduled = detail.fulfillmentMode === "SCHEDULED";
@@ -131,7 +140,7 @@ export function OperationalOrderDetail({
           </dd>
         </div>
         <div>
-          <dt className="font-semibold">Dispatch</dt>
+          <dt className="font-semibold">Dispatch status</dt>
           <dd>{deliveryLabel(detail)}</dd>
         </div>
       </dl>
@@ -152,7 +161,7 @@ export function OperationalOrderDetail({
         <h3 className="font-semibold">Ordered items</h3>
         <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
           {detail.fulfillmentMode === "SCHEDULED"
-            ? "After the delivery week purchase, physically pack this order, then finish packing this order here."
+            ? "After the delivery week purchase, physically pack and check every paid item. Finish packing order confirms this Order is packed accurately."
             : "Prepare each immutable paid quantity using the goods evidence shown below."}
         </p>
         <ol className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
@@ -208,7 +217,7 @@ export function OperationalOrderDetail({
         <div className="space-y-3 rounded-lg border border-[var(--fm-border)] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-              Next preparation step
+              Next status action
             </p>
             <p className="mt-1 font-semibold">
               {nextAction
@@ -222,7 +231,11 @@ export function OperationalOrderDetail({
                 key={nextAction}
                 size="sm"
                 disabled={pending}
-                onClick={() => onAction(nextAction)}
+                onClick={() =>
+                  nextAction === "COMPLETE_SCHEDULED_PACKING"
+                    ? setConfirmPacking(true)
+                    : onAction(nextAction)
+                }
               >
                 {actionLabels[nextAction] ?? nextAction}
               </Button>
@@ -289,6 +302,35 @@ export function OperationalOrderDetail({
             : "Choose Manual or Lalamove dispatch"}
         </Link>
       ) : null}
+      <AlertDialog
+        open={confirmPacking}
+        onOpenChange={(open) => !pending && setConfirmPacking(open)}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Confirm this Order is packed accurately</AlertDialogTitle>
+          <AlertDialogDescription>
+            Confirm every paid item and quantity shown above has been physically packed and checked.
+            This updates only this Order to Packed.
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel asChild disabled={pending}>
+              <Button type="button" variant="outline">
+                Back
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setConfirmPacking(false);
+                onAction("COMPLETE_SCHEDULED_PACKING");
+              }}
+            >
+              Confirm packed accurately
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }

@@ -516,7 +516,7 @@ export function FulfillmentWorkspace({
     <div className="w-full space-y-6">
       <PageHeader
         title="Fulfillment"
-        description={`Paid preparation work for ${locationId ? label : "a selected location"}. Core controls each available action and packing prerequisite.`}
+        description={`Paid order status and packing work for ${locationId ? label : "a selected location"}. Core controls each available action.`}
       />
       {orderId || cycleId ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -532,7 +532,7 @@ export function FulfillmentWorkspace({
       ) : null}
       {unresolved ? (
         <Alert role="alert" className="border-[var(--fm-warning-border)]">
-          <AlertTitle>Preparation action awaiting confirmation</AlertTitle>
+          <AlertTitle>Status action awaiting confirmation</AlertTitle>
           <AlertDescription>
             {commandNotice} Order {unresolved.orderId} remains selected until Core returns a final
             result.
@@ -591,7 +591,7 @@ export function FulfillmentWorkspace({
       {locationId && state === "ready" && currentPage ? (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]">
           <ListPageSection
-            title="Preparation queue"
+            title="Order status"
             description={`${label} · ${currentPage.items.length} ${currentPage.items.length === 1 ? "order" : "orders"} on this page`}
           >
             <div className="flex min-h-8 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs text-[var(--fm-text-muted)]">
@@ -625,7 +625,7 @@ export function FulfillmentWorkspace({
                       <TableHead>Customer</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead className="xl:hidden 2xl:table-cell">Timing</TableHead>
-                      <TableHead>Preparation</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Next action</TableHead>
                     </TableRow>
                   </TableHeader>

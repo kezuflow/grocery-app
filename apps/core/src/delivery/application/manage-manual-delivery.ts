@@ -187,7 +187,7 @@ export async function manageManualDelivery(
     version: command.action === "ASSIGN" ? 1 : command.expectedVersion + 1,
   };
   const jobStatus = {
-    ASSIGN: "ASSIGNED",
+    ASSIGN: "EN_ROUTE",
     HAND_OVER: "EN_ROUTE",
     COMPLETE: "DELIVERED",
     FAIL: "FAILED",
@@ -276,8 +276,8 @@ export async function manageManualDelivery(
       db
         .prepare(`INSERT INTO delivery_provider_dispatch
       (id,delivery_job_id,attempt_sequence,method,manual_reason,manual_person_name,manual_phone_e164,
-      merchant_order_id,request_hash,request_snapshot_json,status,version,created_at,updated_at,client_idempotency_key)
-      VALUES (?,?,?,'MANUAL',?,?,?,?,?,?,'ACTIVE',1,?,?,?)`)
+      merchant_order_id,request_hash,request_snapshot_json,status,handed_over_at,version,created_at,updated_at,client_idempotency_key)
+      VALUES (?,?,?,'MANUAL',?,?,?,?,?,?,'ACTIVE',?,1,?,?,?)`)
         .bind(
           dispatchId,
           command.jobId,
@@ -288,6 +288,7 @@ export async function manageManualDelivery(
           dispatchId,
           hash,
           JSON.stringify(command),
+          now,
           now,
           now,
           command.idempotencyKey,
@@ -319,14 +320,18 @@ export async function manageManualDelivery(
       guard(),
     );
   }
-  if (command.action === "HAND_OVER" || command.action === "COMPLETE") {
+  if (
+    command.action === "ASSIGN" ||
+    command.action === "HAND_OVER" ||
+    command.action === "COMPLETE"
+  ) {
     statements.push(
       db
         .prepare(
           "UPDATE fulfillment_record SET status=?,version=version+1,updated_at=? WHERE order_id=? AND version=? AND status=?",
         )
         .bind(
-          command.action === "HAND_OVER" ? "HANDED_OFF" : "COMPLETED",
+          command.action === "COMPLETE" ? "COMPLETED" : "HANDED_OFF",
           now,
           row.order_id,
           row.fulfillment_version,
@@ -338,7 +343,7 @@ export async function manageManualDelivery(
           "UPDATE grocery_order SET status=?,version=version+1 WHERE id=? AND version=? AND status=?",
         )
         .bind(
-          command.action === "HAND_OVER" ? "OUT_FOR_DELIVERY" : "DELIVERED",
+          command.action === "COMPLETE" ? "DELIVERED" : "OUT_FOR_DELIVERY",
           row.order_id,
           row.order_version,
           row.order_status,
@@ -346,19 +351,18 @@ export async function manageManualDelivery(
       guard(),
     );
   }
-  if (command.action !== "ASSIGN")
-    statements.push(
-      ...deliveryNotificationStatements(
-        db,
-        dispatchId,
-        command.action === "HAND_OVER"
-          ? "OUT_FOR_DELIVERY"
-          : command.action === "COMPLETE"
-            ? "DELIVERED"
-            : "DELIVERY_FAILED",
-        now,
-      ),
-    );
+  statements.push(
+    ...deliveryNotificationStatements(
+      db,
+      dispatchId,
+      command.action === "ASSIGN" || command.action === "HAND_OVER"
+        ? "OUT_FOR_DELIVERY"
+        : command.action === "COMPLETE"
+          ? "DELIVERED"
+          : "DELIVERY_FAILED",
+      now,
+    ),
+  );
   statements.push(
     auditEventStatement(db, {
       actorUserId: access.value.authUserId,

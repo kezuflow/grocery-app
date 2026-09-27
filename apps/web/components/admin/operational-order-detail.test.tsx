@@ -59,6 +59,9 @@ describe("OperationalOrderDetail", () => {
     expect(markup).toContain("/admin/procurement?cycleId=cycle-1");
     expect(markup).toContain("Open this delivery week");
     expect(markup).toContain("Finish packing order");
+    expect(markup).toContain("packed accurately");
+    expect(markup).toContain("Dispatch status");
+    expect(markup).toContain("Next status action");
     expect(markup).not.toContain("/admin/receiving");
     expect(markup).not.toContain("Report shortage");
     expect(markup).not.toContain("fully recorded as received");

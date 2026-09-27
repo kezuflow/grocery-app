@@ -1,5 +1,18 @@
 # FreshMarkets Product Rules
 
+Owner correction, 2026-09-27: **Finish packing order** is a positive confirmation
+that every paid item in that Scheduled Order has been physically packed and checked
+accurately. An Order that cannot be confirmed stays unconfirmed; the ordinary
+Scheduled status flow has no shortage/receiving step. Staff-selected Manual delivery
+combines assignment and physical handover in one explicit confirmation, immediately
+placing that Order **Out for delivery**. Retained older assignments still need their
+recorded handover. Staff may request another Lalamove attempt without a lifetime count
+cap after the previous attempt is definitely closed and delivery remains eligible.
+Unknown or active provider outcomes still block replacement; automatic Instant
+first-booking submission remains bounded separately. The owner withdrew the proposed
+editable delivery status field: the existing Preparing and Ready for dispatch views
+show the Core-derived progress without a manual override.
+
 Owner correction, 2026-09-26: The Scheduled settlement rule below applies to the
 current delivery week as well as future weeks. Existing uncertain payments require an
 audited provider-evidence cutover; they are not relabeled failed or deleted. Remove new
