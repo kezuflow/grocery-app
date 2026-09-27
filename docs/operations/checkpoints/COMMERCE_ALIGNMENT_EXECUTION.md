@@ -1,6 +1,57 @@
 # Commerce alignment — active checkpoint
 
-## Current owner correction — SCHEDULED-NO-RECEIVING-1 (2026-09-27)
+## Current production rollout — SCHEDULED-NO-RECEIVING-DEPLOY-1 (2026-09-27)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
+with **Phase 7 — Complete journeys and activation evidence** still open. The owner explicitly
+authorized deployment of the approved no-receiving Scheduled flow. Acceptance for this rollout:
+apply only migration 0104 to the identified production D1, publish synchronized Core/Web Workers,
+confirm live readiness and the original paid Order without making an operational attestation or
+provider transaction, and preserve unresolved payment evidence.
+
+Started on clean, synchronized `main`/`origin/main` at
+`ce43611f2e03d73d8d8428535d1b4b9e784ca663`; the only subsequent source change is this release
+checkpoint. Target was `freshmarkets-core-production` D1 and the production Core/Web Workers bound to
+`freshmarkets.ph`. Wrangler 4.127.1 authenticated with D1 and Workers access. Before mutation,
+remote migrations listed only `0104_scheduled_week_completion.sql` and a current D1 Time Travel
+bookmark was obtained. A protected production export outside Git was restored to an isolated SQLite
+copy with foreign keys enabled and deferred only through the import transaction because the export
+orders child data before parents and the schema has cyclic references. All 165 tables, 208 indexes,
+91 triggers and 212,969 data statements were retained; after applying 0104, `PRAGMA quick_check`
+returned `ok`, `PRAGMA foreign_key_check` returned zero violations, and all 103 prior migration
+records remained. The add-only table migration does not rewrite the live cycle or paid Order.
+
+Verification on exact `ce43611f`: `pnpm check` passed exit 0, including Web **705/705** and Core
+Worker/D1 **1742/1742** tests, migration verifier, typechecks, lint and both builds. Core and Web
+generated types matched their default configs; the Core production-variant type check was not a
+valid comparison to its default generated file. Web `vinext check` reported 100% compatible;
+production Web build, readiness verifier, and strict production Core/Web Wrangler dry runs passed.
+The Core and Web production secret names and binding targets were present. A read-only production
+query found zero currently eligible automatic late-capture refunds before rollout.
+
+Remote `wrangler d1 migrations apply freshmarkets-core-production --env production --remote`
+applied only 0104. Strict deploy published Core version
+`35346010-4631-49f2-a537-7aa1f7a3cee1` and Web version
+`ff6aac0f-4287-47c3-a6ae-ef19b0dcc7d3` with the Web service binding still pointing to that
+production Core. Post-release Core `/health` and `/ready`, Web `/` and `/api/core-health` returned
+HTTP 200. Remote migrations show none pending; `scheduled_week_completion` exists. A read-only D1
+query confirms the first paid Scheduled Order remains `FULFILLMENT_PENDING` / fulfillment `PACKING` /
+delivery `UNASSIGNED`, with no week purchase attestation. The late-capture auto-refund candidate
+count remains zero. No production purchase completion, packing, delivery, provider transaction,
+outbound message or Order mutation was performed. No authenticated Admin browser session was
+available for a live visual check; local browser journey evidence remains separate.
+
+Automatic command review rejected deletion of the temporary plaintext rehearsal export and
+isolated copies from the user's Temp directory (stated reason: blocked by policy). They remain
+outside Git and must be removed through an authorized local cleanup path; no export data was
+written to this checkpoint. Five previously identified unresolved payment attempts still need
+audited provider-evidence reconciliation. Completion level: **1 of 1 authorized Scheduled paired
+production rollouts deployed and health/database-checked; 0 live packing actions or actual provider
+acceptance transactions**. Next action: staff should verify the external purchase, record **Purchase
+complete** for the week, then use **Finish packing order** after physically packing each Order;
+reconcile the five unresolved Payments separately.
+
+## Prior owner correction — SCHEDULED-NO-RECEIVING-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
 with **Phase 7 — Complete journeys and activation evidence** still open. The owner reaffirmed that
