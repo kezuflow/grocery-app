@@ -1,5 +1,66 @@
 # Commerce alignment — active checkpoint
 
+## Problems Orders-style card — ADMIN-ISSUES-CARD-9 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner corrected the separate-table presentation:
+Problems should use one rounded page card like `/admin/orders`, while the
+segmented views and issue table remain distinct inside it. Acceptance: one
+outer card with title/description, segmented views, inner bordered issue table,
+and a page-count/pagination footer; retain view URLs, links, actions and narrow
+records. The footer reports the loaded Problems page count, not an invented
+result-set total.
+
+Started from `main`/`origin/main` at `6cff1bc3`, with only the previous
+correction's checkpoint update pending. Source/design commit `b1ca3aa5` was
+pushed to `origin/main`. Problems now uses stock Admin shadcn Card composition;
+the issue table has fitted desktop columns and switches to readable records
+below `xl`. The footer shows `Showing 4 of 4 problems on this page` for the
+current local seed page. No Core, contracts, storage, provider, business-write,
+Storefront or auth changes were made.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree. Direct local browser
+review showed the populated rounded card, separate inner table, correct
+4-of-4 footer, reachable row actions and the narrow issue-record layout at
+1100px. The prior source revision's fresh-tab browser check confirmed New
+still sets `status=SUBMITTED` and shows the filtered-empty state. This is local
+UI acceptance, not production or provider acceptance.
+
+Completion level: **one Problems card correction implemented, locally verified
+and pushed**. Next action: resume the first unresolved Phase 7 provider journey
+under the commerce plan. This request did not authorize deployment or real
+provider transactions.
+
+## Problems table separation — ADMIN-ISSUES-TABLE-8 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner corrected the previous Problems layout:
+Order ID, Customer, Issue, Reported, Owner and Status must be in a separate
+bordered table below the segmented status views, rather than sharing the
+views' enclosing panel. Acceptance: distinct view control and table surfaces,
+with existing filter URLs, issue links, row actions and mobile records intact.
+
+Started from clean synchronized `main`/`origin/main` at `745d5782`. Source
+and design commit `6cff1bc3` moved only `AdminIndexViews` outside the table
+section and was pushed to `origin/main`. The issue rows, status mapping,
+actions, pagination and business-write path did not change. Storefront and
+auth remain outside the Admin scope.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree. Local browser review
+showed separate tabs and bordered table on desktop and separate tabs above
+issue records on a narrow viewport. In a fresh local Problems tab, selecting
+New set `status=SUBMITTED` and showed the filtered-empty state. This is local
+UI acceptance, not production or provider acceptance.
+
+Completion level: **one Problems layout correction implemented, locally
+verified and pushed**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan. This request did not authorize
+deployment or real provider transactions.
+
 ## Admin table inset and Problems table — ADMIN-INDEX-TABLE-7 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
