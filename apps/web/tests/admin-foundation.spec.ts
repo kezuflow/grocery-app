@@ -129,14 +129,26 @@ test("scope changes keep the notification control in a stable header position", 
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
   const selector = adminPage.getByRole("combobox", { name: "Active admin scope" });
+  const search = adminPage.getByRole("button", { name: "Open admin search" });
   const bell = adminPage.getByRole("button", { name: "Open notifications" });
   await expect(selector).toContainText("Global");
+  const selectorBox = await selector.boundingBox();
+  const searchBox = await search.boundingBox();
   const before = await bell.boundingBox();
+  expect(selectorBox!.x + selectorBox!.width).toBeLessThan(searchBox!.x);
+  expect(searchBox!.x + searchBox!.width).toBeLessThan(before!.x);
   await selector.click();
   await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
   await expect(selector).toContainText("Central Cebu");
   const after = await bell.boundingBox();
   expect(before?.x).toBe(after?.x);
+
+  await adminPage.setViewportSize({ width: 320, height: 844 });
+  await expect(search).toBeHidden();
+  await expect(selector).toBeVisible();
+  const mobileSelector = await selector.boundingBox();
+  const mobileBell = await bell.boundingBox();
+  expect(mobileSelector!.x + mobileSelector!.width).toBeLessThan(mobileBell!.x);
 });
 
 test("a legacy Payments deep link opens the authorized canonical workspace", async ({

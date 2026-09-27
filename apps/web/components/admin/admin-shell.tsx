@@ -208,7 +208,7 @@ function AdminHeader({
       className="sticky top-0 z-30 border-b border-border bg-background text-foreground"
     >
       <div className="flex h-14 items-center justify-between gap-1 px-2 min-[430px]:gap-4 min-[430px]:px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1 md:gap-2">
           <AdminMobileMenu items={items} />
           <Link
             href="/admin"
@@ -219,7 +219,7 @@ function AdminHeader({
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary shadow-sm ring-1 ring-black/5">
               <FreshMarketsMark className="size-6" />
             </span>
-            <span className="hidden truncate pr-1 text-sm font-semibold tracking-tight min-[430px]:inline">
+            <span className="hidden truncate pr-1 text-sm font-semibold tracking-tight md:inline">
               freshmarkets
             </span>
           </Link>
@@ -237,7 +237,7 @@ function AdminHeader({
               <PanelLeftClose className="size-4" aria-hidden="true" />
             )}
           </Button>
-          <AdminSearchTrigger onOpen={onOpenSearch} />
+          <AdminScopeSelector fallbackLabel={scopeLabel} />
         </div>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link
@@ -248,7 +248,7 @@ function AdminHeader({
             Marketplace
           </Link>
           <span className="mx-1 hidden h-5 w-px bg-border xl:block" aria-hidden="true" />
-          <AdminScopeSelector fallbackLabel={scopeLabel} />
+          <AdminSearchTrigger onOpen={onOpenSearch} />
           <AdminNotifications />
           <AdminThemeToggle />
           <AdminIdentity />
@@ -440,9 +440,12 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
     >
       <SelectTrigger
         aria-label="Active admin scope"
-        className="h-8 w-28 gap-2 rounded-md px-2.5 text-sm font-medium sm:w-36 lg:w-44 [&>svg:last-child]:hidden"
+        className="h-8 w-20 gap-1 rounded-md px-2 text-sm font-medium min-[380px]:w-28 sm:w-36 sm:gap-2 sm:px-2.5 lg:w-44 [&>svg:last-child]:hidden"
       >
-        <span className="size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden="true" />
+        <span
+          className="hidden size-2 shrink-0 rounded-full bg-muted-foreground sm:inline-flex"
+          aria-hidden="true"
+        />
         <span className="truncate">{selectedLabel ?? "Select scope…"}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </SelectTrigger>
