@@ -88,7 +88,7 @@ export function AdminOverviewViewContent({
       <AdminDashboardGrid ariaLabel="Operational metrics" className="xl:grid-cols-4">
         {cards.map((card) => (
           <MetricCard
-            className="xl:col-span-1"
+            className="border-border shadow-none xl:col-span-1"
             detail={
               isGlobal && card.code === "OPEN_EXCEPTIONS" && card.value !== null
                 ? "Select a location in the header or below to inspect its queue."
@@ -109,9 +109,9 @@ export function AdminOverviewViewContent({
 
       <AdminDashboardGrid ariaLabel="Operational workload and exceptions">
         <Card
-          className={`min-w-0 gap-0 py-0 shadow-sm md:col-span-2 ${exceptionsAvailable ? "xl:col-span-7" : "xl:col-span-12"}`}
+          className={`min-w-0 gap-0 border-border py-0 shadow-none md:col-span-2 ${exceptionsAvailable ? "xl:col-span-7" : "xl:col-span-12"}`}
         >
-          <CardHeader className="border-b px-4 py-4 sm:px-5">
+          <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
             <CardTitle>Fulfillment by status</CardTitle>
             <CardDescription>Record counts include completed stages.</CardDescription>
             {fulfillmentHref ? (
@@ -154,8 +154,8 @@ export function AdminOverviewViewContent({
         </Card>
 
         {exceptionsAvailable ? (
-          <Card className="min-w-0 gap-0 py-0 shadow-sm md:col-span-2 xl:col-span-5">
-            <CardHeader className="border-b px-4 py-4 sm:px-5">
+          <Card className="min-w-0 gap-0 border-border py-0 shadow-none md:col-span-2 xl:col-span-5">
+            <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
               <CardTitle>Priority exceptions</CardTitle>
               {isGlobal ? (
                 <CardDescription>
@@ -235,8 +235,8 @@ export function AdminOverviewViewContent({
         ) : null}
       </AdminDashboardGrid>
 
-      <Card id="notifications" className="scroll-mt-20 gap-0 py-0">
-        <CardHeader className="border-b px-4 py-4">
+      <Card id="notifications" className="scroll-mt-20 gap-0 border-border py-0 shadow-none">
+        <CardHeader className="border-b border-border px-4 py-4">
           <CardTitle>Recent notifications</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
@@ -250,8 +250,8 @@ export function AdminOverviewViewContent({
         </CardContent>
       </Card>
 
-      <Card className="min-w-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b px-4 py-4 sm:px-5">
+      <Card className="min-w-0 gap-0 border-border py-0 shadow-none">
+        <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
           <CardTitle>Recent material operations</CardTitle>
         </CardHeader>
         <CardContent className="px-0">

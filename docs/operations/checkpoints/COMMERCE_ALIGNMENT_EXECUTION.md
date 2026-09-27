@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Admin Home visual alignment — ADMIN-HOME-STYLE-28 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to style `/admin` after the stock
+shadcn Admin index work. Acceptance: Home uses the near-black Admin canvas,
+one rounded page frame and subtle stock card borders/spacing; metric and
+operational sections remain readable in dark and light appearances while all
+scope-aware data, access states, actions and links remain intact.
+
+Started on clean `main` at `238daa7b`. Home now uses a shadcn Card page frame
+with its Overview heading, description and existing Refresh control in the
+header. The existing metric, workload, exception, notification and audit
+sections sit inside that frame. Admin-only dark tokens give Home the same
+near-black surface as the styled indexes. Inner cards have subdued borders,
+no shadow and semantic dividers. One shared Admin MetricCard divider now uses
+`border-border`; no Storefront or auth code changed. Data, routes, permission
+checks, scope selection and commands were not changed.
+
+The authenticated local `/admin` page was inspected in the browser before and
+after the styling change at a desktop viewport. Its visible metrics, links,
+exceptions and notifications remained present, and the new frame and subtle
+dividers rendered in dark mode. Focused overview/composition tests (4/4), Web
+typecheck, focused oxlint and oxfmt checks, and `git diff --check` passed on the
+working tree. Light-mode and mobile browser acceptance are not recorded; the
+layout uses stock responsive utilities and semantic tokens. No provider
+transaction or deployment occurred.
+
+Completion level: **one Admin Home styling slice implemented and locally
+verified in dark mode**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan.
+
 ## Promotion status Sonner copy — ADMIN-PROMOTION-TOAST-27 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

@@ -413,6 +413,14 @@ html.fm-admin-dark .fm-admin-orders {
   background: var(--fm-background);
 }
 
+html.fm-admin-dark .fm-admin:has(.fm-admin-overview) {
+  --fm-background: oklch(0.09 0 0);
+  --fm-card: var(--fm-background);
+  --fm-surface-muted: oklch(0.2 0 0);
+  --fm-hover: oklch(0.2 0 0);
+  background: var(--fm-background);
+}
+
 /* The Orders list treatment, scoped to the requested Admin index pages. */
 html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
   --fm-background: oklch(0.09 0 0);

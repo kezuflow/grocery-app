@@ -58,7 +58,7 @@ export function MetricCard({
         {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
       </CardHeader>
       {freshness || href ? (
-        <CardContent className="flex items-center justify-between gap-3 border-t px-4 pt-3 text-xs text-muted-foreground">
+        <CardContent className="flex items-center justify-between gap-3 border-t border-border px-4 pt-3 text-xs text-muted-foreground">
           <span>{freshness}</span>
           {href ? (
             <Link className="font-medium text-primary hover:underline" href={href} prefetch={false}>
