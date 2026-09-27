@@ -32,14 +32,9 @@ export function AdminIndexViews<T extends string>({
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)} className="min-w-0">
       <div className="overflow-x-auto px-4 py-3">
-        <TabsList aria-label={label} className="h-10 w-max rounded-full p-1">
+        <TabsList aria-label={label} className="w-max">
           {views.map((view) => (
-            <TabsTrigger
-              key={view.status}
-              value={view.status}
-              disabled={disabled}
-              className="min-w-32 rounded-full px-4"
-            >
+            <TabsTrigger key={view.status} value={view.status} disabled={disabled}>
               {view.label}
             </TabsTrigger>
           ))}

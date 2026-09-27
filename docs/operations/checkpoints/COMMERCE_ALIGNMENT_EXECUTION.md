@@ -1,5 +1,32 @@
 # Commerce alignment — active checkpoint
 
+## Admin index tabs rectangular treatment — ADMIN-TABS-29 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner supplied a rounded rectangular segmented-tab
+reference and asked to replace the capsule pill style. Acceptance: existing
+in-page Admin view tabs have a rounded rectangular track and active segment,
+while view values, URL/filter selection, disabled state, narrow-screen
+scrolling and keyboard behavior stay intact. Storefront and auth are excluded.
+
+Started on clean `main` at `d0596e3a`. The shared AdminIndexViews composition
+now uses the configured shadcn Tabs default track and trigger radii, height,
+padding and content-sized segment widths. It no longer applies `rounded-full`
+or fixed minimum segment widths. This covers Problems, Products, Categories,
+Banners, Promotion Codes, Promotion Sale, Payments, Delivery weeks and
+Fulfillment/Point of Sale without changing their controls or data flow.
+
+The authenticated local Promotions page showed the rounded rectangular active
+tab and track with the existing list and selection. Focused Admin controls and
+Product list tests passed (8/8), as did Web typecheck, focused oxlint and
+oxfmt, and `git diff --check` on the working tree. No status command, provider
+transaction or deployment occurred.
+
+Completion level: **one shared Admin tab presentation change implemented and
+locally verified**. Next action: resume the first unresolved Phase 7 provider
+journey under the commerce plan.
+
 ## Admin Home visual alignment — ADMIN-HOME-STYLE-28 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
