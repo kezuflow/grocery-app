@@ -48,6 +48,7 @@ import {
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "../../../components/admin/admin-index-card";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import {
@@ -910,7 +911,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
             className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
             aria-labelledby="admin-page-title"
           >
-            <PageHeader
+            <AdminIndexCard
               title="Promotion Codes"
               description="Discount codes customers enter at checkout."
               action={
@@ -921,19 +922,34 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                   </Button>
                 ) : undefined
               }
-            />
+              footer={
+                <>
+                  <AdminIndexPageCount
+                    visible={visiblePromotions.length}
+                    loaded={page?.items.length ?? 0}
+                    singular="promotion code"
+                    plural="promotion codes"
+                  />
+                  <AdminCursorPagination
+                    compact
+                    pageNumber={pagination.pageNumber}
+                    nextCursor={page?.nextCursor ?? null}
+                    pending={createDirty || createLocked}
+                    onPrevious={pagination.previous}
+                    onNext={pagination.next}
+                  />
+                </>
+              }
+            >
+              {notice ? (
+                <p
+                  role="status"
+                  className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
+                >
+                  {notice}
+                </p>
+              ) : null}
 
-            {notice ? (
-              <p
-                role="status"
-                className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
-              >
-                {notice}
-              </p>
-            ) : null}
-
-            <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <h2 className="sr-only">Promotion code list</h2>
               <AdminIndexViews
                 label="Promotion code views"
                 views={[
@@ -948,10 +964,9 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                   updateListFilters(query, nextView);
                 }}
               />
-              <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground" aria-live="polite">
-                  Showing {visiblePromotions.length} of {page?.items.length ?? 0} promotion codes on
-                  this page. Search and status filter this page only.
+              <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Search and status filter this page only.
                 </p>
                 <label className="relative block sm:w-72">
                   <Search
@@ -973,160 +988,155 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                 </label>
               </div>
 
-              <div className="overflow-x-auto">
-                {visiblePromotions.length === 0 ? (
-                  <p className="p-6 text-sm text-muted-foreground" role="status">
-                    No promotion codes match this view on the current page. Other promotion codes
-                    may appear on later pages.
-                  </p>
-                ) : (
-                  <Table aria-label="Promotion code list">
-                    <TableHeader>
-                      <TableRow className="bg-muted hover:bg-muted">
-                        <TableHead>Code</TableHead>
-                        <TableHead>Campaign name</TableHead>
-                        <TableHead>Benefit</TableHead>
-                        <TableHead>Minimum subtotal</TableHead>
-                        <TableHead>Period</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>
-                          <span className="sr-only">Manage</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visiblePromotions.map((promotion) => {
-                        const detailsOpen =
-                          createOpen && selectedPromotion?.promotionId === promotion.promotionId;
-                        const toggleDetails = () =>
-                          detailsOpen ? closePanel() : openPanel(promotion);
+              <section className="overflow-hidden rounded-md border border-border">
+                <h2 className="sr-only">Promotion code list</h2>
+                <div className="overflow-x-auto">
+                  {visiblePromotions.length === 0 ? (
+                    <p className="p-6 text-sm text-muted-foreground" role="status">
+                      No promotion codes match this view on the current page. Other promotion codes
+                      may appear on later pages.
+                    </p>
+                  ) : (
+                    <Table aria-label="Promotion code list">
+                      <TableHeader>
+                        <TableRow className="bg-muted hover:bg-muted">
+                          <TableHead>Code</TableHead>
+                          <TableHead>Campaign name</TableHead>
+                          <TableHead>Benefit</TableHead>
+                          <TableHead>Minimum subtotal</TableHead>
+                          <TableHead>Period</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>
+                            <span className="sr-only">Manage</span>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {visiblePromotions.map((promotion) => {
+                          const detailsOpen =
+                            createOpen && selectedPromotion?.promotionId === promotion.promotionId;
+                          const toggleDetails = () =>
+                            detailsOpen ? closePanel() : openPanel(promotion);
 
-                        return (
-                          <TableRow
-                            key={promotion.promotionId}
-                            className="cursor-pointer align-top transition-colors hover:bg-accent focus-visible:bg-accent"
-                            tabIndex={0}
-                            aria-expanded={detailsOpen}
-                            onClick={toggleDetails}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                toggleDetails();
-                              }
-                            }}
-                          >
-                            <TableCell className="whitespace-nowrap font-semibold text-foreground">
-                              {promotion.code}
-                            </TableCell>
-                            <TableCell className="min-w-32 max-w-48 text-foreground">
-                              {promotion.name}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
-                                ? `${promotion.percent}% off`
-                                : promotion.benefitType === "DELIVERY_FEE_WAIVER"
-                                  ? "Free delivery"
-                                  : `₱${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {promotion.minimumMinor > 0
-                                ? `₱${(promotion.minimumMinor / 100).toFixed(2)}`
-                                : "None"}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              <span>{new Date(promotion.startsAt).toLocaleDateString()}</span>
-                              <span className="block">
-                                {promotion.endsAt
-                                  ? new Date(promotion.endsAt).toLocaleDateString()
-                                  : "No end date"}
-                              </span>
-                            </TableCell>
-                            <TableCell
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
+                          return (
+                            <TableRow
+                              key={promotion.promotionId}
+                              className="cursor-pointer align-top transition-colors hover:bg-accent focus-visible:bg-accent"
+                              tabIndex={0}
+                              aria-expanded={detailsOpen}
+                              onClick={toggleDetails}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  toggleDetails();
+                                }
+                              }}
                             >
-                              {canManage ? (
-                                <PromotionStatusSwitch
-                                  promotion={promotion}
-                                  onApplied={(summary) =>
-                                    setPage((current) =>
-                                      current && !summary.productTargets?.length
-                                        ? {
-                                            ...current,
-                                            items: current.items.map((item) =>
-                                              item.promotionId === summary.promotionId
-                                                ? summary
-                                                : item,
-                                            ),
-                                          }
-                                        : current,
-                                    )
-                                  }
-                                />
-                              ) : (
-                                <StatusBadge
-                                  tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
-                                >
-                                  {promotion.status === "ACTIVE" ? "Active" : promotion.status}
-                                </StatusBadge>
-                              )}
-                            </TableCell>
-                            <TableCell
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                            >
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={`Open actions for ${promotion.code}`}
-                                    className="size-8 rounded-md"
+                              <TableCell className="whitespace-nowrap font-semibold text-foreground">
+                                {promotion.code}
+                              </TableCell>
+                              <TableCell className="min-w-32 max-w-48 text-foreground">
+                                {promotion.name}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                {promotion.benefitType.endsWith("PERCENT_DISCOUNT")
+                                  ? `${promotion.percent}% off`
+                                  : promotion.benefitType === "DELIVERY_FEE_WAIVER"
+                                    ? "Free delivery"
+                                    : `₱${((promotion.discountMinor ?? 0) / 100).toFixed(2)} off`}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                {promotion.minimumMinor > 0
+                                  ? `₱${(promotion.minimumMinor / 100).toFixed(2)}`
+                                  : "None"}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                <span>{new Date(promotion.startsAt).toLocaleDateString()}</span>
+                                <span className="block">
+                                  {promotion.endsAt
+                                    ? new Date(promotion.endsAt).toLocaleDateString()
+                                    : "No end date"}
+                                </span>
+                              </TableCell>
+                              <TableCell
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                              >
+                                {canManage ? (
+                                  <PromotionStatusSwitch
+                                    promotion={promotion}
+                                    onApplied={(summary) =>
+                                      setPage((current) =>
+                                        current && !summary.productTargets?.length
+                                          ? {
+                                              ...current,
+                                              items: current.items.map((item) =>
+                                                item.promotionId === summary.promotionId
+                                                  ? summary
+                                                  : item,
+                                              ),
+                                            }
+                                          : current,
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  <StatusBadge
+                                    tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
                                   >
-                                    <EllipsisVertical aria-hidden="true" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      href={`/admin/promotions/${promotion.promotionId}`}
-                                      prefetch={false}
+                                    {promotion.status === "ACTIVE" ? "Active" : promotion.status}
+                                  </StatusBadge>
+                                )}
+                              </TableCell>
+                              <TableCell
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                              >
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={`Open actions for ${promotion.code}`}
+                                      className="size-8 rounded-md"
                                     >
-                                      <Eye aria-hidden="true" />
-                                      View details
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  {canManage ? (
+                                      <EllipsisVertical aria-hidden="true" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
                                     <DropdownMenuItem asChild>
                                       <Link
                                         href={`/admin/promotions/${promotion.promotionId}`}
                                         prefetch={false}
                                       >
-                                        <Pencil aria-hidden="true" />
-                                        Edit details
+                                        <Eye aria-hidden="true" />
+                                        View details
                                       </Link>
                                     </DropdownMenuItem>
-                                  ) : null}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-              <AdminCursorPagination
-                compact
-                pageNumber={pagination.pageNumber}
-                nextCursor={page?.nextCursor ?? null}
-                pending={createDirty || createLocked}
-                onPrevious={pagination.previous}
-                onNext={pagination.next}
-              />
-            </section>
+                                    {canManage ? (
+                                      <DropdownMenuItem asChild>
+                                        <Link
+                                          href={`/admin/promotions/${promotion.promotionId}`}
+                                          prefetch={false}
+                                        >
+                                          <Pencil aria-hidden="true" />
+                                          Edit details
+                                        </Link>
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </section>
+            </AdminIndexCard>
           </section>
 
           {panelMounted && selectedPromotion ? (

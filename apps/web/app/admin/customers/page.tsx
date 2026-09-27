@@ -19,6 +19,7 @@ import {
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "../../../components/admin/admin-index-card";
 import { CustomerAccessStatusBadge } from "../../../components/admin/customer-status-badges";
 import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
@@ -307,7 +308,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
       className="fm-admin-task-index space-y-6 p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader
+      <AdminIndexCard
         title="Customers"
         action={
           canManage ? (
@@ -325,14 +326,32 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
             </Button>
           ) : undefined
         }
-      />
-      <AdminLiveRegion message={notice} />
-      <AdminLiveRegion message={panelOpen ? null : invitationCommand.notice} />
+        footer={
+          state.phase === "ready" ? (
+            <>
+              <AdminIndexPageCount
+                visible={visibleCustomers.length}
+                loaded={visibleCustomers.length}
+                singular="customer"
+                plural="customers"
+              />
+              <AdminCursorPagination
+                compact
+                pageNumber={pagination.pageNumber}
+                nextCursor={customers?.nextCursor ?? null}
+                pending={panelOpen}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
+              />
+            </>
+          ) : undefined
+        }
+      >
+        <AdminLiveRegion message={notice} />
+        <AdminLiveRegion message={panelOpen ? null : invitationCommand.notice} />
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <h2 className="sr-only">Customer list</h2>
         <form
-          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
+          className="flex min-h-14 flex-wrap items-center gap-2 py-2.5"
           onSubmit={(event) => {
             event.preventDefault();
             applySearch(query);
@@ -365,124 +384,117 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
           ) : null}
         </form>
 
-        {state.phase === "loading" ? (
-          <div className="p-4">
-            <AdminPageState state="loading" title="Loading customers" />
-          </div>
-        ) : null}
-        {state.phase === "error" ? (
-          <div className="p-4">
-            <AdminPageState
-              state="error"
-              title="Customers could not be loaded"
-              message={state.message}
-              requestId={state.requestId}
-              onRetry={() => void load(appliedQuery, pagination.cursor)}
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && visibleCustomers.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState
-              state={appliedQuery ? "filtered-empty" : "empty"}
-              message="No customers are visible in this view."
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && visibleCustomers.length > 0 ? (
-          <>
-            <ul aria-label="Customer list" className="divide-y divide-border sm:hidden">
-              {visibleCustomers.map((customer) => (
-                <li key={customer.customerId} className="space-y-3 p-4">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link
-                        href={recordHref(customer)}
-                        prefetch={false}
-                        onClick={openCustomer}
-                        className="break-all font-semibold text-foreground hover:underline"
-                      >
-                        {customer.email}
-                      </Link>
-                      <p className="mt-0.5 break-all text-sm text-muted-foreground">
-                        {customer.phone ?? "No phone number"}
-                      </p>
-                    </div>
-                    <CustomerAccessStatusBadge status={customer.accessStatus} />
-                  </div>
-                  <dl className="grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Orders</dt>
-                      <dd className="mt-0.5 font-medium">{customer.orderCount}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Last order</dt>
-                      <dd className="mt-0.5">{date(customer.lastOrderAt)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Joined</dt>
-                      <dd className="mt-0.5">{date(customer.createdAt)}</dd>
-                    </div>
-                  </dl>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden sm:block">
-              <Table aria-label="Customer list">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Access</TableHead>
-                    <TableHead>Orders</TableHead>
-                    <TableHead>Last order</TableHead>
-                    <TableHead>Joined</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleCustomers.map((customer) => (
-                    <TableRow key={customer.customerId}>
-                      <TableCell>
+        <section className="overflow-hidden rounded-md border border-border">
+          <h2 className="sr-only">Customer list</h2>
+
+          {state.phase === "loading" ? (
+            <div className="p-4">
+              <AdminPageState state="loading" title="Loading customers" />
+            </div>
+          ) : null}
+          {state.phase === "error" ? (
+            <div className="p-4">
+              <AdminPageState
+                state="error"
+                title="Customers could not be loaded"
+                message={state.message}
+                requestId={state.requestId}
+                onRetry={() => void load(appliedQuery, pagination.cursor)}
+              />
+            </div>
+          ) : null}
+          {state.phase === "ready" && visibleCustomers.length === 0 ? (
+            <div className="p-4">
+              <AdminPageState
+                state={appliedQuery ? "filtered-empty" : "empty"}
+                message="No customers are visible in this view."
+              />
+            </div>
+          ) : null}
+          {state.phase === "ready" && visibleCustomers.length > 0 ? (
+            <>
+              <ul aria-label="Customer list" className="divide-y divide-border sm:hidden">
+                {visibleCustomers.map((customer) => (
+                  <li key={customer.customerId} className="space-y-3 p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <Link
                           href={recordHref(customer)}
                           prefetch={false}
                           onClick={openCustomer}
-                          className="break-all font-medium hover:underline"
+                          className="break-all font-semibold text-foreground hover:underline"
                         >
                           {customer.email}
                         </Link>
-                        <p className="mt-0.5 break-all text-xs text-muted-foreground">
+                        <p className="mt-0.5 break-all text-sm text-muted-foreground">
                           {customer.phone ?? "No phone number"}
                         </p>
-                      </TableCell>
-                      <TableCell>
-                        <CustomerAccessStatusBadge status={customer.accessStatus} />
-                      </TableCell>
-                      <TableCell className="font-medium">{customer.orderCount}</TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {date(customer.lastOrderAt)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {date(customer.createdAt)}
-                      </TableCell>
+                      </div>
+                      <CustomerAccessStatusBadge status={customer.accessStatus} />
+                    </div>
+                    <dl className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Orders</dt>
+                        <dd className="mt-0.5 font-medium">{customer.orderCount}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Last order</dt>
+                        <dd className="mt-0.5">{date(customer.lastOrderAt)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Joined</dt>
+                        <dd className="mt-0.5">{date(customer.createdAt)}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden sm:block">
+                <Table aria-label="Customer list">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Access</TableHead>
+                      <TableHead>Orders</TableHead>
+                      <TableHead>Last order</TableHead>
+                      <TableHead>Joined</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : null}
-
-        {state.phase === "ready" ? (
-          <AdminCursorPagination
-            compact
-            pageNumber={pagination.pageNumber}
-            nextCursor={customers?.nextCursor ?? null}
-            pending={panelOpen}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-          />
-        ) : null}
-      </section>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleCustomers.map((customer) => (
+                      <TableRow key={customer.customerId}>
+                        <TableCell>
+                          <Link
+                            href={recordHref(customer)}
+                            prefetch={false}
+                            onClick={openCustomer}
+                            className="break-all font-medium hover:underline"
+                          >
+                            {customer.email}
+                          </Link>
+                          <p className="mt-0.5 break-all text-xs text-muted-foreground">
+                            {customer.phone ?? "No phone number"}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <CustomerAccessStatusBadge status={customer.accessStatus} />
+                        </TableCell>
+                        <TableCell className="font-medium">{customer.orderCount}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                          {date(customer.lastOrderAt)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                          {date(customer.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </AdminIndexCard>
     </section>
   );
 

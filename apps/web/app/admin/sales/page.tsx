@@ -41,6 +41,7 @@ import {
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "../../../components/admin/admin-index-card";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import {
@@ -729,7 +730,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
           className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
           aria-labelledby="admin-page-title"
         >
-          <PageHeader
+          <AdminIndexCard
             title="Promotion Sale"
             description="Automatic discounts for selected products and locations."
             action={
@@ -740,16 +741,34 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                 </Button>
               ) : undefined
             }
-          />
+            footer={
+              <>
+                <AdminIndexPageCount
+                  visible={visibleSales.length}
+                  loaded={page?.items.length ?? 0}
+                  singular="sale"
+                  plural="sales"
+                />
+                <AdminCursorPagination
+                  compact
+                  pageNumber={pagination.pageNumber}
+                  nextCursor={page?.nextCursor ?? null}
+                  pending={createDirty || createLocked}
+                  onPrevious={pagination.previous}
+                  onNext={pagination.next}
+                />
+              </>
+            }
+          >
+            {notice ? (
+              <p
+                role="status"
+                className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
+              >
+                {notice}
+              </p>
+            ) : null}
 
-          {notice ? (
-            <p role="status" className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm">
-              {notice}
-            </p>
-          ) : null}
-
-          <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <h2 className="sr-only">Promotion Sale list</h2>
             <AdminIndexViews
               label="Promotion Sale views"
               views={[
@@ -764,9 +783,8 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                 updateListFilters(query, nextView);
               }}
             />
-            <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-muted-foreground" aria-live="polite">
-                Showing {visibleSales.length} of {page?.items.length ?? 0} sales on this page.
+            <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
                 Search and status filter this page only.
               </p>
               <label className="relative block sm:w-72">
@@ -789,123 +807,119 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
               </label>
             </div>
 
-            <div className="overflow-x-auto">
-              {visibleSales.length === 0 ? (
-                <p className="p-6 text-sm text-muted-foreground" role="status">
-                  No inventory sales match this view on the current page. Other sales may appear on
-                  later pages.
-                </p>
-              ) : (
-                <Table aria-label="Promotion Sale list">
-                  <TableHeader>
-                    <TableRow className="bg-muted hover:bg-muted">
-                      <TableHead>Sale</TableHead>
-                      <TableHead>Products</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Discount</TableHead>
-                      <TableHead>Allowance</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>
-                        <span className="sr-only">Manage</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleSales.map((promotion) => (
-                      <TableRow key={promotion.promotionId} className="align-top">
-                        <TableCell className="min-w-40 font-semibold text-foreground">
-                          {promotion.name}
-                        </TableCell>
-                        <TableCell className="min-w-48 max-w-72 text-sm text-muted-foreground">
-                          {saleProductsLabel(promotion)}
-                        </TableCell>
-                        <TableCell className="min-w-36 whitespace-nowrap text-sm text-muted-foreground">
-                          {saleLocationsLabel(promotion)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                          {saleDiscountLabel(promotion)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                          {saleAllowance(promotion)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            {canManage ? (
-                              <PromotionStatusSwitch
-                                promotion={promotion}
-                                onApplied={(summary) =>
-                                  setPage((current) => {
-                                    if (!current || !summary.productTargets?.length) return current;
-                                    return {
-                                      ...current,
-                                      items: current.items.map((item) =>
-                                        item.promotionId === summary.promotionId ? summary : item,
-                                      ),
-                                    };
-                                  })
-                                }
-                              />
-                            ) : (
-                              <StatusBadge
-                                tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
-                              >
-                                {promotion.status === "ACTIVE" ? "Active" : promotion.status}
-                              </StatusBadge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Open actions for ${promotion.name}`}
-                                className="size-8 rounded-md"
-                              >
-                                <EllipsisVertical aria-hidden="true" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/admin/sales/${promotion.promotionId}`}
-                                  prefetch={false}
-                                >
-                                  <Eye aria-hidden="true" />
-                                  View details
-                                </Link>
-                              </DropdownMenuItem>
+            <section className="overflow-hidden rounded-md border border-border">
+              <h2 className="sr-only">Promotion Sale list</h2>
+              <div className="overflow-x-auto">
+                {visibleSales.length === 0 ? (
+                  <p className="p-6 text-sm text-muted-foreground" role="status">
+                    No inventory sales match this view on the current page. Other sales may appear
+                    on later pages.
+                  </p>
+                ) : (
+                  <Table aria-label="Promotion Sale list">
+                    <TableHeader>
+                      <TableRow className="bg-muted hover:bg-muted">
+                        <TableHead>Sale</TableHead>
+                        <TableHead>Products</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Discount</TableHead>
+                        <TableHead>Allowance</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>
+                          <span className="sr-only">Manage</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleSales.map((promotion) => (
+                        <TableRow key={promotion.promotionId} className="align-top">
+                          <TableCell className="min-w-40 font-semibold text-foreground">
+                            {promotion.name}
+                          </TableCell>
+                          <TableCell className="min-w-48 max-w-72 text-sm text-muted-foreground">
+                            {saleProductsLabel(promotion)}
+                          </TableCell>
+                          <TableCell className="min-w-36 whitespace-nowrap text-sm text-muted-foreground">
+                            {saleLocationsLabel(promotion)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {saleDiscountLabel(promotion)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {saleAllowance(promotion)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <div className="flex items-center gap-3">
                               {canManage ? (
+                                <PromotionStatusSwitch
+                                  promotion={promotion}
+                                  onApplied={(summary) =>
+                                    setPage((current) => {
+                                      if (!current || !summary.productTargets?.length)
+                                        return current;
+                                      return {
+                                        ...current,
+                                        items: current.items.map((item) =>
+                                          item.promotionId === summary.promotionId ? summary : item,
+                                        ),
+                                      };
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <StatusBadge
+                                  tone={promotion.status === "ACTIVE" ? "success" : "neutral"}
+                                >
+                                  {promotion.status === "ACTIVE" ? "Active" : promotion.status}
+                                </StatusBadge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Open actions for ${promotion.name}`}
+                                  className="size-8 rounded-md"
+                                >
+                                  <EllipsisVertical aria-hidden="true" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
                                 <DropdownMenuItem asChild>
                                   <Link
-                                    href={`/admin/sales/${promotion.promotionId}?edit=1`}
+                                    href={`/admin/sales/${promotion.promotionId}`}
                                     prefetch={false}
                                   >
-                                    <Pencil aria-hidden="true" />
-                                    Edit details
+                                    <Eye aria-hidden="true" />
+                                    View details
                                   </Link>
                                 </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-            <AdminCursorPagination
-              compact
-              pageNumber={pagination.pageNumber}
-              nextCursor={page?.nextCursor ?? null}
-              pending={createDirty || createLocked}
-              onPrevious={pagination.previous}
-              onNext={pagination.next}
-            />
-          </section>
+                                {canManage ? (
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      href={`/admin/sales/${promotion.promotionId}?edit=1`}
+                                      prefetch={false}
+                                    >
+                                      <Pencil aria-hidden="true" />
+                                      Edit details
+                                    </Link>
+                                  </DropdownMenuItem>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </section>
+          </AdminIndexCard>
         </section>
       ) : null}
     </div>

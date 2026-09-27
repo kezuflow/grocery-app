@@ -8,7 +8,7 @@ import type {
   AdminPaymentSummary,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { RefreshCw, X } from "lucide-react";
+import { Eye, RefreshCw, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminCommandIntent } from "./admin-command-state";
@@ -20,7 +20,8 @@ import {
 } from "./admin-controls";
 import { AdminMasterDetailWorkspace } from "./admin-master-detail-workspace";
 import { AdminPageState } from "./admin-page-state";
-import { PageHeader, StatusBadge } from "./admin-shell";
+import { StatusBadge } from "./admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "./admin-index-card";
 import { PaymentRecovery } from "./payment-recovery";
 import { RefundRecovery } from "./refund-recovery";
 import { Button } from "@/components/admin/shadcn/button";
@@ -461,8 +462,64 @@ export function PaymentsWorkspace({
       className="fm-admin-task-index space-y-6 p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader title="Payments" />
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <AdminIndexCard
+        title="Payments"
+        footer={
+          !listError && !loading && (tab === "payments" ? payments : attention) ? (
+            <>
+              <AdminIndexPageCount
+                visible={
+                  tab === "payments"
+                    ? (payments?.items.length ?? 0)
+                    : (attention?.items.length ?? 0)
+                }
+                loaded={
+                  tab === "payments"
+                    ? (payments?.items.length ?? 0)
+                    : (attention?.items.length ?? 0)
+                }
+                singular={tab === "payments" ? "payment" : "payment issue"}
+                plural={tab === "payments" ? "payments" : "payment issues"}
+              />
+              {tab === "payments" && payments ? (
+                <AdminCursorPagination
+                  compact
+                  pageNumber={pages.pageNumber}
+                  nextCursor={payments.nextCursor}
+                  onPrevious={() => {
+                    const previousCursor = pages.previousCursor;
+                    pages.previous();
+                    workspaceUrl.current = window.location.href;
+                    void loadPayments(status, previousCursor);
+                  }}
+                  onNext={(cursor) => {
+                    pages.next(cursor);
+                    workspaceUrl.current = window.location.href;
+                    void loadPayments(status, cursor);
+                  }}
+                />
+              ) : attention ? (
+                <AdminCursorPagination
+                  compact
+                  pageNumber={pages.pageNumber}
+                  nextCursor={attention.nextCursor}
+                  onPrevious={() => {
+                    const previousCursor = pages.previousCursor;
+                    pages.previous();
+                    workspaceUrl.current = window.location.href;
+                    void loadAttention(previousCursor);
+                  }}
+                  onNext={(cursor) => {
+                    pages.next(cursor);
+                    workspaceUrl.current = window.location.href;
+                    void loadAttention(cursor);
+                  }}
+                />
+              ) : null}
+            </>
+          ) : undefined
+        }
+      >
         <AdminIndexViews<Tab>
           label="Payment views"
           views={[
@@ -476,7 +533,7 @@ export function PaymentsWorkspace({
           disabled={locked}
           onChange={changeTab}
         />
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border p-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 py-2">
           {tab === "payments" ? (
             <FieldGroup className="w-auto gap-0">
               <Field className="w-auto gap-1 text-sm">
@@ -521,202 +578,169 @@ export function PaymentsWorkspace({
             Refresh
           </Button>
         </div>
-        {listError ? (
-          <div className="p-4">
-            <AdminPageState
-              state="error"
-              title="Payments could not be loaded"
-              message={listError.message}
-              requestId={listError.requestId ?? undefined}
-              onRetry={() => void refresh()}
-            />
-          </div>
-        ) : null}
-        {loading && !listError ? (
-          <div className="p-4">
-            <AdminPageState state="loading" title="Loading payments" />
-          </div>
-        ) : null}
-        {!loading && !listError && tab === "payments" && payments?.items.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState
-              state={status === "all" ? "empty" : "filtered-empty"}
-              message={
-                status === "all" ? "No payments received yet" : "No payments match this filter"
-              }
-            />
-          </div>
-        ) : null}
-        {!loading && !listError && tab === "attention" && attention?.items.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState state="empty" message="No payments need attention" />
-          </div>
-        ) : null}
-        {!loading && !listError && tab === "payments" && payments?.items.length ? (
-          <Table aria-label="Payments">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Order</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="min-w-28 text-center">Amount</TableHead>
-                <TableHead className="min-w-28 text-center">Refunded</TableHead>
-                <TableHead>Date created</TableHead>
-                <TableHead>
-                  <span className="sr-only">View</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.items.map((payment: AdminPaymentSummary) => (
-                <TableRow
-                  key={payment.paymentIntentId}
-                  tabIndex={0}
-                  className="cursor-pointer"
-                  onClick={() => choosePayment(payment.paymentIntentId)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      choosePayment(payment.paymentIntentId);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    <span className="font-medium">
-                      {payment.customerName ?? payment.customerEmail}
-                    </span>
-                    {payment.customerName && payment.customerEmail !== "Deleted customer" ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {payment.customerEmail}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    {payment.orderId ? (
-                      <Link
-                        className="underline"
-                        href={`/admin/orders/${payment.orderId}`}
-                        prefetch={false}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {payment.orderNumber ?? payment.orderId}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>{statusLabel(payment.status)}</StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {money(payment.amountMinor, payment.currency)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {money(payment.refundedMinor, payment.currency)}
-                  </TableCell>
-                  <TableCell>{date(payment.createdAt)}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(event) => {
-                        event.stopPropagation();
+        <section className="overflow-hidden rounded-md border border-border">
+          {listError ? (
+            <div className="p-4">
+              <AdminPageState
+                state="error"
+                title="Payments could not be loaded"
+                message={listError.message}
+                requestId={listError.requestId ?? undefined}
+                onRetry={() => void refresh()}
+              />
+            </div>
+          ) : null}
+          {loading && !listError ? (
+            <div className="p-4">
+              <AdminPageState state="loading" title="Loading payments" />
+            </div>
+          ) : null}
+          {!loading && !listError && tab === "payments" && payments?.items.length === 0 ? (
+            <div className="p-4">
+              <AdminPageState
+                state={status === "all" ? "empty" : "filtered-empty"}
+                message={
+                  status === "all" ? "No payments received yet" : "No payments match this filter"
+                }
+              />
+            </div>
+          ) : null}
+          {!loading && !listError && tab === "attention" && attention?.items.length === 0 ? (
+            <div className="p-4">
+              <AdminPageState state="empty" message="No payments need attention" />
+            </div>
+          ) : null}
+          {!loading && !listError && tab === "payments" && payments?.items.length ? (
+            <Table aria-label="Payments" className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[21%]">Customer</TableHead>
+                  <TableHead className="w-[16%]">Order</TableHead>
+                  <TableHead className="w-[16%]">Status</TableHead>
+                  <TableHead className="w-[13%] text-center">Amount</TableHead>
+                  <TableHead className="w-[13%] text-center">Refunded</TableHead>
+                  <TableHead className="w-[16%]">Date created</TableHead>
+                  <TableHead className="w-[5%]">
+                    <span className="sr-only">View</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.items.map((payment: AdminPaymentSummary) => (
+                  <TableRow
+                    key={payment.paymentIntentId}
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    onClick={() => choosePayment(payment.paymentIntentId)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
                         choosePayment(payment.paymentIntentId);
-                      }}
-                    >
-                      View payment
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : null}
-        {!loading && !listError && tab === "attention" && attention?.items.length ? (
-          <Table aria-label="Payments needing attention">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Payment</TableHead>
-                <TableHead>Problem</TableHead>
-                <TableHead className="min-w-28 text-center">Amount</TableHead>
-                <TableHead>Opened</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {attention.items.map((item) => (
-                <TableRow
-                  key={item.groupKey}
-                  tabIndex={0}
-                  className="cursor-pointer"
-                  onClick={() => chooseIssue(item)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      chooseIssue(item);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    {item.customerName ??
-                      item.customerEmail ??
-                      (item.paymentIntentId ? "Payment" : "Unmatched payment")}
-                  </TableCell>
-                  <TableCell>
-                    {item.problem}
-                    {item.state === "CHECKING_AUTOMATICALLY" ? (
-                      <span className="block text-xs text-muted-foreground">
-                        Checking automatically
+                      }
+                    }}
+                  >
+                    <TableCell>
+                      <span className="block truncate font-medium">
+                        {payment.customerName ?? payment.customerEmail}
                       </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {item.amountMinor === null || !item.currency
-                      ? "Unavailable"
-                      : money(item.amountMinor, item.currency)}
-                  </TableCell>
-                  <TableCell>{date(item.openedAt)}</TableCell>
+                      {payment.customerName && payment.customerEmail !== "Deleted customer" ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {payment.customerEmail}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      {payment.orderId ? (
+                        <Link
+                          className="block truncate underline"
+                          href={`/admin/orders/${payment.orderId}`}
+                          prefetch={false}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {payment.orderNumber ?? payment.orderId}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge>{statusLabel(payment.status)}</StatusBadge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {money(payment.amountMinor, payment.currency)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {money(payment.refundedMinor, payment.currency)}
+                    </TableCell>
+                    <TableCell>{date(payment.createdAt)}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`View payment for ${payment.customerName ?? payment.customerEmail}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          choosePayment(payment.paymentIntentId);
+                        }}
+                      >
+                        <Eye aria-hidden="true" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : null}
+          {!loading && !listError && tab === "attention" && attention?.items.length ? (
+            <Table aria-label="Payments needing attention">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>Problem</TableHead>
+                  <TableHead className="min-w-28 text-center">Amount</TableHead>
+                  <TableHead>Opened</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : null}
-        {!listError && !loading && tab === "payments" && payments ? (
-          <AdminCursorPagination
-            compact
-            pageNumber={pages.pageNumber}
-            nextCursor={payments.nextCursor}
-            onPrevious={() => {
-              const previousCursor = pages.previousCursor;
-              pages.previous();
-              workspaceUrl.current = window.location.href;
-              void loadPayments(status, previousCursor);
-            }}
-            onNext={(cursor) => {
-              pages.next(cursor);
-              workspaceUrl.current = window.location.href;
-              void loadPayments(status, cursor);
-            }}
-          />
-        ) : null}
-        {!listError && !loading && tab === "attention" && attention ? (
-          <AdminCursorPagination
-            compact
-            pageNumber={pages.pageNumber}
-            nextCursor={attention.nextCursor}
-            onPrevious={() => {
-              const previousCursor = pages.previousCursor;
-              pages.previous();
-              workspaceUrl.current = window.location.href;
-              void loadAttention(previousCursor);
-            }}
-            onNext={(cursor) => {
-              pages.next(cursor);
-              workspaceUrl.current = window.location.href;
-              void loadAttention(cursor);
-            }}
-          />
-        ) : null}
-      </section>
+              </TableHeader>
+              <TableBody>
+                {attention.items.map((item) => (
+                  <TableRow
+                    key={item.groupKey}
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    onClick={() => chooseIssue(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        chooseIssue(item);
+                      }
+                    }}
+                  >
+                    <TableCell>
+                      {item.customerName ??
+                        item.customerEmail ??
+                        (item.paymentIntentId ? "Payment" : "Unmatched payment")}
+                    </TableCell>
+                    <TableCell>
+                      {item.problem}
+                      {item.state === "CHECKING_AUTOMATICALLY" ? (
+                        <span className="block text-xs text-muted-foreground">
+                          Checking automatically
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {item.amountMinor === null || !item.currency
+                        ? "Unavailable"
+                        : money(item.amountMinor, item.currency)}
+                    </TableCell>
+                    <TableCell>{date(item.openedAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : null}
+        </section>
+      </AdminIndexCard>
     </section>
   );
 

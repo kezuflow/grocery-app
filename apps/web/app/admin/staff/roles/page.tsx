@@ -14,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/admin/shadcn/table";
-import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
+import { ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "../../../../components/admin/admin-index-card";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
@@ -104,148 +105,161 @@ export default function RolesPage() {
 
   return (
     <div className="fm-admin-task-index w-full space-y-6">
-      <PageHeader
+      <AdminIndexCard
         title="Roles"
         description="Capability sets over the closed canonical vocabulary."
-      />
-      <WorkspaceNavigation parentCode="staff" label="Staff administration" />
-
-      {admin.state.phase === "ready" && !globalScope ? (
-        <Alert>
-          <AlertTitle>Global scope required</AlertTitle>
-          <AlertDescription>Select Global scope to administer roles.</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {globalScope && state.phase === "loading" ? (
-        <div className="space-y-3" role="status" aria-label="Loading roles">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-12 w-full" />
-        </div>
-      ) : null}
-
-      {globalScope && state.phase === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Roles could not be loaded</AlertTitle>
-          <AlertDescription>
-            {state.message}
-            {state.requestId ? (
-              <>
-                <br />
-                <span className="font-mono text-xs">Request reference: {state.requestId}</span>
-              </>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {globalScope && state.phase === "ready" ? (
-        <>
-          {notice ? (
-            <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
-              {notice}
-            </p>
-          ) : null}
-
-          {uncertain ? (
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void command.retry().then((ok) => {
-                  if (ok) {
-                    setCode("");
-                    setName("");
-                    load(pagination.cursor);
-                  }
-                })
-              }
-            >
-              Retry unconfirmed action
-            </Button>
-          ) : null}
-          <ListPageSection
-            title="Create a role"
-            description="Starts empty; assign capabilities on the role page."
-          >
-            <form
-              className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
-              onSubmit={createRole}
-            >
-              <Input
-                aria-label="Role code"
-                placeholder="code, e.g. support_tier1"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                className="sm:w-56"
+        footer={
+          globalScope && state.phase === "ready" ? (
+            <>
+              <AdminIndexPageCount
+                visible={state.page.items.length}
+                loaded={state.page.items.length}
+                singular="role"
+                plural="roles"
               />
-              <Input
-                aria-label="Role name"
-                placeholder="name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="sm:w-64"
+              <AdminCursorPagination
+                compact
+                pageNumber={pagination.pageNumber}
+                nextCursor={state.page.nextCursor}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
               />
-              <Button type="submit" size="sm" disabled={busy || uncertain}>
-                Create role
-              </Button>
-            </form>
-          </ListPageSection>
+            </>
+          ) : undefined
+        }
+      >
+        <WorkspaceNavigation parentCode="staff" label="Staff administration" />
 
-          <ListPageSection title="Roles">
-            {state.page.items.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground" role="status">
-                No roles exist yet.
+        {admin.state.phase === "ready" && !globalScope ? (
+          <Alert>
+            <AlertTitle>Global scope required</AlertTitle>
+            <AlertDescription>Select Global scope to administer roles.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {globalScope && state.phase === "loading" ? (
+          <div className="space-y-3" role="status" aria-label="Loading roles">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : null}
+
+        {globalScope && state.phase === "error" ? (
+          <Alert variant="destructive">
+            <AlertTitle>Roles could not be loaded</AlertTitle>
+            <AlertDescription>
+              {state.message}
+              {state.requestId ? (
+                <>
+                  <br />
+                  <span className="font-mono text-xs">Request reference: {state.requestId}</span>
+                </>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {globalScope && state.phase === "ready" ? (
+          <>
+            {notice ? (
+              <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
+                {notice}
               </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Capabilities</TableHead>
-                    <TableHead>
-                      <span className="sr-only">Detail link</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {state.page.items.map((role) => (
-                    <TableRow key={role.roleId}>
-                      <TableCell className="font-mono text-xs">{role.code}</TableCell>
-                      <TableCell className="font-medium">{role.name}</TableCell>
-                      <TableCell>
-                        <StatusBadge tone={role.status === "ACTIVE" ? "success" : "neutral"}>
-                          {role.status}
-                        </StatusBadge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {role.capabilityCodes.length} capabilities
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/admin/staff/roles/${role.roleId}`}
-                          prefetch={false}
-                          className="text-xs font-medium text-muted-foreground underline"
-                        >
-                          {role.status === "ACTIVE" ? "Edit" : "View"}
-                        </Link>
-                      </TableCell>
+            ) : null}
+
+            {uncertain ? (
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void command.retry().then((ok) => {
+                    if (ok) {
+                      setCode("");
+                      setName("");
+                      load(pagination.cursor);
+                    }
+                  })
+                }
+              >
+                Retry unconfirmed action
+              </Button>
+            ) : null}
+            <ListPageSection
+              title="Create a role"
+              description="Starts empty; assign capabilities on the role page."
+            >
+              <form
+                className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
+                onSubmit={createRole}
+              >
+                <Input
+                  aria-label="Role code"
+                  placeholder="code, e.g. support_tier1"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  className="sm:w-56"
+                />
+                <Input
+                  aria-label="Role name"
+                  placeholder="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="sm:w-64"
+                />
+                <Button type="submit" size="sm" disabled={busy || uncertain}>
+                  Create role
+                </Button>
+              </form>
+            </ListPageSection>
+
+            <ListPageSection title="Roles">
+              {state.page.items.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground" role="status">
+                  No roles exist yet.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Capabilities</TableHead>
+                      <TableHead>
+                        <span className="sr-only">Detail link</span>
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <AdminCursorPagination
-              compact
-              pageNumber={pagination.pageNumber}
-              nextCursor={state.page.nextCursor}
-              onPrevious={pagination.previous}
-              onNext={pagination.next}
-            />
-          </ListPageSection>
-        </>
-      ) : null}
+                  </TableHeader>
+                  <TableBody>
+                    {state.page.items.map((role) => (
+                      <TableRow key={role.roleId}>
+                        <TableCell className="font-mono text-xs">{role.code}</TableCell>
+                        <TableCell className="font-medium">{role.name}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone={role.status === "ACTIVE" ? "success" : "neutral"}>
+                            {role.status}
+                          </StatusBadge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {role.capabilityCodes.length} capabilities
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/admin/staff/roles/${role.roleId}`}
+                            prefetch={false}
+                            className="text-xs font-medium text-muted-foreground underline"
+                          >
+                            {role.status === "ACTIVE" ? "Edit" : "View"}
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </ListPageSection>
+          </>
+        ) : null}
+      </AdminIndexCard>
     </div>
   );
 }

@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
-import { PageHeader } from "@/components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "@/components/admin/admin-index-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
 import { Button } from "@/components/admin/shadcn/button";
@@ -259,7 +259,7 @@ export function CategoriesPageClient({
       className="fm-admin-task-index space-y-6 p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader
+      <AdminIndexCard
         title="Categories"
         description="Global catalog hierarchy and Product assignments."
         action={
@@ -283,167 +283,184 @@ export function CategoriesPageClient({
             </Button>
           ) : null
         }
-      />
-      {commandResult ? (
-        commandResult.kind === "error" ? (
-          <Alert variant="destructive">
-            <AlertTitle>Category could not be deactivated</AlertTitle>
-            <AlertDescription>
+        footer={
+          payload?.ok ? (
+            <>
+              <AdminIndexPageCount
+                visible={items.length}
+                loaded={payload.value.items.length}
+                singular="category"
+                plural="categories"
+              />
+              <AdminCursorPagination
+                compact
+                pageNumber={pagination.pageNumber}
+                nextCursor={payload.value.nextCursor}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
+              />
+            </>
+          ) : undefined
+        }
+      >
+        {commandResult ? (
+          commandResult.kind === "error" ? (
+            <Alert variant="destructive">
+              <AlertTitle>Category could not be deactivated</AlertTitle>
+              <AlertDescription>
+                {commandResult.message}
+                {commandResult.requestId ? ` Request reference: ${commandResult.requestId}` : ""}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p className="text-sm" role="status">
               {commandResult.message}
-              {commandResult.requestId ? ` Request reference: ${commandResult.requestId}` : ""}
+            </p>
+          )
+        ) : null}
+        {payload && !payload.ok ? (
+          <Alert variant="destructive">
+            <AlertTitle>Categories could not be loaded</AlertTitle>
+            <AlertDescription>
+              {payload.error.message}
+              <br />
+              <span className="font-mono text-xs">
+                Request reference: {payload.error.requestId}
+              </span>
             </AlertDescription>
           </Alert>
-        ) : (
-          <p className="text-sm" role="status">
-            {commandResult.message}
+        ) : null}
+        {!payload ? (
+          <p role="status" className="text-sm">
+            Loading Categories…
           </p>
-        )
-      ) : null}
-      {payload && !payload.ok ? (
-        <Alert variant="destructive">
-          <AlertTitle>Categories could not be loaded</AlertTitle>
-          <AlertDescription>
-            {payload.error.message}
-            <br />
-            <span className="font-mono text-xs">Request reference: {payload.error.requestId}</span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {!payload ? (
-        <p role="status" className="text-sm">
-          Loading Categories…
-        </p>
-      ) : null}
-      {payload?.ok ? (
-        <section className="overflow-hidden rounded-xl border border-border bg-card">
-          <AdminIndexViews
-            label="Category status views"
-            views={
-              [
-                { label: "All", status: "all" },
-                { label: "Active", status: "active" },
-                { label: "Inactive", status: "inactive" },
-              ] as const
-            }
-            value={status}
-            onChange={(next) => setFilter("status", next)}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
-            <Input
-              aria-label="Search categories"
-              value={query}
-              onChange={(event) => setFilter("query", event.target.value)}
-              placeholder="Search categories"
-              className="sm:max-w-xs"
+        ) : null}
+        {payload?.ok ? (
+          <>
+            <AdminIndexViews
+              label="Category status views"
+              views={
+                [
+                  { label: "All", status: "all" },
+                  { label: "Active", status: "active" },
+                  { label: "Inactive", status: "inactive" },
+                ] as const
+              }
+              value={status}
+              onChange={(next) => setFilter("status", next)}
             />
-            <span className="text-xs text-muted-foreground">
-              {items.length} categor{items.length === 1 ? "y" : "ies"} shown
-            </span>
-          </div>
-          <Table aria-label="Categories" className="hidden md:table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Parent</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead className="w-12 text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.categoryId}>
-                  <TableCell>
-                    <button
-                      type="button"
-                      aria-expanded={
-                        panelOpen &&
-                        panelMode === "detail" &&
-                        selectedCategory?.categoryId === item.categoryId
-                      }
-                      aria-controls="category-detail-panel"
-                      className="font-medium hover:underline"
-                      onClick={() => openCategory(item)}
+            <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <Input
+                aria-label="Search categories"
+                value={query}
+                onChange={(event) => setFilter("query", event.target.value)}
+                placeholder="Search categories"
+                className="sm:max-w-xs"
+              />
+              <span className="text-xs text-muted-foreground">
+                {items.length} categor{items.length === 1 ? "y" : "ies"} shown
+              </span>
+            </div>
+            <section className="overflow-hidden rounded-md border border-border">
+              <Table aria-label="Categories" className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Parent</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Products</TableHead>
+                    <TableHead className="w-12 text-right">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.categoryId}>
+                      <TableCell>
+                        <button
+                          type="button"
+                          aria-expanded={
+                            panelOpen &&
+                            panelMode === "detail" &&
+                            selectedCategory?.categoryId === item.categoryId
+                          }
+                          aria-controls="category-detail-panel"
+                          className="font-medium hover:underline"
+                          onClick={() => openCategory(item)}
+                        >
+                          {item.name}
+                        </button>
+                        <span className="block text-xs text-muted-foreground">{item.code}</span>
+                      </TableCell>
+                      <TableCell>{item.parentName ?? "Top level"}</TableCell>
+                      <TableCell>
+                        <AdminStatusPill
+                          status={item.status}
+                          tone={item.status === "active" ? "success" : "danger"}
+                          label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                        />
+                      </TableCell>
+                      <TableCell>{item.productCount}</TableCell>
+                      <TableCell className="w-12 text-right">{categoryActions(item)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="divide-y divide-border md:hidden" aria-label="Category records">
+                {items.map((item) => (
+                  <article key={item.categoryId} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        className="min-w-0 text-left font-semibold hover:underline"
+                        aria-expanded={
+                          panelOpen &&
+                          panelMode === "detail" &&
+                          selectedCategory?.categoryId === item.categoryId
+                        }
+                        aria-controls="category-detail-panel"
+                        onClick={() => openCategory(item)}
+                      >
+                        <span className="block truncate">{item.name}</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {item.code}
+                        </span>
+                      </button>
+                      {categoryActions(item)}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <AdminStatusPill
+                        status={item.status}
+                        tone={item.status === "active" ? "success" : "danger"}
+                        label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                      />
+                      <span>{item.parentName ?? "Top level"}</span>
+                      <span>
+                        {item.productCount} product{item.productCount === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <Link
+                      href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
+                      prefetch={false}
+                      className="inline-flex text-sm font-medium underline underline-offset-4"
                     >
-                      {item.name}
-                    </button>
-                    <span className="block text-xs text-muted-foreground">{item.code}</span>
-                  </TableCell>
-                  <TableCell>{item.parentName ?? "Top level"}</TableCell>
-                  <TableCell>
-                    <AdminStatusPill
-                      status={item.status}
-                      tone={item.status === "active" ? "success" : "danger"}
-                      label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                    />
-                  </TableCell>
-                  <TableCell>{item.productCount}</TableCell>
-                  <TableCell className="w-12 text-right">{categoryActions(item)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="divide-y divide-border md:hidden" aria-label="Category records">
-            {items.map((item) => (
-              <article key={item.categoryId} className="space-y-3 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <button
-                    type="button"
-                    className="min-w-0 text-left font-semibold hover:underline"
-                    aria-expanded={
-                      panelOpen &&
-                      panelMode === "detail" &&
-                      selectedCategory?.categoryId === item.categoryId
-                    }
-                    aria-controls="category-detail-panel"
-                    onClick={() => openCategory(item)}
-                  >
-                    <span className="block truncate">{item.name}</span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {item.code}
-                    </span>
-                  </button>
-                  {categoryActions(item)}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <AdminStatusPill
-                    status={item.status}
-                    tone={item.status === "active" ? "success" : "danger"}
-                    label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                  />
-                  <span>{item.parentName ?? "Top level"}</span>
-                  <span>
-                    {item.productCount} product{item.productCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <Link
-                  href={`/admin/catalog/categories/${item.categoryId}${searchParams.size ? `?from=${encodeURIComponent(searchParams.toString())}` : ""}`}
-                  prefetch={false}
-                  className="inline-flex text-sm font-medium underline underline-offset-4"
-                >
-                  Full details
-                </Link>
-              </article>
-            ))}
-          </div>
-          {items.length === 0 ? (
-            <p role="status" className="p-6 text-sm text-muted-foreground">
-              {query.trim() || status !== "all"
-                ? "No categories match these filters."
-                : "No categories have been created."}
-            </p>
-          ) : null}
-          <AdminCursorPagination
-            compact
-            pageNumber={pagination.pageNumber}
-            nextCursor={payload.value.nextCursor}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-          />
-        </section>
-      ) : null}
+                      Full details
+                    </Link>
+                  </article>
+                ))}
+              </div>
+              {items.length === 0 ? (
+                <p role="status" className="p-6 text-sm text-muted-foreground">
+                  {query.trim() || status !== "all"
+                    ? "No categories match these filters."
+                    : "No categories have been created."}
+                </p>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+      </AdminIndexCard>
       <ConfirmCommandDialog
         open={categoryToDeactivate !== null}
         title="Deactivate category?"

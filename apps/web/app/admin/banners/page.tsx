@@ -12,6 +12,7 @@ import { AdminStatusPill, type AdminStatusTone } from "@/components/admin/admin-
 import { BannerMediaEditor } from "@/components/admin/banner-media-editor";
 import { catalogResultSchema, useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "@/components/admin/admin-index-card";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
@@ -345,7 +346,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
       className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader
+      <AdminIndexCard
         title="Banners"
         description="Manage the standalone images displayed on your storefront."
         action={
@@ -364,29 +365,33 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
             </Button>
           ) : undefined
         }
-      />
+        footer={
+          <AdminIndexPageCount
+            visible={visibleItems.length}
+            loaded={items.length}
+            singular="banner"
+            plural="banners"
+          />
+        }
+      >
+        {message ? (
+          <p
+            role={command.uncertain ? "alert" : "status"}
+            className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
+          >
+            {message}
+          </p>
+        ) : null}
 
-      {message ? (
-        <p
-          role={command.uncertain ? "alert" : "status"}
-          className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
-        >
-          {message}
-        </p>
-      ) : null}
-
-      <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <h2 className="sr-only">Banner gallery</h2>
         <AdminIndexViews<BannerView>
           label="Banner views"
           views={bannerViews}
           value={view}
           onChange={setView}
         />
-        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            Showing {visibleItems.length} of {items.length} loaded banners. Search and status filter
-            loaded banners only.
+        <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Search and status filter loaded banners only.
           </p>
           <div className="flex items-center gap-2">
             <label className="relative block min-w-0 sm:w-72">
@@ -415,72 +420,75 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
           </div>
         </div>
 
-        {visibleItems.length === 0 ? (
-          <AdminPageState
-            state={items.length === 0 ? "empty" : "filtered-empty"}
-            title={items.length === 0 ? "No banners yet" : "No banners match this view"}
-            message={
-              items.length === 0
-                ? canManage
-                  ? "Add a banner to create the first storefront image."
-                  : "No storefront banners are available."
-                : "Change the search or status view to see another loaded banner."
-            }
-          />
-        ) : (
-          <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
-            {visibleItems.map((banner) => {
-              const active = panelOpen && selected?.bannerId === banner.bannerId;
-              return (
-                <button
-                  key={banner.bannerId}
-                  type="button"
-                  aria-expanded={active}
-                  aria-controls="banner-detail-panel"
-                  disabled={locked}
-                  onClick={() => openBanner(banner)}
-                  className={`group overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    active
-                      ? "border-primary shadow-sm"
-                      : "border-border hover:border-primary hover:shadow-sm"
-                  }`}
-                >
-                  <div className="relative aspect-[20/9] overflow-hidden bg-muted">
-                    {banner.image ? (
-                      <img
-                        src={banner.image.src}
-                        alt={banner.image.alt}
-                        className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.01] motion-reduce:transform-none"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                        <ImageIcon className="size-6" aria-hidden="true" />
-                        <span className="text-xs font-medium">No image</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="min-w-0 truncate font-semibold">
-                        {banner.name || "Untitled banner"}
-                      </h3>
-                      <AdminStatusPill status={banner.status} tone={statusTone(banner.status)} />
+        <section className="overflow-hidden rounded-md border border-border">
+          <h2 className="sr-only">Banner gallery</h2>
+          {visibleItems.length === 0 ? (
+            <AdminPageState
+              state={items.length === 0 ? "empty" : "filtered-empty"}
+              title={items.length === 0 ? "No banners yet" : "No banners match this view"}
+              message={
+                items.length === 0
+                  ? canManage
+                    ? "Add a banner to create the first storefront image."
+                    : "No storefront banners are available."
+                  : "Change the search or status view to see another loaded banner."
+              }
+            />
+          ) : (
+            <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
+              {visibleItems.map((banner) => {
+                const active = panelOpen && selected?.bannerId === banner.bannerId;
+                return (
+                  <button
+                    key={banner.bannerId}
+                    type="button"
+                    aria-expanded={active}
+                    aria-controls="banner-detail-panel"
+                    disabled={locked}
+                    onClick={() => openBanner(banner)}
+                    className={`group overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      active
+                        ? "border-primary shadow-sm"
+                        : "border-border hover:border-primary hover:shadow-sm"
+                    }`}
+                  >
+                    <div className="relative aspect-[20/9] overflow-hidden bg-muted">
+                      {banner.image ? (
+                        <img
+                          src={banner.image.src}
+                          alt={banner.image.alt}
+                          className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.01] motion-reduce:transform-none"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                          <ImageIcon className="size-6" aria-hidden="true" />
+                          <span className="text-xs font-medium">No image</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />
-                      {scheduleLabel(banner)}
-                    </p>
-                    <p className="mt-2 truncate text-xs text-muted-foreground">
-                      Priority {banner.priority} · {banner.href ?? "No destination"}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="min-w-0 truncate font-semibold">
+                          {banner.name || "Untitled banner"}
+                        </h3>
+                        <AdminStatusPill status={banner.status} tone={statusTone(banner.status)} />
+                      </div>
+                      <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />
+                        {scheduleLabel(banner)}
+                      </p>
+                      <p className="mt-2 truncate text-xs text-muted-foreground">
+                        Priority {banner.priority} · {banner.href ?? "No destination"}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </AdminIndexCard>
     </section>
   );
 

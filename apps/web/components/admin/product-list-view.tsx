@@ -256,15 +256,15 @@ export function ProductListView({
         ["Missing primary media", page.readiness.missingPrimaryMedia],
       ] as const);
   return (
-    <div className="space-y-4">
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="flex flex-col gap-4">
+      <AdminIndexViews
+        label="Product status views"
+        views={PRODUCT_STATUS_VIEWS}
+        value={status}
+        onChange={onStatusChange}
+      />
+      <section className="overflow-hidden rounded-md border border-border">
         <h2 className="sr-only">Product list</h2>
-        <AdminIndexViews
-          label="Product status views"
-          views={PRODUCT_STATUS_VIEWS}
-          value={status}
-          onChange={onStatusChange}
-        />
         <div className="border-b border-border px-4 py-3">
           <p className="text-sm font-medium">
             {locationScope ? `${locationScope.locationName} pricing` : "Global catalog ownership"}

@@ -14,6 +14,7 @@ import {
 } from "../../../components/admin/admin-controls";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "../../../components/admin/admin-index-card";
 import { MembershipStatusBadge } from "../../../components/admin/customer-status-badges";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
@@ -172,15 +173,31 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
       className="fm-admin-task-index space-y-6 p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader
+      <AdminIndexCard
         title="Membership history"
         description="Retained membership records are available for review and supported cancellation only."
-      />
-
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <h2 className="sr-only">Membership list</h2>
+        footer={
+          state.phase === "ready" ? (
+            <>
+              <AdminIndexPageCount
+                visible={memberships.length}
+                loaded={memberships.length}
+                singular="membership"
+                plural="memberships"
+              />
+              <AdminCursorPagination
+                compact
+                pageNumber={pagination.pageNumber}
+                nextCursor={page?.nextCursor ?? null}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
+              />
+            </>
+          ) : undefined
+        }
+      >
         <form
-          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
+          className="flex min-h-14 flex-wrap items-center gap-2 py-2.5"
           onSubmit={(event) => {
             event.preventDefault();
             applySearch(query);
@@ -212,117 +229,111 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
           ) : null}
         </form>
 
-        {state.phase === "loading" ? (
-          <div className="p-4">
-            <AdminPageState state="loading" title="Loading membership history" />
-          </div>
-        ) : null}
-        {state.phase === "error" ? (
-          <div className="p-4">
-            <AdminPageState
-              state="error"
-              title="Membership history could not be loaded"
-              message={state.message}
-              requestId={state.requestId}
-              onRetry={() => void load(appliedQuery, pagination.cursor)}
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && memberships.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState
-              state={appliedQuery ? "filtered-empty" : "empty"}
-              message="No retained memberships are visible in this view."
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && memberships.length > 0 ? (
-          <>
-            <ul aria-label="Membership list" className="divide-y divide-border sm:hidden">
-              {memberships.map((membership) => (
-                <li key={membership.subscriptionId} className="space-y-3 p-4">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link
-                        href={recordHref(membership)}
-                        prefetch={false}
-                        onClick={rememberReturn}
-                        className="break-all font-semibold hover:underline"
-                      >
-                        {membership.customerEmail}
-                      </Link>
-                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                        {membership.subscriptionId}
-                      </p>
-                    </div>
-                    <MembershipStatusBadge status={membership.state} />
-                  </div>
-                  <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Period end</dt>
-                      <dd>{date(membership.currentPeriodEndsAt)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Cancellation</dt>
-                      <dd>{cancellationLabel(membership)}</dd>
-                    </div>
-                  </dl>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden sm:block">
-              <Table aria-label="Membership list">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Period end</TableHead>
-                    <TableHead>Cancellation</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {memberships.map((membership) => (
-                    <TableRow key={membership.subscriptionId}>
-                      <TableCell>
+        <section className="overflow-hidden rounded-md border border-border">
+          <h2 className="sr-only">Membership list</h2>
+
+          {state.phase === "loading" ? (
+            <div className="p-4">
+              <AdminPageState state="loading" title="Loading membership history" />
+            </div>
+          ) : null}
+          {state.phase === "error" ? (
+            <div className="p-4">
+              <AdminPageState
+                state="error"
+                title="Membership history could not be loaded"
+                message={state.message}
+                requestId={state.requestId}
+                onRetry={() => void load(appliedQuery, pagination.cursor)}
+              />
+            </div>
+          ) : null}
+          {state.phase === "ready" && memberships.length === 0 ? (
+            <div className="p-4">
+              <AdminPageState
+                state={appliedQuery ? "filtered-empty" : "empty"}
+                message="No retained memberships are visible in this view."
+              />
+            </div>
+          ) : null}
+          {state.phase === "ready" && memberships.length > 0 ? (
+            <>
+              <ul aria-label="Membership list" className="divide-y divide-border sm:hidden">
+                {memberships.map((membership) => (
+                  <li key={membership.subscriptionId} className="space-y-3 p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <Link
                           href={recordHref(membership)}
                           prefetch={false}
                           onClick={rememberReturn}
-                          className="break-all font-medium hover:underline"
+                          className="break-all font-semibold hover:underline"
                         >
                           {membership.customerEmail}
                         </Link>
-                        <p className="mt-0.5 max-w-64 truncate font-mono text-xs text-muted-foreground">
+                        <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
                           {membership.subscriptionId}
                         </p>
-                      </TableCell>
-                      <TableCell>
-                        <MembershipStatusBadge status={membership.state} />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {date(membership.currentPeriodEndsAt)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {cancellationLabel(membership)}
-                      </TableCell>
+                      </div>
+                      <MembershipStatusBadge status={membership.state} />
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Period end</dt>
+                        <dd>{date(membership.currentPeriodEndsAt)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Cancellation</dt>
+                        <dd>{cancellationLabel(membership)}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden sm:block">
+                <Table aria-label="Membership list">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Period end</TableHead>
+                      <TableHead>Cancellation</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : null}
-
-        {state.phase === "ready" ? (
-          <AdminCursorPagination
-            compact
-            pageNumber={pagination.pageNumber}
-            nextCursor={page?.nextCursor ?? null}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-          />
-        ) : null}
-      </section>
+                  </TableHeader>
+                  <TableBody>
+                    {memberships.map((membership) => (
+                      <TableRow key={membership.subscriptionId}>
+                        <TableCell>
+                          <Link
+                            href={recordHref(membership)}
+                            prefetch={false}
+                            onClick={rememberReturn}
+                            className="break-all font-medium hover:underline"
+                          >
+                            {membership.customerEmail}
+                          </Link>
+                          <p className="mt-0.5 max-w-64 truncate font-mono text-xs text-muted-foreground">
+                            {membership.subscriptionId}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <MembershipStatusBadge status={membership.state} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                          {date(membership.currentPeriodEndsAt)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {cancellationLabel(membership)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </AdminIndexCard>
     </section>
   );
 }

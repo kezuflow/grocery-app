@@ -12,7 +12,7 @@ import {
   type BulkProductSelection,
 } from "@/components/admin/product-list-view";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
-import { PageHeader } from "@/components/admin/admin-shell";
+import { AdminIndexCard, AdminIndexPageCount } from "@/components/admin/admin-index-card";
 import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-detail-workspace";
 import { GlobalProductPreviewPanel } from "@/components/admin/product-preview-panel";
 import { LocationProductPreviewPanel } from "@/components/admin/location-product-preview-panel";
@@ -311,8 +311,9 @@ export function ProductsPageClient({
       className="fm-admin-task-index space-y-6 p-5 sm:p-7"
       aria-labelledby="admin-page-title"
     >
-      <PageHeader
+      <AdminIndexCard
         title="Products"
+        description="Review and manage products."
         action={
           canManage ? (
             <Button
@@ -334,101 +335,116 @@ export function ProductsPageClient({
             </Button>
           ) : null
         }
-      />
-      {unresolvedDeactivation ? (
-        <Alert variant="destructive">
-          <AlertTitle>Product deactivation could not be confirmed</AlertTitle>
-          <AlertDescription>
-            Retry the saved request for{" "}
-            {unresolvedDeactivation.products.map((product) => product.name).join(", ")}.
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 block"
-              disabled={bulkPending}
-              onClick={() =>
-                void deactivateProducts(
-                  unresolvedDeactivation.products,
-                  unresolvedDeactivation.reason,
-                  true,
-                )
+        footer={
+          payload?.ok ? (
+            <>
+              <AdminIndexPageCount
+                visible={payload.value.items.length}
+                loaded={payload.value.items.length}
+                singular="product"
+                plural="products"
+              />
+              <AdminCursorPagination
+                compact
+                pageNumber={pagination.pageNumber}
+                nextCursor={payload.value.nextCursor}
+                onPrevious={pagination.previous}
+                onNext={pagination.next}
+                onPage={pagination.goToPage}
+              />
+            </>
+          ) : undefined
+        }
+      >
+        {unresolvedDeactivation ? (
+          <Alert variant="destructive">
+            <AlertTitle>Product deactivation could not be confirmed</AlertTitle>
+            <AlertDescription>
+              Retry the saved request for{" "}
+              {unresolvedDeactivation.products.map((product) => product.name).join(", ")}.
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 block"
+                disabled={bulkPending}
+                onClick={() =>
+                  void deactivateProducts(
+                    unresolvedDeactivation.products,
+                    unresolvedDeactivation.reason,
+                    true,
+                  )
+                }
+              >
+                Retry saved deactivation
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryFailure ? (
+          <Alert variant="destructive">
+            <AlertTitle>Product deactivation could not be completed</AlertTitle>
+            <AlertDescription>{recoveryFailure}</AlertDescription>
+          </Alert>
+        ) : null}
+        {!payload ? <Skeleton className="h-64 w-full" /> : null}
+        {listQuery.data && listQuery.isFetching ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Refreshing products…
+          </p>
+        ) : null}
+        {listQuery.data && listQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Products could not be refreshed</AlertTitle>
+            <AlertDescription>
+              The previous authorized results remain visible. Try refreshing this list again.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {payload && !payload.ok ? (
+          <Alert variant="destructive">
+            <AlertTitle>Products could not be loaded</AlertTitle>
+            <AlertDescription>
+              {payload.error.message}
+              <br />
+              <span className="font-mono text-xs">
+                Request reference: {payload.error.requestId}
+              </span>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {payload?.ok ? (
+          <>
+            <ProductListView
+              key={scopeKey}
+              page={payload.value}
+              fromQuery={searchParams.toString()}
+              canManage={canManage}
+              deactivationPending={bulkPending}
+              deactivationRecoveryVersion={recoveryVersion}
+              onDeactivateSelected={deactivateProducts}
+              onOpenProduct={(product) => {
+                if (priceRecoveryActive) return;
+                tryChangeAdminWorkspace(() => {
+                  setSelectedProduct(product);
+                  setPanelMode("detail");
+                  setWorkspaceScopeKey(scopeKey);
+                  setPanelOpen(true);
+                });
+              }}
+              openProductId={
+                panelVisible && panelMode === "detail" ? selectedProduct?.productId : null
               }
-            >
-              Retry saved deactivation
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {recoveryFailure ? (
-        <Alert variant="destructive">
-          <AlertTitle>Product deactivation could not be completed</AlertTitle>
-          <AlertDescription>{recoveryFailure}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!payload ? <Skeleton className="h-64 w-full" /> : null}
-      {listQuery.data && listQuery.isFetching ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Refreshing products…
-        </p>
-      ) : null}
-      {listQuery.data && listQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>Products could not be refreshed</AlertTitle>
-          <AlertDescription>
-            The previous authorized results remain visible. Try refreshing this list again.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {payload && !payload.ok ? (
-        <Alert variant="destructive">
-          <AlertTitle>Products could not be loaded</AlertTitle>
-          <AlertDescription>
-            {payload.error.message}
-            <br />
-            <span className="font-mono text-xs">Request reference: {payload.error.requestId}</span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {payload?.ok ? (
-        <>
-          <ProductListView
-            key={scopeKey}
-            page={payload.value}
-            fromQuery={searchParams.toString()}
-            canManage={canManage}
-            deactivationPending={bulkPending}
-            deactivationRecoveryVersion={recoveryVersion}
-            onDeactivateSelected={deactivateProducts}
-            onOpenProduct={(product) => {
-              if (priceRecoveryActive) return;
-              tryChangeAdminWorkspace(() => {
-                setSelectedProduct(product);
-                setPanelMode("detail");
-                setWorkspaceScopeKey(scopeKey);
-                setPanelOpen(true);
-              });
-            }}
-            openProductId={
-              panelVisible && panelMode === "detail" ? selectedProduct?.productId : null
-            }
-            detailPanelId="product-detail-panel"
-            status={status}
-            onStatusChange={(nextStatus) => setFilter("status", nextStatus)}
-            activeFilterCount={Number(query.trim().length > 0)}
-            filters={
-              <ProductSearchInput query={query} onSearch={(value) => setFilter("query", value)} />
-            }
-          />
-          <AdminCursorPagination
-            compact
-            pageNumber={pagination.pageNumber}
-            nextCursor={payload.value.nextCursor}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-            onPage={pagination.goToPage}
-          />
-        </>
-      ) : null}
+              detailPanelId="product-detail-panel"
+              status={status}
+              onStatusChange={(nextStatus) => setFilter("status", nextStatus)}
+              activeFilterCount={Number(query.trim().length > 0)}
+              filters={
+                <ProductSearchInput query={query} onSearch={(value) => setFilter("query", value)} />
+              }
+            />
+          </>
+        ) : null}
+      </AdminIndexCard>
     </section>
   );
 
