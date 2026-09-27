@@ -138,6 +138,7 @@ it("activates from the status label through the guarded Core command", async () 
   });
 
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(url).toBe("/api/admin/promotions/promo-1/status");
   expect(JSON.parse(String(init.body))).toEqual({ action: "ACTIVATE", expectedVersion: 3 });
   expect(onApplied).toHaveBeenCalledWith(activeSummary);

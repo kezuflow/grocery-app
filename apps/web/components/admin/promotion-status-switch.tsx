@@ -98,7 +98,14 @@ export function PromotionStatusSwitch({
           inert={command.pending}
         >
           {showStatusPill ? (
-            <label htmlFor={switchId} className="cursor-pointer">
+            <label
+              htmlFor={switchId}
+              className="cursor-pointer"
+              onClick={(event) => {
+                event.preventDefault();
+                void commit();
+              }}
+            >
               <PromotionStatusPill status={promotion.status} />
             </label>
           ) : null}
@@ -117,7 +124,7 @@ export function PromotionStatusSwitch({
           role={command.pending ? "status" : undefined}
           aria-label={command.pending ? "Updating promotion status" : undefined}
           aria-hidden={!command.pending}
-          className="fm-status-switch-spinner absolute inset-0 inline-flex items-center justify-center text-muted-foreground"
+          className="fm-status-switch-spinner pointer-events-none absolute inset-0 inline-flex items-center justify-center text-muted-foreground"
         >
           <LoaderCircle
             className="size-4 animate-spin motion-reduce:animate-none"

@@ -294,6 +294,32 @@ test("a promotions reader can inspect both indexes without manage controls", asy
   await expect(page.getByRole("menuitem", { name: "Edit details" })).toHaveCount(0);
 });
 
+test("clicking a Promotion Codes status pill sends one status command and updates the switch", async ({
+  adminPage: page,
+}) => {
+  await mockMixedPromotionPage(page);
+  const requests: Array<{ action: string; expectedVersion: number }> = [];
+  await page.route("**/api/admin/promotions/promotion-code-1/status", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        requestId: "promotion-status-fixture",
+        value: { ...listedPromotion, status: "ACTIVE", version: 2 },
+      }),
+    });
+  });
+
+  await page.goto("/admin/promotions");
+  const row = page.getByRole("row", { name: /READ10/ });
+  await expect(row.getByRole("switch")).not.toBeChecked();
+  await row.locator("[data-promotion-status-pill]").click();
+  await expect(row.getByRole("switch")).toBeChecked();
+  await expect(row.locator("[data-promotion-status-pill]")).toHaveText("Active");
+  expect(requests).toEqual([{ action: "ACTIVATE", expectedVersion: 1 }]);
+});
+
 test("the full sale editor guards a dirty route exit and explicit discard", async ({
   adminPage: page,
 }) => {

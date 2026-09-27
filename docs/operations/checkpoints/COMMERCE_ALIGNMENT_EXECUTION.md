@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Promotion Codes status pill pointer repair — ADMIN-PROMOTION-CLICK-24 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner reported that clicking a Promotion Codes
+status pill still did not change its status. Acceptance: a pointer click on
+the visible pill sends one guarded Core status command and updates the pill
+and switch only after success; the switch, pending/error feedback, read-only
+rules and Admin-only colors remain intact.
+
+Started on `main` at `0e89edb4` with unrelated unfinished Product form,
+summary and related test edits present. Another Admin slice committed those
+edits as `dc8e8ca3` during this work; its changes were preserved. The
+transparent pending-spinner layer covered the pill and switch hit targets
+even when idle. It now ignores pointer input. The pill invokes the existing
+status command explicitly and prevents duplicate label forwarding. No
+business rule or API changed.
+
+Focused component tests (7/7) and a managed local Playwright browser test
+(1/1) passed. The browser test clicked the actual pill, observed one
+`ACTIVATE` request and rendered Active pill/switch after a mocked success
+response. Web typecheck, lint, formatting and diff checks passed on the
+working tree. During local browser diagnosis, actual local Core accepted
+activation and deactivation of seeded WELCOME99; its local status is now
+Inactive. The supported status transition cannot return it to Draft. No
+production or actual provider acceptance is claimed.
+
+Completion level: **one Admin status-pill interaction defect repaired and
+browser-verified**. Next action: resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction
+is authorized by this request.
+
 ## Simplify Product stock wording — ADMIN-PRODUCT-STOCK-WORDING-20 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Products, promotions and stock** and
