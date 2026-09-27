@@ -440,8 +440,8 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     <TableRow className="border-border">
                       <TableHead>Order ID</TableHead>
                       <TableHead>Customer</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-center">Mode</TableHead>
+                      <TableHead className="text-center xl:w-32">Amount</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-12">
@@ -483,12 +483,12 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                         <TableCell>
                           <span className="font-medium">{order.customerName ?? "Customer"}</span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline" className="capitalize">
                             {order.fulfillmentMode.toLowerCase()}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
+                        <TableCell className="text-center font-medium tabular-nums">
                           {money(order.totalMinor, order.currency)}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
