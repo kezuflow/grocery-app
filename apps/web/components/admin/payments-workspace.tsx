@@ -492,7 +492,7 @@ export function PaymentsWorkspace({
                     void loadPayments(selected, null);
                   }}
                 >
-                  <SelectTrigger aria-labelledby="payment-status-label" className="h-9">
+                  <SelectTrigger aria-labelledby="payment-status-label" className="h-9 min-w-36">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -559,8 +559,8 @@ export function PaymentsWorkspace({
                 <TableHead>Customer</TableHead>
                 <TableHead>Order</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Refunded</TableHead>
+                <TableHead className="min-w-28 text-center">Amount</TableHead>
+                <TableHead className="min-w-28 text-center">Refunded</TableHead>
                 <TableHead>Date created</TableHead>
                 <TableHead>
                   <span className="sr-only">View</span>
@@ -608,8 +608,12 @@ export function PaymentsWorkspace({
                   <TableCell>
                     <StatusBadge>{statusLabel(payment.status)}</StatusBadge>
                   </TableCell>
-                  <TableCell>{money(payment.amountMinor, payment.currency)}</TableCell>
-                  <TableCell>{money(payment.refundedMinor, payment.currency)}</TableCell>
+                  <TableCell className="text-center">
+                    {money(payment.amountMinor, payment.currency)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {money(payment.refundedMinor, payment.currency)}
+                  </TableCell>
                   <TableCell>{date(payment.createdAt)}</TableCell>
                   <TableCell>
                     <Button
@@ -634,7 +638,7 @@ export function PaymentsWorkspace({
               <TableRow>
                 <TableHead>Payment</TableHead>
                 <TableHead>Problem</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead className="min-w-28 text-center">Amount</TableHead>
                 <TableHead>Opened</TableHead>
               </TableRow>
             </TableHeader>
@@ -665,7 +669,7 @@ export function PaymentsWorkspace({
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     {item.amountMinor === null || !item.currency
                       ? "Unavailable"
                       : money(item.amountMinor, item.currency)}

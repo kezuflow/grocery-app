@@ -454,6 +454,7 @@ html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
 .fm-admin-task-index [data-slot="table-head"],
 .fm-admin-task-index [data-slot="table-cell"] {
   padding-block: 0.875rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .fm-admin-task-index [data-slot="table-body"] [data-slot="table-row"]:hover {
