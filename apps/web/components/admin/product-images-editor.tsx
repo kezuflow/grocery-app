@@ -4,8 +4,8 @@ import { adminProductMediaMaxCount, type AdminProductMediaView } from "@freshmar
 import { adminProductMediaViewSchema } from "@freshmarkets/validation";
 import { useCatalogCommand } from "./catalog-command-state";
 import { ProductMediaUpload } from "./product-media-upload";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { tryChangeAdminWorkspace, useAdminRouteGuard } from "./use-admin-route-guard";
 
@@ -75,16 +75,16 @@ export function ProductImagesEditor({
   return (
     <section
       aria-label="Product images"
-      className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
+      className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-4 sm:px-5">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Images</h2>
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+          <p className="mt-1 text-sm text-muted-foreground">
             Add up to five photos. Choose a main image and control their display order.
           </p>
         </div>
-        <span className="shrink-0 text-sm text-[var(--fm-text-muted)]">
+        <span className="shrink-0 text-sm text-muted-foreground">
           {images.length} of {adminProductMediaMaxCount}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function ProductImagesEditor({
         {replacement || images.length < adminProductMediaMaxCount ? (
           <fieldset
             disabled={command.pending || command.uncertain}
-            className="rounded-[var(--fm-radius-control)] border border-dashed border-[var(--fm-border)]"
+            className="rounded-md border border-dashed border-border"
           >
             {replacement ? (
               <p className="px-4 pt-4 text-sm font-medium">Replacing {replacement.altText}</p>
@@ -116,7 +116,7 @@ export function ProductImagesEditor({
             />
           </fieldset>
         ) : (
-          <p className="text-sm text-[var(--fm-text-muted)]">
+          <p className="text-sm text-muted-foreground">
             All five photo spaces are used. Replace or remove a photo to change them.
           </p>
         )}
@@ -139,12 +139,12 @@ export function ProductImagesEditor({
           {images.map((image) => (
             <article
               key={`${image.mediaId}-${image.version}`}
-              className="space-y-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3"
+              className="space-y-3 rounded-md border border-border p-3"
             >
               <img
                 src={`/api/admin/catalog/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(image.mediaId)}/content?version=${image.version}`}
                 alt={image.altText}
-                className="aspect-square w-full rounded-md bg-[var(--fm-admin-surface-muted)] object-cover"
+                className="aspect-square w-full rounded-md bg-muted object-cover"
               />
               <form
                 className="grid gap-3"

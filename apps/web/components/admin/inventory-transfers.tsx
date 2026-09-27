@@ -15,12 +15,25 @@ import type {
 } from "@freshmarkets/contracts";
 import { useAdminContext, useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 import { InventoryDistribution } from "./inventory-distribution";
-import { Checkbox } from "../ui/checkbox";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 import { PageHeader, StatusBadge } from "./admin-shell";
 import { AdminCursorPagination, useAdminPagination } from "./admin-controls";
 import { useAdminCommand } from "./use-admin-command";
@@ -141,7 +154,7 @@ export function InventoryTransfersPage() {
               {!page.items.length ? (
                 <p>No transfers match this scope and status.</p>
               ) : (
-                <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+                <div className="rounded-xl border border-border bg-card">
                   <Table className="block lg:table" aria-label="Stock Transfer">
                     <TableHeader className="hidden lg:table-header-group">
                       <TableRow>
@@ -155,7 +168,7 @@ export function InventoryTransfersPage() {
                       {page.items.map((item) => (
                         <TableRow
                           key={item.transferId}
-                          className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                          className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                         >
                           <TableCell className="col-span-2 whitespace-normal">
                             <Link
@@ -166,25 +179,25 @@ export function InventoryTransfersPage() {
                             </Link>
                           </TableCell>
                           <TableCell className="text-sm">
-                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                            <span className="mb-1 block text-muted-foreground lg:hidden">
                               Status
                             </span>
                             <StatusBadge>{statusLabel(item.status)}</StatusBadge>
                             {item.status === "RESOLVED" ? (
-                              <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                              <span className="mt-1 block text-xs text-muted-foreground">
                                 Outstanding goods accounted for; destination receipt remains
                                 distinct.
                               </span>
                             ) : null}
                           </TableCell>
                           <TableCell className="text-sm tabular-nums">
-                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                            <span className="mb-1 block text-muted-foreground lg:hidden">
                               Product lines
                             </span>
                             {item.lineCount}
                           </TableCell>
                           <TableCell className="col-span-2 text-sm lg:col-span-1">
-                            <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                            <span className="mb-1 block text-muted-foreground lg:hidden">
                               Created
                             </span>
                             {new Date(item.createdAt).toLocaleString("en-PH", {

@@ -16,11 +16,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../../../components/ui/select";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+} from "@/components/admin/shadcn/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import {
   AdminCursorPagination,
@@ -297,10 +297,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
       />
 
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
           {notice}
         </p>
       ) : null}
@@ -411,12 +408,12 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
         >
           <div className="space-y-2 p-4">
             {roleError ? (
-              <p className="text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="text-sm text-muted-foreground" role="status">
                 Role choices for this page are unavailable. Retry the read or return to the previous
                 page.
               </p>
             ) : activeRoles.length === 0 ? (
-              <p className="text-sm text-[var(--fm-text-muted)]">
+              <p className="text-sm text-muted-foreground">
                 No active roles exist. Create one under Roles.
               </p>
             ) : (
@@ -441,7 +438,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                     }}
                   />
                   <span className="font-medium">{role.name}</span>
-                  <span className="text-xs text-[var(--fm-text-muted)]">{role.code}</span>
+                  <span className="text-xs text-muted-foreground">{role.code}</span>
                 </label>
               ))
             )}
@@ -515,7 +512,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
                 Set location
               </Button>
             </div>
-            <p className="text-xs text-[var(--fm-text-muted)] sm:col-span-2">
+            <p className="text-xs text-muted-foreground sm:col-span-2">
               Current:{" "}
               {staff.scopes
                 .map((scope) => {
@@ -627,7 +624,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ "staff-i
         }}
       />
       <p className="text-xs">
-        <Link href="/admin/staff/roles" className="text-[var(--fm-info)] underline">
+        <Link href="/admin/staff/roles" className="text-muted-foreground underline">
           Manage roles and capabilities
         </Link>
       </p>

@@ -2,7 +2,7 @@
 
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { useRef, useState } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 
@@ -32,10 +32,10 @@ export function DispatchActions({
       {competing ? (
         <section
           aria-label="Choose dispatch method"
-          className="space-y-2 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3"
+          className="space-y-2 rounded-lg border border-border bg-card p-3"
         >
           <h3 className="text-sm font-semibold">Choose dispatch method</h3>
-          <p className="text-xs text-[var(--fm-text-muted)]">
+          <p className="text-xs text-muted-foreground">
             {item.fulfillmentMode === "SCHEDULED"
               ? "Packed Scheduled order: request Lalamove or assign a person for manual delivery."
               : "A definite courier attempt has closed. Choose the next permitted delivery method."}
@@ -101,9 +101,7 @@ export function DispatchActions({
       !item.externalDispatch &&
       !item.manualDelivery &&
       item.courierPickup.unavailableReason ? (
-        <p className="text-sm text-[var(--fm-text-muted)]">
-          {item.courierPickup.unavailableReason}
-        </p>
+        <p className="text-sm text-muted-foreground">{item.courierPickup.unavailableReason}</p>
       ) : null}
     </div>
   );

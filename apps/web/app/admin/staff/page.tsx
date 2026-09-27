@@ -10,17 +10,17 @@ import type {
   AdminScopeOptionView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../../components/ui/select";
-import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+} from "@/components/admin/shadcn/select";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   Table,
   TableBody,
@@ -28,7 +28,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../components/admin/admin-shell";
 import {
   AdminConfirmationDialog,
@@ -273,10 +273,7 @@ export default function StaffPage() {
             </Alert>
           ) : null}
           {notice ? (
-            <p
-              role="status"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-            >
+            <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
               {notice}
             </p>
           ) : null}
@@ -342,7 +339,7 @@ export default function StaffPage() {
                       </SelectItem>
                     ))}
                   {loadingMoreRoles ? (
-                    <p role="status" className="px-2 py-1 text-xs text-[var(--fm-text-muted)]">
+                    <p role="status" className="px-2 py-1 text-xs text-muted-foreground">
                       Loading more roles…
                     </p>
                   ) : null}
@@ -378,7 +375,7 @@ export default function StaffPage() {
                 Create invitation
               </Button>
             </form>
-            <div className="border-t border-[var(--fm-border)] p-4">
+            <div className="border-t border-border p-4">
               <Input
                 aria-label="Invitation revocation reason"
                 placeholder="revocation reason (required)"
@@ -389,29 +386,29 @@ export default function StaffPage() {
               />
             </div>
             {readLoading ? (
-              <p className="border-t border-[var(--fm-border)] p-4 text-sm" role="status">
+              <p className="border-t border-border p-4 text-sm" role="status">
                 Loading invitation page…
               </p>
             ) : readError || invitationError ? (
-              <p className="border-t border-[var(--fm-border)] p-4 text-sm" role="status">
+              <p className="border-t border-border p-4 text-sm" role="status">
                 Invitations for this page are unavailable. Retry the read or return to the previous
                 page.
               </p>
             ) : invitations && invitations.items.length > 0 ? (
-              <ul className="divide-y divide-[var(--fm-border)] border-t border-[var(--fm-border)]">
+              <ul className="divide-y divide-border border-t border-border">
                 {invitations.items.map((invitation) => (
                   <li
                     key={invitation.invitationId}
                     className="flex flex-wrap items-center gap-3 px-4 py-3"
                   >
                     <span className="text-sm">{invitation.displayName}</span>
-                    <span className="font-mono text-xs text-[var(--fm-text-muted)]">
+                    <span className="font-mono text-xs text-muted-foreground">
                       {invitation.email}
                     </span>
                     <StatusBadge tone={invitation.status === "PENDING" ? "info" : "neutral"}>
                       {invitation.status}
                     </StatusBadge>
-                    <span className="ml-auto text-xs text-[var(--fm-text-muted)]">
+                    <span className="ml-auto text-xs text-muted-foreground">
                       expires {new Date(invitation.expiresAt).toISOString().slice(0, 10)}
                     </span>
                     <InvitationEmailStatusText status={invitation.emailStatus} />
@@ -432,7 +429,7 @@ export default function StaffPage() {
                 ))}
               </ul>
             ) : (
-              <p className="border-t border-[var(--fm-border)] p-4 text-sm text-[var(--fm-text-muted)]">
+              <p className="border-t border-border p-4 text-sm text-muted-foreground">
                 No invitations on this page.
               </p>
             )}
@@ -449,16 +446,16 @@ export default function StaffPage() {
 
           <ListPageSection title="Staff identities">
             {readLoading ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="p-5 text-sm text-muted-foreground" role="status">
                 Loading staff page…
               </p>
             ) : readError ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="p-5 text-sm text-muted-foreground" role="status">
                 Staff identities for this page are unavailable. Retry the read or return to the
                 previous page.
               </p>
             ) : staff === null || staff.items.length === 0 ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="p-5 text-sm text-muted-foreground" role="status">
                 No staff identities are visible to you yet.
               </p>
             ) : (
@@ -489,7 +486,7 @@ export default function StaffPage() {
                         <TableCell className="text-xs">
                           {member.roleCodes.join(", ") || "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-[var(--fm-text-muted)]">
+                        <TableCell className="text-xs text-muted-foreground">
                           {member.scopes.some((scope) => scope.kind === "global")
                             ? "Global"
                             : `${member.scopes.length} scoped`}
@@ -498,7 +495,7 @@ export default function StaffPage() {
                           <Link
                             href={`/admin/staff/${member.staffId}`}
                             prefetch={false}
-                            className="text-xs font-medium text-[var(--fm-info)] underline"
+                            className="text-xs font-medium text-muted-foreground underline"
                           >
                             Manage
                           </Link>

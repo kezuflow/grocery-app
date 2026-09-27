@@ -23,9 +23,16 @@ import {
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
-import { Button } from "../ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Sheet, SheetContent } from "../ui/sheet";
+import { Button } from "@/components/admin/shadcn/button";
+import { Badge } from "@/components/admin/shadcn/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
+import { Sheet, SheetContent } from "@/components/admin/shadcn/sheet";
 import { CycleCalendar } from "./delivery-cycles/cycle-calendar";
 import { CycleDetailsPanel } from "./delivery-cycles/cycle-details-panel";
 import { CycleEditor } from "./delivery-cycles/cycle-editor";
@@ -181,7 +188,7 @@ function ResponsivePanel({
     return (
       <aside
         aria-label="Cycle workspace panel"
-        className="sticky top-4 h-[calc(100vh-10rem)] min-h-[34rem] max-h-[42rem] w-[20rem] shrink-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
+        className="sticky top-4 h-[calc(100vh-10rem)] min-h-[34rem] max-h-[42rem] w-[20rem] shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
       >
         {children}
       </aside>
@@ -448,9 +455,7 @@ export function DeliveryCyclesWorkspace({
         description="Plan ordering, fulfillment, and customer delivery."
         action={
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-[var(--fm-border)] px-3 py-1.5 text-xs font-medium text-[var(--fm-text-muted)]">
-              {timezone}
-            </span>
+            <Badge variant="outline">{timezone}</Badge>
             {page?.canManage ? (
               <Button type="button" disabled={disabled} onClick={() => openNew()}>
                 <Plus aria-hidden className="size-4" /> New cycle
@@ -460,10 +465,7 @@ export function DeliveryCyclesWorkspace({
         }
       />
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 py-3 text-sm"
-        >
+        <p role="status" className="rounded-md border border-border px-4 py-3 text-sm">
           {notice}
         </p>
       ) : null}
@@ -497,7 +499,7 @@ export function DeliveryCyclesWorkspace({
                         setLocationFilter("all");
                       }}
                     >
-                      <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                      <SelectTrigger className="min-w-28 bg-card">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -517,7 +519,7 @@ export function DeliveryCyclesWorkspace({
                     disabled={disabled || draft !== null}
                     onValueChange={setLocationFilter}
                   >
-                    <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                    <SelectTrigger className="min-w-28 bg-card">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -537,7 +539,7 @@ export function DeliveryCyclesWorkspace({
                     disabled={disabled || draft !== null}
                     onValueChange={(value) => setStatusFilter(value as DeliveryCycleState | "all")}
                   >
-                    <SelectTrigger className="min-w-28 bg-[var(--fm-admin-surface)]">
+                    <SelectTrigger className="min-w-28 bg-card">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

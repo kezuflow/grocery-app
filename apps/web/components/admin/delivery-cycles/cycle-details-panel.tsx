@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Copy, Pencil, Power, PowerOff, X } from "lucide-react";
 import type { AdminDeliveryCycleView } from "@freshmarkets/contracts";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { AdminStatusPill } from "../admin-status-pill";
 import { AdminConfirmationDialog } from "../admin-controls";
 import { CycleTimeline } from "./cycle-timeline";
@@ -65,7 +65,7 @@ export function CycleDetailsPanel({
     canManage && cycle.status === "OPEN" && Date.parse(cycle.cutoffAt) > Date.now();
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] p-4">
+      <header className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="truncate text-xl font-semibold">{cycle.name}</h2>
@@ -111,10 +111,10 @@ export function CycleDetailsPanel({
               </Button>
             ) : null}
           </div>
-          <p className="text-sm text-[var(--fm-text-muted)]">
+          <p className="text-sm text-muted-foreground">
             {locationNames.join(", ") || "No fulfillment locations"}
           </p>
-          <p className="mt-1 text-xs text-[var(--fm-text-muted)]">All times in {cycle.timezone}</p>
+          <p className="mt-1 text-xs text-muted-foreground">All times in {cycle.timezone}</p>
         </div>
         <Button
           ref={closeRef}
@@ -130,10 +130,7 @@ export function CycleDetailsPanel({
       </header>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         <section aria-labelledby="cycle-delivery-heading">
-          <h3
-            id="cycle-delivery-heading"
-            className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]"
-          >
+          <h3 id="cycle-delivery-heading" className="text-xs font-semibold text-muted-foreground">
             Customer delivery
           </h3>
           {primaryWindow ? (
@@ -141,13 +138,11 @@ export function CycleDetailsPanel({
               {formatWindow(primaryWindow.startsAt, primaryWindow.endsAt, cycle.timezone)}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-[var(--fm-text-muted)]">No delivery range recorded.</p>
+            <p className="mt-2 text-sm text-muted-foreground">No delivery range recorded.</p>
           )}
           {cycle.windows.length > 1 ? (
-            <div className="mt-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3">
-              <p className="text-xs font-medium text-[var(--fm-text-muted)]">
-                Legacy delivery ranges
-              </p>
+            <div className="mt-3 rounded-md border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">Legacy delivery ranges</p>
               <ul className="mt-1 space-y-1 text-sm">
                 {cycle.windows.slice(1).map((window) => (
                   <li key={window.windowId}>
@@ -159,10 +154,7 @@ export function CycleDetailsPanel({
           ) : null}
         </section>
         <section aria-labelledby="cycle-schedule-heading">
-          <h3
-            id="cycle-schedule-heading"
-            className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]"
-          >
+          <h3 id="cycle-schedule-heading" className="text-xs font-semibold text-muted-foreground">
             Schedule
           </h3>
           <CycleTimeline
@@ -182,28 +174,25 @@ export function CycleDetailsPanel({
             ]}
           />
           {cycle.status === "CUTOFF_REACHED" && Date.parse(cycle.cutoffAt) > Date.now() ? (
-            <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-2 text-sm text-muted-foreground">
               New ordering was closed early. The displayed cutoff remains the original customer
               cancellation and purchase boundary.
             </p>
           ) : null}
         </section>
         <section aria-labelledby="cycle-locations-heading">
-          <h3
-            id="cycle-locations-heading"
-            className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]"
-          >
+          <h3 id="cycle-locations-heading" className="text-xs font-semibold text-muted-foreground">
             Fulfillment locations
           </h3>
           <p className="mt-2 text-sm">{locationNames.join(", ") || "No fulfillment locations"}</p>
         </section>
         {cycle.cancellationUnavailableReason ? (
-          <p className="rounded-[var(--fm-radius-control)] border border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)] p-3 text-sm">
+          <p className="rounded-md border border-border bg-muted p-3 text-sm">
             Deactivate unavailable: {cycle.cancellationUnavailableReason}
           </p>
         ) : null}
       </div>
-      <footer className="grid grid-cols-2 gap-2 border-t border-[var(--fm-border)] p-4">
+      <footer className="grid grid-cols-2 gap-2 border-t border-border p-4">
         {retryAvailable ? (
           <Button type="button" className="col-span-2" disabled={submitting} onClick={onRetry}>
             {submitting ? "Retrying…" : "Retry unconfirmed request"}
@@ -226,7 +215,7 @@ export function CycleDetailsPanel({
         ) : null}
       </footer>
       {editable && (!cycle.pickupAt || cycle.windows.length !== 1) ? (
-        <p className="border-t border-[var(--fm-border)] px-4 py-2 text-xs text-[var(--fm-text-muted)]">
+        <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
           Activate unavailable:{" "}
           {cycle.windows.length !== 1
             ? "This cycle has multiple delivery ranges."

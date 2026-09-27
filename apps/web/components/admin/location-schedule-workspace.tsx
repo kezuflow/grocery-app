@@ -8,9 +8,15 @@ import {
   type RpcResult,
 } from "@freshmarkets/contracts";
 import { z, adminLocationScheduleViewSchema } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { PageHeader } from "./admin-shell";
 import { TimeOfDayInput } from "./time-of-day-input";
 import { useAdminCommandIntent } from "./admin-command-state";
@@ -186,7 +192,7 @@ export function LocationScheduleWorkspace({
           )}
           <fieldset
             disabled={locked || !result.value.canManage}
-            className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+            className="space-y-4 rounded-xl border border-border bg-card p-5"
           >
             <legend className="font-semibold">Weekly Instant operating hours</legend>
             {schedule.weekly.map((row, index) => (
@@ -263,7 +269,7 @@ export function LocationScheduleWorkspace({
           </fieldset>
           <fieldset
             disabled={locked || !result.value.canManage}
-            className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+            className="space-y-4 rounded-xl border border-border bg-card p-5"
           >
             <legend className="font-semibold">Dated closures</legend>
             <p>

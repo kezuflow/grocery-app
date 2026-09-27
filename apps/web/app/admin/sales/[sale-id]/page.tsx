@@ -8,9 +8,10 @@ import { adminPromotionSummarySchema } from "@freshmarkets/validation";
 import { catalogResultSchema, useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
 import { PromotionStatusSwitch } from "@/components/admin/promotion-status-switch";
-import { Button } from "../../../../components/ui/button";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Badge } from "@/components/admin/shadcn/badge";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../../components/admin/admin-shell";
 import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
@@ -24,30 +25,30 @@ type LoadState =
 const statusPresentation = {
   DRAFT: {
     label: "Draft",
-    badge: "bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]",
-    dot: "bg-slate-400",
-    icon: "bg-[var(--fm-admin-surface-muted)]",
+    variant: "outline",
+    dot: "bg-muted-foreground",
+    icon: "bg-muted",
     description: "This sale is saved as a draft and is not active.",
   },
   ACTIVE: {
     label: "Active",
-    badge: "bg-emerald-100 text-emerald-800",
-    dot: "bg-emerald-600",
-    icon: "bg-emerald-100",
+    variant: "secondary",
+    dot: "bg-primary",
+    icon: "bg-secondary",
     description: "Active status; applies only during its scheduled dates when eligible.",
   },
   INACTIVE: {
     label: "Inactive",
-    badge: "bg-amber-100 text-amber-900",
-    dot: "bg-amber-600",
-    icon: "bg-amber-100",
+    variant: "outline",
+    dot: "bg-muted-foreground",
+    icon: "bg-muted",
     description: "This sale is inactive and is not applied at checkout.",
   },
   ARCHIVED: {
     label: "Archived",
-    badge: "bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]",
-    dot: "bg-slate-500",
-    icon: "bg-[var(--fm-admin-surface-muted)]",
+    variant: "outline",
+    dot: "bg-muted-foreground",
+    icon: "bg-muted",
     description: "This sale is archived and remains available as a historical record.",
   },
 } as const;
@@ -236,7 +237,7 @@ function InventorySaleDetailWorkspace({
         <main className="min-w-0 p-5 sm:p-7">
           <Link
             href="/admin/sales"
-            className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             Promotion Sale
@@ -245,27 +246,19 @@ function InventorySaleDetailWorkspace({
           <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-[2rem] font-bold tracking-[-0.04em] text-[var(--fm-text)]">
-                  {sale.name}
-                </h1>
-                <span
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${status.badge}`}
-                >
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">{sale.name}</h1>
+                <Badge variant={status.variant} className="gap-2">
                   <span className={`size-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
                   {status.label}
-                </span>
+                </Badge>
               </div>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Automatic sale on selected products at reduced price.
               </p>
             </div>
             <div className="flex items-center gap-2">
               {canManage && sale.status === "DRAFT" ? (
-                <Button
-                  type="button"
-                  onClick={() => setEditing((value) => !value)}
-                  className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
-                >
+                <Button type="button" onClick={() => setEditing((value) => !value)}>
                   {editing ? "Close editor" : "Edit sale"}
                 </Button>
               ) : null}
@@ -273,22 +266,19 @@ function InventorySaleDetailWorkspace({
           </div>
 
           {notice ? (
-            <p
-              role="status"
-              className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
-            >
+            <p role="status" className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm">
               {notice}
             </p>
           ) : null}
 
           {editing && canManage && sale.status === "DRAFT" ? (
             <section
-              className="mt-8 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]"
+              className="mt-8 rounded-lg border border-border bg-card"
               aria-labelledby="edit-sale-title"
             >
               <h2
                 id="edit-sale-title"
-                className="border-b border-[var(--fm-border)] px-5 py-4 text-lg font-semibold"
+                className="border-b border-border px-5 py-4 text-lg font-semibold"
               >
                 Edit sale details
               </h2>
@@ -301,7 +291,7 @@ function InventorySaleDetailWorkspace({
           ) : (
             <>
               <section
-                className="mt-8 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5"
+                className="mt-8 rounded-lg border border-border bg-card p-5"
                 aria-labelledby="basic-information-title"
               >
                 <h2 id="basic-information-title" className="text-lg font-semibold">
@@ -309,15 +299,15 @@ function InventorySaleDetailWorkspace({
                 </h2>
                 <dl className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Sale name</dt>
+                    <dt className="text-xs text-muted-foreground">Sale name</dt>
                     <dd className="mt-1 font-medium">{sale.name}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Status</dt>
+                    <dt className="text-xs text-muted-foreground">Status</dt>
                     <dd className="mt-1 font-medium">{status.label}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Products</dt>
+                    <dt className="text-xs text-muted-foreground">Products</dt>
                     <dd className="mt-1 font-medium">
                       {targets
                         .map((target) => target.productName ?? "Selected product")
@@ -326,17 +316,17 @@ function InventorySaleDetailWorkspace({
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Location</dt>
+                    <dt className="text-xs text-muted-foreground">Location</dt>
                     <dd className="mt-1 font-medium">
                       {targets[0]?.locationName ?? "Selected location"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Discount type</dt>
+                    <dt className="text-xs text-muted-foreground">Discount type</dt>
                     <dd className="mt-1 font-medium">{discountLabel(sale)}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Allowance</dt>
+                    <dt className="text-xs text-muted-foreground">Allowance</dt>
                     <dd className="mt-1 font-medium">
                       {targets.every((target) => target.quantityLimit === null)
                         ? "Whole stock"
@@ -344,13 +334,13 @@ function InventorySaleDetailWorkspace({
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">Start date</dt>
+                    <dt className="text-xs text-muted-foreground">Start date</dt>
                     <dd className="mt-1 font-medium">
                       {new Date(sale.startsAt).toLocaleDateString()}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-[var(--fm-text-muted)]">End date</dt>
+                    <dt className="text-xs text-muted-foreground">End date</dt>
                     <dd className="mt-1 font-medium">
                       {sale.endsAt ? new Date(sale.endsAt).toLocaleDateString() : "No end date"}
                     </dd>
@@ -359,22 +349,22 @@ function InventorySaleDetailWorkspace({
               </section>
 
               <section
-                className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5"
+                className="mt-5 rounded-lg border border-border bg-card p-5"
                 aria-labelledby="selling-options-title"
               >
                 <h2 id="selling-options-title" className="text-lg font-semibold">
                   Product selling options
                 </h2>
-                <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--fm-border)]">
+                <div className="mt-4 overflow-x-auto rounded-lg border border-border">
                   <table className="w-full min-w-[520px] text-left text-sm">
-                    <thead className="bg-[var(--fm-admin-surface-muted)] text-xs text-[var(--fm-text-muted)]">
+                    <thead className="bg-muted text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-3 font-medium">Option</th>
                         <th className="px-3 py-3 font-medium">Sale discount</th>
                         <th className="px-3 py-3 font-medium">Allowance</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--fm-border)]">
+                    <tbody className="divide-y divide-border">
                       {targets.map((target) => (
                         <tr key={`${target.skuId}:${target.locationId}`}>
                           <td className="px-3 py-3 font-medium">
@@ -386,7 +376,7 @@ function InventorySaleDetailWorkspace({
                       ))}
                       {targets.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-3 py-4 text-[var(--fm-text-muted)]">
+                          <td colSpan={3} className="px-3 py-4 text-muted-foreground">
                             No selling options configured.
                           </td>
                         </tr>
@@ -397,26 +387,26 @@ function InventorySaleDetailWorkspace({
               </section>
 
               <section
-                className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5"
+                className="mt-5 rounded-lg border border-border bg-card p-5"
                 aria-labelledby="allowance-title"
               >
                 <h2 id="allowance-title" className="text-lg font-semibold">
                   Allowance and stock
                 </h2>
-                <div className="mt-4 grid gap-4 rounded-lg bg-[var(--fm-admin-surface-muted)] p-4 sm:grid-cols-2">
+                <div className="mt-4 grid gap-4 rounded-lg bg-muted p-4 sm:grid-cols-2">
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Sale allowance</p>
+                    <p className="text-xs text-muted-foreground">Sale allowance</p>
                     <p className="mt-1 text-lg font-semibold">
                       {targets.every((target) => target.quantityLimit === null)
                         ? "Whole stock"
                         : "Limited quantity"}
                     </p>
-                    <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Applies to the selected stock at this location.
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Remaining allowance</p>
+                    <p className="text-xs text-muted-foreground">Remaining allowance</p>
                     <p className="mt-1 text-lg font-semibold">
                       {targets.every((target) => target.quantityLimit === null)
                         ? "∞"
@@ -424,15 +414,15 @@ function InventorySaleDetailWorkspace({
                             .reduce((sum, target) => sum + (target.remainingQuantity ?? 0), 0)
                             .toLocaleString("en-PH")}
                     </p>
-                    <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Updated from current inventory availability.
                     </p>
                   </div>
                 </div>
-                <div className="mt-4 rounded-lg border border-[var(--fm-border)] p-4">
-                  <p className="text-xs text-[var(--fm-text-muted)]">Current physical stock</p>
+                <div className="mt-4 rounded-lg border border-border p-4">
+                  <p className="text-xs text-muted-foreground">Current physical stock</p>
                   <p className="mt-1 text-2xl font-bold">Managed through inventory</p>
-                  <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Stock is managed through inventory features.
                   </p>
                 </div>
@@ -441,15 +431,12 @@ function InventorySaleDetailWorkspace({
           )}
         </main>
 
-        <aside className="border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] lg:border-l lg:border-t-0">
-          <section
-            className="border-b border-[var(--fm-border)] p-5"
-            aria-labelledby="sale-status-title"
-          >
+        <aside className="border-t border-border bg-card lg:border-l lg:border-t-0">
+          <section className="border-b border-border p-5" aria-labelledby="sale-status-title">
             <h2 id="sale-status-title" className="text-lg font-semibold">
               Sale status
             </h2>
-            <div className="mt-4 rounded-lg border border-[var(--fm-border)] p-4">
+            <div className="mt-4 rounded-lg border border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span
@@ -466,27 +453,27 @@ function InventorySaleDetailWorkspace({
                   />
                 ) : null}
               </div>
-              <p className="mt-3 text-sm text-[var(--fm-text-muted)]">{status.description}</p>
+              <p className="mt-3 text-sm text-muted-foreground">{status.description}</p>
             </div>
           </section>
           <section className="p-5" aria-labelledby="activity-title">
             <h2 id="activity-title" className="text-lg font-semibold">
               Record
             </h2>
-            <ol className="mt-5 space-y-6 border-l border-[var(--fm-border)] pl-5 text-sm">
+            <ol className="mt-5 space-y-6 border-l border-border pl-5 text-sm">
               {sale.updatedAt !== sale.createdAt ? (
                 <li className="relative">
-                  <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-[var(--fm-admin-surface)] bg-[var(--fm-admin-accent)]" />
+                  <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-card bg-primary" />
                   <p className="font-medium">Last updated</p>
-                  <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {new Date(sale.updatedAt).toLocaleString()}
                   </p>
                 </li>
               ) : null}
               <li className="relative">
-                <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-[var(--fm-admin-surface)] bg-slate-300" />
+                <span className="absolute -left-[1.65rem] top-0.5 size-3 rounded-full border-4 border-card bg-muted-foreground/50" />
                 <p className="font-medium">Created</p>
-                <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {new Date(sale.createdAt).toLocaleString()}
                 </p>
               </li>

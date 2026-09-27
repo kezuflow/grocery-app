@@ -10,9 +10,15 @@ import {
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
 import type { useAdminCommand } from "./use-admin-command";
-import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Textarea } from "@/components/admin/shadcn/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { ListPageSection } from "./admin-shell";
 import { AdminConfirmationDialog } from "./admin-controls";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
@@ -233,7 +239,7 @@ export function CustomerPrivacyPanel({
             </Button>
           </fieldset>
         ) : (
-          <p className="text-sm text-[var(--fm-text-muted)]">
+          <p className="text-sm text-muted-foreground">
             Privacy requests are read-only without customers.manage.
           </p>
         )}
@@ -316,7 +322,7 @@ export function CustomerPrivacyPanel({
                 </div>
               </fieldset>
             ) : null}
-            <details className="text-xs text-[var(--fm-text-muted)]">
+            <details className="text-xs text-muted-foreground">
               <summary className="cursor-pointer font-medium">Technical request details</summary>
               <dl className="mt-2 grid gap-1 break-all">
                 <div>

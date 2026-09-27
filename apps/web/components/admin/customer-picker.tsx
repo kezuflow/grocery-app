@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { z } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { catalogResultSchema } from "./catalog-command-state";
 
 export type CustomerChoice = { customerId: string; label: string };

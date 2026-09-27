@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "../../lib/utils";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/admin/shadcn/card";
 
 export function AdminDashboardGrid({
   ariaLabel,
@@ -40,25 +47,21 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("min-w-0 gap-4 py-4 shadow-[var(--fm-shadow-card)]", className)}>
+    <Card className={cn("min-w-0 gap-4 py-4 shadow-sm", className)}>
       <CardHeader className="gap-1 px-4">
         <CardDescription>{label}</CardDescription>
         {value === null ? (
-          <p className="text-sm font-medium text-[var(--fm-text-muted)]">{unavailableReason}</p>
+          <p className="text-sm font-medium text-muted-foreground">{unavailableReason}</p>
         ) : (
-          <CardTitle className="text-2xl tracking-[-0.03em]">{value}</CardTitle>
+          <CardTitle className="text-2xl tracking-tight">{value}</CardTitle>
         )}
-        {detail ? <div className="text-xs text-[var(--fm-text-muted)]">{detail}</div> : null}
+        {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
       </CardHeader>
       {freshness || href ? (
-        <CardContent className="flex items-center justify-between gap-3 border-t px-4 pt-3 text-xs text-[var(--fm-text-muted)]">
+        <CardContent className="flex items-center justify-between gap-3 border-t px-4 pt-3 text-xs text-muted-foreground">
           <span>{freshness}</span>
           {href ? (
-            <Link
-              className="font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
-              href={href}
-              prefetch={false}
-            >
+            <Link className="font-medium text-primary hover:underline" href={href} prefetch={false}>
               Open workspace
             </Link>
           ) : null}
@@ -86,7 +89,7 @@ export function AdminChartCard({
   return (
     <Card
       aria-label={title}
-      className={cn("min-w-0 gap-4 py-0 shadow-[var(--fm-shadow-card)]", className)}
+      className={cn("min-w-0 gap-4 py-0 shadow-sm", className)}
       role="figure"
     >
       <CardHeader className="border-b px-4 py-4 sm:px-5">
@@ -141,7 +144,7 @@ export function DetailWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)] sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">{summary}</div>
         {actions ? (
           <div aria-label="Resource actions" className="flex flex-wrap gap-2" role="group">
@@ -166,16 +169,15 @@ export function SettingsTabs({
   tabs: ReadonlyArray<SettingsTab>;
 }) {
   return (
-    <nav aria-label={label} className="overflow-x-auto border-b border-[var(--fm-border)]">
+    <nav aria-label={label} className="overflow-x-auto border-b border-border">
       <div className="flex min-w-max gap-1">
         {tabs.map((tab) => (
           <Link
             aria-current={activeId === tab.id ? "page" : undefined}
             aria-disabled={tab.disabled || undefined}
             className={cn(
-              "border-b-2 border-transparent px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)]",
-              activeId === tab.id &&
-                "border-[var(--fm-admin-accent)] text-[var(--fm-admin-accent-strong)]",
+              "border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground",
+              activeId === tab.id && "border-primary text-primary",
               tab.disabled && "pointer-events-none opacity-50",
             )}
             href={tab.href}
@@ -205,9 +207,8 @@ export function StepIndicator({
           <li
             aria-current={number === currentStep ? "step" : undefined}
             className={cn(
-              "flex items-center gap-2 border-t-2 border-[var(--fm-border)] pt-2 text-xs text-[var(--fm-text-muted)]",
-              number <= currentStep &&
-                "border-[var(--fm-admin-accent)] font-medium text-[var(--fm-text)]",
+              "flex items-center gap-2 border-t-2 border-border pt-2 text-xs text-muted-foreground",
+              number <= currentStep && "border-primary font-medium text-foreground",
             )}
             key={step}
           >
@@ -232,25 +233,25 @@ export function CommandBanner({
   action?: ReactNode;
 }) {
   const classes = {
-    info: "border-[var(--fm-info-border)] bg-[var(--fm-info-soft)]",
-    pending: "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)]",
-    success: "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)]",
-    conflict: "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)]",
-    error: "border-[var(--fm-danger-border)] bg-[var(--fm-danger-soft)]",
+    info: "border-border bg-muted",
+    pending: "border-border bg-muted",
+    success: "border-border bg-muted",
+    conflict: "border-border bg-muted",
+    error: "border-border bg-muted",
   };
   const isAlert = tone === "conflict" || tone === "error";
   return (
     <section
       aria-live={isAlert ? "assertive" : "polite"}
       className={cn(
-        "flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border p-4 sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between",
         classes[tone],
       )}
       role={isAlert ? "alert" : "status"}
     >
       <div>
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-sm text-[var(--fm-text-muted)]">{message}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{message}</p>
       </div>
       {action}
     </section>

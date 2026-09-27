@@ -4,11 +4,10 @@ import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import type { AdminPromotionSummary } from "@freshmarkets/contracts";
 import { adminPromotionSummarySchema } from "@freshmarkets/validation";
-import { cn } from "../../lib/utils";
 import { useCatalogCommand } from "./catalog-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
-import { adminStatusPillClassName } from "./admin-status-pill";
-import { Switch } from "../ui/switch";
+import { Badge } from "./shadcn/badge";
+import { Switch } from "@/components/admin/shadcn/switch";
 
 const statusLabels: Record<AdminPromotionSummary["status"], string> = {
   DRAFT: "Draft",
@@ -33,9 +32,7 @@ export function PromotionStatusSwitch({
   const [error, setError] = useState<string | null>(null);
 
   if (promotion.status === "ARCHIVED") {
-    return (
-      <span className={cn(adminStatusPillClassName, "fm-admin-status-neutral")}>Archived</span>
-    );
+    return <Badge variant="outline">Archived</Badge>;
   }
 
   const active = promotion.status === "ACTIVE";
@@ -95,7 +92,7 @@ export function PromotionStatusSwitch({
           role={command.pending ? "status" : undefined}
           aria-label={command.pending ? "Updating promotion status" : undefined}
           aria-hidden={!command.pending}
-          className="fm-status-switch-spinner absolute inset-0 inline-flex items-center justify-center text-[var(--fm-text-muted)]"
+          className="fm-status-switch-spinner absolute inset-0 inline-flex items-center justify-center text-muted-foreground"
         >
           <LoaderCircle
             className="size-4 animate-spin motion-reduce:animate-none"
@@ -104,7 +101,7 @@ export function PromotionStatusSwitch({
         </span>
       </span>
       {error ? (
-        <p role="alert" className="max-w-48 text-xs text-[var(--fm-destructive)]">
+        <p role="alert" className="max-w-48 text-xs text-destructive">
           {error}
         </p>
       ) : null}

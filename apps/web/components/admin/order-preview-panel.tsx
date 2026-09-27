@@ -12,9 +12,22 @@ import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
 import { OrderStatusBadge } from "./order-status-badge";
-import { Button } from "../ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Button } from "@/components/admin/shadcn/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 
 function money(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(amountMinor / 100);
@@ -146,15 +159,13 @@ export function OrderPreviewPanel({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Order Preview
-          </p>
-          <h2 id="order-panel-title" className="mt-1 truncate text-xl font-bold tracking-[-0.03em]">
+          <p className="text-xs font-semibold text-muted-foreground">Order Preview</p>
+          <h2 id="order-panel-title" className="mt-1 truncate text-xl font-bold tracking-tight">
             {orderLabel(order)}
           </h2>
-          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+          <p className="mt-1 truncate text-sm text-muted-foreground">
             {order.customerName ?? "Customer"} · {order.customerEmail}
           </p>
         </div>
@@ -185,10 +196,7 @@ export function OrderPreviewPanel({
         {state === "ready" && detail ? (
           <div className="space-y-5">
             {message ? (
-              <div
-                role="status"
-                className="rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
-              >
+              <div role="status" className="rounded-lg border border-border bg-muted p-3 text-sm">
                 <p>{message}</p>
                 {savedCancellation ? (
                   <Button
@@ -217,7 +225,7 @@ export function OrderPreviewPanel({
                     }
                   }}
                 >
-                  <SelectTrigger className="min-w-48" indicator="up-down" aria-label="Order status">
+                  <SelectTrigger className="min-w-48" aria-label="Order status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start">
@@ -230,7 +238,7 @@ export function OrderPreviewPanel({
               </label>
               <OrderStatusBadge status={detail.status} />
             </div>
-            <p className="text-xs text-[var(--fm-text-muted)]">
+            <p className="text-xs text-muted-foreground">
               Available changes follow the order’s current lifecycle and your permissions.
             </p>
             {detail.fulfillment?.locationId ? (
@@ -261,7 +269,7 @@ export function OrderPreviewPanel({
                 <h3 id="order-preview-items" className="font-semibold">
                   Ordered items
                 </h3>
-                <span className="text-xs text-[var(--fm-text-muted)]">
+                <span className="text-xs text-muted-foreground">
                   {detail.items.length} {detail.items.length === 1 ? "item" : "items"}
                 </span>
               </div>
@@ -279,7 +287,7 @@ export function OrderPreviewPanel({
                       <TableRow key={`${item.productName}-${item.variantName}-${index}`}>
                         <TableCell>
                           <p className="font-medium">{item.productName}</p>
-                          <p className="text-xs text-[var(--fm-text-muted)]">
+                          <p className="text-xs text-muted-foreground">
                             {item.variantName} · {money(item.unitPriceMinor, detail.currency)}
                           </p>
                         </TableCell>
@@ -292,13 +300,13 @@ export function OrderPreviewPanel({
                   </TableBody>
                 </Table>
               ) : (
-                <p className="rounded-lg border border-[var(--fm-border)] p-4 text-sm text-[var(--fm-text-muted)]">
+                <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
                   No item snapshots are available for this order.
                 </p>
               )}
             </section>
 
-            <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+            <dl className="divide-y divide-border rounded-lg border border-border">
               {[
                 ["Total", money(detail.totalMinor, detail.currency)],
                 ["Committed", dateTime(detail.committedAt)],
@@ -309,7 +317,7 @@ export function OrderPreviewPanel({
                   key={label}
                   className="flex items-start justify-between gap-4 px-3 py-3 text-sm"
                 >
-                  <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+                  <dt className="text-muted-foreground">{label}</dt>
                   <dd className="max-w-64 break-all text-right font-medium">{value}</dd>
                 </div>
               ))}
@@ -318,7 +326,7 @@ export function OrderPreviewPanel({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+      <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
         <Button type="button" variant="outline" onClick={onClose}>
           Close
         </Button>

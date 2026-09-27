@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { AdminPaymentDetail } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "./admin-feedback";
 const response = z.discriminatedUnion("ok", [
   z.object({
@@ -91,7 +91,7 @@ export function PaymentRecovery({
   }
   return (
     <div className="mt-2 min-w-0 space-y-2">
-      <p className="text-xs text-[var(--fm-text-muted)]">
+      <p className="text-xs text-muted-foreground">
         Provider checks: {payment.lookupRecovery.attempts}
         {payment.lookupRecovery.nextCheckAt
           ? ` · Next check ${payment.lookupRecovery.nextCheckAt.slice(0, 19)}`

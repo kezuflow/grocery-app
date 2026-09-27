@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Button } from "../ui/button";
-import { Skeleton } from "../ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 
 export type AdminPageStateKind =
   | "loading"
@@ -77,19 +77,19 @@ export function AdminPageState({
   return (
     <section
       aria-live="polite"
-      className={`rounded-[var(--fm-radius-panel)] border bg-[var(--fm-admin-surface)] p-6 text-sm ${
+      className={`rounded-xl border bg-card p-6 text-sm ${
         state === "conflict"
-          ? "border-[var(--fm-warning-border)]"
+          ? "border-border"
           : state === "success"
-            ? "border-[var(--fm-success-border)]"
-            : "border-dashed border-[var(--fm-border)]"
+            ? "border-border"
+            : "border-dashed border-border"
       }`}
       role={state === "conflict" ? "alert" : "status"}
     >
       <h2 className="font-semibold">
         {title ?? (state === "filtered-empty" ? "No matching results" : "Nothing to show")}
       </h2>
-      <p className="mt-1 text-[var(--fm-text-muted)]">{description}</p>
+      <p className="mt-1 text-muted-foreground">{description}</p>
     </section>
   );
 }

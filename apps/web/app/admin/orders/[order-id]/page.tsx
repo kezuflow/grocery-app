@@ -18,11 +18,11 @@ import { AdminLiveRegion, AdminTimeline } from "../../../../components/admin/adm
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { OrderStatusBadge } from "../../../../components/admin/order-status-badge";
 import { OrderIssueStatusBadge } from "../../../../components/admin/order-issue-status-badge";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import { Button } from "../../../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
-import { Separator } from "../../../../components/ui/separator";
-import { Skeleton } from "../../../../components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/admin/shadcn/card";
+import { Separator } from "@/components/admin/shadcn/separator";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import {
   Table,
   TableBody,
@@ -30,7 +30,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 
 function money(amountMinor: number | null, currency: string): string {
   return amountMinor === null
@@ -77,8 +77,8 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-4 text-sm">
-      <dt className="text-[var(--fm-text-muted)]">{label}</dt>
-      <dd className={muted ? "text-[var(--fm-text-muted)]" : "font-medium"}>{value}</dd>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={muted ? "text-muted-foreground" : "font-medium"}>{value}</dd>
     </div>
   );
 }
@@ -229,7 +229,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
       ) : null}
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Orders
@@ -303,18 +303,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(19rem,1fr)] [&>*]:min-w-0">
             <div className="min-w-0 space-y-6">
               <ListPageSection title="Order items">
-                <ul className="divide-y divide-[var(--fm-border)] sm:hidden">
+                <ul className="divide-y divide-border sm:hidden">
                   {order.items.map((item, index) => (
                     <li
                       key={`${item.productName}-${item.variantName}-${index}`}
                       className="space-y-2 p-4 text-sm"
                     >
                       <p className="font-medium">{item.productName}</p>
-                      <p className="text-[var(--fm-text-muted)]">
+                      <p className="text-muted-foreground">
                         {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
                       </p>
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[var(--fm-text-muted)]">
+                        <span className="text-muted-foreground">
                           {item.quantity} × {money(item.unitPriceMinor, order.currency)}
                         </span>
                         <span className="font-medium">
@@ -339,7 +339,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                         <TableRow key={`${item.productName}-${item.variantName}-${index}`}>
                           <TableCell>
                             <p className="font-medium">{item.productName}</p>
-                            <p className="text-xs text-[var(--fm-text-muted)]">
+                            <p className="text-xs text-muted-foreground">
                               {item.variantName} · {item.baseQuantity} {item.unit.toLowerCase()}
                             </p>
                           </TableCell>
@@ -371,7 +371,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                             {amendment.lines.length} added item
                             {amendment.lines.length === 1 ? "" : "s"}
                           </p>
-                          <p className="font-mono text-xs text-[var(--fm-text-muted)]">
+                          <p className="font-mono text-xs text-muted-foreground">
                             {amendment.amendmentId}
                           </p>
                         </div>
@@ -387,15 +387,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                 </ListPageSection>
               ) : null}
 
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Payment</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 px-5">
                   {order.payments.length === 0 ? (
-                    <p className="text-sm text-[var(--fm-text-muted)]">
-                      No payment intent is linked.
-                    </p>
+                    <p className="text-sm text-muted-foreground">No payment intent is linked.</p>
                   ) : (
                     order.payments.map((payment) => (
                       <div className="space-y-2 text-sm" key={payment.paymentIntentId}>
@@ -406,13 +404,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                           </span>
                         </div>
                         <Link
-                          className="block truncate font-mono text-xs text-[var(--fm-text-muted)] hover:underline"
+                          className="block truncate font-mono text-xs text-muted-foreground hover:underline"
                           href={`/admin/payments?payment=${encodeURIComponent(payment.paymentIntentId)}`}
                         >
                           {payment.paymentIntentId}
                         </Link>
                         {payment.refundedMinor > 0 ? (
-                          <p className="text-xs text-[var(--fm-text-muted)]">
+                          <p className="text-xs text-muted-foreground">
                             Refunded {money(payment.refundedMinor, payment.currency)}
                           </p>
                         ) : null}
@@ -422,7 +420,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                 </CardContent>
               </Card>
 
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Fulfillment</CardTitle>
                 </CardHeader>
@@ -478,7 +476,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                           className="grid gap-1 p-4 sm:grid-cols-[10rem_1fr_auto]"
                           key={entry.eventId}
                         >
-                          <time className="text-xs text-[var(--fm-text-muted)]">
+                          <time className="text-xs text-muted-foreground">
                             {dateTime(entry.occurredAt)}
                           </time>
                           <span>{entry.label}</span>
@@ -491,7 +489,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             </div>
 
             <aside className="space-y-6">
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Order summary</CardTitle>
                 </CardHeader>
@@ -535,7 +533,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                 </CardContent>
               </Card>
 
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Delivery status</CardTitle>
                 </CardHeader>
@@ -549,8 +547,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                           <span
                             className={
                               index <= deliveryStage(order)
-                                ? "font-medium text-[var(--fm-text)]"
-                                : "text-[var(--fm-text-muted)]"
+                                ? "font-medium text-foreground"
+                                : "text-muted-foreground"
                             }
                             key={stage}
                           >
@@ -568,12 +566,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                       >
                         {deliveryStages.map((stage, index) => (
                           <span
-                            className={`h-1.5 rounded-full ${index <= deliveryStage(order) ? "bg-[var(--fm-text)]" : "bg-[var(--fm-border)]"}`}
+                            className={`h-1.5 rounded-full ${index <= deliveryStage(order) ? "bg-foreground" : "bg-border"}`}
                             key={stage}
                           />
                         ))}
                       </div>
-                      <p className="mt-3 text-sm text-[var(--fm-text-muted)]">
+                      <p className="mt-3 text-sm text-muted-foreground">
                         {order.delivery?.deliveredAt
                           ? `Delivered ${dateTime(order.delivery.deliveredAt)}`
                           : order.fulfillment?.promisedAt
@@ -587,17 +585,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                 </CardContent>
               </Card>
 
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Customer details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 px-5 text-sm">
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Customer name</p>
+                    <p className="text-xs text-muted-foreground">Customer name</p>
                     <p className="mt-1 font-medium">{order.customer.name ?? "Unavailable"}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Email</p>
+                    <p className="text-xs text-muted-foreground">Email</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <a
                         className="min-w-0 truncate hover:underline"
@@ -617,7 +615,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Phone</p>
+                    <p className="text-xs text-muted-foreground">Phone</p>
                     {order.customer.phone ? (
                       <div className="mt-1 flex items-center justify-between gap-2">
                         <a
@@ -638,11 +636,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                         </Button>
                       </div>
                     ) : (
-                      <p className="mt-1 text-[var(--fm-text-muted)]">Unavailable</p>
+                      <p className="mt-1 text-muted-foreground">Unavailable</p>
                     )}
                   </div>
                   <div>
-                    <p className="text-xs text-[var(--fm-text-muted)]">Address</p>
+                    <p className="text-xs text-muted-foreground">Address</p>
                     <p className="mt-1">
                       {order.customer.addressLines.length > 0
                         ? order.customer.addressLines.join(", ")
@@ -653,7 +651,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
               </Card>
 
               {customerIssues.length > 0 ? (
-                <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+                <Card className="gap-4 py-5 shadow-sm">
                   <CardHeader className="px-5">
                     <CardTitle>Customer issues</CardTitle>
                   </CardHeader>
@@ -665,7 +663,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                           <OrderIssueStatusBadge status={issue.status} />
                         </div>
                         {issue.details ? (
-                          <p className="mt-1 text-[var(--fm-text-muted)]">{issue.details}</p>
+                          <p className="mt-1 text-muted-foreground">{issue.details}</p>
                         ) : null}
                         <Button className="mt-2" variant="link" size="sm" asChild>
                           <Link href={`/admin/issues/${issue.exceptionId}`} prefetch={false}>
@@ -679,7 +677,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
               ) : null}
 
               {financeExceptions.length > 0 ? (
-                <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+                <Card className="gap-4 py-5 shadow-sm">
                   <CardHeader className="px-5">
                     <CardTitle>Payment exceptions</CardTitle>
                   </CardHeader>
@@ -691,7 +689,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
                           <StatusBadge>{humanize(exception.status)}</StatusBadge>
                         </div>
                         {exception.details ? (
-                          <p className="mt-1 text-[var(--fm-text-muted)]">{exception.details}</p>
+                          <p className="mt-1 text-muted-foreground">{exception.details}</p>
                         ) : null}
                       </div>
                     ))}

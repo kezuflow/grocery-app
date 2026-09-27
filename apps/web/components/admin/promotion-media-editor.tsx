@@ -5,8 +5,8 @@ import { promotionMediaMaxBytes } from "@freshmarkets/contracts";
 import { promotionMediaViewSchema } from "@freshmarkets/validation";
 import { catalogResultSchema } from "./catalog-command-state";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "./admin-feedback";
 
 export function PromotionMediaEditor({

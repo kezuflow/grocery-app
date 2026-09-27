@@ -9,5 +9,5 @@ const labels: Record<InvitationEmailStatus, string> = {
   CANCELED: "Pending invitation email canceled.",
 };
 export function InvitationEmailStatusText({ status }: { status: InvitationEmailStatus }) {
-  return <p className="text-sm text-[var(--fm-text-muted)]">{labels[status]}</p>;
+  return <p className="text-sm text-muted-foreground">{labels[status]}</p>;
 }

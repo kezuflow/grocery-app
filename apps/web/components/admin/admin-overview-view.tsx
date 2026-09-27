@@ -9,8 +9,15 @@ import type {
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
-import { Badge } from "../ui/badge";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Badge } from "@/components/admin/shadcn/badge";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/admin/shadcn/card";
 
 import { AdminNotificationList } from "./admin-notifications";
 
@@ -70,13 +77,13 @@ export function AdminOverviewViewContent({
           <h2 className="text-base font-semibold">
             {isGlobal ? "Across locations" : isLocation ? "At this location" : "In this market"}
           </h2>
-          <p className="text-sm text-[var(--fm-text-muted)]">
+          <p className="text-sm text-muted-foreground">
             {isGlobal
               ? "Current work and attention across your authorized locations."
               : `Fulfillment status and exceptions in the selected ${isLocation ? "location" : "market"}.`}
           </p>
         </div>
-        <p className="text-xs text-[var(--fm-text-muted)]">{freshness}</p>
+        <p className="text-xs text-muted-foreground">{freshness}</p>
       </div>
       <AdminDashboardGrid ariaLabel="Operational metrics" className="xl:grid-cols-4">
         {cards.map((card) => (
@@ -102,7 +109,7 @@ export function AdminOverviewViewContent({
 
       <AdminDashboardGrid ariaLabel="Operational workload and exceptions">
         <Card
-          className={`min-w-0 gap-0 py-0 shadow-[var(--fm-shadow-card)] md:col-span-2 ${exceptionsAvailable ? "xl:col-span-7" : "xl:col-span-12"}`}
+          className={`min-w-0 gap-0 py-0 shadow-sm md:col-span-2 ${exceptionsAvailable ? "xl:col-span-7" : "xl:col-span-12"}`}
         >
           <CardHeader className="border-b px-4 py-4 sm:px-5">
             <CardTitle>Fulfillment by status</CardTitle>
@@ -110,7 +117,7 @@ export function AdminOverviewViewContent({
             {fulfillmentHref ? (
               <CardAction>
                 <Link
-                  className="text-sm font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
+                  className="text-sm font-medium text-primary hover:underline"
                   href={fulfillmentHref}
                   prefetch={false}
                 >
@@ -121,14 +128,14 @@ export function AdminOverviewViewContent({
           </CardHeader>
           <CardContent className="px-0">
             {!operationsAvailable ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+              <p className="p-5 text-sm text-muted-foreground">
                 Fulfillment status is outside your current access.
               </p>
             ) : overview.workloadStages.length ? (
               <ul className="grid sm:grid-cols-2">
                 {overview.workloadStages.map((stage) => (
                   <li
-                    className="flex items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-3 text-sm sm:px-5"
+                    className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 text-sm sm:px-5"
                     key={stage.code}
                   >
                     <span className="capitalize">{stage.label}</span>
@@ -139,7 +146,7 @@ export function AdminOverviewViewContent({
                 ))}
               </ul>
             ) : (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+              <p className="p-5 text-sm text-muted-foreground">
                 No fulfillment records in the selected scope.
               </p>
             )}
@@ -147,7 +154,7 @@ export function AdminOverviewViewContent({
         </Card>
 
         {exceptionsAvailable ? (
-          <Card className="min-w-0 gap-0 py-0 shadow-[var(--fm-shadow-card)] md:col-span-2 xl:col-span-5">
+          <Card className="min-w-0 gap-0 py-0 shadow-sm md:col-span-2 xl:col-span-5">
             <CardHeader className="border-b px-4 py-4 sm:px-5">
               <CardTitle>Priority exceptions</CardTitle>
               {isGlobal ? (
@@ -158,7 +165,7 @@ export function AdminOverviewViewContent({
             </CardHeader>
             <CardContent className="px-0">
               {overview.exceptions.length ? (
-                <ul className="divide-y divide-[var(--fm-border)]">
+                <ul className="divide-y divide-border">
                   {overview.exceptions.map((exception) => (
                     <li
                       className="flex items-start gap-3 px-4 py-3 sm:px-5"
@@ -167,7 +174,7 @@ export function AdminOverviewViewContent({
                       <Badge
                         className={
                           exception.severity === "CRITICAL" || exception.severity === "HIGH"
-                            ? "border-[var(--fm-warning-border)] bg-[var(--fm-warning-soft)]"
+                            ? "border-border bg-muted"
                             : undefined
                         }
                         variant="secondary"
@@ -176,11 +183,11 @@ export function AdminOverviewViewContent({
                       </Badge>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{label(exception.kind)}</p>
-                        <p className="break-words text-xs text-[var(--fm-text-muted)]">
+                        <p className="break-words text-xs text-muted-foreground">
                           {exception.detail}
                         </p>
                         {isGlobal ? (
-                          <p className="text-xs text-[var(--fm-text-muted)]">
+                          <p className="text-xs text-muted-foreground">
                             {locations.get(exception.locationId ?? "")?.locationName ??
                               "Location outside current selection"}
                           </p>
@@ -189,7 +196,7 @@ export function AdminOverviewViewContent({
                       {isGlobal ? (
                         locations.has(exception.locationId ?? "") && onSelectScope ? (
                           <button
-                            className="text-xs font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
+                            className="text-xs font-medium text-primary hover:underline"
                             onClick={() => {
                               const location = locations.get(exception.locationId ?? "");
                               if (location) {
@@ -209,7 +216,7 @@ export function AdminOverviewViewContent({
                         exception.locationId === overview.selectedScope.locationId ? (
                         <a
                           aria-label={`Open ${label(exception.kind)} exception`}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-[var(--fm-admin-accent-strong)] hover:underline"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                           href={exception.href}
                         >
                           View <ArrowUpRight className="size-4" aria-hidden />
@@ -219,7 +226,7 @@ export function AdminOverviewViewContent({
                   ))}
                 </ul>
               ) : (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+                <p className="p-5 text-sm text-muted-foreground">
                   No open exceptions in the selected scope.
                 </p>
               )}
@@ -243,36 +250,33 @@ export function AdminOverviewViewContent({
         </CardContent>
       </Card>
 
-      <Card className="min-w-0 gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+      <Card className="min-w-0 gap-0 py-0 shadow-sm">
         <CardHeader className="border-b px-4 py-4 sm:px-5">
           <CardTitle>Recent material operations</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
           {!auditAvailable ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+            <p className="p-5 text-sm text-muted-foreground">
               Material operations are outside your current access.
             </p>
           ) : overview.recentOperations.length ? (
-            <ul className="divide-y divide-[var(--fm-border)]">
+            <ul className="divide-y divide-border">
               {overview.recentOperations.map((operation) => (
                 <li
                   className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5"
                   key={operation.auditEventId}
                 >
                   <span className="font-medium">{label(operation.action)}</span>
-                  <time
-                    className="text-xs text-[var(--fm-text-muted)]"
-                    dateTime={operation.occurredAt}
-                  >
+                  <time className="text-xs text-muted-foreground" dateTime={operation.occurredAt}>
                     {new Date(operation.occurredAt).toLocaleString("en-PH", {
                       timeZone: overview.timezone,
                     })}
                   </time>
                   <details className="text-xs sm:col-span-2">
-                    <summary className="w-fit cursor-pointer text-[var(--fm-text-muted)]">
+                    <summary className="w-fit cursor-pointer text-muted-foreground">
                       Technical details
                     </summary>
-                    <p className="mt-1 break-all font-mono text-[var(--fm-text-muted)]">
+                    <p className="mt-1 break-all font-mono text-muted-foreground">
                       {operation.resourceType} · {operation.resourceId}
                     </p>
                   </details>
@@ -280,7 +284,7 @@ export function AdminOverviewViewContent({
               ))}
             </ul>
           ) : (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+            <p className="p-5 text-sm text-muted-foreground">
               No authorized material operations are available.
             </p>
           )}
@@ -288,7 +292,7 @@ export function AdminOverviewViewContent({
       </Card>
 
       {overview.deniedSections.length ? (
-        <details className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-4 py-3 text-sm">
+        <details className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
           <summary className="cursor-pointer font-medium">Sections outside current access</summary>
           <div className="mt-3 flex flex-wrap gap-2">
             {overview.deniedSections.map((section) => (

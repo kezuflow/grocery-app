@@ -1,34 +1,61 @@
 # Commerce alignment — active checkpoint
 
-## Current Admin component preference — SHADCN-ADMIN-STOCK-1 (2026-09-27)
+## Active owner request — ADMIN-SHADCN-RESET-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. The owner
-clarified that new or touched Admin components should use stock shadcn styling and
-composition, while the current Admin page layout remains. Acceptance: the project
-skill and active guidance no longer treat FreshMarkets' customized shared UI files
-as the default shadcn appearance; Storefront and existing untouched Admin screens
-are preserved.
+explicitly authorizes a full Admin dashboard visual reset to stock shadcn
+components and defaults: fonts, typography, spacing, colors, radii, surfaces and
+component dimensions. Preserve existing routes, navigation, data, actions,
+permissions, workflows, accessible states and business logic. Storefront and auth
+presentation and behavior are excluded. This follow-up supersedes the earlier
+instruction that a bulk Admin styling migration was not authorized.
 
-Started on clean `main` at `608a28bc`, after the separate Admin line-Tabs slice was
-committed and pushed. `apps/web/components/ui/button.tsx` and `card.tsx` demonstrate
-that installed primitives contain FreshMarkets styles and variants, although
-`apps/web/components.json` configures Radix/new-york. The skill's scope and reuse
-rule, its metadata, `AGENTS.md` and DESIGN now specify upstream stock defaults for
-new or touched Admin work and require a registry comparison before relying on a
-local primitive. No application source, dependency, component, theme, layout,
-Storefront code or runtime behavior changed in this preference update.
+Observed `main` at `ce44dcc0`. The pre-existing Admin Orders styling work and its
+tests were preserved and carried into this broader task. Application changes are
+confined to `apps/web/app/admin`, `apps/web/components/admin`, Admin styling rules
+in `apps/web/app/globals.css`, and Admin tests; `apps/web/components/ui` and
+Storefront source remain unchanged. Admin screens now import scoped stock
+Radix/new-york component copies. The Admin-only neutral theme maps light/dark
+surfaces, semantic colors, fonts and radius scale; old Admin status colors and
+pill-button styles were replaced by stock Badge, Alert and Button variants.
+Accessible table scroll naming/focus and column header scope were retained.
+`AGENTS.md` and DESIGN record the owner follow-up authorization.
 
-Verification on this working tree: `pnpm skills:check` passed with 31 mirrored
-files, `pnpm naming:check` passed, `pnpm harness:test` passed 37/37, and
-`git diff --check` passed. The skill creator
+Verification: `pnpm format:check`, `pnpm lint`, `pnpm -r typecheck`, and
+`pnpm --filter @freshmarkets/web typecheck` passed. The Web suite passed
+**705/705** across 158 files. Focused Admin accessibility, time-of-day, and product
+preview tests passed **21/21**. The full local Admin foundation Playwright run
+passed **12/12** with isolated state `e2e-admin-shadcn-reset`; focused Admin font,
+theme-scope, and dark-toggle checks passed **2/2**. Browser checks used local
+fixtures and did not touch production pages or data. `pnpm check` passed all gates
+through the Web suite, then was stopped after Core Vitest made no progress for over
+two minutes and only repeated `Using secrets defined in .dev.vars`; the aggregate
+did not complete, and later build gates were not reached. The unused Combobox
+parameter reported by aggregate lint was corrected; standalone lint and formatting
+then passed cleanly. No build or Core test success is claimed.
+
+Next action: review and commit this scoped Admin presentation reset to `main`, push
+`origin main`, and verify local/remote synchronization. No deploy, provider operation
+or real business write is authorized. Commerce Phase 7 and provider journey
+acceptance remain open.
+
+## Prior Admin component preference — SHADCN-ADMIN-STOCK-1 (2026-09-27)
+
+The owner clarified that new or touched Admin components should use stock shadcn
+styling and composition, while the current Admin page layout remains. This earlier
+instruction-only preference was recorded before the full Admin reset was
+explicitly authorized below. The skill's scope and reuse rule, its metadata,
+`AGENTS.md` and DESIGN specify upstream stock defaults for Admin work and require
+a registry comparison before relying on a local primitive. At that point no
+application source, dependency, component, theme, layout, Storefront code or
+runtime behavior changed.
+
+That instruction-only update started on clean `main` at `608a28bc`. Verification:
+`pnpm skills:check` passed with 31 mirrored files, `pnpm naming:check` passed,
+`pnpm harness:test` passed 37/37, and `git diff --check` passed. The skill creator
 quick validator reported the upstream skill's pre-existing `user-invocable`
 frontmatter key as unsupported by that validator; invocation metadata was not
-changed. No browser or provider acceptance applies to an instruction-only edit.
-Completion level: **one stock-component preference recorded; zero Admin or
-Storefront screens migrated**. Next action: on the next authorized Admin UI task,
-compare each touched local primitive with its upstream Radix/new-york source and
-implement the stock appearance without changing Storefront consumers. Commerce
-Phase 7 and provider journey acceptance remain open.
+changed. Commerce Phase 7 and provider journey acceptance remain open.
 
 ## Prior Admin presentation slice — ADMIN-SHADCN-VIEWS-1 (2026-09-27)
 

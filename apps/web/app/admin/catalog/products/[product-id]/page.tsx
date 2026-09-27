@@ -6,10 +6,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import type { AdminProductDetail, AdminUnitSummary } from "@freshmarkets/contracts";
-import { Button } from "../../../../../components/ui/button";
-import { Input } from "../../../../../components/ui/input";
-import { Skeleton } from "../../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import {
   PageHeader,
   ListPageSection,
@@ -314,7 +314,7 @@ export default function ProductDetailPage({
     <section className="w-full space-y-6 p-5 sm:p-7">
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Products
@@ -341,22 +341,19 @@ export default function ProductDetailPage({
       />
 
       {(notice ?? variantNotice ?? command.notice) ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
           {notice ?? variantNotice ?? command.notice}
         </p>
       ) : null}
 
       <div
         aria-label="Product detail sections"
-        className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]/95 px-2 shadow-sm backdrop-blur"
+        className="sticky top-[4.5rem] z-20 -mx-1 overflow-x-auto rounded-md border border-border bg-card/95 px-2 shadow-sm backdrop-blur"
       >
         <div className="flex min-w-max gap-1 py-1">
           {detailSections.map(([label, href]) => (
             <a
-              className="rounded-md px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)] hover:text-[var(--fm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href={href}
               key={href}
             >
@@ -456,7 +453,7 @@ export default function ProductDetailPage({
         >
           {canManageProduct ? (
             <form
-              className="grid gap-4 border-b border-[var(--fm-border)] p-4"
+              className="grid gap-4 border-b border-border p-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (skuCommand.uncertain) {
@@ -511,8 +508,8 @@ export default function ProductDetailPage({
               }}
             >
               <div>
-                <p className="text-sm font-semibold text-[var(--fm-text)]">Add a sell variant</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--fm-text-muted)]">
+                <p className="text-sm font-semibold text-foreground">Add a sell variant</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Example: SKU <span className="font-mono">ZUCCHINI-250G</span>, display name “Small
                   bag (250 g)”, unit “Gram”, and amount “250”.
                 </p>
@@ -520,7 +517,7 @@ export default function ProductDetailPage({
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,1.2fr)_minmax(12rem,1.2fr)_minmax(10rem,0.9fr)_minmax(8rem,0.7fr)_auto] lg:items-end">
                 <label className="grid gap-1 text-sm font-medium">
                   SKU code
-                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                  <span className="text-xs font-normal text-muted-foreground">
                     Stable internal identifier
                   </span>
                   <Input
@@ -534,7 +531,7 @@ export default function ProductDetailPage({
                 {variantBaseUnitCode !== "GRAM" ? (
                   <label className="grid gap-1 text-sm font-medium">
                     Shipping weight (g, optional)
-                    <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                    <span className="text-xs font-normal text-muted-foreground">
                       Logistics reference for one sold unit
                     </span>
                     <Input
@@ -557,7 +554,7 @@ export default function ProductDetailPage({
                 ) : null}
                 <label className="grid gap-1 text-sm font-medium">
                   Display name
-                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                  <span className="text-xs font-normal text-muted-foreground">
                     Customer-facing choice
                   </span>
                   <Input
@@ -570,7 +567,7 @@ export default function ProductDetailPage({
                 </label>
                 <label className="grid gap-1 text-sm font-medium">
                   Unit
-                  <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                  <span className="text-xs font-normal text-muted-foreground">
                     Measurement type
                   </span>
                   <select
@@ -592,7 +589,7 @@ export default function ProductDetailPage({
                           : { ...newSku, unitId: event.target.value },
                       )
                     }
-                    className="h-10 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 text-sm"
+                    className="h-10 rounded-md border border-border bg-card px-3 text-sm"
                   >
                     <option value="">Select unit</option>
                     {countedSizes
@@ -618,7 +615,7 @@ export default function ProductDetailPage({
                 {!countedSizes ? (
                   <label className="grid gap-1 text-sm font-medium">
                     Amount
-                    <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                    <span className="text-xs font-normal text-muted-foreground">
                       Number in this unit
                     </span>
                     <Input
@@ -645,14 +642,14 @@ export default function ProductDetailPage({
                   {skuCommand.busy ? "Adding variant…" : "Add variant"}
                 </Button>
               </div>
-              <p className="text-xs text-[var(--fm-text-muted)]">
+              <p className="text-xs text-muted-foreground">
                 Shared inventory consumption is calculated automatically from the selected unit and
                 amount.
               </p>
             </form>
           ) : null}
           {product.skus.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No sell variants defined.</p>
+            <p className="p-5 text-sm text-muted-foreground">No sell variants defined.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -678,7 +675,7 @@ export default function ProductDetailPage({
                     <TableCell>
                       {sku.name}
                       {sku.merchandisingLabel ? (
-                        <span className="ml-1 text-xs text-[var(--fm-text-muted)]">
+                        <span className="ml-1 text-xs text-muted-foreground">
                           ({sku.merchandisingLabel})
                         </span>
                       ) : null}
@@ -733,7 +730,7 @@ export default function ProductDetailPage({
                               ? "Not selling"
                               : "Not configured"}
                         </StatusBadge>
-                        <span className="block text-xs text-[var(--fm-text-muted)]">
+                        <span className="block text-xs text-muted-foreground">
                           {product.scope.locationName}
                         </span>
                       </TableCell>
@@ -755,9 +752,7 @@ export default function ProductDetailPage({
                               : "Insufficient stock"}
                           </StatusBadge>
                         ) : (
-                          <span className="text-xs text-[var(--fm-text-muted)]">
-                            No stock recorded
-                          </span>
+                          <span className="text-xs text-muted-foreground">No stock recorded</span>
                         )}
                       </TableCell>
                     ) : null}
@@ -795,7 +790,7 @@ export default function ProductDetailPage({
                             </Button>
                           </span>
                         ) : (
-                          <span className="text-xs text-[var(--fm-text-muted)]">Read only</span>
+                          <span className="text-xs text-muted-foreground">Read only</span>
                         )}
                       </TableCell>
                     ) : null}
@@ -809,11 +804,11 @@ export default function ProductDetailPage({
       <div id="product-audit" className="scroll-mt-32">
         <ListPageSection title="Recent audit">
           {product.recentAudit.length ? (
-            <ol className="divide-y divide-[var(--fm-border)]">
+            <ol className="divide-y divide-border">
               {product.recentAudit.map((audit) => (
                 <li key={audit.auditEventId} className="p-4 text-sm">
                   <span className="font-medium">{audit.action}</span>
-                  <span className="block text-[var(--fm-text-muted)]">
+                  <span className="block text-muted-foreground">
                     {new Date(audit.occurredAt).toLocaleString()} ·{" "}
                     {audit.correlationId ?? "No request reference"}
                   </span>
@@ -821,7 +816,7 @@ export default function ProductDetailPage({
               ))}
             </ol>
           ) : (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
+            <p className="p-5 text-sm text-muted-foreground">No audit events recorded.</p>
           )}
         </ListPageSection>
       </div>

@@ -1,7 +1,7 @@
 import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { Boxes, ImageIcon, Tag } from "lucide-react";
 import { AdminDashboardGrid, MetricCard } from "./admin-compositions";
-import { Badge } from "../ui/badge";
+import { Badge } from "@/components/admin/shadcn/badge";
 
 function money(amountMinor: number, currency: string) {
   return new Intl.NumberFormat("en-PH", {
@@ -30,21 +30,21 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
 
   return (
     <div className="space-y-4">
-      <div className="grid overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)] lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]">
+      <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]">
         <section
           aria-label="Product media preview"
-          className="border-b border-[var(--fm-border)] bg-[var(--fm-surface-muted)] p-4 lg:border-r lg:border-b-0"
+          className="border-b border-border bg-muted p-4 lg:border-r lg:border-b-0"
         >
           {primary ? (
             <img
               alt={primary.altText}
-              className="aspect-square w-full rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] object-cover"
+              className="aspect-square w-full rounded-xl border border-border bg-card object-cover"
               height={640}
               src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(primary.mediaId)}/content?v=${primary.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
               width={640}
             />
           ) : (
-            <div className="grid aspect-square place-items-center rounded-xl border border-dashed border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text-muted)]">
+            <div className="grid aspect-square place-items-center rounded-xl border border-dashed border-border bg-card text-muted-foreground">
               <span className="grid justify-items-center gap-2 text-sm">
                 <ImageIcon className="size-7" aria-hidden /> No primary media
               </span>
@@ -57,8 +57,8 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
                   alt={media.altText}
                   className={`aspect-square w-full rounded-lg border object-cover ${
                     media.mediaId === primary?.mediaId
-                      ? "border-[var(--fm-admin-accent)] ring-2 ring-[var(--fm-admin-accent-soft)]"
-                      : "border-[var(--fm-border)]"
+                      ? "border-primary ring-2 ring-secondary"
+                      : "border-border"
                   }`}
                   height={96}
                   key={media.mediaId}
@@ -74,9 +74,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
         <section aria-labelledby="product-overview-heading" className="min-w-0 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold tracking-[0.12em] text-[var(--fm-admin-accent-strong)] uppercase">
-                Product overview
-              </p>
+              <p className="text-xs font-semibold text-primary">Product overview</p>
               <h2 id="product-overview-heading" className="mt-1 text-lg font-semibold">
                 {product.name}
               </h2>
@@ -84,7 +82,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
             <Badge
               className={
                 product.status === "active"
-                  ? "border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] text-[var(--fm-success)]"
+                  ? "border-border bg-muted text-muted-foreground"
                   : undefined
               }
               variant="secondary"
@@ -93,23 +91,23 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
             </Badge>
           </div>
 
-          <div className="mt-5 border-t border-[var(--fm-border)] pt-5">
+          <div className="mt-5 border-t border-border pt-5">
             <h3 className="text-sm font-semibold">Description</h3>
-            <p className="mt-2 text-sm leading-6 text-[var(--fm-text-muted)]">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {product.description ?? "No customer-facing description has been provided."}
             </p>
           </div>
 
           {product.customerDetails.length ? (
-            <div className="mt-5 border-t border-[var(--fm-border)] pt-5">
+            <div className="mt-5 border-t border-border pt-5">
               <h3 className="text-sm font-semibold">Customer details</h3>
-              <dl className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+              <dl className="mt-3 divide-y divide-border rounded-lg border border-border">
                 {product.customerDetails.map((detail) => (
                   <div
                     className="grid gap-1 px-3 py-2.5 text-sm sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4"
                     key={detail.detailId}
                   >
-                    <dt className="font-medium text-[var(--fm-text-muted)]">{detail.label}</dt>
+                    <dt className="font-medium text-muted-foreground">{detail.label}</dt>
                     <dd>{detail.value}</dd>
                   </div>
                 ))}
@@ -117,20 +115,20 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
             </div>
           ) : null}
 
-          <div className="mt-5 border-t border-[var(--fm-border)] pt-5">
+          <div className="mt-5 border-t border-border pt-5">
             <h3 className="text-sm font-semibold">Catalog facts</h3>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="flex min-w-0 gap-2 rounded-lg bg-[var(--fm-surface-muted)] p-3">
-                <Tag className="mt-0.5 size-4 shrink-0 text-[var(--fm-text-muted)]" aria-hidden />
+              <div className="flex min-w-0 gap-2 rounded-lg bg-muted p-3">
+                <Tag className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--fm-text-muted)]">Category</dt>
+                  <dt className="text-xs text-muted-foreground">Category</dt>
                   <dd className="truncate text-sm font-medium">{product.categoryName}</dd>
                 </div>
               </div>
-              <div className="flex min-w-0 gap-2 rounded-lg bg-[var(--fm-surface-muted)] p-3">
-                <Boxes className="mt-0.5 size-4 shrink-0 text-[var(--fm-text-muted)]" aria-hidden />
+              <div className="flex min-w-0 gap-2 rounded-lg bg-muted p-3">
+                <Boxes className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="min-w-0">
-                  <dt className="text-xs text-[var(--fm-text-muted)]">Inventory base unit</dt>
+                  <dt className="text-xs text-muted-foreground">Inventory base unit</dt>
                   <dd className="truncate text-sm font-medium">
                     {product.inventoryPool.baseUnitCode} ({product.inventoryPool.baseUnitSymbol})
                   </dd>

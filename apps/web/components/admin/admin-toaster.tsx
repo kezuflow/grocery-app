@@ -1,6 +1,6 @@
 "use client";
 
-import { Toaster } from "../ui/sonner";
+import { Toaster } from "@/components/admin/shadcn/sonner";
 import { useAdminTheme } from "./admin-theme-provider";
 
 /**

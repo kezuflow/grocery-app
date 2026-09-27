@@ -10,10 +10,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { ListPageSection, PageHeader, StatusBadge } from "@/components/admin/admin-shell";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
@@ -121,7 +121,7 @@ export default function CategoryDetailPage() {
     <div className="space-y-6">
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+        className="inline-flex items-center gap-2 text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Categories
@@ -142,19 +142,16 @@ export default function CategoryDetailPage() {
         }
       />
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-md border border-border bg-card p-3 text-sm">
           {notice}
         </p>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-3">
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 lg:col-span-2">
+        <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
           <h2 className="font-semibold">Category details</h2>
           <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Status</dt>
+              <dt className="text-muted-foreground">Status</dt>
               <dd>
                 <StatusBadge tone={category.status === "active" ? "success" : "neutral"}>
                   {category.status}
@@ -162,23 +159,23 @@ export default function CategoryDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Parent</dt>
+              <dt className="text-muted-foreground">Parent</dt>
               <dd>{category.parent?.name ?? "Top level"}</dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Slug</dt>
+              <dt className="text-muted-foreground">Slug</dt>
               <dd>{category.slug}</dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Icon</dt>
+              <dt className="text-muted-foreground">Icon</dt>
               <dd>{category.iconAssetKey ?? "None"}</dd>
             </div>
           </dl>
         </section>
         {globalScope && category.allowedActions.includes("SET_STATUS") ? (
-          <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="font-semibold">Lifecycle</h2>
-            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-1 text-sm text-muted-foreground">
               {category.status === "active"
                 ? "Deactivation keeps history and products intact."
                 : "Activation restores this category to the active hierarchy."}
@@ -216,7 +213,7 @@ export default function CategoryDetailPage() {
       </div>
       <ListPageSection title="Child categories">
         {category.children.length ? (
-          <ul className="divide-y divide-[var(--fm-border)]">
+          <ul className="divide-y divide-border">
             {category.children.map((child) => (
               <li key={child.categoryId} className="p-4">
                 <Link
@@ -230,12 +227,12 @@ export default function CategoryDetailPage() {
             ))}
           </ul>
         ) : (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No child categories.</p>
+          <p className="p-5 text-sm text-muted-foreground">No child categories.</p>
         )}
       </ListPageSection>
       <ListPageSection title="Contained products">
         {category.products.length ? (
-          <ul className="divide-y divide-[var(--fm-border)]">
+          <ul className="divide-y divide-border">
             {category.products.map((product) => (
               <li key={product.productId} className="p-4">
                 <Link
@@ -249,18 +246,18 @@ export default function CategoryDetailPage() {
             ))}
           </ul>
         ) : (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+          <p className="p-5 text-sm text-muted-foreground">
             No products are assigned directly to this category.
           </p>
         )}
       </ListPageSection>
       <ListPageSection title="Recent audit">
         {category.recentAudit.length ? (
-          <ol className="divide-y divide-[var(--fm-border)]">
+          <ol className="divide-y divide-border">
             {category.recentAudit.map((audit) => (
               <li key={audit.auditEventId} className="p-4 text-sm">
                 <span className="font-medium">{audit.action}</span>
-                <span className="block text-[var(--fm-text-muted)]">
+                <span className="block text-muted-foreground">
                   {new Date(audit.occurredAt).toLocaleString()} ·{" "}
                   {audit.correlationId ?? "No request reference"}
                 </span>
@@ -268,7 +265,7 @@ export default function CategoryDetailPage() {
             ))}
           </ol>
         ) : (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No audit events recorded.</p>
+          <p className="p-5 text-sm text-muted-foreground">No audit events recorded.</p>
         )}
       </ListPageSection>
       <ConfirmCommandDialog

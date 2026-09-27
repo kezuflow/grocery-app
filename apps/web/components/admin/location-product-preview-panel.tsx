@@ -11,8 +11,8 @@ import { adminCatalogSkuSummarySchema, z } from "@freshmarkets/validation";
 import { ExternalLink, ImageIcon, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
@@ -212,17 +212,17 @@ function LocationSkuPriceRow({
   }
 
   return (
-    <article className="border-b border-[var(--fm-border)] p-3 last:border-b-0">
+    <article className="border-b border-border p-3 last:border-b-0">
       <div className="flex items-center gap-3">
         {image ? (
           <img
             src={image}
             alt=""
-            className="size-12 shrink-0 rounded-md border border-[var(--fm-border)] object-cover"
+            className="size-12 shrink-0 rounded-md border border-border object-cover"
           />
         ) : (
-          <span className="grid size-12 shrink-0 place-items-center rounded-md bg-[var(--fm-admin-surface-muted)]">
-            <ImageIcon className="size-4 text-[var(--fm-text-muted)]" aria-hidden="true" />
+          <span className="grid size-12 shrink-0 place-items-center rounded-md bg-muted">
+            <ImageIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           </span>
         )}
         <div className="min-w-0 flex-1">
@@ -230,7 +230,7 @@ function LocationSkuPriceRow({
           {priceEditable ? (
             <button
               type="button"
-              className="mt-0.5 inline-flex items-center gap-1 rounded text-left text-sm font-semibold text-[var(--fm-admin-accent-strong)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+              className="mt-0.5 inline-flex items-center gap-1 rounded text-left text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={`Edit price for ${sku.name}`}
               disabled={command !== null || intent.pending}
               onClick={() => void openEditor()}
@@ -253,7 +253,7 @@ function LocationSkuPriceRow({
 
       {editing ? (
         <form
-          className="mt-3 grid gap-3 rounded-md bg-[var(--fm-admin-surface-muted)] p-3"
+          className="mt-3 grid gap-3 rounded-md bg-muted p-3"
           onSubmit={(event) => {
             event.preventDefault();
             if (command) {
@@ -265,7 +265,7 @@ function LocationSkuPriceRow({
           }}
         >
           {loading ? (
-            <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+            <p role="status" className="text-sm text-muted-foreground">
               Loading location price…
             </p>
           ) : view?.canManage ? (
@@ -310,7 +310,7 @@ function LocationSkuPriceRow({
         </form>
       ) : null}
       {notice ? (
-        <p role="status" className="mt-2 text-xs text-[var(--fm-text-muted)]">
+        <p role="status" className="mt-2 text-xs text-muted-foreground">
           {notice}
         </p>
       ) : null}
@@ -382,15 +382,12 @@ function LocationProductPreviewPanelContent({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
+          <p className="text-xs font-semibold text-muted-foreground">
             {product.scope.locationName} fulfillment preview
           </p>
-          <h2
-            id="product-panel-title"
-            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
-          >
+          <h2 id="product-panel-title" className="mt-1 truncate text-xl font-bold tracking-tight">
             {product.name}
           </h2>
         </div>
@@ -412,26 +409,24 @@ function LocationProductPreviewPanelContent({
             <img
               src={image}
               alt=""
-              className="size-24 shrink-0 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] object-cover"
+              className="size-24 shrink-0 rounded-lg border border-border bg-muted object-cover"
             />
           ) : (
-            <span className="grid size-24 shrink-0 place-items-center rounded-lg border border-dashed border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]">
+            <span className="grid size-24 shrink-0 place-items-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground">
               <ImageIcon className="size-6" aria-hidden="true" />
             </span>
           )}
           <div className="min-w-0">
             <h3 className="truncate text-lg font-bold">{product.name}</h3>
-            <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-              {product.categoryName}
-            </p>
-            <p className="mt-1 truncate text-xs text-[var(--fm-text-muted)]">
+            <p className="mt-1 truncate text-sm text-muted-foreground">{product.categoryName}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
               {product.scope.locationName}
             </p>
           </div>
         </section>
 
         <section
-          className="mt-6 border-t border-[var(--fm-border)] pt-5"
+          className="mt-6 border-t border-border pt-5"
           aria-labelledby="location-product-options"
         >
           <div className="flex items-start justify-between gap-3">
@@ -439,19 +434,19 @@ function LocationProductPreviewPanelContent({
               <h3 id="location-product-options" className="text-sm font-semibold">
                 Location selling options
               </h3>
-              <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {canManagePrices
                   ? `Click a price to change it for ${product.scope.locationName} only.`
                   : `Prices for ${product.scope.locationName} are view-only with your current access.`}
               </p>
             </div>
-            <span className="shrink-0 text-sm text-[var(--fm-text-muted)]">
+            <span className="shrink-0 text-sm text-muted-foreground">
               {product.skus.length} option{product.skus.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="mt-3 overflow-hidden rounded-lg border border-[var(--fm-border)]">
+          <div className="mt-3 overflow-hidden rounded-lg border border-border">
             {product.skus.length === 0 ? (
-              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No selling options yet.</p>
+              <p className="p-4 text-sm text-muted-foreground">No selling options yet.</p>
             ) : (
               product.skus.map((sku) => (
                 <LocationSkuPriceRow
@@ -469,27 +464,27 @@ function LocationProductPreviewPanelContent({
         </section>
 
         <section
-          className="mt-6 border-t border-[var(--fm-border)] pt-5"
+          className="mt-6 border-t border-border pt-5"
           aria-label="Location product metadata"
         >
           <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-            <dt className="text-[var(--fm-text-muted)]">Fulfillment location</dt>
+            <dt className="text-muted-foreground">Fulfillment location</dt>
             <dd className="font-medium">{product.scope.locationName}</dd>
-            <dt className="text-[var(--fm-text-muted)]">Currency</dt>
+            <dt className="text-muted-foreground">Currency</dt>
             <dd>{product.scope.currency}</dd>
-            <dt className="text-[var(--fm-text-muted)]">Physical stock</dt>
+            <dt className="text-muted-foreground">Physical stock</dt>
             <dd>
               {product.inventoryPool.position
                 ? `${product.inventoryPool.position.onHandBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
                 : "Not recorded"}
             </dd>
-            <dt className="text-[var(--fm-text-muted)]">Reserved stock</dt>
+            <dt className="text-muted-foreground">Reserved stock</dt>
             <dd>
               {product.inventoryPool.position
                 ? `${product.inventoryPool.position.reservedBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
                 : "Not recorded"}
             </dd>
-            <dt className="text-[var(--fm-text-muted)]">Available stock</dt>
+            <dt className="text-muted-foreground">Available stock</dt>
             <dd>
               {product.inventoryPool.position
                 ? `${product.inventoryPool.position.availableBase.toLocaleString()} ${product.inventoryPool.baseUnitSymbol}`
@@ -499,7 +494,7 @@ function LocationProductPreviewPanelContent({
         </section>
       </div>
 
-      <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+      <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
         <Button type="button" variant="outline" disabled={recoveryActive} onClick={onClose}>
           Close
         </Button>

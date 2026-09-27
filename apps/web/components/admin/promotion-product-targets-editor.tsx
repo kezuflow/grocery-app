@@ -8,9 +8,15 @@ import type {
 import { z, adminProductDetailSchema, adminProductSummarySchema } from "@freshmarkets/validation";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
 import { catalogResultSchema } from "./catalog-command-state";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 
 export type SaleTargetSelection = AdminPromotionProductTargetInput & {
   productName?: string;

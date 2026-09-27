@@ -39,10 +39,10 @@ export default function FulfillmentSetupPage() {
             <Link
               key={item.code}
               href={item.href}
-              className="rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+              className="rounded-lg border border-border bg-card p-5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <h2 className="font-medium">{item.label}</h2>
-              <p className="mt-2 text-sm text-[var(--fm-text-muted)]">{descriptions[item.code]}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{descriptions[item.code]}</p>
             </Link>
           ))}
         </div>

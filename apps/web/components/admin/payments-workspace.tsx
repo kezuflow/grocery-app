@@ -23,9 +23,9 @@ import { AdminPageState } from "./admin-page-state";
 import { PageHeader, StatusBadge } from "./admin-shell";
 import { PaymentRecovery } from "./payment-recovery";
 import { RefundRecovery } from "./refund-recovery";
-import { Button } from "../ui/button";
-import { Field, FieldGroup, FieldLabel } from "../ui/field";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Select,
   SelectContent,
@@ -33,8 +33,15 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+} from "@/components/admin/shadcn/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 import { refundAmountMinor, refundResponse } from "@/lib/refund-response";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
@@ -452,7 +459,7 @@ export function PaymentsWorkspace({
   const master = (
     <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader title="Payments" />
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <AdminIndexViews<Tab>
           label="Payment views"
           views={[
@@ -466,7 +473,7 @@ export function PaymentsWorkspace({
           disabled={locked}
           onChange={changeTab}
         />
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--fm-border)] p-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border p-3">
           {tab === "payments" ? (
             <FieldGroup className="w-auto gap-0">
               <Field className="w-auto gap-1 text-sm">
@@ -497,7 +504,7 @@ export function PaymentsWorkspace({
               </Field>
             </FieldGroup>
           ) : (
-            <span className="text-sm text-[var(--fm-text-muted)]">
+            <span className="text-sm text-muted-foreground">
               Genuine unresolved payment and refund issues
             </span>
           )}
@@ -576,7 +583,7 @@ export function PaymentsWorkspace({
                       {payment.customerName ?? payment.customerEmail}
                     </span>
                     {payment.customerName && payment.customerEmail !== "Deleted customer" ? (
-                      <span className="block text-xs text-[var(--fm-text-muted)]">
+                      <span className="block text-xs text-muted-foreground">
                         {payment.customerEmail}
                       </span>
                     ) : null}
@@ -650,7 +657,7 @@ export function PaymentsWorkspace({
                   <TableCell>
                     {item.problem}
                     {item.state === "CHECKING_AUTOMATICALLY" ? (
-                      <span className="block text-xs text-[var(--fm-text-muted)]">
+                      <span className="block text-xs text-muted-foreground">
                         Checking automatically
                       </span>
                     ) : null}
@@ -736,7 +743,7 @@ export function PaymentsWorkspace({
       />
     ) : detailTarget ? (
       <>
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-5">
           <h2 id="payment-panel-title" className="text-xl font-bold">
             Payment details
           </h2>
@@ -810,7 +817,7 @@ export function PaymentsWorkspace({
         onConfirm={(reason) => void submitRefund(reason)}
       />
       {unresolved ? (
-        <div className="fixed bottom-4 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-[var(--fm-admin-surface)] p-3 shadow-lg">
+        <div className="fixed bottom-4 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card p-3 shadow-lg">
           <span className="text-sm">Command response unknown.</span>
           <Button
             size="sm"
@@ -868,15 +875,13 @@ function PaymentPanel({
     0;
   return (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Payment
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground">Payment</p>
           <h2 id="payment-panel-title" className="mt-1 truncate text-xl font-bold">
             {payment.orderNumber ?? payment.paymentIntentId}
           </h2>
-          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
+          <p className="mt-1 truncate text-sm text-muted-foreground">
             {payment.customerName ?? payment.customerEmail}
           </p>
         </div>
@@ -911,7 +916,7 @@ function PaymentPanel({
             {notice}
           </p>
         ) : null}
-        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+        <dl className="divide-y divide-border rounded-lg border border-border">
           {[
             [received ? "Amount received" : "Amount", money(payment.amountMinor, payment.currency)],
             ["Refunded", money(payment.refundedMinor, payment.currency)],
@@ -937,7 +942,7 @@ function PaymentPanel({
             ["Date created", date(payment.createdAt)],
           ].map(([label, value]) => (
             <div key={String(label)} className="flex justify-between gap-4 px-3 py-3 text-sm">
-              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+              <dt className="text-muted-foreground">{label}</dt>
               <dd className="text-right font-medium">{value}</dd>
             </div>
           ))}
@@ -976,7 +981,7 @@ function PaymentPanel({
         {payment.allowedActions.includes("REQUEST_REFUND") ? (
           <div className="space-y-2 rounded-lg border p-3">
             <p className="text-sm font-medium">Refund payment</p>
-            <p className="text-xs text-[var(--fm-text-muted)]">
+            <p className="text-xs text-muted-foreground">
               Remaining refundable amount:{" "}
               {money(payment.remainingRefundableMinor, payment.currency)}
             </p>
@@ -994,19 +999,19 @@ function PaymentPanel({
             </div>
           </div>
         ) : payment.refundUnavailableReason ? (
-          <p className="text-sm text-[var(--fm-text-muted)]">{payment.refundUnavailableReason}</p>
+          <p className="text-sm text-muted-foreground">{payment.refundUnavailableReason}</p>
         ) : null}
         {technical ? (
           <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-sm font-medium">Technical details</summary>
-            <div className="mt-3 space-y-4 break-all text-xs text-[var(--fm-text-muted)]">
+            <div className="mt-3 space-y-4 break-all text-xs text-muted-foreground">
               <p>
                 Payment ID: {payment.paymentIntentId} · Canonical state: {payment.canonicalStatus} ·
                 Version: {payment.version}
               </p>
               {payment.attempts.length ? (
                 <section>
-                  <h3 className="font-semibold text-[var(--fm-text)]">Attempts</h3>
+                  <h3 className="font-semibold text-foreground">Attempts</h3>
                   {payment.attempts.map((item) => (
                     <p key={item.attemptId}>
                       {item.provider} · {item.status} · {item.attemptId}
@@ -1016,7 +1021,7 @@ function PaymentPanel({
               ) : null}
               {payment.events.length ? (
                 <section>
-                  <h3 className="font-semibold text-[var(--fm-text)]">Provider events</h3>
+                  <h3 className="font-semibold text-foreground">Provider events</h3>
                   {payment.events.map((item) => (
                     <p key={item.eventId}>
                       {item.eventType} · {item.processingStatus}
@@ -1026,7 +1031,7 @@ function PaymentPanel({
               ) : null}
               {payment.reactions.length ? (
                 <section>
-                  <h3 className="font-semibold text-[var(--fm-text)]">Order reactions</h3>
+                  <h3 className="font-semibold text-foreground">Order reactions</h3>
                   {payment.reactions.map((item) => (
                     <p key={item.reactionId}>
                       {item.reactionType} · {item.status} · attempts {item.attempts}
@@ -1036,7 +1041,7 @@ function PaymentPanel({
               ) : null}
               {payment.reconciliationCases.length ? (
                 <section>
-                  <h3 className="font-semibold text-[var(--fm-text)]">Issue history</h3>
+                  <h3 className="font-semibold text-foreground">Issue history</h3>
                   {payment.reconciliationCases.map((item) => (
                     <p key={item.caseId}>
                       {item.category} · {item.status}
@@ -1046,7 +1051,7 @@ function PaymentPanel({
               ) : null}
               {payment.recentAudit.length ? (
                 <section>
-                  <h3 className="font-semibold text-[var(--fm-text)]">Audit</h3>
+                  <h3 className="font-semibold text-foreground">Audit</h3>
                   {payment.recentAudit.map((item) => (
                     <p key={item.auditEventId}>
                       {item.action} · {date(item.occurredAt)}
@@ -1116,9 +1121,7 @@ function IssuePanel({
     <>
       <div className="flex items-start justify-between border-b p-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Needs attention
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground">Needs attention</p>
           <h2 id="payment-panel-title" className="mt-1 text-xl font-bold">
             {item.paymentIntentId ? "Payment issue" : "Unmatched payment"}
           </h2>
@@ -1135,7 +1138,7 @@ function IssuePanel({
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <p>{item.problem}</p>
-        <p className="text-sm text-[var(--fm-text-muted)]">
+        <p className="text-sm text-muted-foreground">
           Opened {date(item.openedAt)}
           {item.state === "CHECKING_AUTOMATICALLY" ? " · Checking automatically" : ""}
         </p>
@@ -1197,7 +1200,7 @@ function IssuePanel({
         )}
         <details className="rounded-lg border p-3">
           <summary className="cursor-pointer text-sm font-medium">Technical details</summary>
-          <p className="mt-3 break-all text-xs text-[var(--fm-text-muted)]">
+          <p className="mt-3 break-all text-xs text-muted-foreground">
             Issue key: {item.groupKey}
             <br />
             Cases: {item.caseIds.join(", ")}

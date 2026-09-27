@@ -6,10 +6,10 @@ import type {
   CapabilityDefinitionView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Button } from "../../../../../components/ui/button";
-import { Input } from "../../../../../components/ui/input";
-import { Skeleton } from "../../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   PageHeader,
   ListPageSection,
@@ -178,7 +178,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
       <Link
         ref={backLink}
         href="/admin/staff/roles"
-        className="text-sm font-medium text-[var(--fm-info)] underline"
+        className="text-sm font-medium text-muted-foreground underline"
       >
         Back to roles
       </Link>
@@ -193,10 +193,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
       />
 
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
           {notice}
         </p>
       ) : null}
@@ -292,9 +289,7 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
                   }}
                 />
                 <span className="font-mono text-xs">{capability.code}</span>
-                <span className="text-xs text-[var(--fm-text-muted)]">
-                  {capability.description}
-                </span>
+                <span className="text-xs text-muted-foreground">{capability.description}</span>
               </label>
             ))}
           </div>

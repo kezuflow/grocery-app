@@ -17,9 +17,9 @@ import { AdminMasterDetailWorkspace } from "@/components/admin/admin-master-deta
 import { GlobalProductPreviewPanel } from "@/components/admin/product-preview-panel";
 import { LocationProductPreviewPanel } from "@/components/admin/location-product-preview-panel";
 import { ProductSearchInput } from "@/components/admin/product-search-input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { NewProductWorkspace } from "./new/page";
 import {
   tryChangeAdminWorkspace,
@@ -315,7 +315,7 @@ export function ProductsPageClient({
             <Button
               type="button"
               size="sm"
-              className="fm-admin-reference-primary"
+              className=""
               aria-expanded={panelVisible && panelMode === "create"}
               aria-controls="product-detail-panel"
               onClick={() => {
@@ -364,7 +364,7 @@ export function ProductsPageClient({
       ) : null}
       {!payload ? <Skeleton className="h-64 w-full" /> : null}
       {listQuery.data && listQuery.isFetching ? (
-        <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+        <p role="status" className="text-sm text-muted-foreground">
           Refreshing products…
         </p>
       ) : null}
@@ -457,20 +457,13 @@ export function ProductsPageClient({
       )
     ) : (
       <>
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-              Product preview
-            </p>
-            <h2
-              id="product-panel-title"
-              className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
-            >
+            <p className="text-xs font-semibold text-muted-foreground">Product preview</p>
+            <h2 id="product-panel-title" className="mt-1 truncate text-xl font-bold tracking-tight">
               {selectedProduct.name}
             </h2>
-            <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-              {selectedProduct.slug}
-            </p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{selectedProduct.slug}</p>
           </div>
           <Button
             type="button"
@@ -504,7 +497,7 @@ export function ProductsPageClient({
           )}
         </div>
         {previewQuery.isError || (previewResult && !previewResult.ok) ? (
-          <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
             <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
               Close
             </Button>

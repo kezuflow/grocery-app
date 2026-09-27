@@ -1,11 +1,19 @@
 import { cn } from "../../lib/utils";
+import { Badge } from "./shadcn/badge";
 
 export type AdminStatusTone = "success" | "warning" | "info" | "accent" | "danger" | "neutral";
 
-/** Shared presentation for every admin status pill; tones live in globals.css. */
-export const adminStatusPillClassName = cn(
-  "inline-flex min-h-6 items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium",
-);
+export const adminStatusVariant = {
+  success: "secondary",
+  warning: "outline",
+  info: "outline",
+  accent: "secondary",
+  danger: "destructive",
+  neutral: "outline",
+} as const;
+
+/** Shared status labels rendered with the configured stock shadcn Badge. */
+export const adminStatusPillClassName = "whitespace-nowrap";
 
 function statusLabel(status: string): string {
   return status
@@ -27,8 +35,8 @@ export function AdminStatusPill({
   className?: string;
 }) {
   return (
-    <span className={cn(adminStatusPillClassName, `fm-admin-status-${tone}`, className)}>
+    <Badge variant={adminStatusVariant[tone]} className={cn(adminStatusPillClassName, className)}>
       {label ?? statusLabel(status)}
-    </span>
+    </Badge>
   );
 }

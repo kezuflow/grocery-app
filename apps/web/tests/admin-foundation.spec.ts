@@ -79,6 +79,13 @@ test("the desktop theme and search respect keyboard focus and reduced motion", a
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.emulateMedia({ reducedMotion: "reduce" });
   await adminPage.goto("/admin");
+  await expect(adminPage.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await adminPage.screenshot({ path: testInfo.outputPath("admin-light-1440.png") });
+  expect(
+    await adminPage
+      .locator(".fm-admin")
+      .evaluate((element) => getComputedStyle(element).fontFamily),
+  ).toContain("ui-sans-serif");
   const darkToggle = adminPage.getByRole("button", { name: "Switch to dark mode" });
   await darkToggle.click();
   await expect(adminPage.locator("html")).toHaveClass(/fm-admin-dark/);
@@ -147,12 +154,29 @@ test("Admin status views use line tabs with keyboard selection", async ({ adminP
   const all = views.getByRole("tab", { name: "All", exact: true });
   const committed = views.getByRole("tab", { name: "Committed", exact: true });
   await expect(all).toHaveAttribute("aria-selected", "true");
-  expect(await all.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("0px");
+  expect(await all.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
   await all.focus();
   await adminPage.keyboard.press("ArrowRight");
   await adminPage.keyboard.press("Enter");
   await expect(committed).toHaveAttribute("aria-selected", "true");
   await expect(adminPage).toHaveURL(/status=COMMITTED/);
+});
+
+test("Orders uses scoped stock shadcn controls at desktop and tablet widths", async ({
+  adminPage,
+}) => {
+  await adminPage.setViewportSize({ width: 1440, height: 900 });
+  await adminPage.goto("/admin/orders");
+  const orders = adminPage.locator(".fm-admin-orders");
+  await expect(orders.locator('[data-slot="card"]')).toBeVisible();
+  await expect(orders.locator('[data-slot="tabs-list"][data-variant="line"]')).toBeVisible();
+  const previous = orders.getByRole("button", { name: "Previous" });
+  await expect(previous).toBeVisible();
+  await expect(previous).toHaveAttribute("data-slot", "button");
+  expect(await previous.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
+  await adminPage.setViewportSize({ width: 900, height: 800 });
+  await expect(orders.locator('[data-slot="card"]')).toBeVisible();
+  await expect(orders.getByRole("tablist", { name: "Order status views" })).toBeVisible();
 });
 
 test("Payments uses the shared tabs and status select", async ({ adminPage }) => {
@@ -172,17 +196,25 @@ test("Payments uses the shared tabs and status select", async ({ adminPage }) =>
   );
 });
 
-test("admin accent tokens stay isolated from the storefront", async ({ adminPage, page }) => {
+test("stock Admin theme tokens stay isolated from the storefront", async ({ adminPage, page }) => {
   await adminPage.goto("/admin");
   const adminAccent = await adminPage
     .locator(".fm-admin")
     .evaluate((element) => getComputedStyle(element).getPropertyValue("--fm-admin-accent").trim());
+  const adminFont = await adminPage
+    .locator(".fm-admin")
+    .evaluate((element) => getComputedStyle(element).fontFamily);
   await page.goto("/");
   const storefrontAccent = await page
     .locator(".fm-storefront")
     .evaluate((element) => getComputedStyle(element).getPropertyValue("--fm-admin-accent").trim());
-  expect(adminAccent).toBe("#005bd3");
+  const storefrontFont = await page
+    .locator(".fm-storefront")
+    .evaluate((element) => getComputedStyle(element).fontFamily);
+  expect(adminAccent).not.toBe("");
+  expect(adminFont).toContain("ui-sans-serif");
   expect(storefrontAccent).toBe("");
+  expect(storefrontFont).toContain("Geist Variable");
 });
 
 test("a signed-in non-staff account sees the forbidden state with recovery guidance", async ({

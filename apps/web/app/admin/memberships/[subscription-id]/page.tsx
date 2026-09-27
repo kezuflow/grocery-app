@@ -12,9 +12,9 @@ import { ListPageSection, PageHeader } from "../../../../components/admin/admin-
 import { MembershipStatusBadge } from "../../../../components/admin/customer-status-badges";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 
 type LoadState =
@@ -255,7 +255,7 @@ function MembershipDetailWorkspace({
       <section className="space-y-5" aria-labelledby="admin-page-title">
         <Link
           href={listHref}
-          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Membership history
@@ -284,7 +284,7 @@ function MembershipDetailWorkspace({
     <div className="w-full space-y-6 [&_h1]:break-all">
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Membership history
@@ -323,23 +323,23 @@ function MembershipDetailWorkspace({
         >
           <dl className="grid gap-5 p-5 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Status</dt>
+              <dt className="text-muted-foreground">Status</dt>
               <dd className="mt-1 font-medium">{membership.state}</dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Current period ends</dt>
+              <dt className="text-muted-foreground">Current period ends</dt>
               <dd className="mt-1 font-medium">{date(membership.currentPeriodEndsAt)}</dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Cancellation</dt>
+              <dt className="text-muted-foreground">Cancellation</dt>
               <dd className="mt-1 font-medium">{cancellation}</dd>
             </div>
             <div>
-              <dt className="text-[var(--fm-text-muted)]">Customer contact</dt>
+              <dt className="text-muted-foreground">Customer contact</dt>
               <dd className="mt-1 break-all font-medium">{membership.customerEmail}</dd>
             </div>
           </dl>
-          <details className="border-t border-[var(--fm-border)] p-5 text-xs text-[var(--fm-text-muted)]">
+          <details className="border-t border-border p-5 text-xs text-muted-foreground">
             <summary className="cursor-pointer font-medium">Technical record details</summary>
             <dl className="mt-3 grid gap-2 break-all">
               <div>
@@ -385,11 +385,11 @@ function MembershipDetailWorkspace({
               </Button>
             </div>
           ) : canManage ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+            <p className="p-5 text-sm text-muted-foreground">
               This membership is terminal. No lifecycle action is available.
             </p>
           ) : (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+            <p className="p-5 text-sm text-muted-foreground">
               You can review this retained record. Cancellation requires memberships.manage.
             </p>
           )}

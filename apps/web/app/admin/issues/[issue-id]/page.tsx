@@ -21,9 +21,9 @@ import { AdminLiveRegion, AdminPageState } from "../../../../components/admin/ad
 import { ListPageSection, PageHeader } from "../../../../components/admin/admin-shell";
 import { OrderIssueStatusBadge } from "../../../../components/admin/order-issue-status-badge";
 import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import { Button } from "../../../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/admin/shadcn/card";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 
 const actionPresentation: Readonly<
@@ -302,7 +302,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
   return (
     <div className="mx-auto min-w-0 max-w-[1280px] space-y-6 break-words">
       {unresolved ? (
-        <Alert role="alert" className="border-[var(--fm-warning-border)]">
+        <Alert role="alert" className="border-border">
           <AlertTitle>Support action awaiting confirmation</AlertTitle>
           <AlertDescription>
             {notice} The {humanize(unresolved.action).toLowerCase()} note and version are saved for
@@ -322,7 +322,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
       ) : null}
 
       {refreshWarning ? (
-        <Alert role="alert" className="border-[var(--fm-warning-border)]">
+        <Alert role="alert" className="border-border">
           <AlertTitle>Action confirmed; latest record unavailable</AlertTitle>
           <AlertDescription>
             {refreshWarning} The confirmed result remains visible below.
@@ -341,7 +341,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
 
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Problems
@@ -404,14 +404,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
             </div>
 
             <aside className="min-w-0 space-y-6">
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Order context</CardTitle>
                 </CardHeader>
                 <CardContent className="px-5">
                   <dl className="space-y-4 text-sm">
                     <div>
-                      <dt className="text-[var(--fm-text-muted)]">Order</dt>
+                      <dt className="text-muted-foreground">Order</dt>
                       <dd className="mt-1 font-medium">
                         <Link
                           className="hover:underline"
@@ -423,11 +423,11 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-[var(--fm-text-muted)]">Reported</dt>
+                      <dt className="text-muted-foreground">Reported</dt>
                       <dd className="mt-1 font-medium">{dateTime(issue.createdAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[var(--fm-text-muted)]">Owner</dt>
+                      <dt className="text-muted-foreground">Owner</dt>
                       <dd className="mt-1 font-medium">
                         {issue.assignedStaffName ?? "Unassigned"}
                       </dd>
@@ -436,7 +436,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
                 </CardContent>
               </Card>
 
-              <Card className="gap-4 py-5 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-4 py-5 shadow-sm">
                 <CardHeader className="px-5">
                   <CardTitle>Customer contact</CardTitle>
                 </CardHeader>
@@ -451,7 +451,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ "issue-i
                         {issue.customerPhone}
                       </a>
                     ) : (
-                      <p className="text-[var(--fm-text-muted)]">No phone number recorded</p>
+                      <p className="text-muted-foreground">No phone number recorded</p>
                     )}
                   </address>
                 </CardContent>

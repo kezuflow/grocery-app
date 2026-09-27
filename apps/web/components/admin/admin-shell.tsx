@@ -18,11 +18,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminSelectableScopes, useAdminContext } from "../../app/admin/admin-context-provider";
 import { cn } from "../../lib/utils";
-import { Alert, AlertDescription } from "../ui/alert";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "../ui/select";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Badge } from "@/components/admin/shadcn/badge";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/admin/shadcn/select";
 import {
   Sheet,
   SheetClose,
@@ -30,13 +31,18 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "../ui/sheet";
-import { Skeleton } from "../ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+} from "@/components/admin/shadcn/sheet";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/admin/shadcn/tooltip";
 import { FreshMarketsMark } from "../brand/freshmarkets-mark";
 import { AdminCommandPalette } from "./admin-command-palette";
 import { AdminNotifications } from "./admin-notifications";
-import { adminStatusPillClassName } from "./admin-status-pill";
+import { adminStatusVariant } from "./admin-status-pill";
 import { useAdminTheme } from "./admin-theme-provider";
 import {
   adminNavigationFromContext,
@@ -146,7 +152,7 @@ export function AdminShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--fm-admin-canvas)] text-[var(--fm-text)]">
+    <div className="min-h-screen bg-background text-foreground">
       <AdminCommandPalette
         items={items}
         open={commandOpen}
@@ -168,7 +174,7 @@ export function AdminShell({
           aria-labelledby="admin-page-title"
           tabIndex={-1}
           className={cn(
-            "min-w-0 flex-1 bg-[var(--fm-admin-canvas)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+            "min-w-0 flex-1 bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring",
             fullBleedWorkspace ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8",
           )}
         >
@@ -199,7 +205,7 @@ function AdminHeader({
   return (
     <header
       data-admin-environment={environment}
-      className="sticky top-0 z-30 bg-[var(--fm-admin-header)] text-white"
+      className="sticky top-0 z-30 border-b border-border bg-background text-foreground"
     >
       <div className="flex h-14 items-center justify-between gap-1 px-2 min-[430px]:gap-4 min-[430px]:px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
@@ -208,12 +214,12 @@ function AdminHeader({
             href="/admin"
             prefetch={false}
             aria-label="freshmarkets admin home"
-            className="flex h-9 select-none items-center gap-2 rounded-lg text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="flex h-9 select-none items-center gap-2 rounded-md text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--fm-brand-mark-surface)] shadow-sm ring-1 ring-black/5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary shadow-sm ring-1 ring-black/5">
               <FreshMarketsMark className="size-6" />
             </span>
-            <span className="hidden truncate pr-1 text-sm font-semibold tracking-[-0.02em] min-[430px]:inline">
+            <span className="hidden truncate pr-1 text-sm font-semibold tracking-tight min-[430px]:inline">
               freshmarkets
             </span>
           </Link>
@@ -222,7 +228,7 @@ function AdminHeader({
             variant="ghost"
             size="icon-sm"
             aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}
-            className="hidden size-9 rounded-lg text-white hover:bg-white/10 md:inline-flex"
+            className="hidden rounded-md text-foreground hover:bg-accent md:inline-flex"
             onClick={() => onCollapsedChange(!collapsed)}
           >
             {collapsed ? (
@@ -233,15 +239,15 @@ function AdminHeader({
           </Button>
           <AdminSearchTrigger onOpen={onOpenSearch} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-white/80">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link
             href="/"
             prefetch={false}
-            className="hidden rounded-[var(--fm-radius-control)] px-2 py-1 font-medium hover:bg-white/10 xl:inline-flex"
+            className="hidden rounded-md px-2 py-1 font-medium hover:bg-accent xl:inline-flex"
           >
             Marketplace
           </Link>
-          <span className="mx-1 hidden h-5 w-px bg-white/25 xl:block" aria-hidden="true" />
+          <span className="mx-1 hidden h-5 w-px bg-border xl:block" aria-hidden="true" />
           <AdminScopeSelector fallbackLabel={scopeLabel} />
           <AdminNotifications />
           <AdminThemeToggle />
@@ -258,19 +264,21 @@ function AdminSearchTrigger({ onOpen }: { onOpen: () => void }) {
     if (/Mac|iPhone|iPad|iPod/.test(window.navigator.platform)) setShortcutLabel("⌘K");
   }, []);
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       aria-label="Open admin search"
       aria-keyshortcuts="Control+K Meta+K"
       onClick={onOpen}
-      className="hidden h-8 w-36 items-center gap-2 rounded-md border border-white/20 bg-white/10 pl-2.5 pr-1.5 text-xs text-white/80 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:inline-flex lg:w-72"
+      className="hidden w-36 justify-start text-muted-foreground md:inline-flex lg:w-72"
     >
       <Search className="size-3.5" aria-hidden="true" />
       <span className="min-w-0">Search</span>
-      <kbd className="ml-auto shrink-0 rounded border border-white/20 bg-white/10 px-1 py-0.5 text-[10px] font-medium">
+      <kbd className="ml-auto shrink-0 rounded border border-border bg-muted px-1 py-0.5 text-xs font-medium">
         {shortcutLabel}
       </kbd>
-    </button>
+    </Button>
   );
 }
 
@@ -278,11 +286,13 @@ function AdminThemeToggle() {
   const { theme, toggleTheme } = useAdminTheme();
   const dark = theme === "dark";
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       aria-pressed={dark}
-      className="relative inline-flex size-9 items-center justify-center rounded-lg hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      className="relative rounded-md"
       onClick={toggleTheme}
     >
       <Sun
@@ -299,7 +309,7 @@ function AdminThemeToggle() {
         )}
         aria-hidden="true"
       />
-    </button>
+    </Button>
   );
 }
 
@@ -334,38 +344,40 @@ function AdminIdentity() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           aria-label={`Open account menu for ${label}`}
-          className="ml-0.5 flex items-center gap-1 rounded-lg p-1 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="ml-0.5 gap-1 px-1"
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-[var(--fm-admin-accent-soft)] text-xs font-semibold text-[var(--fm-admin-accent-strong)] ring-1 ring-inset ring-[var(--fm-admin-accent)]/20">
+          <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {initial}
           </span>
           <ChevronDown
-            className="hidden size-3.5 text-[var(--fm-text-muted)] sm:block"
+            className="hidden size-3.5 text-muted-foreground sm:block"
             aria-hidden="true"
           />
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
         sideOffset={8}
         role="menu"
         aria-label="Account menu"
-        className="w-64 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+        className="w-64 border-border bg-card p-2 text-foreground shadow-md"
       >
         <div className="px-2 py-2">
           <p className="truncate text-sm font-semibold">{label}</p>
-          <p className="truncate text-xs text-[var(--fm-text-muted)]">{state.context.email}</p>
+          <p className="truncate text-xs text-muted-foreground">{state.context.email}</p>
         </div>
-        <div className="my-1 h-px bg-[var(--fm-border)]" aria-hidden="true" />
+        <div className="my-1 h-px bg-border" aria-hidden="true" />
         <Button
           type="button"
           variant="ghost"
           role="menuitem"
           disabled={signingOut}
-          className="w-full justify-start text-[var(--fm-destructive)] hover:bg-[var(--fm-danger-soft)] hover:text-[var(--fm-destructive)]"
+          className="w-full justify-start text-destructive hover:bg-muted hover:text-destructive"
           onClick={signOut}
         >
           {signingOut ? (
@@ -376,7 +388,7 @@ function AdminIdentity() {
           {signingOut ? "Signing out…" : "Sign out"}
         </Button>
         {signOutError ? (
-          <p role="alert" className="px-2 pb-1 pt-2 text-xs text-[var(--fm-destructive)]">
+          <p role="alert" className="px-2 pb-1 pt-2 text-xs text-destructive">
             {signOutError}
           </p>
         ) : null}
@@ -389,11 +401,8 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
   const { state, selectScope } = useAdminContext();
   if (state.phase !== "ready") {
     return (
-      <span className="inline-flex h-7 items-center gap-2 rounded-lg px-2.5 text-[0.8rem] font-medium">
-        <span
-          className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
-          aria-hidden="true"
-        />
+      <span className="inline-flex h-7 items-center gap-2 rounded-lg px-2.5 text-sm font-medium">
+        <span className="size-4 shrink-0 rounded-full bg-primary" aria-hidden="true" />
         {fallbackLabel.replace(/^Scope:\s*/, "")}
       </span>
     );
@@ -431,21 +440,18 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
     >
       <SelectTrigger
         aria-label="Active admin scope"
-        className="h-8 w-28 gap-2 rounded-md border-white/20 bg-white/10 px-2.5 text-[0.8rem] font-medium text-white shadow-none hover:bg-white/15 focus-visible:ring-white sm:w-36 lg:w-44 [&>svg:last-child]:hidden"
+        className="h-8 w-28 gap-2 rounded-md px-2.5 text-sm font-medium sm:w-36 lg:w-44 [&>svg:last-child]:hidden"
       >
-        <span
-          className="size-4 shrink-0 rounded-full bg-[var(--fm-admin-accent)]"
-          aria-hidden="true"
-        />
+        <span className="size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden="true" />
         <span className="truncate">{selectedLabel ?? "Select scope…"}</span>
-        <ChevronsUpDown className="size-3.5 shrink-0 text-white/70" aria-hidden="true" />
+        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </SelectTrigger>
       <SelectContent
         position="popper"
         side="bottom"
         sideOffset={4}
         align="start"
-        className="border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+        className="min-w-56"
       >
         {selections.map((selection) => {
           const value = JSON.stringify(selection.value);
@@ -467,12 +473,16 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
   const groups = groupAdminNavigation(items);
   return (
     <Sheet>
-      <SheetTrigger
-        ref={triggerRef}
-        aria-label="Open admin navigation"
-        className="rounded-[var(--fm-radius-control)] p-2 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:hidden"
-      >
-        <Menu className="size-5" />
+      <SheetTrigger asChild>
+        <Button
+          ref={triggerRef}
+          variant="ghost"
+          size="icon"
+          aria-label="Open admin navigation"
+          className="md:hidden"
+        >
+          <Menu />
+        </Button>
       </SheetTrigger>
       <SheetContent
         side="left"
@@ -489,9 +499,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
           {groups.map((group) => (
             <div key={group.code}>
               {showNavigationGroupLabel(group.code) ? (
-                <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  {group.label}
-                </p>
+                <p className="px-3 pb-1 text-xs font-medium text-muted-foreground">{group.label}</p>
               ) : null}
               <div className="space-y-1">
                 {group.code === "sales_channels" ? (
@@ -509,8 +517,7 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
                   <div
                     key={item.code}
                     className={cn(
-                      isNestedGroupSibling(group, item) &&
-                        "ml-4 border-l border-[var(--fm-border)] pl-1",
+                      isNestedGroupSibling(group, item) && "ml-4 border-l border-border pl-1",
                     )}
                   >
                     <MobileNavigationParent item={item} activeCode={active?.code} />
@@ -519,12 +526,10 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
               </div>
             </div>
           ))}
-          <div className="space-y-1 border-t border-[var(--fm-border)] pt-4">
+          <div className="space-y-1 border-t border-border pt-4">
             {!groups.some((group) => group.code === "sales_channels") ? (
               <>
-                <p className="px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  Sales channels
-                </p>
+                <p className="px-3 text-xs font-medium text-muted-foreground">Sales channels</p>
                 <SheetClose asChild>
                   <Link
                     href="/"
@@ -536,13 +541,8 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
                 </SheetClose>
               </>
             ) : null}
-            <p className="px-3 pt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-              Apps
-            </p>
-            <span
-              aria-disabled="true"
-              className="block px-3 py-2 text-sm text-[var(--fm-text-muted)]"
-            >
+            <p className="px-3 pt-2 text-xs font-medium text-muted-foreground">Apps</p>
+            <span aria-disabled="true" className="block px-3 py-2 text-sm text-muted-foreground">
               Messaging · Coming soon
             </span>
           </div>
@@ -567,8 +567,8 @@ function MobileNavigationParent({
       {sidebarChildren.length > 0 ? (
         <div
           className={cn(
-            "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
-            parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
+            "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-normal hover:bg-accent",
+            parentActive && "bg-sidebar-accent text-foreground",
           )}
         >
           <item.icon className="size-4" aria-hidden="true" />
@@ -581,8 +581,8 @@ function MobileNavigationParent({
             prefetch={false}
             aria-current={parentActive ? "page" : undefined}
             className={cn(
-              "flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-normal hover:bg-[var(--fm-hover)]",
-              parentActive && "bg-[var(--fm-active)] text-[var(--fm-active-text)]",
+              "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-normal hover:bg-accent",
+              parentActive && "bg-sidebar-accent text-foreground",
             )}
           >
             <item.icon className="size-4" aria-hidden="true" />
@@ -591,7 +591,7 @@ function MobileNavigationParent({
         </SheetClose>
       )}
       {sidebarChildren.length > 0 ? (
-        <div className="ml-8 border-l border-[var(--fm-border)] pl-2">
+        <div className="ml-8 border-l border-border pl-2">
           {sidebarChildren.map((child) => {
             const childActive = activeCode === child.code;
             return (
@@ -601,8 +601,8 @@ function MobileNavigationParent({
                   prefetch={false}
                   aria-current={childActive ? "page" : undefined}
                   className={cn(
-                    "block min-h-10 rounded px-3 py-2 text-sm text-[var(--fm-text-muted)] hover:bg-[var(--fm-hover)]",
-                    childActive && "bg-[var(--fm-active)] font-medium text-[var(--fm-active-text)]",
+                    "block min-h-10 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-accent",
+                    childActive && "bg-sidebar-accent font-medium text-foreground",
                   )}
                 >
                   {child.label}
@@ -668,7 +668,7 @@ function AdminSidebar({
         {showNavigationGroupLabel(group.code) ? (
           <p
             className={cn(
-              "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70 transition-[margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
+              "flex h-8 shrink-0 items-center overflow-hidden rounded-lg px-2 text-xs font-medium text-sidebar-foreground/70 transition-[margin,opacity,visibility] duration-200 ease-linear motion-reduce:transition-none",
               collapsed ? "invisible -mt-8 opacity-0" : "visible mt-0 opacity-100",
             )}
           >
@@ -679,7 +679,7 @@ function AdminSidebar({
           <Link
             href="/"
             prefetch={false}
-            className="mx-2 block rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--fm-admin-sidebar-active)]"
+            className="mx-2 block rounded-lg px-2 py-1.5 text-sm hover:bg-sidebar-accent"
           >
             Online Store
           </Link>
@@ -691,7 +691,7 @@ function AdminSidebar({
               className={cn(
                 !collapsed &&
                   isNestedGroupSibling(group, item) &&
-                  "ml-3 border-l border-[var(--fm-border)] pl-1",
+                  "ml-3 border-l border-border pl-1",
               )}
             >
               <DesktopNavigationParent
@@ -719,7 +719,7 @@ function AdminSidebar({
     <TooltipProvider disableHoverableContent>
       <aside
         className={cn(
-          "relative hidden shrink-0 border-r border-[var(--fm-border)] bg-[var(--fm-admin-sidebar)] transition-[width] duration-200 ease-linear md:block",
+          "relative hidden shrink-0 border-r border-border bg-sidebar transition-[width] duration-200 ease-linear md:block",
           collapsed
             ? "w-[var(--fm-admin-sidebar-collapsed)]"
             : "w-[var(--fm-admin-sidebar-expanded)]",
@@ -733,7 +733,7 @@ function AdminSidebar({
               : "w-[var(--fm-admin-sidebar-expanded)] p-2",
           )}
         >
-          <div className="flex size-full flex-col bg-[var(--fm-admin-sidebar)] text-[var(--fm-admin-sidebar-text)]">
+          <div className="flex size-full flex-col bg-sidebar text-sidebar-foreground">
             <div className="flex shrink-0 flex-col gap-2 p-2">
               {collapsed ? (
                 <Tooltip>
@@ -741,7 +741,7 @@ function AdminSidebar({
                     <button
                       type="button"
                       aria-label="Search admin navigation"
-                      className="flex size-8 items-center justify-center rounded-lg text-[var(--fm-admin-sidebar-text)] hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                      className="flex size-8 items-center justify-center rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => onCollapsedChange(false)}
                     >
                       <Search className="size-4" aria-hidden="true" />
@@ -754,7 +754,7 @@ function AdminSidebar({
               ) : (
                 <div className="relative px-2">
                   <Search
-                    className="pointer-events-none absolute left-[18px] top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                    className="pointer-events-none absolute left-[18px] top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                     aria-hidden="true"
                   />
                   <Input
@@ -762,7 +762,7 @@ function AdminSidebar({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search..."
-                    className="h-8 bg-[var(--fm-admin-content)] pl-8 text-sm shadow-none"
+                    className="h-8 bg-card pl-8 text-sm shadow-none"
                   />
                 </div>
               )}
@@ -776,44 +776,37 @@ function AdminSidebar({
               >
                 {scrollingGroups.map(renderGroup)}
                 {!collapsed ? (
-                  <div className="space-y-1 border-t border-[var(--fm-border)] px-4 py-3 text-sm">
+                  <div className="space-y-1 border-t border-border px-4 py-3 text-sm">
                     {!groups.some((group) => group.code === "sales_channels") ? (
                       <>
-                        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
+                        <p className="text-xs font-medium text-sidebar-foreground/70">
                           Sales channels
                         </p>
                         <Link
                           href="/"
                           prefetch={false}
-                          className="block rounded px-2 py-1.5 hover:bg-[var(--fm-admin-sidebar-active)]"
+                          className="block rounded px-2 py-1.5 hover:bg-sidebar-accent"
                         >
                           Online Store
                         </Link>
                       </>
                     ) : null}
-                    <p className="pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--fm-admin-sidebar-text)]/70">
-                      Apps
-                    </p>
-                    <span
-                      aria-disabled="true"
-                      className="block px-2 py-1.5 text-[var(--fm-text-muted)]"
-                    >
+                    <p className="pt-2 text-xs font-medium text-sidebar-foreground/70">Apps</p>
+                    <span aria-disabled="true" className="block px-2 py-1.5 text-muted-foreground">
                       Messaging · Coming soon
                     </span>
                   </div>
                 ) : null}
                 {items.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
+                  <p className="px-3 py-2 text-xs text-muted-foreground">
                     No workspaces permitted.
                   </p>
                 ) : visibleGroups.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-[var(--fm-text-muted)]">
-                    No matching workspaces.
-                  </p>
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No matching workspaces.</p>
                 ) : null}
               </div>
               {settingsGroup ? (
-                <div className="max-h-[45vh] shrink-0 overflow-y-auto border-t border-[var(--fm-border)]">
+                <div className="max-h-[45vh] shrink-0 overflow-y-auto border-t border-border">
                   {renderGroup(settingsGroup)}
                 </div>
               ) : null}
@@ -843,10 +836,9 @@ function DesktopNavigationParent({
   const parentActive =
     activeCode === item.code || item.children.some((child) => child.code === activeCode);
   const controlClassName = cn(
-    "flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left text-sm font-normal text-[var(--fm-admin-sidebar-text)] transition-[width,height,padding] duration-150 ease-in-out hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]",
+    "flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left text-sm font-normal text-sidebar-foreground transition-[width,height,padding] duration-150 ease-in-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     collapsed ? "w-8 px-2" : "w-full px-2",
-    parentActive &&
-      "bg-[var(--fm-admin-sidebar-active)] text-[var(--fm-admin-sidebar-active-text)]",
+    parentActive && "bg-sidebar-accent text-sidebar-accent-foreground",
   );
   const label = (
     <span
@@ -913,16 +905,16 @@ function DesktopNavigationParent({
               sideOffset={4}
               role="menu"
               aria-label={item.label}
-              className="w-max min-w-32 max-w-64 rounded-[10px] border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-1 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+              className="w-max min-w-32 max-w-64 rounded-lg border-border bg-card p-1 text-foreground shadow-md"
             >
-              <p className="px-2 py-1 text-xs text-[var(--fm-text-muted)]">{item.label}</p>
+              <p className="px-2 py-1 text-xs text-muted-foreground">{item.label}</p>
               {sidebarChildren.map((child) => (
                 <Link
                   key={child.code}
                   href={child.href}
                   prefetch={false}
                   role="menuitem"
-                  className="block rounded-md px-2 py-1.5 text-sm outline-none hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)] focus:bg-[var(--fm-admin-sidebar-active)] focus:text-[var(--fm-admin-sidebar-active-text)]"
+                  className="block rounded-md px-2 py-1.5 text-sm outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
                 >
                   {child.label}
                 </Link>
@@ -959,9 +951,9 @@ function DesktopNavigationParent({
               prefetch={false}
               aria-current={activeCode === child.code ? "page" : undefined}
               className={cn(
-                "block rounded-lg px-2 py-1.5 text-sm text-[var(--fm-admin-sidebar-text)] hover:bg-[var(--fm-admin-sidebar-active)] hover:text-[var(--fm-admin-sidebar-active-text)]",
+                "block rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 activeCode === child.code &&
-                  "bg-[var(--fm-admin-sidebar-active)] font-medium text-[var(--fm-admin-sidebar-active-text)]",
+                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
               )}
             >
               {child.label}
@@ -978,7 +970,7 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
   if (state.phase === "loading") {
     return (
       <main
-        className="min-h-screen bg-[var(--fm-surface-soft)] p-4 sm:p-6 lg:p-8"
+        className="min-h-screen bg-background p-4 sm:p-6 lg:p-8"
         role="status"
         aria-label="Loading admin shell"
       >
@@ -1018,7 +1010,7 @@ export function AdminShellBoundary({ children }: { children: ReactNode }) {
   if (state.phase === "forbidden") {
     return (
       <main className="mx-auto max-w-2xl p-6" aria-labelledby="admin-page-title">
-        <Alert variant="warning">
+        <Alert>
           <h1 id="admin-page-title" className="font-semibold leading-none">
             Staff access required
           </h1>
@@ -1077,13 +1069,13 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 id="admin-page-title" className="text-2xl font-bold tracking-[-0.025em]">
+        <h1 id="admin-page-title" className="text-2xl font-bold tracking-tight">
           {title}
         </h1>
         {description ? (
-          <p className="mt-2 max-w-2xl text-sm text-[var(--fm-text-muted)]">{description}</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {action}
@@ -1101,12 +1093,10 @@ export function ListPageSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
-      <div className="border-b border-[var(--fm-border)] px-4 py-3 sm:px-5">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-4 py-3 sm:px-5">
         <h2 className="font-semibold">{title}</h2>
-        {description ? (
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">{description}</p>
-        ) : null}
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       <div className="min-w-0">{children}</div>
     </section>
@@ -1114,9 +1104,7 @@ export function ListPageSection({
 }
 
 /**
- * Compatibility wrapper over the single admin status pill. Tones map 1:1 to the
- * `fm-admin-status-*` classes owned by globals.css; new surfaces should use
- * AdminStatusPill directly.
+ * Compatibility wrapper over the stock Admin Badge used for status labels.
  */
 export function StatusBadge({
   tone = "neutral",
@@ -1125,7 +1113,5 @@ export function StatusBadge({
   tone?: "neutral" | "success" | "warning" | "danger" | "info";
   children: ReactNode;
 }) {
-  return (
-    <span className={cn(adminStatusPillClassName, `fm-admin-status-${tone}`)}>{children}</span>
-  );
+  return <Badge variant={adminStatusVariant[tone]}>{children}</Badge>;
 }

@@ -15,8 +15,8 @@ import {
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { PageHeader } from "../../../components/admin/admin-shell";
 import { MembershipStatusBadge } from "../../../components/admin/customer-status-badges";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Table,
   TableBody,
@@ -24,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { useAdminContext } from "../admin-context-provider";
 
 type LoadState =
@@ -174,10 +174,10 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
         description="Retained membership records are available for review and supported cancellation only."
       />
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Membership list</h2>
         <form
-          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
+          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
           onSubmit={(event) => {
             event.preventDefault();
             applySearch(query);
@@ -235,10 +235,7 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
         ) : null}
         {state.phase === "ready" && memberships.length > 0 ? (
           <>
-            <ul
-              aria-label="Membership list"
-              className="divide-y divide-[var(--fm-border)] sm:hidden"
-            >
+            <ul aria-label="Membership list" className="divide-y divide-border sm:hidden">
               {memberships.map((membership) => (
                 <li key={membership.subscriptionId} className="space-y-3 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -251,7 +248,7 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
                       >
                         {membership.customerEmail}
                       </Link>
-                      <p className="mt-1 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
                         {membership.subscriptionId}
                       </p>
                     </div>
@@ -259,11 +256,11 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
                   </div>
                   <dl className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Period end</dt>
+                      <dt className="text-xs text-muted-foreground">Period end</dt>
                       <dd>{date(membership.currentPeriodEndsAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Cancellation</dt>
+                      <dt className="text-xs text-muted-foreground">Cancellation</dt>
                       <dd>{cancellationLabel(membership)}</dd>
                     </div>
                   </dl>
@@ -292,17 +289,17 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
                         >
                           {membership.customerEmail}
                         </Link>
-                        <p className="mt-0.5 max-w-64 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                        <p className="mt-0.5 max-w-64 truncate font-mono text-xs text-muted-foreground">
                           {membership.subscriptionId}
                         </p>
                       </TableCell>
                       <TableCell>
                         <MembershipStatusBadge status={membership.state} />
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {date(membership.currentPeriodEndsAt)}
                       </TableCell>
-                      <TableCell className="text-sm text-[var(--fm-text-muted)]">
+                      <TableCell className="text-sm text-muted-foreground">
                         {cancellationLabel(membership)}
                       </TableCell>
                     </TableRow>

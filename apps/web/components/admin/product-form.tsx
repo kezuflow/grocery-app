@@ -9,9 +9,15 @@ import { ImagePlus, Plus, Trash2 } from "lucide-react";
 import { adminProductMediaMaxCount } from "@freshmarkets/contracts";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/admin/shadcn/card";
+import { Input } from "@/components/admin/shadcn/input";
 import { EditorLayout } from "./admin-compositions";
 
 export type ProductMediaDraft = {
@@ -123,7 +129,7 @@ export function ProductForm({
         asideLabel="Product preview and organization"
         editor={
           <div className="space-y-4">
-            <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+            <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b px-4 py-4 sm:px-5">
                 <CardTitle>Product details</CardTitle>
               </CardHeader>
@@ -148,7 +154,7 @@ export function ProductForm({
                 <label className="block space-y-1 text-sm font-medium sm:col-span-2">
                   <span>Product description</span>
                   <textarea
-                    className="min-h-32 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 py-2"
+                    className="min-h-32 w-full rounded-md border border-border bg-card px-3 py-2"
                     value={value.description ?? ""}
                     onChange={(event) =>
                       onChange({ ...value, description: event.target.value || null })
@@ -159,7 +165,7 @@ export function ProductForm({
             </Card>
 
             {value.media ? (
-              <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="border-b px-4 py-4 sm:px-5">
                   <CardTitle>Product images</CardTitle>
                   <CardDescription>
@@ -170,7 +176,7 @@ export function ProductForm({
                   {value.media.map((media, index) => (
                     <div
                       key={media.id}
-                      className="grid gap-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto_auto] md:items-end"
+                      className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto_auto] md:items-end"
                     >
                       <ImageDraftPreview file={media.file} />
                       <label className="grid gap-1 text-sm font-medium">
@@ -277,17 +283,14 @@ export function ProductForm({
             ) : null}
 
             {value.variants ? (
-              <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="border-b px-4 py-4 sm:px-5">
                   <CardTitle>Selling options</CardTitle>
                   <CardDescription>Configure the sizes or packs customers can buy.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 px-4 py-5 sm:px-5">
                   {value.variants.map((variant, index) => (
-                    <div
-                      key={variant.id}
-                      className="space-y-3 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3"
-                    >
+                    <div key={variant.id} className="space-y-3 rounded-md border border-border p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold">Selling option {index + 1}</p>
                         <Button
@@ -333,7 +336,7 @@ export function ProductForm({
                         <label className="grid gap-1 text-sm font-medium">
                           <span>Sell unit</span>
                           <select
-                            className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                            className="h-10 w-full rounded-md border border-border bg-card px-3"
                             value={
                               countedSizes
                                 ? variant.sellableUnitId
@@ -423,7 +426,7 @@ export function ProductForm({
                                 })
                               }
                             />
-                            <span className="text-xs font-normal text-[var(--fm-text-muted)]">
+                            <span className="text-xs font-normal text-muted-foreground">
                               Optional logistics reference. Stock uses actual counts.
                             </span>
                           </label>
@@ -459,7 +462,7 @@ export function ProductForm({
               </Card>
             ) : null}
 
-            <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+            <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b px-4 py-4 sm:px-5">
                 <CardTitle>Customer-facing details</CardTitle>
               </CardHeader>
@@ -467,7 +470,7 @@ export function ProductForm({
                 {value.customerDetails.map((detail, index) => (
                   <div
                     key={index}
-                    className="grid gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3 sm:grid-cols-[1fr_2fr_auto]"
+                    className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_2fr_auto]"
                   >
                     <Input
                       aria-label={`Detail label ${index + 1}`}
@@ -526,7 +529,7 @@ export function ProductForm({
         aside={
           <div className="space-y-4">
             {preview}
-            <Card className="gap-0 py-0 shadow-[var(--fm-shadow-card)]">
+            <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b px-4 py-4">
                 <CardTitle>Product classification</CardTitle>
               </CardHeader>
@@ -534,7 +537,7 @@ export function ProductForm({
                 <label className="block space-y-1 text-sm font-medium">
                   <span>Product category</span>
                   <select
-                    className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                    className="h-10 w-full rounded-md border border-border bg-card px-3"
                     value={value.categoryId}
                     required
                     onChange={(event) => onChange({ ...value, categoryId: event.target.value })}
@@ -564,7 +567,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Stock sold by</span>
                       <select
-                        className="h-10 w-full rounded border bg-[var(--fm-admin-surface)] px-3"
+                        className="h-10 w-full rounded border bg-card px-3"
                         value={value.stockTracking ?? "SHARED"}
                         onChange={(event) =>
                           onChange({
@@ -598,7 +601,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Inventory base unit</span>
                       <select
-                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                        className="h-10 w-full rounded-md border border-border bg-card px-3"
                         value={value.inventoryBaseUnitId ?? ""}
                         required
                         onChange={(event) =>
@@ -630,7 +633,7 @@ export function ProductForm({
                     <label className="block space-y-1 text-sm font-medium">
                       <span>Status</span>
                       <select
-                        className="h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                        className="h-10 w-full rounded-md border border-border bg-card px-3"
                         value={value.status}
                         onChange={(event) =>
                           onChange({
@@ -663,13 +666,9 @@ export function ProductForm({
               </CardContent>
             </Card>
             {!hideSubmit ? (
-              <Card className="gap-3 py-4 shadow-[var(--fm-shadow-card)]">
+              <Card className="gap-3 py-4 shadow-sm">
                 <CardContent className="px-4">
-                  <Button
-                    className="fm-admin-reference-primary w-full"
-                    type="submit"
-                    disabled={pending}
-                  >
+                  <Button className=" w-full" type="submit" disabled={pending}>
                     {pending ? "Saving…" : submitLabel}
                   </Button>
                 </CardContent>

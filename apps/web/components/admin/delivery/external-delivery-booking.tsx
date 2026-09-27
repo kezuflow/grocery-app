@@ -12,11 +12,11 @@ import {
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../../ui/alert-dialog";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
+} from "@/components/admin/shadcn/alert-dialog";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "../admin-feedback";
-import { Label } from "../../ui/label";
+import { Label } from "@/components/admin/shadcn/label";
 import type { OrderedDeliveryItem } from "./delivery-order-list";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -168,14 +168,14 @@ export function ExternalDeliveryBooking({
 
   if (readiness.unavailableReason) return <p className="text-sm">{readiness.unavailableReason}</p>;
   return (
-    <section className="space-y-3 rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3">
+    <section className="space-y-3 rounded border border-border bg-card p-3">
       <div>
         <h3 className="font-semibold">
           {delivery.status === "FAILED" || delivery.status === "RETRY_SCHEDULED"
             ? "Retry courier"
             : "External courier"}
         </h3>
-        <p className="text-xs text-[var(--fm-text-muted)]">
+        <p className="text-xs text-muted-foreground">
           {fulfillmentMode === "INSTANT"
             ? "Retry the courier the customer chose at checkout after a definite failure and packing. First booking starts automatically during packing."
             : "After packing, request a driver now or choose a future pickup within the customer’s delivery range."}
@@ -237,7 +237,7 @@ export function ExternalDeliveryBooking({
           Reset pickup choice
         </Button>
       ) : null}
-      {message ? <p className="text-xs text-[var(--fm-danger)]">{message}</p> : null}
+      {message ? <p className="text-xs text-destructive">{message}</p> : null}
       <Button
         type="button"
         variant="outline"

@@ -2,12 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 import type { MembershipPriceConfigurationView } from "@freshmarkets/contracts";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Textarea } from "../ui/textarea";
+import { Button } from "@/components/admin/shadcn/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/admin/shadcn/card";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import { Textarea } from "@/components/admin/shadcn/textarea";
 import { EditorLayout } from "./admin-compositions";
 import { StatusBadge } from "./admin-shell";
 
@@ -67,15 +73,13 @@ export function CommerceConfigurationView({
             <CardContent className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge>Version {membership.version}</StatusBadge>
-                <code className="text-xs text-[var(--fm-text-muted)]">
-                  {membership.priceVersionId}
-                </code>
+                <code className="text-xs text-muted-foreground">{membership.priceVersionId}</code>
               </div>
               <p className="text-3xl font-semibold">
                 {money(membership.amountMinor, membership.currency)}
               </p>
-              <p className="text-sm text-[var(--fm-text-muted)]">Offer {membership.offerId}</p>
-              <p className="text-xs text-[var(--fm-text-muted)]">
+              <p className="text-sm text-muted-foreground">Offer {membership.offerId}</p>
+              <p className="text-xs text-muted-foreground">
                 Effective from {new Date(membership.effectiveFrom).toLocaleString("en-PH")}
               </p>
             </CardContent>
@@ -133,7 +137,7 @@ export function CommerceConfigurationView({
                     <Label htmlFor="membership-reason">Reason for change</Label>
                     <Textarea
                       id="membership-reason"
-                      className="min-h-24 bg-[var(--fm-admin-surface)]"
+                      className="min-h-24 bg-card"
                       required
                       value={reason}
                       onChange={(event) => setReason(event.target.value)}
@@ -142,7 +146,7 @@ export function CommerceConfigurationView({
                   <label className="flex items-start gap-2 text-sm">
                     <Checkbox
                       checked={confirmed}
-                      className="mt-0.5 data-[state=checked]:border-[var(--fm-admin-accent)] data-[state=checked]:bg-[var(--fm-admin-accent)]"
+                      className="mt-0.5 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                       onCheckedChange={(value) => setConfirmed(value === true)}
                     />
                     <span>
@@ -158,7 +162,7 @@ export function CommerceConfigurationView({
             </Card>
           ) : (
             <Card>
-              <CardContent className="pt-6 text-sm text-[var(--fm-text-muted)]">
+              <CardContent className="pt-6 text-sm text-muted-foreground">
                 {scheduledMembership || membership.effectiveTo
                   ? "A replacement is already scheduled."
                   : "Membership management permission is required to create a replacement."}
@@ -172,7 +176,7 @@ export function CommerceConfigurationView({
           <CardHeader>
             <CardTitle>Impact and audit context</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-[var(--fm-text-muted)]">
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
               Existing paid subscriptions retain their snapshotted price. Replacements apply only to
               new paid subscriptions unless a separate migration is authorized.

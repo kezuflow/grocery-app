@@ -6,9 +6,15 @@ import {
   adminPromotionAudienceSchema,
   adminPromotionAudienceViewSchema,
 } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { CustomerPicker } from "./customer-picker";
 import { catalogResultSchema, useCatalogCommand } from "./catalog-command-state";
 const names = {
@@ -164,7 +170,7 @@ export function PromotionAudienceEditor({
     );
   return (
     <div className="space-y-4 p-4">
-      <p className="text-sm text-[var(--fm-text-muted)]">
+      <p className="text-sm text-muted-foreground">
         Customers must match every condition. With no conditions, all customers may qualify.
         Campaign dates, minimum purchase and redemption limits still apply.
       </p>

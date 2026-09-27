@@ -1,8 +1,8 @@
 "use client";
 
 import type { AdminCategorySummary } from "@freshmarkets/contracts";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 
 export type CategoryFormValue = {
   code?: string;
@@ -68,7 +68,7 @@ export function CategoryForm({
         <label className="grid gap-1.5 text-sm font-medium">
           <span>Parent category</span>
           <select
-            className="h-9 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+            className="h-9 w-full rounded-md border border-border bg-card px-3"
             value={value.parentCategoryId ?? ""}
             onChange={(event) =>
               onChange({ ...value, parentCategoryId: event.target.value || null })
@@ -101,7 +101,7 @@ export function CategoryForm({
         </label>
       </fieldset>
       {!hideSubmit ? (
-        <Button type="submit" size="sm" className="fm-admin-reference-primary" disabled={pending}>
+        <Button type="submit" size="sm" className="" disabled={pending}>
           {pending ? "Saving…" : submitLabel}
         </Button>
       ) : null}

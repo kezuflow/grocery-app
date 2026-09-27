@@ -8,8 +8,8 @@ import type {
   MetricDefinitionView,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 import { AdminDashboardGrid, MetricCard } from "../../../components/admin/admin-compositions";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
@@ -279,11 +279,11 @@ export default function AnalyticsPage() {
       />
       <section
         aria-label="Report filters"
-        className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
+        className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--fm-border)] px-4 py-3 text-sm sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm sm:px-5">
           <h2 className="font-semibold">Report filters</h2>
-          <span className="text-[var(--fm-text-muted)]">Scope: {scopeLabel}</span>
+          <span className="text-muted-foreground">Scope: {scopeLabel}</span>
         </div>
         <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 sm:p-5">
           <label className="space-y-1 text-sm">
@@ -335,7 +335,7 @@ export default function AnalyticsPage() {
             </select>
           </label>
         </div>
-        <details className="border-t border-[var(--fm-border)] px-4 py-3 sm:px-5">
+        <details className="border-t border-border px-4 py-3 sm:px-5">
           <summary className="cursor-pointer text-sm font-medium">Product breakdown</summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <form
@@ -490,7 +490,7 @@ export default function AnalyticsPage() {
           })}
           <details className="rounded-lg border p-4 text-sm">
             <summary className="cursor-pointer font-medium">How these figures are counted</summary>
-            <p className="mt-3 text-[var(--fm-text-muted)]">
+            <p className="mt-3 text-muted-foreground">
               {visibleState.overview.freshness.sourceWatermark
                 ? `Latest source record: ${new Date(visibleState.overview.freshness.sourceWatermark).toLocaleString("en-PH", { timeZone: visibleState.overview.window.timezone })}.`
                 : "Source record timestamp unavailable."}

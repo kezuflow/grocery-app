@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type { AdminPromotionPage, AdminPromotionSummary } from "@freshmarkets/contracts";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Table,
   TableBody,
@@ -25,7 +25,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { PromotionStatusSwitch } from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
@@ -48,7 +48,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+} from "@/components/admin/shadcn/dropdown-menu";
 
 type LoadState =
   | { phase: "loading" }
@@ -436,14 +436,14 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
       >
         <DialogPrimitive.Portal>
           <div className="fm-admin contents">
-            <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.42)]" />
-            <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] focus:outline-none">
-              <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-4">
+            <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+            <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-md focus:outline-none">
+              <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div>
-                  <DialogPrimitive.Title className="text-lg font-semibold tracking-[-0.02em]">
+                  <DialogPrimitive.Title className="text-lg font-semibold tracking-tight">
                     Select sale type
                   </DialogPrimitive.Title>
-                  <DialogPrimitive.Description className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                  <DialogPrimitive.Description className="mt-1 text-sm text-muted-foreground">
                     Choose how the sale reduces each selected selling unit.
                   </DialogPrimitive.Description>
                 </div>
@@ -458,7 +458,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                   </Button>
                 </DialogPrimitive.Close>
               </div>
-              <div className="divide-y divide-[var(--fm-border)] p-2">
+              <div className="divide-y divide-border p-2">
                 {saleBenefitOptions.map((option) => {
                   const Icon = option.icon;
                   return (
@@ -466,14 +466,14 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                       key={option.type}
                       type="button"
                       onClick={() => chooseBenefit(option.type)}
-                      className="flex w-full items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-3 text-left transition-colors hover:bg-[var(--fm-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)]"
+                      className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)]">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
                         <Icon className="size-4" aria-hidden="true" />
                       </span>
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold">{option.label}</span>
-                        <span className="mt-0.5 block text-xs leading-5 text-[var(--fm-text-muted)]">
+                        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
                           {option.description}
                         </span>
                       </span>
@@ -481,7 +481,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                   );
                 })}
               </div>
-              <div className="flex justify-end border-t border-[var(--fm-border)] px-5 py-3">
+              <div className="flex justify-end border-t border-border px-5 py-3">
                 <DialogPrimitive.Close asChild>
                   <Button type="button" variant="outline">
                     Cancel
@@ -519,7 +519,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
           aria-labelledby="admin-page-title"
           className="min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)]"
         >
-          <header className="border-b border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4 sm:px-7">
+          <header className="border-b border-border bg-card px-5 py-4 sm:px-7">
             <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <Button
@@ -533,16 +533,13 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                   <ArrowLeft aria-hidden="true" />
                 </Button>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-[var(--fm-text-muted)]">Promotion Sale</p>
-                  <h1
-                    id="admin-page-title"
-                    className="truncate text-xl font-bold tracking-[-0.03em]"
-                  >
+                  <p className="text-xs font-medium text-muted-foreground">Promotion Sale</p>
+                  <h1 id="admin-page-title" className="truncate text-xl font-bold tracking-tight">
                     Create sale
                   </h1>
                 </div>
               </div>
-              <p className="hidden text-sm text-[var(--fm-text-muted)] sm:block">
+              <p className="hidden text-sm text-muted-foreground sm:block">
                 Saved sales begin as drafts.
               </p>
             </div>
@@ -551,14 +548,14 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
           <div className="mx-auto grid w-full max-w-6xl gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.8fr)] lg:items-start">
             <div className="space-y-5">
               <section
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                className="rounded-xl border border-border bg-card p-5 shadow-sm"
                 aria-labelledby="sale-details-heading"
               >
                 <h2 id="sale-details-heading" className="text-base font-semibold">
                   Sale details
                 </h2>
                 <label className="mt-4 block text-sm font-semibold">
-                  Sale name<span className="text-red-600"> *</span>
+                  Sale name<span className="text-destructive"> *</span>
                   <Input
                     aria-label="Sale name"
                     disabled={createLocked}
@@ -571,7 +568,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
               </section>
 
               <section
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                className="rounded-xl border border-border bg-card p-5 shadow-sm"
                 aria-labelledby="sale-discount-heading"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -579,7 +576,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                     <h2 id="sale-discount-heading" className="text-base font-semibold">
                       Discount
                     </h2>
-                    <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {saleBenefitLabels[benefit]}
                     </p>
                   </div>
@@ -595,10 +592,10 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                 </div>
                 <label className="mt-4 block text-sm font-semibold sm:max-w-sm">
                   {benefit === "ORDER_PERCENT_DISCOUNT" ? "Discount percentage" : "Discount amount"}
-                  <span className="text-red-600"> *</span>
+                  <span className="text-destructive"> *</span>
                   <div className="relative mt-1.5">
                     {benefit === "ORDER_FIXED_DISCOUNT" ? (
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                         ₱
                       </span>
                     ) : null}
@@ -616,25 +613,25 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                       className={`h-10 ${benefit === "ORDER_PERCENT_DISCOUNT" ? "pr-10" : "pl-8"}`}
                     />
                     {benefit === "ORDER_PERCENT_DISCOUNT" ? (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--fm-text-muted)]">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                         %
                       </span>
                     ) : null}
                   </div>
                 </label>
-                <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-4 text-sm text-muted-foreground">
                   The discount applies to each selected selling unit while the sale is active.
                 </p>
               </section>
 
               <section
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+                className="rounded-xl border border-border bg-card p-5 shadow-sm"
                 aria-labelledby="sale-targets-heading"
               >
                 <h2 id="sale-targets-heading" className="text-base font-semibold">
                   Products and quantities
                 </h2>
-                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Select the location and selling options this sale covers. Each option can use
                   whole stock or a fixed clearance pool.
                 </p>
@@ -651,35 +648,35 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
             </div>
 
             <aside className="space-y-4 lg:sticky lg:top-5" aria-labelledby="sale-summary-heading">
-              <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]">
+              <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
                 <h2 id="sale-summary-heading" className="text-base font-semibold">
                   Summary
                 </h2>
-                <p className="mt-1 break-words text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-1 break-words text-sm text-muted-foreground">
                   {name.trim() || "Sale name not entered"}
                 </p>
-                <dl className="mt-4 divide-y divide-[var(--fm-border)] text-sm" aria-live="polite">
+                <dl className="mt-4 divide-y divide-border text-sm" aria-live="polite">
                   <div className="py-3 first:pt-0">
-                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Type</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">Type</dt>
                     <dd className="mt-1 font-medium">{createSummary.type}</dd>
                   </div>
                   <div className="py-3">
-                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Value</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">Value</dt>
                     <dd className="mt-1 font-medium">{createSummary.value}</dd>
                   </div>
                   <div className="py-3">
-                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Targets</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">Targets</dt>
                     <dd className="mt-1">{createSummary.targets}</dd>
                   </div>
                   <div className="py-3 last:pb-0">
-                    <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Allowance</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">Allowance</dt>
                     <dd className="mt-1">{createSummary.allowance}</dd>
                   </div>
                 </dl>
               </section>
-              <p className="flex gap-2 px-1 text-xs leading-5 text-[var(--fm-text-muted)]">
+              <p className="flex gap-2 px-1 text-xs leading-5 text-muted-foreground">
                 <Info
-                  className="mt-0.5 size-3.5 shrink-0 text-[var(--fm-info)]"
+                  className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
                 Sale prices apply automatically to selected products after this draft is activated.
@@ -690,15 +687,15 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
           {notice ? (
             <p
               role={createIntent.uncertain ? "alert" : "status"}
-              className="mx-auto mb-4 w-[calc(100%-2.5rem)] max-w-6xl rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm sm:w-[calc(100%-3.5rem)]"
+              className="mx-auto mb-4 w-[calc(100%-2.5rem)] max-w-6xl rounded-lg border border-border bg-card p-3 text-sm sm:w-[calc(100%-3.5rem)]"
             >
               {notice}
             </p>
           ) : null}
 
-          <div className="sticky bottom-0 z-10 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-3 shadow-[0_-8px_24px_rgb(15_23_42_/_0.08)] sm:px-7">
+          <div className="sticky bottom-0 z-10 border-t border-border bg-card px-5 py-3 shadow-sm sm:px-7">
             <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
-              <p className="text-sm text-[var(--fm-text-muted)]" aria-live="polite">
+              <p className="text-sm text-muted-foreground" aria-live="polite">
                 {createIntent.uncertain
                   ? "Save outcome unknown. Keep this editor open and check the same save."
                   : createDirty
@@ -714,11 +711,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                 >
                   Discard
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={createIntent.pending}
-                  className="bg-[var(--fm-admin-accent)] text-white hover:bg-[var(--fm-admin-accent-strong)]"
-                >
+                <Button type="submit" disabled={createIntent.pending}>
                   {createIntent.pending
                     ? "Saving…"
                     : createIntent.uncertain
@@ -738,12 +731,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
             description="Automatic discounts for selected products and locations."
             action={
               canManage ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setChooserOpen(true)}
-                  className="fm-admin-reference-primary"
-                >
+                <Button type="button" size="sm" onClick={() => setChooserOpen(true)} className="">
                   <Plus className="size-4" aria-hidden="true" />
                   New sale
                 </Button>
@@ -752,15 +740,12 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
           />
 
           {notice ? (
-            <p
-              role="status"
-              className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
-            >
+            <p role="status" className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm">
               {notice}
             </p>
           ) : null}
 
-          <section className="mt-8 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+          <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <h2 className="sr-only">Promotion Sale list</h2>
             <AdminIndexViews
               label="Promotion Sale views"
@@ -776,14 +761,14 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                 updateListFilters(query, nextView);
               }}
             />
-            <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-[var(--fm-text-muted)]" aria-live="polite">
+            <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground" aria-live="polite">
                 Showing {visibleSales.length} of {page?.items.length ?? 0} sales on this page.
                 Search and status filter this page only.
               </p>
               <label className="relative block sm:w-72">
                 <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <Input
@@ -796,21 +781,21 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                     setQuery(nextQuery);
                     updateListFilters(nextQuery, tab);
                   }}
-                  className="h-9 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
+                  className="h-9 bg-card pl-9 shadow-none"
                 />
               </label>
             </div>
 
             <div className="overflow-x-auto">
               {visibleSales.length === 0 ? (
-                <p className="p-6 text-sm text-[var(--fm-text-muted)]" role="status">
+                <p className="p-6 text-sm text-muted-foreground" role="status">
                   No inventory sales match this view on the current page. Other sales may appear on
                   later pages.
                 </p>
               ) : (
                 <Table aria-label="Promotion Sale list">
                   <TableHeader>
-                    <TableRow className="bg-[var(--fm-admin-surface-muted)] hover:bg-[var(--fm-admin-surface-muted)]">
+                    <TableRow className="bg-muted hover:bg-muted">
                       <TableHead>Sale</TableHead>
                       <TableHead>Products</TableHead>
                       <TableHead>Location</TableHead>
@@ -825,19 +810,19 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
                   <TableBody>
                     {visibleSales.map((promotion) => (
                       <TableRow key={promotion.promotionId} className="align-top">
-                        <TableCell className="min-w-40 font-semibold text-[var(--fm-text)]">
+                        <TableCell className="min-w-40 font-semibold text-foreground">
                           {promotion.name}
                         </TableCell>
-                        <TableCell className="min-w-48 max-w-72 text-sm text-[var(--fm-text-muted)]">
+                        <TableCell className="min-w-48 max-w-72 text-sm text-muted-foreground">
                           {saleProductsLabel(promotion)}
                         </TableCell>
-                        <TableCell className="min-w-36 whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        <TableCell className="min-w-36 whitespace-nowrap text-sm text-muted-foreground">
                           {saleLocationsLabel(promotion)}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                           {saleDiscountLabel(promotion)}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                           {saleAllowance(promotion)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap">

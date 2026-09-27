@@ -2,9 +2,15 @@
 import { useEffect, useState } from "react";
 import type { AdminInventoryItem, AdminProductDetail } from "@freshmarkets/contracts";
 import { z, adminProductDetailSchema } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../ui/sheet";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/admin/shadcn/sheet";
 import { useAdminContext, useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminCommand } from "./use-admin-command";
 import { useAdminRouteGuard } from "./use-admin-route-guard";

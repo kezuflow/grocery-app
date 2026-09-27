@@ -11,9 +11,10 @@ import type {
   Coordinate,
 } from "@freshmarkets/contracts";
 import { GoogleMap } from "../maps/google-map";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { Badge } from "@/components/admin/shadcn/badge";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
 import { readJson } from "../../lib/http/read-deadline";
 
 const center = { latitude: 10.3157, longitude: 123.8854 };
@@ -207,15 +208,9 @@ export function LocationAddressMap({
             Search, click the map, or drag the pin to the exact courier pickup entrance.
           </p>
         </div>
-        <span
-          className={
-            coordinate
-              ? "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800"
-              : "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800"
-          }
-        >
+        <Badge variant={coordinate ? "secondary" : "outline"}>
           {coordinate ? "Pin set" : "Pin required"}
-        </span>
+        </Badge>
       </div>
       <div>
         <Label htmlFor="location-address-search">Find pickup address</Label>
@@ -252,7 +247,7 @@ export function LocationAddressMap({
       {results.length > 0 && (
         <ul className="space-y-2">
           <li
-            className="text-xs font-normal not-italic tracking-normal text-[#5e5e5e] whitespace-nowrap"
+            className="text-xs font-normal not-italic tracking-normal text-muted-foreground whitespace-nowrap"
             translate="no"
           >
             Google Maps

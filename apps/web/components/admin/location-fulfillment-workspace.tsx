@@ -7,9 +7,9 @@ import {
   type RpcResult,
 } from "@freshmarkets/contracts";
 import { z, adminLocationFulfillmentViewSchema } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Checkbox } from "../ui/checkbox";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
@@ -147,11 +147,7 @@ export function LocationFulfillmentWorkspace({
   }
   return (
     <div
-      className={
-        embedded
-          ? "space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
-          : "space-y-4"
-      }
+      className={embedded ? "space-y-4 rounded-xl border border-border bg-card p-5" : "space-y-4"}
     >
       {!embedded && (
         <Link href="/admin/locations" className="underline">

@@ -2,8 +2,8 @@
 import { useState } from "react";
 import type { AdminPromotionDetail, AdminPromotionUpdateRequest } from "@freshmarkets/contracts";
 import { adminPromotionUpdateBodySchema } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   PromotionProductTargetsEditor,
   type SaleTargetSelection,

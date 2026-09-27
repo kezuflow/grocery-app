@@ -33,14 +33,14 @@ import { PageHeader } from "../../../components/admin/admin-shell";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import { OrderIssueStatusBadge } from "../../../components/admin/order-issue-status-badge";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+} from "@/components/admin/shadcn/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -48,8 +48,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+} from "@/components/admin/shadcn/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 
 type State =
   | { phase: "loading" }
@@ -292,7 +292,7 @@ export default function IssuesPage() {
       <AdminLiveRegion message={notice} />
 
       {unresolved ? (
-        <Alert role="alert" className="border-[var(--fm-warning-border)]">
+        <Alert role="alert" className="border-border">
           <AlertTitle>Problem action awaiting confirmation</AlertTitle>
           <AlertDescription>
             {notice} Keep this problem open until Core returns a final result.
@@ -310,7 +310,7 @@ export default function IssuesPage() {
         </Alert>
       ) : null}
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Order issue queue</h2>
         <AdminIndexViews
           label="Order issue status views"
@@ -371,14 +371,14 @@ export default function IssuesPage() {
                       {orderLabel(issue)}
                     </Link>
                     {issue.orderNumber ? (
-                      <p className="mt-0.5 max-w-40 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
+                      <p className="mt-0.5 max-w-40 truncate font-mono text-xs text-muted-foreground">
                         {issue.orderId}
                       </p>
                     ) : null}
                   </TableCell>
                   <TableCell>
                     <p className="font-medium">{issue.customerName ?? "Customer"}</p>
-                    <p className="text-xs text-[var(--fm-text-muted)]">{issue.customerEmail}</p>
+                    <p className="text-xs text-muted-foreground">{issue.customerEmail}</p>
                     {issue.customerPhone && (
                       <a href={`tel:${issue.customerPhone}`} className="text-xs underline">
                         {issue.customerPhone}
@@ -393,11 +393,11 @@ export default function IssuesPage() {
                     >
                       {categoryLabel(issue.category)}
                     </Link>
-                    <p className="mt-0.5 truncate text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {issue.details ?? "No details provided"}
                     </p>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {date(issue.createdAt)}
                   </TableCell>
                   <TableCell>{issue.assignedStaffName ?? "Unassigned"}</TableCell>

@@ -6,14 +6,14 @@ import {
   categoryDetailResultSchema,
   useCategoryOptions,
 } from "@/components/admin/category-authoring-state";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
 import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../../admin-context-provider";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
@@ -108,7 +108,7 @@ export default function EditCategoryPage() {
   if (admin.state.phase !== "ready") return <p role="status">Loading Admin access…</p>;
   if (admin.state.selectedScope?.kind !== "GLOBAL")
     return (
-      <Alert variant="warning">
+      <Alert>
         <AlertDescription>Select Global scope to edit a category.</AlertDescription>
       </Alert>
     );
@@ -144,11 +144,11 @@ export default function EditCategoryPage() {
         </Button>
       ) : null}
       {dirty ? (
-        <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+        <p role="status" className="text-sm text-muted-foreground">
           Unsaved changes
         </p>
       ) : null}
-      <section className="max-w-2xl rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-6">
+      <section className="max-w-2xl rounded-xl border border-border bg-card p-6">
         <CategoryForm
           formId="edit-category-form"
           hideSubmit
@@ -166,7 +166,7 @@ export default function EditCategoryPage() {
           onSubmit={submit}
         />
       </section>
-      <div className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur">
+      <div className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-4 backdrop-blur">
         <Button
           type="button"
           variant="outline"

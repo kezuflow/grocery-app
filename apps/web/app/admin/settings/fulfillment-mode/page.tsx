@@ -7,17 +7,17 @@ import { useAdminCommandIntent } from "../../../../components/admin/admin-comman
 import { notifyCommandSuccess } from "../../../../components/admin/admin-feedback";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../../../components/ui/select";
-import { Skeleton } from "../../../../components/ui/skeleton";
+} from "@/components/admin/shadcn/select";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
 
@@ -223,21 +223,18 @@ export default function FulfillmentModePage() {
               </div>
             </div>
           </div>
-          <p className="border-t border-[var(--fm-border)] p-4 text-sm text-[var(--fm-muted-foreground)]">
+          <p className="border-t border-border p-4 text-sm text-muted-foreground">
             Active mode: <strong>{configuration.fulfillmentMode}</strong>. A mode switch is legal
             only while selling is paused and after mode-specific readiness passes.
           </p>
           {configuration.readinessBlockers.length > 0 ? (
-            <ul
-              className="border-t border-[var(--fm-border)] p-4 text-sm"
-              aria-label="Readiness blockers"
-            >
+            <ul className="border-t border-border p-4 text-sm" aria-label="Readiness blockers">
               {configuration.readinessBlockers.map((blocker) => (
                 <li key={blocker.code}>{blocker.message}</li>
               ))}
             </ul>
           ) : null}
-          <div className="space-y-3 border-t border-[var(--fm-border)] p-4">
+          <div className="space-y-3 border-t border-border p-4">
             <label className="block space-y-1 text-sm font-medium">
               Change reason
               <Input

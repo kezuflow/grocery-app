@@ -22,11 +22,17 @@ import {
 import { PageHeader, ListPageSection } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Checkbox } from "../ui/checkbox";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { LocationAddressMap } from "./location-address-map";
 import { useSetupNavigationLock } from "./location-setup-state";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
@@ -213,7 +219,7 @@ export function LocationsWorkspace({
         description="Set each fulfillment center's confirmed pickup address and exact map pin. Global service areas admit customer addresses, the closest active center fulfills them, and Lalamove confirms each delivery route."
       />
       {result.ok && !detailLocationId && (
-        <div className="mb-5 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+        <div className="mb-5 rounded-xl border border-border bg-card p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
           <div>
             <h2 className="font-semibold">Delivery coverage</h2>
             <p className="mt-1 text-sm text-muted-foreground">

@@ -10,10 +10,10 @@ import {
 } from "@freshmarkets/validation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAdminContext } from "../../../app/admin/admin-context-provider";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
 import { useAdminCommandIntent } from "../admin-command-state";
 import { notifyCommandSuccess } from "../admin-feedback";
 import { useSetupNavigationLock } from "../location-setup-state";
@@ -206,9 +206,9 @@ export function LocationDeliveryProfilePanel({
   }
 
   return (
-    <section className="rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
+    <section className="rounded-xl border border-border bg-card p-5">
       <h1 className="text-xl font-semibold">{view?.locationName ?? "Location"} courier pickup</h1>
-      <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
+      <p className="mt-2 text-sm text-muted-foreground">
         Coordinates come from this location's saved pin; these fields identify the sender and pickup
         address sent to the courier.
       </p>
@@ -235,7 +235,7 @@ export function LocationDeliveryProfilePanel({
       )}
       {loading ? <p className="mt-3 text-sm">Loading pickup profile…</p> : null}
       {message ? (
-        <Alert className="mt-3" variant="warning">
+        <Alert className="mt-3">
           <AlertTitle>Pickup profile</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
@@ -296,11 +296,11 @@ export function LocationDeliveryProfilePanel({
               maxLength={1000}
               disabled={!canManage || command.pending || pendingPayload !== null}
               defaultValue={view.profile?.pickupInstructions ?? ""}
-              className="mt-1 min-h-24 w-full rounded border border-[var(--fm-border)] px-3 py-2 text-sm"
+              className="mt-1 min-h-24 w-full rounded border border-border px-3 py-2 text-sm"
             />
           </div>
           <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-[var(--fm-text-muted)]">
+            <span className="text-xs text-muted-foreground">
               Store coordinate: {view.coordinate.latitude}, {view.coordinate.longitude}
             </span>
             {canManage ? (
@@ -320,7 +320,7 @@ export function LocationDeliveryProfilePanel({
                         : "Save pickup profile"}
               </Button>
             ) : (
-              <span className="text-xs text-[var(--fm-text-muted)]">Read-only access</span>
+              <span className="text-xs text-muted-foreground">Read-only access</span>
             )}
           </div>
         </form>

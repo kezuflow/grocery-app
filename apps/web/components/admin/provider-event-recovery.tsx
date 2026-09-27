@@ -2,8 +2,8 @@
 import { useState } from "react";
 import type { AdminReconciliationCaseView } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "./admin-feedback";
 const response = z.discriminatedUnion("ok", [
   z.object({

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { FulfillmentQueueView } from "@freshmarkets/contracts";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { StatusBadge } from "./admin-shell";
 import {
   AlertDialog,
@@ -12,7 +13,7 @@ import {
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
+} from "@/components/admin/shadcn/alert-dialog";
 
 const actionLabels: Record<string, string> = {
   START_PICKING: "Accept order & start picking",
@@ -114,17 +115,15 @@ export function OperationalOrderDetail({
   return (
     <aside
       aria-label={`Order ${detail.orderNumber} details`}
-      className={`space-y-5 rounded-xl border border-[var(--fm-border)] bg-[var(--fm-surface)] p-5 ${
+      className={`space-y-5 rounded-xl border border-border bg-card p-5 ${
         presentation === "station" ? "[&_button]:min-h-11 [&_input]:min-h-11" : ""
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-            {detail.fulfillmentMode}
-          </p>
+          <p className="text-xs font-semibold text-muted-foreground">{detail.fulfillmentMode}</p>
           <h2 className="text-xl font-semibold">Order {detail.orderNumber}</h2>
-          <p className="text-sm text-[var(--fm-text-muted)]">
+          <p className="text-sm text-muted-foreground">
             Paid {date(detail.committedAt, detail.timing.timezone)} · {detail.recipient.name} ·{" "}
             <span>{detail.recipient.phone}</span>
           </p>
@@ -145,26 +144,25 @@ export function OperationalOrderDetail({
         </div>
       </dl>
       {blockers.length ? (
-        <div
-          role="alert"
-          className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
-        >
-          <p className="font-semibold">Needs attention</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
-            {blockers.map((blocker, index) => (
-              <li key={`${index}-${blocker}`}>{blocker}</li>
-            ))}
-          </ul>
-        </div>
+        <Alert>
+          <AlertTitle>Needs attention</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-5">
+              {blockers.map((blocker, index) => (
+                <li key={`${index}-${blocker}`}>{blocker}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
       ) : null}
       <div>
         <h3 className="font-semibold">Ordered items</h3>
-        <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+        <p className="mt-1 text-sm text-muted-foreground">
           {detail.fulfillmentMode === "SCHEDULED"
             ? "After the delivery week purchase, physically pack and check every paid item. Finish packing order confirms this Order is packed accurately."
             : "Prepare each immutable paid quantity using the goods evidence shown below."}
         </p>
-        <ol className="mt-3 divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+        <ol className="mt-3 divide-y divide-border rounded-lg border border-border">
           {detail.lines.map((line, index) => (
             <li
               key={line.lineId}
@@ -172,14 +170,14 @@ export function OperationalOrderDetail({
             >
               <span
                 aria-hidden="true"
-                className="row-span-2 flex size-7 items-center justify-center rounded-full border border-[var(--fm-border)] bg-[var(--fm-workspace)] text-xs font-semibold"
+                className="row-span-2 flex size-7 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold"
               >
                 {index + 1}
               </span>
               <span className="min-w-0">
                 <span className="font-medium">{line.productName}</span>
                 {line.variantName ? ` · ${line.variantName}` : ""}
-                <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                <span className="mt-1 block text-xs text-muted-foreground">
                   {line.source === "COMMITTED_ADDITION" ? "Paid addition" : "Original order"}
                 </span>
               </span>
@@ -188,7 +186,7 @@ export function OperationalOrderDetail({
                   {line.quantity} {line.unit}
                 </span>
                 {detail.fulfillmentMode === "INSTANT" ? (
-                  <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                  <span className="mt-1 block text-xs text-muted-foreground">
                     {line.goods.kind === "INSTANT_RESERVATION" ? (
                       <>
                         {reservationEvidence(line.goods.status)} · {line.goods.allocatedBase}{" "}
@@ -214,11 +212,9 @@ export function OperationalOrderDetail({
         </ol>
       </div>
       {preparationActions.length || issueAction ? (
-        <div className="space-y-3 rounded-lg border border-[var(--fm-border)] p-4">
+        <div className="space-y-3 rounded-lg border border-border p-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-              Next status action
-            </p>
+            <p className="text-xs font-semibold text-muted-foreground">Next status action</p>
             <p className="mt-1 font-semibold">
               {nextAction
                 ? (actionLabels[nextAction] ?? nextAction)
@@ -253,7 +249,7 @@ export function OperationalOrderDetail({
             </div>
           ) : null}
           {canManage && issueAction ? (
-            <div className="space-y-2 border-t border-[var(--fm-border)] pt-3">
+            <div className="space-y-2 border-t border-border pt-3">
               <p className="text-sm font-medium">
                 {issueAction === "RECORD_SHORTAGE" ? "Item shortage" : "Shortage escalation"}
               </p>

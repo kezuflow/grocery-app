@@ -2,13 +2,13 @@
 import { adminCategorySummarySchema } from "@freshmarkets/validation";
 
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CategoryForm, type CategoryFormValue } from "@/components/admin/category-form";
 import { useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 
@@ -71,7 +71,7 @@ export function NewCategoryWorkspace({
   if (admin.state.phase !== "ready") return <p role="status">Loading Admin access…</p>;
   if (admin.state.selectedScope?.kind !== "GLOBAL")
     return (
-      <Alert variant="warning">
+      <Alert>
         <AlertDescription>Select Global scope to create a category.</AlertDescription>
       </Alert>
     );
@@ -84,12 +84,12 @@ export function NewCategoryWorkspace({
   return (
     <div className={embedded ? "flex h-full min-h-0 flex-col" : "space-y-6"}>
       {embedded ? (
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-5">
           <div>
-            <h2 id="create-category-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+            <h2 id="create-category-panel-title" className="text-xl font-bold tracking-tight">
               Add category
             </h2>
-            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-1 text-sm text-muted-foreground">
               Create a new catalog category and choose its position.
             </p>
           </div>
@@ -133,7 +133,7 @@ export function NewCategoryWorkspace({
             {parents.error ? "Retry parent categories" : "More parent categories"}
           </Button>
         ) : null}
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-6">
+        <section className="rounded-xl border border-border bg-card p-6">
           <CategoryForm
             value={value}
             categories={parents.items}

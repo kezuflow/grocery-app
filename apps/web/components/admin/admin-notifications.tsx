@@ -26,13 +26,13 @@ export function AdminNotificationList({
     return (
       <div role="status" className="p-4 text-sm">
         <p className="font-semibold">No recent notifications</p>
-        <p className="mt-1 text-[var(--fm-text-muted)]">
+        <p className="mt-1 text-muted-foreground">
           Updates for your access and selected scope will appear here.
         </p>
       </div>
     );
   return (
-    <ul className="divide-y divide-[var(--fm-border)]">
+    <ul className="divide-y divide-border">
       {notifications.map((notice) => (
         <li key={notice.id}>
           <Link
@@ -45,7 +45,7 @@ export function AdminNotificationList({
             }}
           >
             <span className="block break-words font-semibold">{notice.label}</span>
-            <span className="mt-0.5 block break-words text-[var(--fm-text-muted)]">
+            <span className="mt-0.5 block break-words text-muted-foreground">
               Order {notice.orderNumber}
             </span>
             <NotificationTimestamp value={notice.occurredAt} timezone={timezone} />
@@ -142,11 +142,11 @@ export function AdminNotifications() {
               onNavigate={close}
             />
             {operational.stale && state.selectedScope.kind === "LOCATION" ? (
-              <p role="status" className="border-t px-4 py-2 text-xs text-[var(--fm-text-muted)]">
+              <p role="status" className="border-t px-4 py-2 text-xs text-muted-foreground">
                 Updates are delayed; showing the last successful result.
               </p>
             ) : null}
-            <div className="border-t border-[var(--fm-border)] px-4 py-2">
+            <div className="border-t border-border px-4 py-2">
               <Link
                 className="inline-flex min-h-11 items-center text-sm font-semibold underline"
                 href="/admin#notifications"

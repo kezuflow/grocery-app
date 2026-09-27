@@ -6,8 +6,8 @@ import type { BannerMediaView } from "@freshmarkets/contracts";
 import { bannerMediaMaxBytes } from "@freshmarkets/contracts";
 import { bannerMediaViewSchema, storefrontBannerListSchema } from "@freshmarkets/validation";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { catalogResultSchema } from "./catalog-command-state";
 
@@ -270,24 +270,22 @@ export function BannerMediaEditor({
   return (
     <section
       aria-labelledby="banner-image-heading"
-      className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+      className="rounded-xl border border-border bg-card p-5 shadow-sm"
     >
       <h3 id="banner-image-heading" className="text-base font-semibold">
         Banner image
       </h3>
-      <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+      <p className="mt-1 text-sm text-muted-foreground">
         Choose one JPEG, PNG or WebP image up to 5 MiB and provide an accessible description.
       </p>
 
       {!canRead ? (
-        <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+        <p className="mt-4 text-sm text-muted-foreground">
           Banner image access requires a Global scope.
         </p>
       ) : !loaded ? (
-        <div className="mt-4 rounded-lg border border-dashed border-[var(--fm-border)] p-4">
-          <p className="text-sm text-[var(--fm-text-muted)]">
-            {loadError ?? "Loading banner image…"}
-          </p>
+        <div className="mt-4 rounded-lg border border-dashed border-border p-4">
+          <p className="text-sm text-muted-foreground">{loadError ?? "Loading banner image…"}</p>
           {loadError ? (
             <Button
               type="button"
@@ -302,7 +300,7 @@ export function BannerMediaEditor({
         </div>
       ) : (
         <>
-          <div className="mt-4 overflow-hidden rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)]">
+          <div className="mt-4 overflow-hidden rounded-lg border border-border bg-muted">
             {preview || media ? (
               <img
                 src={
@@ -313,7 +311,7 @@ export function BannerMediaEditor({
                 className="aspect-[20/9] w-full object-cover"
               />
             ) : (
-              <div className="flex aspect-[20/9] flex-col items-center justify-center gap-2 text-[var(--fm-text-muted)]">
+              <div className="flex aspect-[20/9] flex-col items-center justify-center gap-2 text-muted-foreground">
                 <ImageIcon className="size-7" aria-hidden="true" />
                 <span className="text-sm font-medium">No image attached</span>
               </div>
@@ -337,7 +335,7 @@ export function BannerMediaEditor({
                   />
                 </label>
                 <label className="block text-sm font-semibold">
-                  Image description<span className="text-red-600"> *</span>
+                  Image description<span className="text-destructive"> *</span>
                   <Input
                     maxLength={300}
                     value={altText}
@@ -379,7 +377,7 @@ export function BannerMediaEditor({
               </div>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-4 text-sm text-muted-foreground">
               {archived ? "Archived banner images are read-only." : "Banner images are read-only."}
             </p>
           )}

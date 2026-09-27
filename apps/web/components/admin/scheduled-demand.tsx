@@ -7,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../ui/table";
+} from "@/components/admin/shadcn/table";
 
 export function formatDemandQuantity(quantity: number, unit: string): string {
   const label =
@@ -43,12 +43,12 @@ export function ScheduledDemand({
           return (
             <TableRow
               key={JSON.stringify([item.skuId, item.inventoryPoolId, item.locationId])}
-              className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-3 lg:[&>td]:py-3"
+              className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-3 lg:[&>td]:py-3"
             >
               <TableCell className="col-span-2 whitespace-normal">
                 <p className="font-semibold">{item.productName}</p>
-                <p className="text-sm text-[var(--fm-text-muted)]">{item.variantName}</p>
-                <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                <p className="text-sm text-muted-foreground">{item.variantName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Recorded shipping weight:{" "}
                   {item.shippingGrams === null
                     ? "Not recorded"
@@ -56,22 +56,22 @@ export function ScheduledDemand({
                 </p>
               </TableCell>
               <TableCell className="col-span-2 text-sm lg:col-span-1">
-                <span className="block text-[var(--fm-text-muted)] lg:hidden">Destination</span>
+                <span className="block text-muted-foreground lg:hidden">Destination</span>
                 {item.locationName}
               </TableCell>
               <TableCell className="text-sm tabular-nums lg:text-right">
-                <span className="block text-[var(--fm-text-muted)] lg:hidden">Sold units</span>
+                <span className="block text-muted-foreground lg:hidden">Sold units</span>
                 {item.quantitySellable.toLocaleString("en-PH")}
               </TableCell>
               <TableCell className="text-sm font-semibold tabular-nums lg:text-right">
-                <span className="block font-normal text-[var(--fm-text-muted)] lg:hidden">
+                <span className="block font-normal text-muted-foreground lg:hidden">
                   Paid quantity
                 </span>
                 {formatDemandQuantity(item.quantityBase, item.baseUnit)}
               </TableCell>
               {global ? (
                 <TableCell className="col-span-2 text-sm lg:col-span-1">
-                  <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                  <span className="block text-muted-foreground lg:hidden">
                     All destinations, full cycle
                   </span>
                   <span className="block whitespace-nowrap tabular-nums">

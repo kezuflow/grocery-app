@@ -17,18 +17,26 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { notifyCommandError, notifyCommandSuccess } from "./admin-feedback";
 import { AdminStatusPill } from "./admin-status-pill";
 import { AdminIndexViews, ConfirmCommandDialog } from "./admin-controls";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Badge } from "@/components/admin/shadcn/badge";
+import { Button } from "@/components/admin/shadcn/button";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+} from "@/components/admin/shadcn/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 
 type ProductListItem = AdminProductPage["items"][number];
 
@@ -249,7 +257,7 @@ export function ProductListView({
       ] as const);
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Product list</h2>
         <AdminIndexViews
           label="Product status views"
@@ -257,11 +265,11 @@ export function ProductListView({
           value={status}
           onChange={onStatusChange}
         />
-        <div className="border-b border-[var(--fm-border)] px-4 py-3">
+        <div className="border-b border-border px-4 py-3">
           <p className="text-sm font-medium">
             {locationScope ? `${locationScope.locationName} pricing` : "Global catalog ownership"}
           </p>
-          <p className="mt-0.5 text-xs leading-5 text-[var(--fm-text-muted)]">
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
             {locationScope
               ? `${locationScope.locationName} owns the exact prices shown here. Product identity remains Global; exact inventory quantities stay in each scoped Product preview.`
               : "Global owns product identity, lifecycle, selling options, and categories. Exact prices and inventory context appear after choosing a fulfillment location."}
@@ -269,20 +277,17 @@ export function ProductListView({
         </div>
         <dl
           aria-label="Catalog readiness"
-          className="grid grid-cols-2 border-b border-[var(--fm-border)] bg-[var(--fm-surface-muted)] sm:grid-cols-3 lg:grid-cols-5"
+          className="grid grid-cols-2 border-b border-border bg-muted sm:grid-cols-3 lg:grid-cols-5"
         >
           {readiness.map(([label, value]) => (
-            <div
-              className="border-r border-[var(--fm-border)] px-4 py-3 last:border-r-0"
-              key={label}
-            >
-              <dt className="text-xs text-[var(--fm-text-muted)]">{label}</dt>
+            <div className="border-r border-border px-4 py-3 last:border-r-0" key={label}>
+              <dt className="text-xs text-muted-foreground">{label}</dt>
               <dd className="mt-0.5 text-base font-semibold tabular-nums">{value}</dd>
             </div>
           ))}
         </dl>
         {selectedIds.size > 0 ? (
-          <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5">
+          <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium" role="status" aria-live="polite">
                 {selectedIds.size} selected
@@ -314,7 +319,7 @@ export function ProductListView({
           <div
             role="toolbar"
             aria-label="Product table controls"
-            className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--fm-border)] px-4 py-2.5"
+            className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-2.5"
           >
             {filters ? (
               <Popover>
@@ -323,15 +328,13 @@ export function ProductListView({
                     <ListFilter aria-hidden="true" />
                     Filters
                     {activeFilterCount > 0 ? (
-                      <span className="rounded-full bg-[var(--fm-admin-accent-soft)] px-1.5 text-xs text-[var(--fm-admin-accent-strong)]">
-                        {activeFilterCount}
-                      </span>
+                      <Badge variant="secondary">{activeFilterCount}</Badge>
                     ) : null}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
-                  className="w-80 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+                  className="w-80 border-border bg-card p-3 text-foreground shadow-md"
                 >
                   <div className="grid gap-3">{filters}</div>
                 </PopoverContent>
@@ -348,16 +351,16 @@ export function ProductListView({
               </PopoverTrigger>
               <PopoverContent
                 align="end"
-                className="w-56 border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-2 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)]"
+                className="w-56 border-border bg-card p-2 text-foreground shadow-md"
               >
-                <p className="px-2 pb-1.5 text-xs font-medium text-[var(--fm-text-muted)]">
+                <p className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">
                   Show columns
                 </p>
                 <div className="grid gap-0.5">
                   {columnOptions.map((column) => (
                     <label
                       key={column.key}
-                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-[var(--fm-hover)]"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-accent"
                     >
                       <Checkbox
                         aria-label={`Toggle ${column.label} column`}
@@ -399,10 +402,8 @@ export function ProductListView({
               data-product-record={product.productId}
               data-preview-open={openProductId === product.productId ? "true" : undefined}
               data-state={selectedIds.has(product.productId) ? "selected" : undefined}
-              className={`rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 ${
-                openProductId === product.productId
-                  ? "border-[var(--fm-admin-accent-strong)] bg-[var(--fm-admin-accent-soft)]"
-                  : ""
+              className={`rounded-md border border-border bg-card p-3 ${
+                openProductId === product.productId ? "border-primary bg-secondary" : ""
               }`}
               onClick={(event) => {
                 if (!onOpenProduct) return;
@@ -431,15 +432,15 @@ export function ProductListView({
                 {product.primaryMedia ? (
                   <img
                     alt={product.primaryMedia.altText}
-                    className="size-11 shrink-0 rounded-md border border-[var(--fm-border)] object-cover"
+                    className="size-11 shrink-0 rounded-md border border-border object-cover"
                     height={44}
                     loading="lazy"
                     src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
                     width={44}
                   />
                 ) : (
-                  <span className="grid size-11 shrink-0 place-items-center rounded-md border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-muted)]">
-                    <ImageIcon className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+                  <span className="grid size-11 shrink-0 place-items-center rounded-md border border-dashed border-border bg-muted">
+                    <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
@@ -457,7 +458,7 @@ export function ProductListView({
                   ) : (
                     <span className="block truncate font-medium">{product.name}</span>
                   )}
-                  <span className="block truncate text-xs text-[var(--fm-text-muted)]">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {product.slug}
                   </span>
                 </div>
@@ -468,13 +469,13 @@ export function ProductListView({
                 />
               </div>
 
-              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--fm-border)] pt-3 text-sm">
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-3 text-sm">
                 <div>
-                  <dt className="text-xs text-[var(--fm-text-muted)]">Category</dt>
+                  <dt className="text-xs text-muted-foreground">Category</dt>
                   <dd className="mt-0.5 font-medium">{product.categoryCode}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-[var(--fm-text-muted)]">
+                  <dt className="text-xs text-muted-foreground">
                     {locationOperations ? "Priced variants" : "Active variants"}
                   </dt>
                   <dd className="mt-0.5 font-medium tabular-nums">
@@ -486,15 +487,15 @@ export function ProductListView({
                 {locationOperations ? (
                   <>
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Location price</dt>
+                      <dt className="text-xs text-muted-foreground">Location price</dt>
                       <dd
-                        className={`mt-0.5 ${product.priceRange ? "font-medium" : "text-[var(--fm-text-muted)]"}`}
+                        className={`mt-0.5 ${product.priceRange ? "font-medium" : "text-muted-foreground"}`}
                       >
                         {priceRange(product)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Selling status</dt>
+                      <dt className="text-xs text-muted-foreground">Selling status</dt>
                       <dd className="mt-0.5 font-medium tabular-nums">
                         {product.availableSkuCount} / {product.activeSkuCount} selling
                       </dd>
@@ -503,7 +504,7 @@ export function ProductListView({
                 ) : null}
               </dl>
 
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--fm-border)] pt-3">
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
                 <Button asChild size="sm" variant="outline">
                   <a
                     href={`/admin/catalog/products/${product.productId}${fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""}`}
@@ -548,7 +549,7 @@ export function ProductListView({
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                          className="text-destructive focus:bg-muted focus:text-destructive"
                           disabled={deactivationPending || !onDeactivateSelected}
                           onSelect={() => setRowToDeactivate(product)}
                         >
@@ -620,9 +621,7 @@ export function ProductListView({
                   className={
                     onOpenProduct
                       ? `cursor-pointer ${
-                          openProductId === product.productId
-                            ? "bg-[var(--fm-admin-accent-soft)]"
-                            : ""
+                          openProductId === product.productId ? "bg-secondary" : ""
                         }`
                       : undefined
                   }
@@ -656,15 +655,15 @@ export function ProductListView({
                       {product.primaryMedia ? (
                         <img
                           alt={product.primaryMedia.altText}
-                          className="size-11 rounded-md border border-[var(--fm-border)] object-cover"
+                          className="size-11 rounded-md border border-border object-cover"
                           height={44}
                           loading="lazy"
                           src={`/api/admin/catalog/products/${encodeURIComponent(product.productId)}/media/${encodeURIComponent(product.primaryMedia.mediaId)}/content?v=${product.primaryMedia.version}${locationScope ? `&locationId=${encodeURIComponent(locationScope.locationId)}` : ""}`}
                           width={44}
                         />
                       ) : (
-                        <span className="grid size-11 place-items-center rounded-md border border-dashed border-[var(--fm-border)] bg-[var(--fm-surface-muted)]">
-                          <ImageIcon className="size-4 text-[var(--fm-text-muted)]" aria-hidden />
+                        <span className="grid size-11 place-items-center rounded-md border border-dashed border-border bg-muted">
+                          <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
                         </span>
                       )}
                       <span>
@@ -682,9 +681,7 @@ export function ProductListView({
                         ) : (
                           <span className="block font-medium">{product.name}</span>
                         )}
-                        <span className="block text-xs text-[var(--fm-text-muted)]">
-                          {product.slug}
-                        </span>
+                        <span className="block text-xs text-muted-foreground">{product.slug}</span>
                       </span>
                     </div>
                   </TableCell>
@@ -694,9 +691,7 @@ export function ProductListView({
                   {locationOperations && visibleColumns.has("price") ? (
                     <TableCell>
                       <span
-                        className={
-                          product.priceRange ? "font-medium" : "text-[var(--fm-text-muted)]"
-                        }
+                        className={product.priceRange ? "font-medium" : "text-muted-foreground"}
                       >
                         {priceRange(product)}
                       </span>
@@ -774,7 +769,7 @@ export function ProductListView({
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                              className="text-destructive focus:bg-muted focus:text-destructive"
                               disabled={deactivationPending || !onDeactivateSelected}
                               onSelect={() => setRowToDeactivate(product)}
                             >
@@ -792,7 +787,7 @@ export function ProductListView({
           </Table>
         </div>
         {page.items.length === 0 ? (
-          <p className="p-8 text-center text-sm text-[var(--fm-text-muted)]" role="status">
+          <p className="p-8 text-center text-sm text-muted-foreground" role="status">
             No products match the current filters.
           </p>
         ) : null}

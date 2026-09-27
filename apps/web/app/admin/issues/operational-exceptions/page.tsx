@@ -7,9 +7,9 @@ import type {
   OperationalExceptionPage,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
-import { Button } from "../../../../components/ui/button";
-import { Skeleton } from "../../../../components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../../components/admin/use-admin-location";
 import {
@@ -163,7 +163,7 @@ export default function OperationalExceptionsPage() {
             </p>
           ) : null}
           {currentPage.items.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+            <p className="p-5 text-sm text-muted-foreground">
               No operational exceptions for this location.
             </p>
           ) : (
@@ -185,7 +185,7 @@ export default function OperationalExceptionsPage() {
                       <TableCell>
                         <div className="space-y-1">
                           <StatusBadge>{displayCode(item.source)}</StatusBadge>
-                          <div className="text-xs text-[var(--fm-text-muted)]">
+                          <div className="text-xs text-muted-foreground">
                             {displayCode(item.severity)}
                           </div>
                         </div>
@@ -201,7 +201,7 @@ export default function OperationalExceptionsPage() {
                             Open {item.source.toLowerCase()}
                           </Link>
                         ) : (
-                          <span className="font-sans text-[var(--fm-text-muted)]">
+                          <span className="font-sans text-muted-foreground">
                             Source link unavailable
                           </span>
                         )}
@@ -224,7 +224,7 @@ export default function OperationalExceptionsPage() {
                               <StatusBadge key={action}>{displayCode(action)}</StatusBadge>
                             ))
                           ) : (
-                            <span className="text-xs text-[var(--fm-text-muted)]">
+                            <span className="text-xs text-muted-foreground">
                               Source-owned; unavailable here
                             </span>
                           )}

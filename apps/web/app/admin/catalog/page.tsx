@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import {
   Table,
   TableBody,
@@ -15,7 +15,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { useAdminContext } from "../admin-context-provider";
 
 type UnitState =
@@ -81,7 +81,7 @@ export default function CatalogPage() {
           <Skeleton className="h-32 w-full" />
         </div>
       ) : admin.state.selectedScope?.kind !== "GLOBAL" ? (
-        <Alert variant="warning">
+        <Alert>
           <AlertTitle>Global catalog reference</AlertTitle>
           <AlertDescription>
             Select Global scope to see controlled units. Products at this fulfillment location
@@ -97,9 +97,9 @@ export default function CatalogPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
-            <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="text-base font-semibold">Products</h2>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Manage Global identity, selling options and lifecycle in the Product workspace.
                 Exact prices and inventory belong to a selected fulfillment location.
               </p>
@@ -109,9 +109,9 @@ export default function CatalogPage() {
                 </Link>
               </Button>
             </section>
-            <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="text-base font-semibold">Categories</h2>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Maintain the existing catalog hierarchy and Product assignments in Categories.
               </p>
               <Button asChild size="sm" variant="outline" className="mt-4">
@@ -121,10 +121,10 @@ export default function CatalogPage() {
               </Button>
             </section>
           </div>
-          <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
-            <div className="border-b border-[var(--fm-border)] px-5 py-4">
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="border-b border-border px-5 py-4">
               <h2 className="text-base font-semibold">Controlled units</h2>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Weighed options use exact gram stock. For a named size sold as a piece or pack,
                 count the actual ready-to-sell items at the fulfillment location: 10 Small packs
                 means 10 Small units available, and selling 2 leaves 8. Pack is a selling label, not
@@ -145,18 +145,18 @@ export default function CatalogPage() {
                 </AlertDescription>
               </Alert>
             ) : state.units.length === 0 ? (
-              <p role="status" className="p-5 text-sm text-[var(--fm-text-muted)]">
+              <p role="status" className="p-5 text-sm text-muted-foreground">
                 No controlled units are defined.
               </p>
             ) : (
               <>
-                <div className="divide-y divide-[var(--fm-border)] md:hidden">
+                <div className="divide-y divide-border md:hidden">
                   {state.units.map((unit) => (
                     <article key={unit.unitId} className="space-y-2 p-4 text-sm">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="font-semibold">{unit.displayName}</h3>
-                          <p className="text-xs text-[var(--fm-text-muted)]">{unit.code}</p>
+                          <p className="text-xs text-muted-foreground">{unit.code}</p>
                         </div>
                         <AdminStatusPill
                           status={unit.status}
@@ -184,9 +184,7 @@ export default function CatalogPage() {
                         <TableRow key={unit.unitId}>
                           <TableCell>
                             <span className="font-medium">{unit.displayName}</span>
-                            <span className="block text-xs text-[var(--fm-text-muted)]">
-                              {unit.code}
-                            </span>
+                            <span className="block text-xs text-muted-foreground">{unit.code}</span>
                           </TableCell>
                           <TableCell>{unit.dimension}</TableCell>
                           <TableCell>{conversion(unit)}</TableCell>

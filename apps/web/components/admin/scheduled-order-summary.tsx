@@ -10,7 +10,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../ui/table";
+} from "@/components/admin/shadcn/table";
 
 export function formatScheduledQuantity(
   quantity: number,

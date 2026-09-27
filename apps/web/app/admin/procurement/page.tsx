@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { ScheduledWeekView } from "@freshmarkets/contracts";
 import { z, scheduledWeekViewSchema } from "@freshmarkets/validation";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "../../../components/ui/sheet";
+} from "@/components/admin/shadcn/sheet";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminCursorPagination, AdminIndexViews } from "../../../components/admin/admin-controls";
@@ -187,12 +187,12 @@ export default function ProcurementPage() {
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)]">
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <label className="grid min-w-0 max-w-lg flex-1 gap-2 text-sm font-medium">
               Delivery week
               <select
                 aria-label="Delivery week"
-                className="h-10 min-w-0 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3"
+                className="h-10 min-w-0 w-full rounded-md border border-border bg-card px-3"
                 value={cycleId}
                 disabled={command.busy || command.uncertain}
                 onChange={(event) => {
@@ -217,38 +217,30 @@ export default function ProcurementPage() {
             ) : null}
           </div>
           {visibleError ? (
-            <div
-              role="alert"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-danger-border)] bg-[var(--fm-danger-soft)] p-4 text-sm"
-            >
+            <div role="alert" className="rounded-xl border border-border bg-muted p-4 text-sm">
               {visibleError}{" "}
               <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
                 Reload
               </Button>
             </div>
           ) : !view && !week ? (
-            <p
-              role="status"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 text-sm"
-            >
+            <p role="status" className="rounded-xl border border-border bg-card p-4 text-sm">
               Loading delivery week…
             </p>
           ) : null}
           {week ? (
             <>
               <section
-                className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 shadow-[var(--fm-shadow-card)] sm:p-5"
+                className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
                 aria-label="Delivery week dates"
               >
                 <div className="flex flex-wrap items-center gap-3">
                   <h2 className="text-lg font-semibold">{week.name}</h2>
                   <StatusBadge>{plain(week.status)}</StatusBadge>
-                  <span className="text-xs text-[var(--fm-text-muted)]">{week.timezone}</span>
+                  <span className="text-xs text-muted-foreground">{week.timezone}</span>
                 </div>
-                <div className="mt-4 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-                    Customer arrival
-                  </h3>
+                <div className="mt-4 rounded-md border border-border bg-muted p-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground">Customer arrival</h3>
                   {week.windows.length === 0 ? (
                     <p className="mt-2 text-sm">No customer delivery range recorded.</p>
                   ) : (
@@ -275,7 +267,7 @@ export default function ProcurementPage() {
                     ["Pickup planned", week.pickupAt],
                   ].map(([name, value]) => (
                     <div key={String(name)}>
-                      <dt className="text-[var(--fm-text-muted)]">{name}</dt>
+                      <dt className="text-muted-foreground">{name}</dt>
                       <dd className="mt-0.5 font-medium tabular-nums">
                         {date(typeof value === "number" ? value : null)}
                       </dd>
@@ -283,13 +275,13 @@ export default function ProcurementPage() {
                   ))}
                 </dl>
                 {week.status === "CUTOFF_REACHED" && week.cutoffAt > Date.now() ? (
-                  <p className="mt-4 text-sm text-[var(--fm-text-muted)]">
+                  <p className="mt-4 text-sm text-muted-foreground">
                     New ordering was closed early. The displayed cutoff still governs existing paid
                     orders and when purchasing can begin.
                   </p>
                 ) : null}
                 {locationId ? (
-                  <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--fm-border)] pt-4">
+                  <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4">
                     {week.completion ? (
                       <p className="text-sm">
                         Purchase completed {date(week.completion.purchaseCompletedAt)}
@@ -455,10 +447,7 @@ export default function ProcurementPage() {
                   />
                 </ListPageSection>
               ) : !visibleError ? (
-                <p
-                  role="status"
-                  className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-4 text-sm"
-                >
+                <p role="status" className="rounded-xl border border-border bg-card p-4 text-sm">
                   Loading {sectionNames[section].toLowerCase()}…
                 </p>
               ) : null}

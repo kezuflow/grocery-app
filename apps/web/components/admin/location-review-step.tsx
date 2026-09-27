@@ -7,8 +7,8 @@ import { useLocationSetup, useSetupNavigationLock } from "./location-setup-state
 import { LocationFulfillmentWorkspace } from "./location-fulfillment-workspace";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import { AdminStatusPill } from "./admin-status-pill";
@@ -133,7 +133,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
         Refresh review
       </Button>
       <dl className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
+        <div className="space-y-2 rounded-xl border border-border bg-card p-4">
           <dt className="font-medium">Location</dt>
           <dd>
             {data.location.address
@@ -147,7 +147,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             </Link>
           </dd>
         </div>
-        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
+        <div className="space-y-2 rounded-xl border border-border bg-card p-4">
           <dt className="font-medium">Pickup contact</dt>
           <dd>{data.pickup ? (data.pickup.profile?.senderName ?? "Not saved") : "Unavailable"}</dd>
           <dd>
@@ -156,7 +156,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             </Link>
           </dd>
         </div>
-        <div className="space-y-2 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-4">
+        <div className="space-y-2 rounded-xl border border-border bg-card p-4">
           <dt className="font-medium">Instant operating hours</dt>
           <dd>
             {data.hours
@@ -174,7 +174,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
       </dl>
       {data.location.status === "inactive" && (
         <form
-          className="space-y-4 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+          className="space-y-4 rounded-xl border border-border bg-card p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void changeStatus();
@@ -206,7 +206,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
         </form>
       )}
       {data.location.status === "active" && data.canManage && (
-        <div className="rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5">
+        <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="font-semibold">Location status</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Deactivate this location to stop new fulfillment work. Core checks existing obligations
@@ -262,10 +262,7 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
         />
       )}
       {!pending && !data.readiness && (
-        <div
-          role="alert"
-          className="rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
-        >
+        <div role="alert" className="rounded-xl border border-border bg-card p-5">
           Dispatch settings could not be loaded.{" "}
           <Button variant="outline" onClick={reload}>
             Retry review

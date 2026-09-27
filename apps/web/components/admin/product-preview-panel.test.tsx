@@ -70,7 +70,7 @@ describe("GlobalProductPreviewPanel", () => {
       "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock.",
     );
     expect(html).toContain(
-      'class="mt-6 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] pt-5"',
+      'class="mt-6 flex items-center justify-between gap-3 border-t border-border pt-5"',
     );
     expect(html).not.toContain("min-h-11 items-center rounded-lg border");
     expect(html).toContain("Zucchini");

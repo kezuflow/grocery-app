@@ -21,8 +21,8 @@ import { useAdminCommandIntent } from "@/components/admin/admin-command-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
 import { ProductDraftPreview } from "@/components/admin/product-draft-preview";
 import { X } from "lucide-react";
@@ -329,7 +329,7 @@ export function NewProductWorkspace({
   }
   if (admin.state.phase === "ready" && admin.state.selectedScope?.kind !== "GLOBAL") {
     return (
-      <Alert variant="warning">
+      <Alert>
         <AlertDescription>
           Select Global scope to create a product. The current location scope can view its catalog
           and prices. <Link href="/admin/catalog/products">Open Products</Link>.
@@ -375,7 +375,7 @@ export function NewProductWorkspace({
         type="submit"
         form={CREATE_PRODUCT_FORM_ID}
         size="sm"
-        className="fm-admin-reference-primary"
+        className=""
         disabled={intent.pending || unitsLoading || !!unitsError}
       >
         {intent.pending ? "Saving…" : recovering ? "Retry saved setup" : "Create product"}
@@ -388,12 +388,12 @@ export function NewProductWorkspace({
   return (
     <div className={embedded ? "flex h-full min-h-0 flex-col" : "w-full space-y-5"}>
       {embedded ? (
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-5">
           <div>
-            <h2 id="create-product-panel-title" className="text-xl font-bold tracking-[-0.03em]">
+            <h2 id="create-product-panel-title" className="text-xl font-bold tracking-tight">
               Add product
             </h2>
-            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-1 text-sm text-muted-foreground">
               Create the product, selling options, and initial images.
             </p>
           </div>
@@ -454,8 +454,8 @@ export function NewProductWorkspace({
       <div
         className={
           embedded
-            ? "flex shrink-0 justify-end border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4"
-            : "sticky bottom-0 z-20 -mx-4 flex justify-end border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+            ? "flex shrink-0 justify-end border-t border-border bg-card px-5 py-4"
+            : "sticky bottom-0 z-20 -mx-4 flex justify-end border-t border-border bg-card/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
         }
       >
         {actions}

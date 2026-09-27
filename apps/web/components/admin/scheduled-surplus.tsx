@@ -1,9 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { ScheduledSurplusView } from "@freshmarkets/contracts";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/admin/shadcn/sheet";
 import { useAdminCommand } from "./use-admin-command";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";

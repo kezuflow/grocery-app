@@ -14,10 +14,10 @@ import {
 } from "@freshmarkets/validation";
 import { ScheduledCountedReceiving } from "../../../components/admin/scheduled-counted-receiving";
 import { ScheduledSurplus } from "../../../components/admin/scheduled-surplus";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import {
   Table,
   TableBody,
@@ -25,7 +25,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
@@ -337,7 +337,7 @@ export default function ReceivingPage() {
               </p>
             ) : null}
             {visiblePage.items.length === 0 ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+              <p className="p-5 text-sm text-muted-foreground">
                 No receiving sessions for this location.
               </p>
             ) : (
@@ -355,17 +355,17 @@ export default function ReceivingPage() {
                     {visiblePage.items.map((item) => (
                       <TableRow
                         key={item.receivingSessionId}
-                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                        className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                       >
                         <TableCell className="col-span-2 lg:table-cell">
                           <p className="font-medium">{item.productName ?? "Historical product"}</p>
                           {item.variantName ? <p className="text-sm">{item.variantName}</p> : null}
-                          <p className="text-xs text-[var(--fm-text-muted)]">
+                          <p className="text-xs text-muted-foreground">
                             {item.cycleName ?? "Retained cycle"}
                           </p>
                         </TableCell>
                         <TableCell className="col-span-2 space-y-1 text-sm tabular-nums lg:col-span-1">
-                          <span className="mb-1 block text-xs text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="mb-1 block text-xs text-muted-foreground lg:hidden">
                             Expected / inspected
                           </span>
                           <p>Expected: {receivingQuantity(item.expectedBase, item.baseUnit)}</p>
@@ -405,7 +405,7 @@ export default function ReceivingPage() {
                             </p>
                           ) : null}
                           {(item.legacyAcceptedBase ?? 0) > 0 ? (
-                            <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+                            <p className="mt-1 text-xs text-muted-foreground">
                               {receivingQuantity(item.legacyAcceptedBase ?? 0, item.baseUnit)}{" "}
                               accepted before cycle allocation tracking. Review retained stock
                               evidence before allocating these goods.

@@ -3,16 +3,16 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import { cn } from "../../lib/utils";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/admin/shadcn/tabs";
 import {
   AlertDialog,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
+} from "@/components/admin/shadcn/alert-dialog";
 
 /** Compact view tabs shared by real Admin index pages. */
 export function AdminIndexViews<T extends string>({
@@ -70,7 +70,7 @@ export function AdminCursorPagination({
   return (
     <nav
       aria-label="Results pagination"
-      className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--fm-border)] p-3"
+      className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-3"
     >
       <Button
         type="button"
@@ -86,7 +86,7 @@ export function AdminCursorPagination({
           {numberedPages.map((page, index) => (
             <div key={page} className="flex items-center gap-1">
               {index > 0 && page - numberedPages[index - 1]! > 1 ? (
-                <span aria-hidden="true" className="px-1 text-[var(--fm-text-muted)]">
+                <span aria-hidden="true" className="px-1 text-muted-foreground">
                   …
                 </span>
               ) : null}
@@ -113,7 +113,7 @@ export function AdminCursorPagination({
           ))}
         </div>
       ) : (
-        <span className="text-xs text-[var(--fm-text-muted)]">Page {pageNumber}</span>
+        <span className="text-xs text-muted-foreground">Page {pageNumber}</span>
       )}
       <Button
         type="button"
@@ -272,13 +272,11 @@ export function AdminConfirmationDialog({
           <dt className="font-medium">Scope</dt>
           <dd>{scope}</dd>
         </dl>
-        <AlertDialogDescription
-          className={destructive ? "text-[var(--fm-destructive)]" : undefined}
-        >
+        <AlertDialogDescription className={destructive ? "text-destructive" : undefined}>
           {consequence}
         </AlertDialogDescription>
         {error && (
-          <p role="alert" className="text-sm text-[var(--fm-destructive)]">
+          <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
@@ -337,7 +335,7 @@ export function FilterBar({
       aria-label={label}
       className={cn(
         variant === "card" &&
-          "flex flex-col gap-3 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 sm:flex-row sm:flex-wrap sm:items-center",
+          "flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center",
         variant === "section" && "flex flex-wrap items-end gap-2 border-b p-4",
       )}
       onSubmit={(event) => {

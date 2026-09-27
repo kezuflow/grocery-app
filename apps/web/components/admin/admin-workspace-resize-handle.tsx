@@ -129,8 +129,8 @@ export function AdminWorkspaceResizeHandle({
       <span
         aria-hidden="true"
         className={cn(
-          "h-12 w-1 rounded-full bg-[var(--fm-border)] transition-[transform,background-color] duration-150 group-hover:bg-[var(--fm-admin-accent)] group-focus-visible:bg-[var(--fm-admin-accent)] motion-reduce:transition-[background-color]",
-          resizing && "scale-y-150 bg-[var(--fm-admin-accent)]",
+          "h-12 w-1 rounded-full bg-border transition-[transform,background-color] duration-150 group-hover:bg-primary group-focus-visible:bg-primary motion-reduce:transition-[background-color]",
+          resizing && "scale-y-150 bg-primary",
         )}
       />
     </div>

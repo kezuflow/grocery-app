@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { AdminDeliveryOperationView, ManualDeliveryAction } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   AlertDialog,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
-} from "../../ui/alert-dialog";
+} from "@/components/admin/shadcn/alert-dialog";
 import { notifyCommandSuccess } from "../admin-feedback";
 
 const labels: Record<ManualDeliveryAction, string> = {

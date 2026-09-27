@@ -20,10 +20,16 @@ import { PageHeader } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { GoogleMap } from "../maps/google-map";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 
@@ -402,7 +408,7 @@ export function ServiceAreasWorkspace({
               </Button>
             )}
           </div>
-          <ol className="overflow-hidden rounded-xl border border-border bg-[var(--fm-admin-surface)] divide-y divide-border">
+          <ol className="overflow-hidden rounded-xl border border-border bg-card divide-y divide-border">
             {result.value.areas.map((area, index) => (
               <li
                 key={area.serviceAreaId}
@@ -446,7 +452,7 @@ export function ServiceAreasWorkspace({
           )}
           {draft && result.value.canManage && (
             <form
-              className="space-y-5 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5"
+              className="space-y-5 rounded-xl border border-border bg-card p-5"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!serviceAreaDefinitionSchema.safeParse(draft).success || !draft.reason.trim()) {
@@ -540,7 +546,7 @@ export function ServiceAreasWorkspace({
               )}
             </form>
           )}
-          <section className="space-y-3 rounded-xl border border-border bg-[var(--fm-admin-surface)] p-5">
+          <section className="space-y-3 rounded-xl border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">Preview a customer address pin</h2>
             <p className="text-sm text-muted-foreground">
               Checks the active global areas and current fulfillment readiness. Lalamove route

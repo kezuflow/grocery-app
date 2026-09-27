@@ -74,7 +74,7 @@ export function LocationSetupNavigation({ locationId }: { locationId: string }) 
             key={path}
             href={`${base}${path}`}
             aria-current={pathname === `${base}${path}` ? "page" : undefined}
-            className="rounded-xl border border-border bg-[var(--fm-admin-surface)] px-3 py-3 text-sm transition-colors hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-muted aria-[current=page]:font-semibold"
+            className="rounded-xl border border-border bg-card px-3 py-3 text-sm transition-colors hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-muted aria-[current=page]:font-semibold"
           >
             <span className="flex items-center gap-2">
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs tabular-nums">

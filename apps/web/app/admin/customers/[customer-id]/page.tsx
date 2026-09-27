@@ -13,9 +13,9 @@ import { CustomerPrivacyPanel } from "../../../../components/admin/customer-priv
 import { CustomerSupportPanel } from "../../../../components/admin/customer-support-panel";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
 import { useAdminRouteGuard } from "../../../../components/admin/use-admin-route-guard";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../admin-context-provider";
 
 type LoadState =
@@ -230,7 +230,7 @@ function CustomerDetailWorkspace({
       <section className="space-y-5" aria-labelledby="admin-page-title">
         <Link
           href={listHref}
-          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Customers
@@ -278,7 +278,7 @@ function CustomerDetailWorkspace({
     <div className="w-full space-y-6 [&_h1]:break-all">
       <Link
         href={listHref}
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Customers
@@ -294,10 +294,7 @@ function CustomerDetailWorkspace({
       />
 
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
           {notice}
         </p>
       ) : null}
@@ -336,11 +333,9 @@ function CustomerDetailWorkspace({
             description="Sanitized material changes recorded for this customer."
           >
             {customer.recentAudit.length === 0 ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
-                No material history recorded.
-              </p>
+              <p className="p-5 text-sm text-muted-foreground">No material history recorded.</p>
             ) : (
-              <ol className="divide-y divide-[var(--fm-border)]">
+              <ol className="divide-y divide-border">
                 {customer.recentAudit.map((event) => (
                   <li key={event.auditEventId} className="space-y-2 p-5 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -348,11 +343,11 @@ function CustomerDetailWorkspace({
                       <time dateTime={event.occurredAt}>{date(event.occurredAt)}</time>
                     </div>
                     {event.reason ? (
-                      <p className="whitespace-pre-wrap break-words text-[var(--fm-text-muted)]">
+                      <p className="whitespace-pre-wrap break-words text-muted-foreground">
                         {event.reason}
                       </p>
                     ) : null}
-                    <details className="text-xs text-[var(--fm-text-muted)]">
+                    <details className="text-xs text-muted-foreground">
                       <summary className="cursor-pointer font-medium">Technical evidence</summary>
                       <dl className="mt-2 grid gap-1 break-all">
                         <div>
@@ -378,11 +373,11 @@ function CustomerDetailWorkspace({
           <ListPageSection title="Contact" description="Current account contact details.">
             <dl className="grid gap-4 p-5 text-sm">
               <div className="min-w-0">
-                <dt className="text-[var(--fm-text-muted)]">Email</dt>
+                <dt className="text-muted-foreground">Email</dt>
                 <dd className="break-all font-medium">{customer.email}</dd>
               </div>
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Phone</dt>
+                <dt className="text-muted-foreground">Phone</dt>
                 <dd>{customer.phone ?? "None recorded"}</dd>
               </div>
             </dl>
@@ -391,19 +386,19 @@ function CustomerDetailWorkspace({
           <ListPageSection title="Customer summary" description="Current account and order facts.">
             <dl className="grid grid-cols-2 gap-4 p-5 text-sm">
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Orders</dt>
+                <dt className="text-muted-foreground">Orders</dt>
                 <dd className="text-lg font-semibold">{customer.orderCount}</dd>
               </div>
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Last order</dt>
+                <dt className="text-muted-foreground">Last order</dt>
                 <dd>{date(customer.lastOrderAt)}</dd>
               </div>
               <div className="col-span-2">
-                <dt className="text-[var(--fm-text-muted)]">Legacy membership</dt>
+                <dt className="text-muted-foreground">Legacy membership</dt>
                 <dd>{customer.subscriptionState ?? "No membership history"}</dd>
               </div>
             </dl>
-            <details className="border-t border-[var(--fm-border)] p-5 text-xs text-[var(--fm-text-muted)]">
+            <details className="border-t border-border p-5 text-xs text-muted-foreground">
               <summary className="cursor-pointer font-medium">Technical account details</summary>
               <dl className="mt-3 grid gap-2 break-all">
                 <div>
@@ -457,7 +452,7 @@ function CustomerDetailWorkspace({
                 </div>
               </div>
             ) : (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]">
+              <p className="p-5 text-sm text-muted-foreground">
                 You can review this record. Customer access and session actions require
                 customers.manage.
               </p>

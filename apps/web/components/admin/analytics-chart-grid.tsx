@@ -33,7 +33,7 @@ export function AnalyticsChartGrid({ series }: { series: ReadonlyArray<MetricSer
                 </Suspense>
               </div>
             ) : (
-              <p className="py-8 text-sm text-[var(--fm-text-muted)]">
+              <p className="py-8 text-sm text-muted-foreground">
                 {metric.unavailableReason ??
                   "No authoritative points are available for this window."}
               </p>

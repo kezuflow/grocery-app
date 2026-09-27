@@ -41,7 +41,7 @@ export function AdminCommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(15_23_42_/_0.4)] duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none!" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 duration-(--fm-motion-base) ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none!" />
         <DialogPrimitive.Content
           aria-label="Admin command palette"
           onCloseAutoFocus={(event) => {
@@ -63,37 +63,37 @@ export function AdminCommandPalette({
             event.preventDefault();
             target.focus();
           }}
-          className="fixed left-1/2 top-[20%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-[var(--fm-background)] text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] duration-(--fm-motion-base) ease-out focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none!"
+          className="fixed left-1/2 top-[20%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-md duration-(--fm-motion-base) ease-out focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none!"
         >
           <DialogPrimitive.Title className="sr-only">Admin command palette</DialogPrimitive.Title>
           <CommandPrimitive label="Admin command palette" className="flex flex-col">
-            <div className="flex h-12 items-center gap-2.5 border-b border-[var(--fm-border)] px-4">
-              <Search className="size-4 shrink-0 text-[var(--fm-text-muted)]" aria-hidden="true" />
+            <div className="flex h-12 items-center gap-2.5 border-b border-border px-4">
+              <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <CommandPrimitive.Input
                 autoFocus
                 placeholder="Search workspaces..."
-                className="h-full w-full bg-transparent text-sm text-[var(--fm-text)] outline-none placeholder:text-[var(--fm-text-muted)]"
+                className="h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
               />
             </div>
             <CommandPrimitive.List className="max-h-80 overflow-y-auto overflow-x-hidden p-1">
-              <CommandPrimitive.Empty className="px-3 py-6 text-center text-sm text-[var(--fm-text-muted)]">
+              <CommandPrimitive.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
                 No matching workspaces.
               </CommandPrimitive.Empty>
               {groups.map((group) => (
                 <CommandPrimitive.Group
                   key={group.code}
                   heading={group.label}
-                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-[var(--fm-text-muted)]"
+                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
                 >
                   {commandPaletteEntries(group).map((entry) => (
                     <CommandPrimitive.Item
                       key={entry.code}
                       value={entry.label}
                       onSelect={() => select(entry.href)}
-                      className="flex min-h-9 cursor-default items-center gap-2.5 rounded-[var(--fm-radius-control)] px-2.5 text-sm text-[var(--fm-text)] data-[selected=true]:bg-[var(--fm-hover)] data-[selected=true]:outline-none"
+                      className="flex min-h-9 cursor-default items-center gap-2.5 rounded-md px-2.5 text-sm text-foreground data-[selected=true]:bg-accent data-[selected=true]:outline-none"
                     >
                       <entry.icon
-                        className="size-4 shrink-0 text-[var(--fm-text-muted)]"
+                        className="size-4 shrink-0 text-muted-foreground"
                         aria-hidden="true"
                       />
                       {entry.label}

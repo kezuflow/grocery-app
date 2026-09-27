@@ -7,19 +7,19 @@ import type {
   AdminDeliveryCyclePage,
   DeliveryCycleDraft,
 } from "@freshmarkets/contracts";
-import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/admin/shadcn/calendar";
+import { Button } from "@/components/admin/shadcn/button";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/admin/shadcn/select";
 import { CycleTimeline } from "./cycle-timeline";
 import {
   addBusinessDays,
@@ -74,7 +74,7 @@ function DateButton({
           aria-invalid={invalid}
           className="w-full justify-start font-normal"
         >
-          <CalendarDays aria-hidden className="size-4 text-[var(--fm-text-muted)]" />
+          <CalendarDays aria-hidden className="size-4 text-muted-foreground" />
           {displayDate(value)}
         </Button>
       </PopoverTrigger>
@@ -127,7 +127,7 @@ function DateTimeRow({
         <p
           id={errorId}
           role="alert"
-          className="text-xs text-[var(--fm-destructive)] sm:col-start-2 sm:col-span-2"
+          className="text-xs text-destructive sm:col-start-2 sm:col-span-2"
         >
           {error}
         </p>
@@ -187,7 +187,7 @@ function FieldError({
   errors: ReturnType<typeof validateCycleDraft>;
 }) {
   return errors[field] ? (
-    <p role="alert" className="text-xs text-[var(--fm-destructive)]">
+    <p role="alert" className="text-xs text-destructive">
       {errors[field]}
     </p>
   ) : null;
@@ -287,11 +287,9 @@ export function CycleEditor({
         onSave(draft);
       }}
     >
-      <header className="flex items-start justify-between gap-3 border-b border-[var(--fm-border)] p-5">
+      <header className="flex items-start justify-between gap-3 border-b border-border p-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-admin-accent-strong)]">
-            Step {step} of 3
-          </p>
+          <p className="text-xs font-semibold text-primary">Step {step} of 3</p>
           <h2 className="mt-1 text-xl font-semibold">
             {mode === "edit"
               ? "Edit cycle"
@@ -299,7 +297,7 @@ export function CycleEditor({
                 ? "Duplicate cycle"
                 : "New cycle"}
           </h2>
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">Plan in {timezone}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Plan in {timezone}</p>
         </div>
         <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
           Discard
@@ -311,9 +309,9 @@ export function CycleEditor({
             {["Delivery", "Schedule", "Review"].map((label, index) => (
               <div key={label} className="space-y-1">
                 <div
-                  className={`h-1 rounded-full ${index + 1 <= step ? "bg-[var(--fm-admin-accent)]" : "bg-[var(--fm-border)]"}`}
+                  className={`h-1 rounded-full ${index + 1 <= step ? "bg-primary" : "bg-border"}`}
                 />
-                <span className="text-xs text-[var(--fm-text-muted)]">{label}</span>
+                <span className="text-xs text-muted-foreground">{label}</span>
               </div>
             ))}
           </div>
@@ -321,7 +319,7 @@ export function CycleEditor({
             <div className="space-y-5">
               <div>
                 <h3 className="text-base font-semibold">Delivery and locations</h3>
-                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Start with the promise customers will see, then build the operating plan
                   backwards.
                 </p>
@@ -359,7 +357,7 @@ export function CycleEditor({
                     onChange(applyDeliveryDate(draft, date, timezone, mode === "duplicate"))
                   }
                 />
-                <p className="text-xs text-[var(--fm-text-muted)]">
+                <p className="text-xs text-muted-foreground">
                   {mode === "duplicate"
                     ? "Changing this date shifts the copied schedule by the same number of days."
                     : "Changing this date keeps the exact schedule milestones you have already set."}
@@ -402,12 +400,12 @@ export function CycleEditor({
               </div>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Fulfillment locations</legend>
-                <p className="text-xs text-[var(--fm-text-muted)]">
+                <p className="text-xs text-muted-foreground">
                   All selected locations follow this cycle’s ordering, procurement, preparation, and
                   pickup schedule.
                 </p>
                 {destinationError ? (
-                  <p role="alert" className="text-sm text-[var(--fm-destructive)]">
+                  <p role="alert" className="text-sm text-destructive">
                     {destinationError}
                   </p>
                 ) : null}
@@ -420,7 +418,7 @@ export function CycleEditor({
                     return (
                       <Label
                         key={`${item.zoneId}:${item.locationId}`}
-                        className="flex min-h-10 items-center gap-2 rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-3 py-2"
+                        className="flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2"
                       >
                         <Checkbox
                           checked={checked}
@@ -446,7 +444,7 @@ export function CycleEditor({
                   })}
                 </div>
                 {!destinations.items.length && !destinationError ? (
-                  <p className="text-sm text-[var(--fm-text-muted)]">
+                  <p className="text-sm text-muted-foreground">
                     {destinationsLoading
                       ? "Loading eligible locations…"
                       : "No eligible locations are configured."}
@@ -470,11 +468,11 @@ export function CycleEditor({
             <div className="space-y-4">
               <div>
                 <h3 className="text-base font-semibold">Build the schedule</h3>
-                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Milestones are exact points in time. Adjusting one does not silently move another.
                 </p>
               </div>
-              <div className="divide-y divide-[var(--fm-border)]">
+              <div className="divide-y divide-border">
                 {scheduleFields.map(([field, label]) => (
                   <DateTimeRow
                     key={field}
@@ -486,8 +484,8 @@ export function CycleEditor({
                   />
                 ))}
               </div>
-              <div className="rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-muted)] p-3 text-sm">
-                <span className="text-[var(--fm-text-muted)]">Customer delivery</span>
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <span className="text-muted-foreground">Customer delivery</span>
                 <br />
                 {delivery?.startsAt && delivery.endsAt
                   ? `${displayDate(deliveryStart.date)} · ${deliveryStart.time}–${deliveryEnd.time}`
@@ -499,23 +497,19 @@ export function CycleEditor({
             <div className="space-y-6">
               <div>
                 <h3 className="text-base font-semibold">Review and save</h3>
-                <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Saving keeps this cycle in Draft. Activate it separately after reviewing the saved
                   plan.
                 </p>
               </div>
               <section>
-                <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  Customer delivery
-                </h4>
+                <h4 className="text-xs font-semibold text-muted-foreground">Customer delivery</h4>
                 <p className="mt-2 font-semibold">
                   {displayDate(deliveryStart.date)} · {deliveryStart.time}–{deliveryEnd.time}
                 </p>
               </section>
               <section>
-                <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  Schedule
-                </h4>
+                <h4 className="text-xs font-semibold text-muted-foreground">Schedule</h4>
                 <CycleTimeline
                   timezone={timezone}
                   items={scheduleFields.map(([field, label, kind]) => ({
@@ -526,9 +520,7 @@ export function CycleEditor({
                 />
               </section>
               <section>
-                <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-                  Locations
-                </h4>
+                <h4 className="text-xs font-semibold text-muted-foreground">Locations</h4>
                 <p className="mt-2 text-sm">
                   {destinations.items
                     .filter((item) =>
@@ -557,7 +549,7 @@ export function CycleEditor({
           ) : null}
         </div>
       </fieldset>
-      <footer className="flex items-center justify-between gap-2 border-t border-[var(--fm-border)] p-4">
+      <footer className="flex items-center justify-between gap-2 border-t border-border p-4">
         <Button
           type="button"
           variant="ghost"

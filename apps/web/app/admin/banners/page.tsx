@@ -13,8 +13,8 @@ import { BannerMediaEditor } from "@/components/admin/banner-media-editor";
 import { catalogResultSchema, useCatalogCommand } from "@/components/admin/catalog-command-state";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 
 type BannerView = "all" | "ACTIVE" | "DRAFT" | "INACTIVE" | "ARCHIVED";
 type LoadState =
@@ -354,7 +354,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
               disabled={locked}
               aria-expanded={panelOpen}
               aria-controls="banner-detail-panel"
-              className="fm-admin-reference-primary"
+              className=""
             >
               <Plus className="size-4" aria-hidden="true" />
               Add banner
@@ -366,13 +366,13 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
       {message ? (
         <p
           role={command.uncertain ? "alert" : "status"}
-          className="mt-5 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] p-3 text-sm"
+          className="mt-5 rounded-lg border border-border bg-muted p-3 text-sm"
         >
           {message}
         </p>
       ) : null}
 
-      <section className="mt-8 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Banner gallery</h2>
         <AdminIndexViews<BannerView>
           label="Banner views"
@@ -380,15 +380,15 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
           value={view}
           onChange={setView}
         />
-        <div className="flex flex-col gap-3 border-b border-[var(--fm-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-[var(--fm-text-muted)]" aria-live="polite">
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground" aria-live="polite">
             Showing {visibleItems.length} of {items.length} loaded banners. Search and status filter
             loaded banners only.
           </p>
           <div className="flex items-center gap-2">
             <label className="relative block min-w-0 sm:w-72">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fm-text-muted)]"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
@@ -396,7 +396,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                 placeholder="Search loaded banners"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="h-9 bg-[var(--fm-admin-surface)] pl-9 shadow-none"
+                className="h-9 bg-card pl-9 shadow-none"
               />
             </label>
             <Button
@@ -436,13 +436,13 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                   aria-controls="banner-detail-panel"
                   disabled={locked}
                   onClick={() => openBanner(banner)}
-                  className={`group overflow-hidden rounded-[var(--fm-radius-surface)] border bg-[var(--fm-admin-surface)] text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] ${
+                  className={`group overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     active
-                      ? "border-[var(--fm-admin-accent)] shadow-[var(--fm-shadow-card)]"
-                      : "border-[var(--fm-border)] hover:border-[var(--fm-admin-accent)] hover:shadow-[var(--fm-shadow-card)]"
+                      ? "border-primary shadow-sm"
+                      : "border-border hover:border-primary hover:shadow-sm"
                   }`}
                 >
-                  <div className="relative aspect-[20/9] overflow-hidden bg-[var(--fm-admin-surface-muted)]">
+                  <div className="relative aspect-[20/9] overflow-hidden bg-muted">
                     {banner.image ? (
                       <img
                         src={banner.image.src}
@@ -451,7 +451,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex size-full flex-col items-center justify-center gap-2 text-[var(--fm-text-muted)]">
+                      <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
                         <ImageIcon className="size-6" aria-hidden="true" />
                         <span className="text-xs font-medium">No image</span>
                       </div>
@@ -464,11 +464,11 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                       </h3>
                       <AdminStatusPill status={banner.status} tone={statusTone(banner.status)} />
                     </div>
-                    <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                       <CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />
                       {scheduleLabel(banner)}
                     </p>
-                    <p className="mt-2 truncate text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-2 truncate text-xs text-muted-foreground">
                       Priority {banner.priority} · {banner.href ?? "No destination"}
                     </p>
                   </div>
@@ -483,16 +483,16 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
 
   const detail = selected ? (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-[var(--fm-text-muted)]">Content / Banners</p>
+          <p className="text-xs font-medium text-muted-foreground">Content / Banners</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 id="banner-panel-title" className="truncate text-xl font-bold tracking-[-0.03em]">
+            <h2 id="banner-panel-title" className="truncate text-xl font-bold tracking-tight">
               {selected.version ? selected.name || "Untitled banner" : "New banner"}
             </h2>
             <AdminStatusPill status={selected.status} tone={statusTone(selected.status)} />
           </div>
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+          <p className="mt-1 text-sm text-muted-foreground">
             Configure the storefront image, destination, and publication schedule.
           </p>
         </div>
@@ -508,11 +508,11 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-[var(--fm-background)] px-5 py-5">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-background px-5 py-5">
         <form id="banner-details-form" onSubmit={save} className="space-y-5">
           <fieldset disabled={!canManage || archived || locked} className="space-y-5">
             <section
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+              className="rounded-xl border border-border bg-card p-5 shadow-sm"
               aria-labelledby="banner-details-heading"
             >
               <h3 id="banner-details-heading" className="text-base font-semibold">
@@ -520,7 +520,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
               </h3>
               <div className="mt-4 grid gap-4">
                 <label className="block text-sm font-semibold">
-                  Title<span className="text-red-600"> *</span>
+                  Title<span className="text-destructive"> *</span>
                   <Input
                     required
                     maxLength={150}
@@ -541,7 +541,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                     }
                     className="mt-1.5 h-10"
                   />
-                  <span className="mt-1.5 block text-xs font-normal text-[var(--fm-text-muted)]">
+                  <span className="mt-1.5 block text-xs font-normal text-muted-foreground">
                     Optional same-origin path. Leave blank for an image without a link.
                   </span>
                 </label>
@@ -549,13 +549,13 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
             </section>
 
             <section
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]"
+              className="rounded-xl border border-border bg-card p-5 shadow-sm"
               aria-labelledby="banner-publication-heading"
             >
               <h3 id="banner-publication-heading" className="text-base font-semibold">
                 Publication
               </h3>
-              <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Dates use this browser’s timezone. Active banners appear only inside their date
                 window and while an image is attached.
               </p>
@@ -563,7 +563,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                 <label className="block text-sm font-semibold">
                   Status
                   <select
-                    className="mt-1.5 min-h-10 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-3 text-sm"
+                    className="mt-1.5 min-h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
                     value={selected.status}
                     onChange={(event) => {
                       const status = storefrontBannerSchema.shape.status.parse(
@@ -596,7 +596,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                   />
                 </label>
                 <label className="block text-sm font-semibold">
-                  Starts<span className="text-red-600"> *</span>
+                  Starts<span className="text-destructive"> *</span>
                   <Input
                     type="datetime-local"
                     required
@@ -627,7 +627,7 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
                   />
                 </label>
               </div>
-              <p className="mt-4 text-xs text-[var(--fm-text-muted)]">
+              <p className="mt-4 text-xs text-muted-foreground">
                 Higher priority banners appear first. Archived banners are retained as read-only
                 records.
               </p>
@@ -643,35 +643,35 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
             onStateChange={setMediaState}
           />
         ) : (
-          <section className="rounded-[var(--fm-radius-surface)] border border-dashed border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5">
+          <section className="rounded-xl border border-dashed border-border bg-card p-5">
             <h3 className="text-base font-semibold">Banner image</h3>
-            <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+            <p className="mt-1 text-sm text-muted-foreground">
               Save this draft before choosing its storefront image.
             </p>
           </section>
         )}
 
-        <section className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-5 shadow-[var(--fm-shadow-card)]">
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h3 className="text-base font-semibold">Summary</h3>
-          <dl className="mt-3 divide-y divide-[var(--fm-border)] text-sm" aria-live="polite">
+          <dl className="mt-3 divide-y divide-border text-sm" aria-live="polite">
             <div className="py-3 first:pt-0">
-              <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Banner</dt>
+              <dt className="text-xs font-medium text-muted-foreground">Banner</dt>
               <dd className="mt-1 font-medium">{selected.name.trim() || "Title not entered"}</dd>
             </div>
             <div className="py-3">
-              <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Destination</dt>
+              <dt className="text-xs font-medium text-muted-foreground">Destination</dt>
               <dd className="mt-1 break-all">{selected.href || "No destination"}</dd>
             </div>
             <div className="py-3 last:pb-0">
-              <dt className="text-xs font-medium text-[var(--fm-text-muted)]">Schedule</dt>
+              <dt className="text-xs font-medium text-muted-foreground">Schedule</dt>
               <dd className="mt-1">{scheduleLabel(selected)}</dd>
             </div>
           </dl>
         </section>
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--fm-border)] bg-[var(--fm-admin-surface)] px-5 py-4 shadow-[0_-8px_24px_rgb(15_23_42_/_0.08)]">
-        <p className="text-sm text-[var(--fm-text-muted)]" aria-live="polite">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border bg-card px-5 py-4 shadow-sm">
+        <p className="text-sm text-muted-foreground" aria-live="polite">
           {command.uncertain
             ? "Save outcome unknown"
             : mediaState.locked

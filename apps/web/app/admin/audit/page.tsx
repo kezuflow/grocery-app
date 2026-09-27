@@ -3,10 +3,10 @@ import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AdminAuditEventPage } from "@freshmarkets/contracts";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { Button } from "../../../components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   Table,
   TableBody,
@@ -14,7 +14,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import {
   AdminCursorPagination,
   FilterBar,
@@ -225,7 +225,7 @@ function AuditWorkspace() {
             ) : null}
           </div>
         </div>
-        <span className="text-xs text-[var(--fm-text-muted)]">
+        <span className="text-xs text-muted-foreground">
           {filters.locationId
             ? `Location scope filter: ${filters.locationId}`
             : "All permitted locations"}
@@ -252,7 +252,7 @@ function AuditWorkspace() {
       {state.phase === "ready" ? (
         state.page.items.length === 0 ? (
           <ListPageSection title="Audit events">
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+            <p className="p-5 text-sm text-muted-foreground" role="status">
               {hasFilters
                 ? "No audit events match the applied filters. Clear filters to see the permitted history."
                 : "No audit events exist for your permitted scope yet."}
@@ -296,7 +296,7 @@ function AuditWorkspace() {
                     <TableCell className="text-xs">
                       {item.resourceType}:{item.resourceId}
                     </TableCell>
-                    <TableCell className="text-xs text-[var(--fm-text-muted)]">
+                    <TableCell className="text-xs text-muted-foreground">
                       {item.locationId ?? item.marketId ?? "Global"}
                     </TableCell>
                     <TableCell className="max-w-64 truncate text-xs">
@@ -306,7 +306,7 @@ function AuditWorkspace() {
                       <Link
                         href={`/admin/audit/${item.auditEventId}${searchParams.size ? `?${searchParams}` : ""}`}
                         prefetch={false}
-                        className="text-xs font-medium text-[var(--fm-info)] underline"
+                        className="text-xs font-medium text-muted-foreground underline"
                       >
                         Detail
                       </Link>

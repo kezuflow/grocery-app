@@ -5,10 +5,10 @@ import type { CustomerProfileView, CustomerSupportNotePage } from "@freshmarkets
 import { z } from "@freshmarkets/validation";
 import type { useAdminCommand } from "./use-admin-command";
 import { ListPageSection } from "./admin-shell";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
-import { Checkbox } from "../ui/checkbox";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Textarea } from "@/components/admin/shadcn/textarea";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 const failure = z.object({ ok: z.literal(false), error: z.object({ message: z.string() }) });
@@ -208,15 +208,15 @@ export function CustomerSupportPanel({
           ) : profile && !error ? (
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Preferred language</dt>
+                <dt className="text-muted-foreground">Preferred language</dt>
                 <dd>{profile.preferredLanguage ?? "None recorded"}</dd>
               </div>
               <div>
-                <dt className="text-[var(--fm-text-muted)]">Promotional emails</dt>
+                <dt className="text-muted-foreground">Promotional emails</dt>
                 <dd>{profile.promotionalEmails ? "Opted in" : "Not opted in"}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-[var(--fm-text-muted)]">Access</dt>
+                <dt className="text-muted-foreground">Access</dt>
                 <dd>You can review these preferences. Changes require customers.manage.</dd>
               </div>
             </dl>
@@ -256,7 +256,7 @@ export function CustomerSupportPanel({
               </Button>
             </fieldset>
           ) : (
-            <p className="text-sm text-[var(--fm-text-muted)]">
+            <p className="text-sm text-muted-foreground">
               Support notes are read-only without customers.manage.
             </p>
           )}

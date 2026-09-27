@@ -8,11 +8,18 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Skeleton } from "../../ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../admin-shell";
 import { useAdminLocation } from "../use-admin-location";
 import { DispatchActions } from "./dispatch-actions";
@@ -290,7 +297,7 @@ export function ExternalDeliveryQueue() {
         </Link>
       ) : null}
       {message ? (
-        <Alert variant="warning">
+        <Alert>
           <AlertTitle>Delivery update</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
@@ -308,7 +315,7 @@ export function ExternalDeliveryQueue() {
           description="Track each order and its current delivery progress."
         >
           {summary.items.length === 0 ? (
-            <p className="p-5 text-sm text-[var(--fm-text-muted)]">No open courier work.</p>
+            <p className="p-5 text-sm text-muted-foreground">No open courier work.</p>
           ) : (
             <div>
               <Table className="block lg:table" aria-label="Delivery queue">
@@ -325,7 +332,7 @@ export function ExternalDeliveryQueue() {
                   {summary.items.map((item) => (
                     <TableRow
                       key={item.jobId}
-                      className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:align-top [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                      className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:align-top [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                     >
                       <TableCell className="col-span-2 whitespace-normal">
                         <Link
@@ -334,29 +341,27 @@ export function ExternalDeliveryQueue() {
                         >
                           Order {item.orderId.slice(0, 8)}
                         </Link>
-                        <span className="block break-all font-mono text-xs text-[var(--fm-text-muted)]">
+                        <span className="block break-all font-mono text-xs text-muted-foreground">
                           {item.orderId}
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
-                          Mode
-                        </span>
+                        <span className="mb-1 block text-muted-foreground lg:hidden">Mode</span>
                         {item.fulfillmentMode === "INSTANT" ? "Instant" : "Scheduled"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                        <span className="mb-1 block text-muted-foreground lg:hidden">
                           FreshMarkets status
                         </span>
                         <StatusBadge>{deliveryJobStatusLabel(item.status)}</StatusBadge>
                         {item.deliveredAtIso ? (
-                          <span className="mt-1 block text-xs text-[var(--fm-text-muted)]">
+                          <span className="mt-1 block text-xs text-muted-foreground">
                             Delivered: {new Date(item.deliveredAtIso).toLocaleString("en-PH")}
                           </span>
                         ) : null}
                       </TableCell>
                       <TableCell className="col-span-2 whitespace-normal text-sm lg:col-span-1">
-                        <span className="mb-1 block text-[var(--fm-text-muted)] lg:hidden">
+                        <span className="mb-1 block text-muted-foreground lg:hidden">
                           Delivery progress
                         </span>
                         {item.externalDispatch ? (
@@ -401,7 +406,7 @@ export function ExternalDeliveryQueue() {
                         )}
                       </TableCell>
                       <TableCell className="col-span-2 whitespace-normal lg:col-span-1">
-                        <span className="mb-2 block text-sm text-[var(--fm-text-muted)] lg:hidden">
+                        <span className="mb-2 block text-sm text-muted-foreground lg:hidden">
                           Next action
                         </span>
                         {item.externalDispatch?.provider === "lalamove" && canManage ? (

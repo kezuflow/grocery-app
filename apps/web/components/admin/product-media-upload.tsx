@@ -2,9 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { adminProductMediaMaxBytes, type AdminProductMediaView } from "@freshmarkets/contracts";
 import { adminProductMediaViewSchema, z } from "@freshmarkets/validation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";

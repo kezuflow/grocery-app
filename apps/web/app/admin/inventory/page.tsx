@@ -8,10 +8,10 @@ import type {
   AdminInventoryPage,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { PageHeader, ListPageSection } from "../../../components/admin/admin-shell";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
 import {
@@ -375,10 +375,7 @@ export default function InventoryPage() {
       {locationId && visibleState.phase === "ready" ? (
         <>
           {notice ? (
-            <p
-              role="status"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-            >
+            <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
               {notice}
             </p>
           ) : null}
@@ -388,7 +385,7 @@ export default function InventoryPage() {
             description={`${locationLabel}. Available is physical stock after reservations and checkout holds. Enter a positive quantity to adjust stock.`}
           >
             {visibleState.page.items.length === 0 ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="p-5 text-sm text-muted-foreground" role="status">
                 No inventory records for this location.
               </p>
             ) : (
@@ -410,7 +407,7 @@ export default function InventoryPage() {
                     {visibleState.page.items.map((item) => (
                       <TableRow
                         key={item.inventoryPoolId}
-                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-3 lg:[&>td]:py-3"
+                        className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-3 lg:[&>td]:py-3"
                       >
                         <TableCell className="col-span-2 whitespace-normal font-medium">
                           <span>{item.productName}</span>
@@ -421,31 +418,27 @@ export default function InventoryPage() {
                           ) : null}
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
-                            Physical
-                          </span>
+                          <span className="block text-muted-foreground lg:hidden">Physical</span>
                           {stockQuantity(item.onHandBase, item.baseUnitSymbol)}
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
-                            Reserved
-                          </span>
+                          <span className="block text-muted-foreground lg:hidden">Reserved</span>
                           {stockQuantity(item.reservedBase, item.baseUnitSymbol)}
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="block text-muted-foreground lg:hidden">
                             Checkout holds
                           </span>
                           {stockQuantity(item.heldBase, item.baseUnitSymbol)}
                         </TableCell>
                         <TableCell className="text-sm font-semibold tabular-nums">
-                          <span className="block font-normal text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="block font-normal text-muted-foreground lg:hidden">
                             Available
                           </span>
                           {stockQuantity(item.availableBase, item.baseUnitSymbol)}
                         </TableCell>
                         <TableCell className="col-span-2 lg:col-span-1">
-                          <span className="mb-1 block text-sm text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="mb-1 block text-sm text-muted-foreground lg:hidden">
                             Adjustment quantity
                           </span>
                           <Input
@@ -540,7 +533,7 @@ export default function InventoryPage() {
                     ))}
                   </TableBody>
                 </Table>
-                <p className="px-4 pb-3 text-xs text-[var(--fm-text-muted)]">
+                <p className="px-4 pb-3 text-xs text-muted-foreground">
                   The date and time are recorded automatically. Removing stock cannot reduce
                   available inventory below zero.
                 </p>
@@ -562,7 +555,7 @@ export default function InventoryPage() {
               description={`Dated stock movements for ${locationLabel}. History cannot be edited.`}
             >
               {visibleLedgerState.phase === "loading" ? (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+                <p className="p-5 text-sm text-muted-foreground" role="status">
                   Loading ledger…
                 </p>
               ) : visibleLedgerState.phase === "error" ? (
@@ -582,7 +575,7 @@ export default function InventoryPage() {
                 </Alert>
               ) : visibleLedgerState.phase === "ready" &&
                 visibleLedgerState.page.items.length === 0 ? (
-                <p className="p-5 text-sm text-[var(--fm-text-muted)]">No ledger entries yet.</p>
+                <p className="p-5 text-sm text-muted-foreground">No ledger entries yet.</p>
               ) : visibleLedgerState.phase === "ready" ? (
                 <Table className="block lg:table" aria-label="Stock activity">
                   <TableHeader className="hidden lg:table-header-group">
@@ -598,14 +591,14 @@ export default function InventoryPage() {
                     {visibleLedgerState.page.items.map((entry) => (
                       <TableRow
                         key={entry.entryId}
-                        className="grid grid-cols-2 gap-3 border-b border-[var(--fm-border)] p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
+                        className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                       >
                         <TableCell className="col-span-2 text-sm lg:whitespace-nowrap">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">Date</span>
+                          <span className="block text-muted-foreground lg:hidden">Date</span>
                           {formatActivityDate(entry.createdAt)}
                         </TableCell>
                         <TableCell className="text-sm">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">Type</span>
+                          <span className="block text-muted-foreground lg:hidden">Type</span>
                           {entry.movementType === "MANUAL_ADJUSTMENT"
                             ? entry.quantityDeltaBase >= 0
                               ? "Stock added"
@@ -613,7 +606,7 @@ export default function InventoryPage() {
                             : entry.movementType.replaceAll("_", " ").toLowerCase()}
                         </TableCell>
                         <TableCell className="text-sm font-semibold tabular-nums">
-                          <span className="block font-normal text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="block font-normal text-muted-foreground lg:hidden">
                             Physical change
                           </span>
                           {signedStockQuantity(
@@ -622,7 +615,7 @@ export default function InventoryPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
+                          <span className="block text-muted-foreground lg:hidden">
                             Reservation / hold change
                           </span>
                           {signedStockQuantity(
@@ -631,9 +624,7 @@ export default function InventoryPage() {
                           )}
                         </TableCell>
                         <TableCell className="col-span-2 whitespace-normal break-words text-sm">
-                          <span className="block text-[var(--fm-text-muted)] lg:hidden">
-                            Details
-                          </span>
+                          <span className="block text-muted-foreground lg:hidden">Details</span>
                           {entry.reasonCode ?? "—"}
                         </TableCell>
                       </TableRow>

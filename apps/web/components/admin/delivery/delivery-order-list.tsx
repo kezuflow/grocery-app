@@ -2,7 +2,7 @@
 
 import { GripVertical } from "lucide-react";
 import { useRef } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 
 export type OrderedDeliveryItem = Readonly<{
   jobId: string;
@@ -67,13 +67,13 @@ export function DeliveryOrderList({
           onDragStart={() => (draggedId.current = delivery.jobId)}
           onDragOver={(event) => event.preventDefault()}
           onDrop={() => drop(delivery.jobId)}
-          className="flex min-h-11 items-center gap-2 rounded border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-2"
+          className="flex min-h-11 items-center gap-2 rounded border border-border bg-card p-2"
         >
-          <GripVertical className="size-4 text-[var(--fm-text-muted)]" aria-hidden="true" />
+          <GripVertical className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="w-6 font-semibold">{index + 1}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate font-mono text-xs">{delivery.jobId}</span>
-            <span className="text-xs text-[var(--fm-text-muted)]">
+            <span className="text-xs text-muted-foreground">
               {delivery.status} · version {delivery.version}
             </span>
           </span>

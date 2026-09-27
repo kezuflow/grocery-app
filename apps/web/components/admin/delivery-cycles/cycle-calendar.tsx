@@ -17,7 +17,7 @@ import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import type { AdminDeliveryCycleView, DeliveryCycleDraft } from "@freshmarkets/contracts";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { cyclesToCalendarEvents } from "./cycle-calendar-adapter";
 
 export type CycleCalendarView = "month" | "week" | "agenda";
@@ -91,9 +91,9 @@ export function CycleCalendar({
   return (
     <section
       aria-label="Scheduled cycle calendar"
-      className="min-w-0 overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]"
+      className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
     >
-      <div className="flex flex-wrap items-end gap-2 border-b border-[var(--fm-border)] p-3">
+      <div className="flex flex-wrap items-end gap-2 border-b border-border p-3">
         <div className="flex items-center gap-1">
           <Button
             type="button"
@@ -143,11 +143,7 @@ export function CycleCalendar({
             <RotateCw aria-hidden className={cn("size-3.5", loading && "animate-spin")} />
             Refresh
           </Button>
-          <div
-            role="group"
-            aria-label="Calendar view"
-            className="flex rounded-[var(--fm-radius-control)] bg-[var(--fm-surface-muted)] p-0.5"
-          >
+          <div role="group" aria-label="Calendar view" className="flex rounded-md bg-muted p-0.5">
             {(["month", "week", "agenda"] as const).map((option) => (
               <Button
                 key={option}
@@ -156,10 +152,7 @@ export function CycleCalendar({
                 variant="ghost"
                 aria-pressed={view === option}
                 disabled={interactionLocked}
-                className={cn(
-                  "min-h-9 capitalize",
-                  view === option && "bg-[var(--fm-admin-surface)] shadow-sm",
-                )}
+                className={cn("min-h-9 capitalize", view === option && "bg-card shadow-sm")}
                 onClick={() => changeView(option)}
               >
                 {option}
@@ -169,20 +162,17 @@ export function CycleCalendar({
         </div>
       </div>
       {rangeIncomplete ? (
-        <p role="alert" className="border-b border-[var(--fm-border)] px-4 py-2 text-sm">
+        <p role="alert" className="border-b border-border px-4 py-2 text-sm">
           This range could not be fully loaded. Refresh to try again.
         </p>
       ) : null}
       {error ? (
-        <p
-          role="alert"
-          className="border-b border-[var(--fm-border)] px-4 py-2 text-sm text-[var(--fm-destructive)]"
-        >
+        <p role="alert" className="border-b border-border px-4 py-2 text-sm text-destructive">
           Cycles could not be loaded: {error} Use Refresh to try again.
         </p>
       ) : null}
       {!loading && !error && cycles.length === 0 ? (
-        <p className="border-b border-[var(--fm-border)] px-4 py-2 text-sm text-[var(--fm-text-muted)]">
+        <p className="border-b border-border px-4 py-2 text-sm text-muted-foreground">
           No cycles in this range. Select an empty date to start one.
         </p>
       ) : null}
@@ -192,7 +182,7 @@ export function CycleCalendar({
           canCreate && view === "month" && "fm-cycle-calendar-selectable",
         )}
       >
-        <p className="mb-2 px-1 text-xs text-[var(--fm-text-muted)]">
+        <p className="mb-2 px-1 text-xs text-muted-foreground">
           {view === "month" && canCreate
             ? "Drag from the order-opening date to the customer-delivery date, or select one day."
             : "Select a cycle to inspect its complete schedule."}
@@ -244,7 +234,7 @@ export function CycleCalendar({
           noEventsText={error ? "Cycles unavailable" : "No cycles in this range"}
         />
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[var(--fm-border)] px-4 py-3 text-xs text-[var(--fm-text-muted)]">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border px-4 py-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-[var(--fm-cycle-ordering)]" /> Ordering
         </span>

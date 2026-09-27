@@ -3,16 +3,22 @@
 import { useState, type FormEvent } from "react";
 import type { AdminCatalogSkuSummary } from "@freshmarkets/contracts";
 import { adminCatalogSkuSummarySchema, adminSkuUpdateBodySchema } from "@freshmarkets/validation";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   AlertDialog as Dialog,
   AlertDialogContent as DialogContent,
   AlertDialogTrigger as DialogTrigger,
   AlertDialogTitle as DialogTitle,
   AlertDialogDescription as DialogDescription,
-} from "../ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+} from "@/components/admin/shadcn/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { useCatalogCommand } from "./catalog-command-state";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";

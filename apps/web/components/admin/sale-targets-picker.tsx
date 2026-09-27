@@ -8,10 +8,18 @@ import type {
 import { z, adminProductDetailSchema } from "@freshmarkets/validation";
 import { useAdminContext } from "@/app/admin/admin-context-provider";
 import { catalogResultSchema } from "./catalog-command-state";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Badge } from "@/components/admin/shadcn/badge";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import {
   Combobox,
   ComboboxContent,
@@ -19,7 +27,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-} from "../ui/combobox";
+} from "@/components/admin/shadcn/combobox";
 
 export type SaleTargetSelection = AdminPromotionProductTargetInput & {
   productName?: string;
@@ -303,9 +311,9 @@ export function SaleTargetsPicker({
               showClear
               className="w-full"
             />
-            <ComboboxContent className="max-h-80 w-[var(--anchor-width)] min-w-[var(--anchor-width)] overflow-hidden border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-0 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] ring-0 duration-150 [animation-timing-function:var(--fm-ease-out)] motion-reduce:animate-none">
+            <ComboboxContent className="max-h-80 w-[var(--anchor-width)] min-w-[var(--anchor-width)] overflow-hidden border border-border bg-card p-0 text-foreground shadow-md ring-0 duration-150 [animation-timing-function:var(--fm-ease-out)] motion-reduce:animate-none">
               {listState === "loading" ? (
-                <p role="status" className="px-3 py-3 text-sm text-[var(--fm-text-muted)]">
+                <p role="status" className="px-3 py-3 text-sm text-muted-foreground">
                   Searching products…
                 </p>
               ) : listState === "error" ? (
@@ -322,7 +330,7 @@ export function SaleTargetsPicker({
                 </div>
               ) : (
                 <>
-                  <ComboboxEmpty className="px-3 py-4 text-[var(--fm-text-muted)]">
+                  <ComboboxEmpty className="px-3 py-4 text-muted-foreground">
                     No active products found.
                   </ComboboxEmpty>
                   <ComboboxList className="max-h-64 p-1">
@@ -330,17 +338,17 @@ export function SaleTargetsPicker({
                       <ComboboxItem
                         key={item.productId}
                         value={item}
-                        className="rounded-md px-3 py-2.5 text-[var(--fm-text)] data-highlighted:bg-[var(--fm-hover)] data-highlighted:text-[var(--fm-text)]"
+                        className="rounded-md px-3 py-2.5 text-foreground data-highlighted:bg-accent data-highlighted:text-foreground"
                       >
                         <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                        <span className="shrink-0 text-xs text-[var(--fm-text-muted)]">
+                        <span className="shrink-0 text-xs text-muted-foreground">
                           {item.skuCount} {item.skuCount === 1 ? "option" : "options"}
                         </span>
                       </ComboboxItem>
                     )}
                   </ComboboxList>
                   {page?.nextCursor ? (
-                    <div className="border-t border-[var(--fm-border)] p-2">
+                    <div className="border-t border-border p-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -361,7 +369,7 @@ export function SaleTargetsPicker({
 
       {product ? (
         detailState === "loading" ? (
-          <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+          <p role="status" className="text-sm text-muted-foreground">
             Loading selling options for {product.name} at {location?.locationName}…
           </p>
         ) : detailState === "error" ? (
@@ -387,34 +395,26 @@ export function SaleTargetsPicker({
                     <button
                       type="button"
                       onClick={() => setSkuId(sku.skuId)}
-                      className={`flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm hover:bg-[var(--fm-hover)] ${
-                        selected ? "bg-[var(--fm-surface-soft)]" : ""
+                      className={`flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm hover:bg-accent ${
+                        selected ? "bg-background" : ""
                       }`}
                     >
                       <span className="font-medium">
                         {sku.name}{" "}
-                        <span className="text-xs text-[var(--fm-text-muted)]">
-                          ({sku.unitSymbol})
-                        </span>
+                        <span className="text-xs text-muted-foreground">({sku.unitSymbol})</span>
                       </span>
                       <span className="flex items-center gap-3 text-xs">
                         {sku.priceMinor != null ? (
                           <span>{peso(sku.priceMinor)}</span>
                         ) : (
-                          <span className="text-[var(--fm-text-muted)]">
-                            No price at this location
-                          </span>
+                          <span className="text-muted-foreground">No price at this location</span>
                         )}
                         {sku.availability ? (
-                          <span
-                            className={
-                              sku.availability === "AVAILABLE"
-                                ? "text-emerald-700"
-                                : "text-amber-700"
-                            }
+                          <Badge
+                            variant={sku.availability === "AVAILABLE" ? "secondary" : "outline"}
                           >
                             {sku.availability === "AVAILABLE" ? "Available" : "Unavailable"}
-                          </span>
+                          </Badge>
                         ) : null}
                       </span>
                     </button>
@@ -422,7 +422,7 @@ export function SaleTargetsPicker({
                 );
               })}
               {options.length === 0 ? (
-                <li className="px-4 py-3 text-sm text-[var(--fm-text-muted)]">
+                <li className="px-4 py-3 text-sm text-muted-foreground">
                   No active selling options for this product.
                 </li>
               ) : null}
@@ -430,40 +430,38 @@ export function SaleTargetsPicker({
           </div>
         )
       ) : !query ? (
-        <p className="text-sm text-[var(--fm-text-muted)]">
+        <p className="text-sm text-muted-foreground">
           Search to find products and selling options.
         </p>
       ) : null}
 
       {option ? (
-        <div className="grid gap-3 rounded-lg bg-[var(--fm-surface-soft)] p-3 text-sm">
+        <div className="grid gap-3 rounded-lg bg-background p-3 text-sm">
           {option.priceMinor != null && optionSalePrice ? (
             <p>
               <span className="font-medium">
                 {option.name} sale price:{" "}
-                <s className="text-[var(--fm-text-muted)]">{peso(option.priceMinor)}</s>{" "}
+                <s className="text-muted-foreground">{peso(option.priceMinor)}</s>{" "}
                 {peso(optionSalePrice.priceMinor)}
               </span>{" "}
-              <span className="text-xs text-[var(--fm-text-muted)]">
+              <span className="text-xs text-muted-foreground">
                 (saves {peso(optionSalePrice.savedMinor)} per unit)
               </span>
             </p>
           ) : option.priceMinor != null ? (
-            <p className="text-[var(--fm-text-muted)]">
+            <p className="text-muted-foreground">
               Enter a discount smaller than the regular price ({peso(option.priceMinor)}) to preview
               the sale price.
             </p>
           ) : null}
           {approxPieces !== null ? (
-            <p className="text-xs text-[var(--fm-text-muted)]">
+            <p className="text-xs text-muted-foreground">
               ≈ {approxPieces.toLocaleString("en-PH")} sellable pieces currently available at{" "}
               {location?.locationName}.
             </p>
           ) : null}
           <fieldset className="grid gap-2">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--fm-text-muted)]">
-              Sale quantity
-            </legend>
+            <legend className="text-xs font-semibold text-muted-foreground">Sale quantity</legend>
             <label className="flex items-center gap-2">
               <input
                 type="radio"
@@ -496,10 +494,12 @@ export function SaleTargetsPicker({
             </label>
           </fieldset>
           {overlap ? (
-            <p role="alert" className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-              Another active sale already covers this option at this location. Core will reject
-              activation while it runs; you can still save this draft.
-            </p>
+            <Alert className="py-2">
+              <AlertDescription className="text-xs">
+                Another active sale already covers this option at this location. Core will reject
+                activation while it runs; you can still save this draft.
+              </AlertDescription>
+            </Alert>
           ) : null}
           <div>
             <Button type="button" size="sm" onClick={addTarget}>
@@ -510,7 +510,7 @@ export function SaleTargetsPicker({
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       ) : null}
@@ -538,7 +538,7 @@ export function SaleTargetsPicker({
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-[var(--fm-text-muted)]">
+        <p className="text-sm text-muted-foreground">
           Add at least one selling option before creating the sale.
         </p>
       )}

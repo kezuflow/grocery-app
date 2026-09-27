@@ -19,10 +19,10 @@ import {
 import { CustomerPicker, type CustomerChoice } from "@/components/admin/customer-picker";
 import { PromotionAudienceEditor } from "@/components/admin/promotion-audience-editor";
 import { PromotionDefinitionForm } from "@/components/admin/promotion-definition-form";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { AdminPageState } from "../../../../components/admin/admin-page-state";
 import { notifyCommandSuccess } from "@/components/admin/admin-feedback";
@@ -347,7 +347,7 @@ function PromotionDetailWorkspace({
     <div className="w-full space-y-6">
       <Link
         href="/admin/promotions"
-        className="inline-flex text-sm font-medium text-[var(--fm-text-muted)] hover:text-[var(--fm-text)]"
+        className="inline-flex text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         Back to Promotion Codes
       </Link>
@@ -370,10 +370,7 @@ function PromotionDetailWorkspace({
       />
 
       {notice ? (
-        <p
-          role="status"
-          className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
           {notice}
         </p>
       ) : null}
@@ -711,9 +708,9 @@ function PromotionDetailWorkspace({
             </AlertDescription>
           </Alert>
         ) : grants.page.items.length === 0 ? (
-          <p className="p-5 pt-0 text-sm text-[var(--fm-text-muted)]">No grants yet.</p>
+          <p className="p-5 pt-0 text-sm text-muted-foreground">No grants yet.</p>
         ) : (
-          <ul className="divide-y divide-[var(--fm-border)] border-t border-[var(--fm-border)]">
+          <ul className="divide-y divide-border border-t border-border">
             {grants.page.items.map((grant) => (
               <li
                 key={grant.grantId}
@@ -728,7 +725,7 @@ function PromotionDetailWorkspace({
                 <StatusBadge tone={grant.status === "ACTIVE" ? "success" : "neutral"}>
                   {grant.status}
                 </StatusBadge>
-                <span className="text-xs text-[var(--fm-text-muted)]">
+                <span className="text-xs text-muted-foreground">
                   max {grant.maxRedemptions} redemption{grant.maxRedemptions === 1 ? "" : "s"}
                 </span>
               </li>
@@ -736,7 +733,7 @@ function PromotionDetailWorkspace({
           </ul>
         )}
         {grants.phase === "ready" && grants.page.nextCursor ? (
-          <div className="border-t border-[var(--fm-border)] p-4">
+          <div className="border-t border-border p-4">
             <Button
               size="sm"
               variant="outline"
@@ -762,16 +759,16 @@ function PromotionDetailWorkspace({
             </AlertDescription>
           </Alert>
         ) : redemptions.page.items.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--fm-text-muted)]">No redemptions recorded.</p>
+          <p className="p-5 text-sm text-muted-foreground">No redemptions recorded.</p>
         ) : (
-          <ul className="divide-y divide-[var(--fm-border)]">
+          <ul className="divide-y divide-border">
             {redemptions.page.items.map((redemption) => (
               <li
                 key={redemption.redemptionId}
                 className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
               >
                 <span className="font-mono text-xs">{redemption.customerId}</span>
-                <span className="text-xs text-[var(--fm-text-muted)]">
+                <span className="text-xs text-muted-foreground">
                   {redemption.redeemedAt.slice(0, 10)}
                 </span>
               </li>
@@ -779,7 +776,7 @@ function PromotionDetailWorkspace({
           </ul>
         )}
         {redemptions.phase === "ready" && redemptions.page.nextCursor ? (
-          <div className="border-t border-[var(--fm-border)] p-4">
+          <div className="border-t border-border p-4">
             <Button
               size="sm"
               variant="outline"

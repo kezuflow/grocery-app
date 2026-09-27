@@ -3,7 +3,7 @@
 import { lazy, Suspense } from "react";
 import { AdminPageState } from "@/components/admin/admin-page-state";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import { useAdminContext } from "./admin-context-provider";
 import { useAdminOverview } from "./admin-overview-provider";
 

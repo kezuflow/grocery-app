@@ -10,25 +10,31 @@ import { Clipboard, EllipsisVertical, Eye } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AdminCursorPagination,
-  AdminIndexViews,
-  useAdminUrlPagination,
-} from "../../../components/admin/admin-controls";
+import { useAdminUrlPagination } from "../../../components/admin/admin-controls";
 import { useAdminContext } from "../admin-context-provider";
-import { AdminPageState } from "../../../components/admin/admin-page-state";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
 import { PageHeader } from "../../../components/admin/admin-shell";
-import { OrderProgressStatus } from "../../../components/admin/order-progress-status";
+import { orderProgressFacts } from "../../../components/admin/order-progress-status";
 import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
 import { tryChangeAdminWorkspace } from "../../../components/admin/use-admin-route-guard";
-import { Button } from "../../../components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "../../../components/admin/shadcn/alert";
+import { Badge } from "../../../components/admin/shadcn/badge";
+import { Button } from "../../../components/admin/shadcn/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../../../components/admin/shadcn/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+} from "../../../components/admin/shadcn/dropdown-menu";
+import { Skeleton } from "../../../components/admin/shadcn/skeleton";
 import {
   Table,
   TableBody,
@@ -36,7 +42,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "../../../components/admin/shadcn/table";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/admin/shadcn/tabs";
 
 type State =
   | { phase: "loading" }
@@ -67,6 +74,69 @@ function date(value: string | null): string {
 
 function orderLabel(order: AdminOrderSummary): string {
   return order.orderNumber ?? order.orderId;
+}
+
+function OrdersProgressStatus({ order }: { order: AdminOrderSummary }) {
+  const facts = orderProgressFacts(order);
+  return (
+    <div
+      className="flex max-w-52 flex-wrap gap-1.5"
+      aria-label={`Order progress: ${facts.map((fact) => fact.label).join("; ")}`}
+    >
+      {facts.map((fact) => (
+        <Badge
+          key={fact.code}
+          variant={
+            fact.tone === "danger"
+              ? "destructive"
+              : fact.tone === "success"
+                ? "default"
+                : fact.tone === "neutral"
+                  ? "outline"
+                  : "secondary"
+          }
+        >
+          {fact.label}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function OrdersPagination({
+  pageNumber,
+  nextCursor,
+  onPrevious,
+  onNext,
+}: {
+  pageNumber: number;
+  nextCursor: string | null;
+  onPrevious(): void;
+  onNext(cursor: string): void;
+}) {
+  return (
+    <nav aria-label="Results pagination" className="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={pageNumber <= 1}
+        onClick={onPrevious}
+      >
+        Previous
+      </Button>
+      <span className="text-sm text-muted-foreground">Page {pageNumber}</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={nextCursor === null}
+        onClick={() => nextCursor && onNext(nextCursor)}
+      >
+        Next
+      </Button>
+    </nav>
+  );
 }
 
 export default function OrdersPage() {
@@ -188,192 +258,220 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   );
 
   const master = (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section className="fm-admin-orders space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
       <PageHeader title="Orders" />
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
-        <h2 className="sr-only">Order list</h2>
-        <AdminIndexViews
-          label="Order status views"
-          views={orderViews}
-          value={status}
-          onChange={selectView}
-        />
-
-        {copiedId ? (
-          <p className="sr-only" role="status">
-            Order ID copied.
-          </p>
-        ) : null}
-        {state.phase === "loading" ? (
-          <div className="p-4">
-            <AdminPageState state="loading" title="Loading orders" />
-          </div>
-        ) : null}
-        {state.phase === "error" ? (
-          <div className="p-4">
-            <AdminPageState
-              state="error"
-              title="Orders could not be loaded"
-              message={state.message}
-              requestId={state.requestId}
-              onRetry={() => void load(status, pagination.cursor)}
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && visibleOrders.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState
-              state={status ? "filtered-empty" : "empty"}
-              message="No orders are visible in this view."
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && visibleOrders.length > 0 ? (
-          <>
-            <ul aria-label="Order list" className="divide-y divide-[var(--fm-border)] sm:hidden">
-              {visibleOrders.map((order) => (
-                <li key={order.orderId} className="space-y-3 p-4">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={recordHref(order)}
-                        onClick={rememberReturn}
-                        className="font-semibold text-[var(--fm-text)] hover:underline"
-                      >
-                        {orderLabel(order)}
-                      </Link>
-                      <p className="truncate text-sm text-[var(--fm-text-muted)]">
-                        {order.customerName ?? "Customer"}
-                      </p>
-                    </div>
-                    <OrderProgressStatus order={order} />
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-[var(--fm-text-muted)]">
-                      {date(order.committedAt)} · {order.fulfillmentMode.toLowerCase()}
+      <Card className="gap-0 overflow-hidden py-0">
+        <CardHeader className="px-0 py-0">
+          <CardTitle className="sr-only">Order list</CardTitle>
+          <Tabs value={status} onValueChange={selectView}>
+            <TabsList
+              variant="line"
+              aria-label="Order status views"
+              className="w-full justify-start overflow-x-auto border-b px-3 py-2"
+            >
+              {orderViews.map((view) => (
+                <TabsTrigger key={view.status} value={view.status} className="flex-none px-3">
+                  {view.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </CardHeader>
+        <CardContent className="px-0">
+          {copiedId ? (
+            <p className="sr-only" role="status">
+              Order ID copied.
+            </p>
+          ) : null}
+          {state.phase === "loading" ? (
+            <div className="flex flex-col gap-3 p-4" role="status" aria-label="Loading orders">
+              <span className="sr-only">Loading orders</span>
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : null}
+          {state.phase === "error" ? (
+            <div className="p-4">
+              <Alert variant="destructive">
+                <AlertTitle>Orders could not be loaded</AlertTitle>
+                <AlertDescription>
+                  {state.message}
+                  {state.requestId ? (
+                    <span className="block font-mono text-xs">
+                      Request reference: {state.requestId}
                     </span>
-                    <span className="font-medium">{money(order.totalMinor, order.currency)}</span>
-                  </div>
+                  ) : null}
                   <Button
                     type="button"
-                    variant="ghost"
                     size="sm"
-                    onClick={() => openOrderPreview(order)}
+                    variant="outline"
+                    className="mt-3"
+                    onClick={() => void load(status, pagination.cursor)}
                   >
-                    Preview order
+                    Retry
                   </Button>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden sm:block">
-              <Table aria-label="Order list">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-12">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleOrders.map((order) => (
-                    <TableRow
-                      key={order.orderId}
-                      tabIndex={0}
-                      aria-label={`Preview order ${orderLabel(order)}`}
-                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-focus)]"
-                      onClick={(event) => {
-                        if (
-                          (event.target as Element).closest("button, a, input, [role='menuitem']")
-                        )
-                          return;
-                        openOrderPreview(order);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openOrderPreview(order);
-                        }
-                      }}
-                    >
-                      <TableCell>
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : null}
+          {state.phase === "ready" && visibleOrders.length === 0 ? (
+            <div className="p-4">
+              <Alert role="status">
+                <AlertTitle>{status ? "No matching results" : "Nothing to show"}</AlertTitle>
+                <AlertDescription>No orders are visible in this view.</AlertDescription>
+              </Alert>
+            </div>
+          ) : null}
+          {state.phase === "ready" && visibleOrders.length > 0 ? (
+            <>
+              <ul aria-label="Order list" className="divide-y divide-border xl:hidden">
+                {visibleOrders.map((order) => (
+                  <li key={order.orderId} className="flex flex-col gap-3 p-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="min-w-0 flex-1">
                         <Link
                           href={recordHref(order)}
-                          className="font-medium hover:underline"
                           onClick={rememberReturn}
+                          className="font-semibold text-foreground hover:underline"
                         >
                           {orderLabel(order)}
                         </Link>
-                        {order.orderNumber ? (
-                          <p className="mt-0.5 max-w-40 truncate font-mono text-[11px] text-[var(--fm-text-muted)]">
-                            {order.orderId}
-                          </p>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{order.customerName ?? "Customer"}</p>
-                        <p className="text-xs text-[var(--fm-text-muted)]">{order.customerEmail}</p>
-                      </TableCell>
-                      <TableCell className="text-sm capitalize">
-                        {order.fulfillmentMode.toLowerCase()}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {money(order.totalMinor, order.currency)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
-                        {date(order.committedAt)}
-                      </TableCell>
-                      <TableCell>
-                        <OrderProgressStatus order={order} />
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Open actions for order ${orderLabel(order)}`}
-                            >
-                              <EllipsisVertical aria-hidden="true" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => openOrderPreview(order)}>
-                              <Eye aria-hidden="true" />
-                              View details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => void copyOrderId(order)}>
-                              <Clipboard aria-hidden="true" />
-                              {copiedId === order.orderId ? "Copied" : "Copy order ID"}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {order.customerName ?? "Customer"}
+                        </p>
+                      </div>
+                      <OrdersProgressStatus order={order} />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        {date(order.committedAt)} · {order.fulfillmentMode.toLowerCase()}
+                      </span>
+                      <span className="font-medium">{money(order.totalMinor, order.currency)}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openOrderPreview(order)}
+                    >
+                      Preview order
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden xl:block">
+                <Table aria-label="Order list">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order ID</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-12">
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : null}
-
+                  </TableHeader>
+                  <TableBody>
+                    {visibleOrders.map((order) => (
+                      <TableRow
+                        key={order.orderId}
+                        tabIndex={0}
+                        aria-label={`Preview order ${orderLabel(order)}`}
+                        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        onClick={(event) => {
+                          if (
+                            (event.target as Element).closest("button, a, input, [role='menuitem']")
+                          )
+                            return;
+                          openOrderPreview(order);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openOrderPreview(order);
+                          }
+                        }}
+                      >
+                        <TableCell>
+                          <Link
+                            href={recordHref(order)}
+                            className="font-medium hover:underline"
+                            onClick={rememberReturn}
+                          >
+                            {orderLabel(order)}
+                          </Link>
+                          {order.orderNumber ? (
+                            <p className="mt-0.5 max-w-40 truncate font-mono text-xs text-muted-foreground">
+                              {order.orderId}
+                            </p>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{order.customerName ?? "Customer"}</p>
+                          <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
+                        </TableCell>
+                        <TableCell className="text-sm capitalize">
+                          {order.fulfillmentMode.toLowerCase()}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {money(order.totalMinor, order.currency)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {date(order.committedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <OrdersProgressStatus order={order} />
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Open actions for order ${orderLabel(order)}`}
+                              >
+                                <EllipsisVertical aria-hidden="true" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="fm-admin-orders">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onSelect={() => openOrderPreview(order)}>
+                                  <Eye aria-hidden="true" />
+                                  View details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => void copyOrderId(order)}>
+                                  <Clipboard aria-hidden="true" />
+                                  {copiedId === order.orderId ? "Copied" : "Copy order ID"}
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          ) : null}
+        </CardContent>
         {state.phase === "ready" ? (
-          <AdminCursorPagination
-            pageNumber={pagination.pageNumber}
-            nextCursor={page?.nextCursor ?? null}
-            onPrevious={pagination.previous}
-            onNext={pagination.next}
-          />
+          <CardFooter className="justify-end border-t px-3 py-3">
+            <OrdersPagination
+              pageNumber={pagination.pageNumber}
+              nextCursor={page?.nextCursor ?? null}
+              onPrevious={pagination.previous}
+              onNext={pagination.next}
+            />
+          </CardFooter>
         ) : null}
-      </section>
+      </Card>
     </section>
   );
 

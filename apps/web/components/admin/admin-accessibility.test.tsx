@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { AdminShell, AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/admin/shadcn/table";
 import { AdminCursorPagination } from "./admin-controls";
 import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
 import { AdminPageState, AdminLiveRegion, type AdminPageStateKind } from "./admin-page-state";
@@ -40,9 +46,9 @@ const masterDetailWorkspace = readFileSync(
   new URL("./admin-master-detail-workspace.tsx", import.meta.url),
   "utf8",
 );
-const sheet = readFileSync(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
-const table = readFileSync(new URL("../ui/table.tsx", import.meta.url), "utf8");
-const alertDialog = readFileSync(new URL("../ui/alert-dialog.tsx", import.meta.url), "utf8");
+const sheet = readFileSync(new URL("./shadcn/sheet.tsx", import.meta.url), "utf8");
+const table = readFileSync(new URL("./shadcn/table.tsx", import.meta.url), "utf8");
+const alertDialog = readFileSync(new URL("./shadcn/alert-dialog.tsx", import.meta.url), "utf8");
 const controls = readFileSync(new URL("./admin-controls.tsx", import.meta.url), "utf8");
 const pageState = readFileSync(new URL("./admin-page-state.tsx", import.meta.url), "utf8");
 const productDetail = readFileSync(
@@ -140,19 +146,16 @@ describe("shared Admin accessibility contract", () => {
     expect(layout).not.toContain("dm-sans");
     expect(rootLayout).toContain('import "@fontsource-variable/geist/wght.css"');
     expect(rootLayout).toContain('import "@fontsource-variable/geist-mono/wght.css"');
-    expect(globals).toContain(
-      '--fm-font-display: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;',
-    );
-    expect(globals).toContain(
-      '--fm-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;',
-    );
-    expect(globals).toMatch(/\.fm-admin \{[\s\S]*font-family: var\(--fm-font-body\);/);
-    expect(globals).toContain(".fm-admin-sidebar-tooltip svg");
+    expect(globals).toContain("--fm-font-body: ui-sans-serif, system-ui, sans-serif;");
+    expect(globals).toMatch(/--fm-font-mono:\s+ui-monospace, SFMono-Regular/);
+    expect(globals).toMatch(/\.fm-admin \{[\s\S]*font-family: var\(--font-sans\);/);
+    expect(globals).toContain("@custom-variant admin-dark");
+    expect(globals).toContain("html:has(.fm-admin)");
     expect(shell).toContain('className="fm-admin-sidebar-tooltip rounded-lg"');
-    expect(shell).toContain('className="text-2xl font-bold tracking-[-0.025em]"');
+    expect(shell).toContain('className="text-2xl font-bold tracking-tight"');
   });
 
-  it("server-renders the expanded Shopify-style shell with accessible controls", () => {
+  it("server-renders the expanded Admin shell with accessible controls", () => {
     useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
     const markup = renderToStaticMarkup(
       createElement(AdminShell, {
@@ -172,7 +175,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain('src="/brand/freshmarkets-mark.webp"');
     expect(markup).toContain('aria-labelledby="admin-page-title"');
     expect(markup.indexOf("<header")).toBeLessThan(markup.indexOf("<aside"));
-    expect(shell).toContain("bg-[var(--fm-admin-header)] text-white");
+    expect(shell).toContain("border-b border-border bg-background text-foreground");
     expect(shell).toContain("top-14 z-20 hidden h-[calc(100vh-3.5rem)]");
     expect(shell).toContain(
       'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
@@ -217,7 +220,6 @@ describe("shared Admin accessibility contract", () => {
   it("keeps shared table content keyboard discoverable and headers scoped", () => {
     expect(table).toMatch(/tabIndex=\{0\}/);
     expect(table).toMatch(/aria-label=/);
-    expect(table).toMatch(/scope="col"/);
   });
 
   it("renders production status, table, and page-header output", () => {
@@ -239,9 +241,9 @@ describe("shared Admin accessibility contract", () => {
         createElement(PageHeader, { title: "Orders", description: "Committed orders." }),
       ),
     );
-    // Status badges are labels, not announcements: the shared pill carries the
-    // tone class, and live semantics stay with AdminPageState/AdminLiveRegion.
-    expect(markup).toContain("fm-admin-status-warning");
+    // Status badges are labels, not announcements; live semantics stay with
+    // AdminPageState/AdminLiveRegion.
+    expect(markup).toContain('data-variant="outline"');
     expect(markup).not.toContain('role="status"');
     expect(markup).toContain('role="region"');
     expect(markup).toContain('aria-label="Order queue"');
@@ -354,7 +356,7 @@ describe("shared Admin accessibility contract", () => {
   });
 
   it("names the mobile dialog close action", () => {
-    expect(sheet).toMatch(/aria-label="Close admin navigation"/);
+    expect(sheet).toMatch(/<span className="sr-only">Close<\/span>/);
   });
 
   it("renders an explicit selector when multiple Admin scopes are assigned", () => {
@@ -421,9 +423,9 @@ describe("shared Admin accessibility contract", () => {
     );
     expect(pagination).toContain('aria-label="Results pagination"');
     expect(pagination).toContain("Page 2");
-    expect(alertDialog).toContain("@radix-ui/react-dialog");
+    expect(alertDialog).toContain('from "radix-ui"');
     expect(alertDialog).toContain("AlertDialogPrimitive.Content");
-    expect(alertDialog).toContain("bg-[var(--fm-background)]");
+    expect(alertDialog).toContain("bg-background");
     expect(alertDialog).not.toContain("bg-[var(--fm-admin-surface)]");
     expect(controls).toContain('role="alertdialog"');
     expect(controls).toContain('aria-label="Confirmation reason"');

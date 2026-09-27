@@ -1,6 +1,6 @@
 import type { AdminAuditEventView } from "@freshmarkets/contracts";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { ListPageSection, PageHeader } from "../../../components/admin/admin-shell";
 
 export type AuditDetailState =
@@ -9,9 +9,9 @@ export type AuditDetailState =
   | { phase: "ready"; event: AdminAuditEventView };
 
 function JsonEvidence({ value }: { value: Readonly<Record<string, unknown>> | null }) {
-  if (value === null) return <p className="text-sm text-[var(--fm-muted)]">No value recorded.</p>;
+  if (value === null) return <p className="text-sm text-muted-foreground">No value recorded.</p>;
   return (
-    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-[var(--fm-surface-subtle)] p-4 text-xs">
+    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-xs">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -28,7 +28,7 @@ export function AuditDetailView({
     <Link
       href={returnHref}
       prefetch={false}
-      className="text-sm font-medium text-[var(--fm-info)] underline"
+      className="text-sm font-medium text-muted-foreground underline"
     >
       Back to audit log
     </Link>

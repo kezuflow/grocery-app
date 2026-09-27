@@ -1,6 +1,6 @@
 "use client";
 import { adminProductSummarySchema, adminProductDetailSchema } from "@freshmarkets/validation";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 
 import type { AdminProductDetail } from "@freshmarkets/contracts";
 import { useCategoryOptions } from "@/components/admin/category-authoring-state";
@@ -10,8 +10,8 @@ import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catal
 import { PageHeader } from "@/components/admin/admin-shell";
 import { ProductForm, type ProductFormValue } from "@/components/admin/product-form";
 import { ProductImagesEditor } from "@/components/admin/product-images-editor";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { useAdminContext, useAdminScopeGuard } from "../../../../admin-context-provider";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
@@ -215,18 +215,18 @@ export default function EditProductPage() {
         <div
           role="navigation"
           aria-label="Product editing sections"
-          className="border-b border-[var(--fm-border)]"
+          className="border-b border-border"
         >
           <div className="flex gap-1">
             <a
               href="#product-details-editor"
-              className="border-b-2 border-[var(--fm-admin-accent)] px-3 py-2 text-sm font-semibold"
+              className="border-b-2 border-primary px-3 py-2 text-sm font-semibold"
             >
               Product details
             </a>
             <a
               href="#product-images-editor"
-              className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-[var(--fm-text-muted)]"
+              className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground"
             >
               Images
             </a>
@@ -276,7 +276,7 @@ export default function EditProductPage() {
             {categories.error ? "Retry categories" : "More categories"}
           </Button>
         ) : null}
-        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-[var(--fm-admin-content)]/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <Button
             type="button"
             variant="outline"
@@ -296,7 +296,7 @@ export default function EditProductPage() {
             <Button
               type="submit"
               form={EDIT_PRODUCT_FORM_ID}
-              className="fm-admin-reference-primary"
+              className=""
               disabled={intent.pending || imageBusy || !dirty}
             >
               {intent.pending ? "Saving…" : "Save changes"}

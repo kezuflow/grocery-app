@@ -17,17 +17,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConfirmCommandDialog } from "@/components/admin/admin-controls";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { AdminStatusPill } from "@/components/admin/admin-status-pill";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+} from "@/components/admin/shadcn/dropdown-menu";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Table,
   TableBody,
@@ -35,7 +35,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/admin/shadcn/table";
 import {
   AdminCursorPagination,
   AdminIndexViews,
@@ -240,7 +240,7 @@ export function CategoriesPageClient({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-[var(--fm-destructive)] focus:bg-[var(--fm-danger-soft)] focus:text-[var(--fm-destructive)]"
+                className="text-destructive focus:bg-muted focus:text-destructive"
                 disabled={deactivationIntent.pending || deactivationIntent.uncertain}
                 onSelect={() => setCategoryToDeactivate(item)}
               >
@@ -264,7 +264,7 @@ export function CategoriesPageClient({
             <Button
               type="button"
               size="sm"
-              className="fm-admin-reference-primary"
+              className=""
               aria-expanded={panelOpen && panelMode === "create"}
               aria-controls="category-detail-panel"
               disabled={panelOpen && panelMode === "create" && creatorState.locked}
@@ -312,7 +312,7 @@ export function CategoriesPageClient({
         </p>
       ) : null}
       {payload?.ok ? (
-        <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
           <AdminIndexViews
             label="Category status views"
             views={
@@ -325,7 +325,7 @@ export function CategoriesPageClient({
             value={status}
             onChange={(next) => setFilter("status", next)}
           />
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fm-border)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
             <Input
               aria-label="Search categories"
               value={query}
@@ -333,7 +333,7 @@ export function CategoriesPageClient({
               placeholder="Search categories"
               className="sm:max-w-xs"
             />
-            <span className="text-xs text-[var(--fm-text-muted)]">
+            <span className="text-xs text-muted-foreground">
               {items.length} categor{items.length === 1 ? "y" : "ies"} shown
             </span>
           </div>
@@ -366,7 +366,7 @@ export function CategoriesPageClient({
                     >
                       {item.name}
                     </button>
-                    <span className="block text-xs text-[var(--fm-text-muted)]">{item.code}</span>
+                    <span className="block text-xs text-muted-foreground">{item.code}</span>
                   </TableCell>
                   <TableCell>{item.parentName ?? "Top level"}</TableCell>
                   <TableCell>
@@ -382,10 +382,7 @@ export function CategoriesPageClient({
               ))}
             </TableBody>
           </Table>
-          <div
-            className="divide-y divide-[var(--fm-border)] md:hidden"
-            aria-label="Category records"
-          >
+          <div className="divide-y divide-border md:hidden" aria-label="Category records">
             {items.map((item) => (
               <article key={item.categoryId} className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -401,13 +398,13 @@ export function CategoriesPageClient({
                     onClick={() => openCategory(item)}
                   >
                     <span className="block truncate">{item.name}</span>
-                    <span className="block text-xs font-normal text-[var(--fm-text-muted)]">
+                    <span className="block text-xs font-normal text-muted-foreground">
                       {item.code}
                     </span>
                   </button>
                   {categoryActions(item)}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fm-text-muted)]">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <AdminStatusPill
                     status={item.status}
                     tone={item.status === "active" ? "success" : "danger"}
@@ -429,7 +426,7 @@ export function CategoriesPageClient({
             ))}
           </div>
           {items.length === 0 ? (
-            <p role="status" className="p-6 text-sm text-[var(--fm-text-muted)]">
+            <p role="status" className="p-6 text-sm text-muted-foreground">
               {query.trim() || status !== "all"
                 ? "No categories match these filters."
                 : "No categories have been created."}
@@ -465,20 +462,13 @@ export function CategoriesPageClient({
 
   const categoryDetail = selectedCategory ? (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Category details
-          </p>
-          <h2
-            id="category-panel-title"
-            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
-          >
+          <p className="text-xs font-semibold text-muted-foreground">Category details</p>
+          <h2 id="category-panel-title" className="mt-1 truncate text-xl font-bold tracking-tight">
             {selectedCategory.name}
           </h2>
-          <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-            {selectedCategory.code}
-          </p>
+          <p className="mt-1 truncate text-sm text-muted-foreground">{selectedCategory.code}</p>
         </div>
         <Button
           type="button"
@@ -498,20 +488,20 @@ export function CategoriesPageClient({
             label={selectedCategory.status}
           />
         </div>
-        <dl className="divide-y divide-[var(--fm-border)] rounded-lg border border-[var(--fm-border)]">
+        <dl className="divide-y divide-border rounded-lg border border-border">
           {[
             ["Parent", selectedCategory.parentName ?? "Top level"],
             ["Products", String(selectedCategory.productCount)],
             ["Category ID", selectedCategory.categoryId],
           ].map(([label, value]) => (
             <div key={label} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-              <dt className="text-[var(--fm-text-muted)]">{label}</dt>
+              <dt className="text-muted-foreground">{label}</dt>
               <dd className="max-w-64 break-all text-right font-medium">{value}</dd>
             </div>
           ))}
         </dl>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border px-5 py-4">
         <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
           Close
         </Button>

@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { AdminRolePage, RpcResult } from "@freshmarkets/contracts";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { PageHeader, ListPageSection, StatusBadge } from "../../../../components/admin/admin-shell";
 import { WorkspaceNavigation } from "../../../../components/admin/workspace-navigation";
 import { useAdminCommand } from "../../../../components/admin/use-admin-command";
@@ -142,10 +142,7 @@ export default function RolesPage() {
       {globalScope && state.phase === "ready" ? (
         <>
           {notice ? (
-            <p
-              role="status"
-              className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-            >
+            <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">
               {notice}
             </p>
           ) : null}
@@ -196,7 +193,7 @@ export default function RolesPage() {
 
           <ListPageSection title="Roles">
             {state.page.items.length === 0 ? (
-              <p className="p-5 text-sm text-[var(--fm-text-muted)]" role="status">
+              <p className="p-5 text-sm text-muted-foreground" role="status">
                 No roles exist yet.
               </p>
             ) : (
@@ -222,14 +219,14 @@ export default function RolesPage() {
                           {role.status}
                         </StatusBadge>
                       </TableCell>
-                      <TableCell className="text-xs text-[var(--fm-text-muted)]">
+                      <TableCell className="text-xs text-muted-foreground">
                         {role.capabilityCodes.length} capabilities
                       </TableCell>
                       <TableCell>
                         <Link
                           href={`/admin/staff/roles/${role.roleId}`}
                           prefetch={false}
-                          className="text-xs font-medium text-[var(--fm-info)] underline"
+                          className="text-xs font-medium text-muted-foreground underline"
                         >
                           {role.status === "ACTIVE" ? "Edit" : "View"}
                         </Link>

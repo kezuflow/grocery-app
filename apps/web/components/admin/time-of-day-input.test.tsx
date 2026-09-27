@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { TimeOfDayInput } from "./time-of-day-input";
 
-vi.mock("../ui/select", () => ({
+vi.mock("@/components/admin/shadcn/select", () => ({
   Select: ({
     value,
     onValueChange,

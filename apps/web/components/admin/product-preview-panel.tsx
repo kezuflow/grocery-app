@@ -12,11 +12,17 @@ import {
 import { ChevronsUpDown, ExternalLink, ImageIcon, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Button } from "@/components/admin/shadcn/button";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { Input } from "@/components/admin/shadcn/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/admin/shadcn/select";
 import { AdminStatusPill } from "./admin-status-pill";
 import { useCategoryOptions } from "./category-authoring-state";
 import { useCatalogCommand } from "./catalog-command-state";
@@ -220,15 +226,10 @@ export function GlobalProductPreviewPanel({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fm-text-muted)]">
-            Global product preview
-          </p>
-          <h2
-            id="product-panel-title"
-            className="mt-1 truncate text-xl font-bold tracking-[-0.03em]"
-          >
+          <p className="text-xs font-semibold text-muted-foreground">Global product preview</p>
+          <h2 id="product-panel-title" className="mt-1 truncate text-xl font-bold tracking-tight">
             {product.name}
           </h2>
         </div>
@@ -245,7 +246,7 @@ export function GlobalProductPreviewPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-        <p className="mb-5 text-xs text-[var(--fm-text-muted)]">
+        <p className="mb-5 text-xs text-muted-foreground">
           {canManage
             ? "Global manages product identity, status, selling options and categories. Select a fulfillment location for its price and stock."
             : "This Global product is view-only with your current access. Select a fulfillment location to see its price and stock."}
@@ -255,10 +256,10 @@ export function GlobalProductPreviewPanel({
             <img
               src={image}
               alt=""
-              className="size-24 shrink-0 rounded-lg border border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] object-cover"
+              className="size-24 shrink-0 rounded-lg border border-border bg-muted object-cover"
             />
           ) : (
-            <span className="grid size-24 shrink-0 place-items-center rounded-lg border border-dashed border-[var(--fm-border)] bg-[var(--fm-admin-surface-muted)] text-[var(--fm-text-muted)]">
+            <span className="grid size-24 shrink-0 place-items-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground">
               <ImageIcon className="size-6" aria-hidden="true" />
             </span>
           )}
@@ -267,7 +268,7 @@ export function GlobalProductPreviewPanel({
               <div>
                 <label
                   htmlFor="product-preview-name"
-                  className="text-xs font-medium text-[var(--fm-text-muted)]"
+                  className="text-xs font-medium text-muted-foreground"
                 >
                   Product name
                 </label>
@@ -308,15 +309,13 @@ export function GlobalProductPreviewPanel({
             ) : (
               <h3 className="truncate text-lg font-bold">{product.name}</h3>
             )}
-            <p className="mt-1 truncate text-sm text-[var(--fm-text-muted)]">
-              {product.categoryName}
-            </p>
-            <p className="mt-1 truncate text-xs text-[var(--fm-text-muted)]">{product.slug}</p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{product.categoryName}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{product.slug}</p>
           </div>
         </section>
 
         <section
-          className="mt-6 flex items-center justify-between gap-3 border-t border-[var(--fm-border)] pt-5"
+          className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-5"
           aria-labelledby="product-preview-status"
         >
           <h3 id="product-preview-status" className="text-sm font-semibold">
@@ -330,7 +329,7 @@ export function GlobalProductPreviewPanel({
                 if (status === "active" || status === "inactive") void setProductStatus(status);
               }}
             >
-              <SelectTrigger className="w-32" indicator="up-down" aria-label="Product status">
+              <SelectTrigger className="w-32" aria-label="Product status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -349,7 +348,7 @@ export function GlobalProductPreviewPanel({
 
         {notice ? (
           <div className="mt-3 flex items-center justify-between gap-3" role="alert">
-            <p className="text-sm text-[var(--fm-danger)]">{notice}</p>
+            <p className="text-sm text-destructive">{notice}</p>
             {productCommand.uncertain || skuCommand.uncertain || categoryCommand.uncertain ? (
               <Button
                 type="button"
@@ -364,7 +363,7 @@ export function GlobalProductPreviewPanel({
         ) : null}
 
         <section
-          className="mt-6 border-t border-[var(--fm-border)] pt-5"
+          className="mt-6 border-t border-border pt-5"
           aria-labelledby="product-preview-options"
         >
           <div className="flex items-start justify-between gap-3">
@@ -372,40 +371,37 @@ export function GlobalProductPreviewPanel({
               <h3 id="product-preview-options" className="text-sm font-semibold">
                 Selling options
               </h3>
-              <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Different weights, packs, or variants for this product.
               </p>
             </div>
-            <span className="shrink-0 text-sm text-[var(--fm-text-muted)]">
+            <span className="shrink-0 text-sm text-muted-foreground">
               {product.skus.length} option{product.skus.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="mt-3 overflow-hidden rounded-lg border border-[var(--fm-border)]">
+          <div className="mt-3 overflow-hidden rounded-lg border border-border">
             {product.skus.length === 0 ? (
-              <p className="p-4 text-sm text-[var(--fm-text-muted)]">No selling options yet.</p>
+              <p className="p-4 text-sm text-muted-foreground">No selling options yet.</p>
             ) : (
               product.skus.map((sku) => (
                 <article
                   key={sku.skuId}
-                  className="flex items-center gap-3 border-b border-[var(--fm-border)] p-3 last:border-b-0"
+                  className="flex items-center gap-3 border-b border-border p-3 last:border-b-0"
                 >
                   {image ? (
                     <img
                       src={image}
                       alt=""
-                      className="size-12 shrink-0 rounded-md border border-[var(--fm-border)] object-cover"
+                      className="size-12 shrink-0 rounded-md border border-border object-cover"
                     />
                   ) : (
-                    <span className="grid size-12 shrink-0 place-items-center rounded-md bg-[var(--fm-admin-surface-muted)]">
-                      <ImageIcon
-                        className="size-4 text-[var(--fm-text-muted)]"
-                        aria-hidden="true"
-                      />
+                    <span className="grid size-12 shrink-0 place-items-center rounded-md bg-muted">
+                      <ImageIcon className="size-4 text-muted-foreground" aria-hidden="true" />
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{sku.name}</p>
-                    <p className="mt-0.5 text-xs text-[var(--fm-text-muted)]">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {sku.code} · {sku.sellQuantity.toLocaleString()} {sku.unitSymbol}
                     </p>
                   </div>
@@ -418,11 +414,7 @@ export function GlobalProductPreviewPanel({
                           void setVariantStatus(sku.skuId, sku.version, status);
                       }}
                     >
-                      <SelectTrigger
-                        className="w-28"
-                        indicator="up-down"
-                        aria-label={`${sku.name} status`}
-                      >
+                      <SelectTrigger className="w-28" aria-label={`${sku.name} status`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -442,11 +434,7 @@ export function GlobalProductPreviewPanel({
             )}
           </div>
           {product.allowedActions.includes("UPDATE") ? (
-            <Button
-              asChild
-              variant="outline"
-              className="mt-2 w-full justify-start text-[var(--fm-admin-accent-strong)]"
-            >
+            <Button asChild variant="outline" className="mt-2 w-full justify-start text-primary">
               <Link href={`${detailHref}#product-variants`} prefetch={false}>
                 <Plus aria-hidden="true" />
                 Add selling option
@@ -456,14 +444,14 @@ export function GlobalProductPreviewPanel({
         </section>
 
         <section
-          className="mt-6 border-t border-[var(--fm-border)] pt-5"
+          className="mt-6 border-t border-border pt-5"
           aria-labelledby="product-preview-categories"
         >
           <div>
             <h3 id="product-preview-categories" className="text-sm font-semibold">
               Categories
             </h3>
-            <p className="mt-1 text-xs text-[var(--fm-text-muted)]">
+            <p className="mt-1 text-xs text-muted-foreground">
               {canManage
                 ? "Choose one or more. The first category is primary."
                 : "Assigned categories for this product."}
@@ -512,13 +500,13 @@ export function GlobalProductPreviewPanel({
                         />
                         <span className="min-w-0 flex-1 truncate">{category.name}</span>
                         {checked && categoryIds[0] === category.categoryId ? (
-                          <span className="text-xs text-[var(--fm-text-muted)]">Primary</span>
+                          <span className="text-xs text-muted-foreground">Primary</span>
                         ) : null}
                       </label>
                     );
                   })}
                   {categoryOptions.error ? (
-                    <p className="p-2 text-xs text-[var(--fm-danger)]">{categoryOptions.error}</p>
+                    <p className="p-2 text-xs text-destructive">{categoryOptions.error}</p>
                   ) : null}
                 </div>
                 {categoryOptions.hasMore ? (
@@ -539,24 +527,21 @@ export function GlobalProductPreviewPanel({
           )}
         </section>
 
-        <section
-          className="mt-6 border-t border-[var(--fm-border)] pt-5"
-          aria-label="Product metadata"
-        >
+        <section className="mt-6 border-t border-border pt-5" aria-label="Product metadata">
           <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-            <dt className="text-[var(--fm-text-muted)]">Primary category</dt>
+            <dt className="text-muted-foreground">Primary category</dt>
             <dd className="font-medium">{product.categories[0]?.name ?? product.categoryName}</dd>
-            <dt className="text-[var(--fm-text-muted)]">Inventory unit</dt>
+            <dt className="text-muted-foreground">Inventory unit</dt>
             <dd className="font-medium">{product.inventoryPool.baseUnitSymbol}</dd>
-            <dt className="text-[var(--fm-text-muted)]">Catalog version</dt>
+            <dt className="text-muted-foreground">Catalog version</dt>
             <dd>{product.version}</dd>
-            <dt className="text-[var(--fm-text-muted)]">Last recorded change</dt>
+            <dt className="text-muted-foreground">Last recorded change</dt>
             <dd>{date(latestRecordedChange ?? null)}</dd>
           </dl>
         </section>
       </div>
 
-      <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-[var(--fm-border)] px-5 py-4">
+      <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-border px-5 py-4">
         {frozen || hasDraft ? (
           <Button type="button" variant="outline" disabled>
             <ExternalLink aria-hidden="true" /> View product

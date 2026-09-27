@@ -23,8 +23,8 @@ import { CustomerAccessStatusBadge } from "../../../components/admin/customer-st
 import { InvitationEmailStatusText } from "../../../components/admin/invitation-email-status";
 import { useAdminCommand } from "../../../components/admin/use-admin-command";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
 import {
   Table,
   TableBody,
@@ -32,7 +32,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 
 type LoadState =
@@ -311,7 +311,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
             <Button
               type="button"
               size="sm"
-              className="fm-admin-reference-primary"
+              className=""
               aria-expanded={panelOpen}
               aria-controls="customer-invitation-panel"
               disabled={panelOpen && invitationLocked}
@@ -326,10 +326,10 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
       <AdminLiveRegion message={notice} />
       <AdminLiveRegion message={panelOpen ? null : invitationCommand.notice} />
 
-      <section className="overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] shadow-[var(--fm-shadow-card)]">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Customer list</h2>
         <form
-          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[var(--fm-border)] px-4 py-2.5"
+          className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
           onSubmit={(event) => {
             event.preventDefault();
             applySearch(query);
@@ -388,7 +388,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
         ) : null}
         {state.phase === "ready" && visibleCustomers.length > 0 ? (
           <>
-            <ul aria-label="Customer list" className="divide-y divide-[var(--fm-border)] sm:hidden">
+            <ul aria-label="Customer list" className="divide-y divide-border sm:hidden">
               {visibleCustomers.map((customer) => (
                 <li key={customer.customerId} className="space-y-3 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -397,11 +397,11 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
                         href={recordHref(customer)}
                         prefetch={false}
                         onClick={openCustomer}
-                        className="break-all font-semibold text-[var(--fm-text)] hover:underline"
+                        className="break-all font-semibold text-foreground hover:underline"
                       >
                         {customer.email}
                       </Link>
-                      <p className="mt-0.5 break-all text-sm text-[var(--fm-text-muted)]">
+                      <p className="mt-0.5 break-all text-sm text-muted-foreground">
                         {customer.phone ?? "No phone number"}
                       </p>
                     </div>
@@ -409,15 +409,15 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
                   </div>
                   <dl className="grid grid-cols-3 gap-3 text-sm">
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Orders</dt>
+                      <dt className="text-xs text-muted-foreground">Orders</dt>
                       <dd className="mt-0.5 font-medium">{customer.orderCount}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Last order</dt>
+                      <dt className="text-xs text-muted-foreground">Last order</dt>
                       <dd className="mt-0.5">{date(customer.lastOrderAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-[var(--fm-text-muted)]">Joined</dt>
+                      <dt className="text-xs text-muted-foreground">Joined</dt>
                       <dd className="mt-0.5">{date(customer.createdAt)}</dd>
                     </div>
                   </dl>
@@ -447,7 +447,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
                         >
                           {customer.email}
                         </Link>
-                        <p className="mt-0.5 break-all text-xs text-[var(--fm-text-muted)]">
+                        <p className="mt-0.5 break-all text-xs text-muted-foreground">
                           {customer.phone ?? "No phone number"}
                         </p>
                       </TableCell>
@@ -455,10 +455,10 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
                         <CustomerAccessStatusBadge status={customer.accessStatus} />
                       </TableCell>
                       <TableCell className="font-medium">{customer.orderCount}</TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {date(customer.lastOrderAt)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-[var(--fm-text-muted)]">
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {date(customer.createdAt)}
                       </TableCell>
                     </TableRow>
@@ -484,12 +484,12 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
 
   const inviteDetail = canManage ? (
     <>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--fm-border)] px-5 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
         <div>
-          <h2 id="customer-invitation-title" className="text-xl font-bold tracking-[-0.03em]">
+          <h2 id="customer-invitation-title" className="text-xl font-bold tracking-tight">
             Invite customer
           </h2>
-          <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+          <p className="mt-1 text-sm text-muted-foreground">
             Create and monitor customer invitations.
           </p>
         </div>
@@ -529,7 +529,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
           </label>
           <Button
             type="submit"
-            className="fm-admin-reference-primary"
+            className=""
             disabled={invitationCommand.busy || invitationCommand.uncertain}
           >
             {invitationCommand.busy ? "Creating…" : "Create invitation"}
@@ -537,20 +537,20 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
         </form>
         {invitations && invitations.items.length > 0 ? (
           <section
-            className="space-y-3 border-t border-[var(--fm-border)] pt-5"
+            className="space-y-3 border-t border-border pt-5"
             aria-label="Customer invitations"
           >
             <h3 className="font-semibold">Recent invitations</h3>
-            <p className="text-sm text-[var(--fm-text-muted)]">
+            <p className="text-sm text-muted-foreground">
               Email delivery status and pending invitation controls.
             </p>
             {invitations.items.map((invitation) => (
               <article
                 key={invitation.invitationId}
-                className="space-y-2 rounded-lg border border-[var(--fm-border)] p-3"
+                className="space-y-2 rounded-lg border border-border p-3"
               >
                 <p className="break-all font-medium">{invitation.email}</p>
-                <p className="text-sm text-[var(--fm-text-muted)]">
+                <p className="text-sm text-muted-foreground">
                   {invitation.status} · Expires {date(invitation.expiresAt)}
                 </p>
                 <InvitationEmailStatusText status={invitation.emailStatus} />
@@ -616,7 +616,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
           </section>
         ) : null}
       </div>
-      <div className="flex shrink-0 justify-end border-t border-[var(--fm-border)] px-5 py-4">
+      <div className="flex shrink-0 justify-end border-t border-border px-5 py-4">
         <Button
           type="button"
           variant="outline"

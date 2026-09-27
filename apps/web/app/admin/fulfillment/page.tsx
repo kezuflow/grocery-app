@@ -12,8 +12,8 @@ import {
   type RpcResult,
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
-import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
-import { Button } from "../../../components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
+import { Button } from "@/components/admin/shadcn/button";
 import {
   Table,
   TableBody,
@@ -21,7 +21,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@/components/admin/shadcn/table";
 import { ListPageSection, PageHeader, StatusBadge } from "../../../components/admin/admin-shell";
 import { useAdminLocation } from "../../../components/admin/use-admin-location";
 import { useAdminCommandIntent } from "../../../components/admin/admin-command-state";
@@ -345,7 +345,7 @@ export function FulfillmentWorkspace({
           </Link>
         </div>
         {unresolved ? (
-          <Alert role="alert" className="border-[var(--fm-warning-border)]">
+          <Alert role="alert" className="border-border">
             <AlertTitle>Preparation action awaiting confirmation</AlertTitle>
             <AlertDescription>
               {commandNotice} Order {unresolved.orderId} remains selected until Core returns a final
@@ -361,12 +361,12 @@ export function FulfillmentWorkspace({
             </AlertDescription>
           </Alert>
         ) : commandNotice ? (
-          <p role="status" className="rounded-lg border border-[var(--fm-border)] p-4 text-sm">
+          <p role="status" className="rounded-lg border border-border p-4 text-sm">
             {commandNotice}
           </p>
         ) : null}
         {locationId ? (
-          <div className="overflow-hidden rounded-xl border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             <AdminIndexViews<FulfillmentQueueFilter>
               label="Point of Sale order views"
               views={queueViews}
@@ -408,7 +408,7 @@ export function FulfillmentWorkspace({
                 <h2 className="text-lg font-semibold">Orders</h2>
                 <span
                   role={operationalRefresh.stale ? "status" : undefined}
-                  className="text-sm text-[var(--fm-text-muted)]"
+                  className="text-sm text-muted-foreground"
                 >
                   {operationalRefresh.stale
                     ? "Updates delayed"
@@ -437,10 +437,10 @@ export function FulfillmentWorkspace({
                       aria-controls="point-of-sale-order"
                       disabled={commandLocked}
                       onClick={() => selectOrder(item.orderId)}
-                      className={`min-h-28 w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-focus)] ${
+                      className={`min-h-28 w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         selectedOrderId === item.orderId
-                          ? "border-[var(--fm-focus)] bg-[var(--fm-admin-surface)]"
-                          : "border-[var(--fm-border)] bg-[var(--fm-admin-surface)] hover:bg-[var(--fm-hover)]"
+                          ? "border-ring bg-card"
+                          : "border-border bg-card hover:bg-accent"
                       }`}
                     >
                       <span className="flex items-start justify-between gap-3">
@@ -449,7 +449,7 @@ export function FulfillmentWorkspace({
                         </span>
                         <StatusBadge>{preparationStatus(item.status)}</StatusBadge>
                       </span>
-                      <span className="mt-1 block text-sm text-[var(--fm-text-muted)]">
+                      <span className="mt-1 block text-sm text-muted-foreground">
                         {item.operational?.fulfillmentMode === "SCHEDULED"
                           ? "Scheduled"
                           : "Instant"}
@@ -520,7 +520,7 @@ export function FulfillmentWorkspace({
       />
       {orderId || cycleId ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-[var(--fm-text-muted)]">
+          <span className="text-muted-foreground">
             {orderId ? `Order ${orderId}` : null}
             {orderId && cycleId ? " · " : null}
             {cycleId ? `Delivery week ${cycleId}` : null}
@@ -531,7 +531,7 @@ export function FulfillmentWorkspace({
         </div>
       ) : null}
       {unresolved ? (
-        <Alert role="alert" className="border-[var(--fm-warning-border)]">
+        <Alert role="alert" className="border-border">
           <AlertTitle>Status action awaiting confirmation</AlertTitle>
           <AlertDescription>
             {commandNotice} Order {unresolved.orderId} remains selected until Core returns a final
@@ -548,15 +548,12 @@ export function FulfillmentWorkspace({
           </AlertDescription>
         </Alert>
       ) : commandNotice ? (
-        <p
-          role="status"
-          className="rounded-md border border-[var(--fm-border)] bg-[var(--fm-admin-surface)] p-3 text-sm"
-        >
+        <p role="status" className="rounded-md border border-border bg-card p-3 text-sm">
           {commandNotice}
         </p>
       ) : null}
       {locationId ? (
-        <div className="overflow-hidden rounded-[var(--fm-radius-panel)] border border-[var(--fm-border)] bg-[var(--fm-admin-surface)]">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           <AdminIndexViews<FulfillmentQueueFilter>
             label="Fulfillment views"
             views={queueViews}
@@ -594,11 +591,11 @@ export function FulfillmentWorkspace({
             title="Order status"
             description={`${label} · ${currentPage.items.length} ${currentPage.items.length === 1 ? "order" : "orders"} on this page`}
           >
-            <div className="flex min-h-8 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs text-[var(--fm-text-muted)]">
+            <div className="flex min-h-8 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
               <span>Showing Core-filtered paid orders for the selected location</span>
               {operationalRefresh.refreshing ? <span role="status">Updating…</span> : null}
               {operationalRefresh.stale ? (
-                <span role="status" className="text-amber-700">
+                <span role="status" className="text-muted-foreground">
                   Updates delayed
                 </span>
               ) : null}
@@ -633,11 +630,7 @@ export function FulfillmentWorkspace({
                     {currentPage.items.map((item) => (
                       <TableRow
                         key={item.orderId}
-                        className={
-                          selectedOrderId === item.orderId
-                            ? "bg-[var(--fm-admin-canvas)]"
-                            : undefined
-                        }
+                        className={selectedOrderId === item.orderId ? "bg-background" : undefined}
                         aria-selected={selectedOrderId === item.orderId}
                         onClick={(event) => {
                           if (commandLocked) return;
@@ -656,7 +649,7 @@ export function FulfillmentWorkspace({
                           >
                             {item.operational?.orderNumber ?? item.orderId}
                           </button>
-                          <span className="block text-xs font-normal text-[var(--fm-text-muted)]">
+                          <span className="block text-xs font-normal text-muted-foreground">
                             {item.operational?.fulfillmentMode === "SCHEDULED"
                               ? "Scheduled"
                               : "Instant"}
@@ -672,7 +665,7 @@ export function FulfillmentWorkspace({
                               item.operational?.timing.cycleName ??
                               "Paid order"}
                           </span>
-                          <span className="text-[var(--fm-text-muted)]">
+                          <span className="text-muted-foreground">
                             {dateTime(
                               item.operational?.timing.startsAt ??
                                 item.operational?.timing.pickupAt ??

@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { z, inventoryDistributionPageSchema } from "@freshmarkets/validation";
 import type { InventoryDistributionPage } from "@freshmarkets/contracts";
 import { ChevronDown } from "lucide-react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { Button } from "@/components/admin/shadcn/button";
+import { Input } from "@/components/admin/shadcn/input";
+import { Label } from "@/components/admin/shadcn/label";
 import { AdminCursorPagination, useAdminPagination } from "./admin-controls";
 
 export function InventoryDistribution() {
