@@ -128,7 +128,7 @@ export function ProductDetailSummary({ product }: { product: AdminProductDetail 
               <div className="flex min-w-0 gap-2 rounded-lg bg-muted p-3">
                 <Boxes className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">Inventory base unit</dt>
+                  <dt className="text-xs text-muted-foreground">Stock unit</dt>
                   <dd className="truncate text-sm font-medium">
                     {product.inventoryPool.baseUnitCode} ({product.inventoryPool.baseUnitSymbol})
                   </dd>

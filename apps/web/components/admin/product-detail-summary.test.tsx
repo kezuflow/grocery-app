@@ -66,7 +66,7 @@ describe("ProductDetailSummary", () => {
     expect(html).toContain("/media/media-1/content?v=2");
     expect(html).toContain("Product overview");
     expect(html).toContain("Catalog facts");
-    expect(html).toContain("Inventory base unit");
+    expect(html).toContain("Stock unit");
     expect(html).toContain("Central Cebu price");
     expect(html).not.toContain("Pricing context");
     expect(html).not.toContain("Revenue");

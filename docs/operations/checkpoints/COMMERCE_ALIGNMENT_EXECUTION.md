@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Simplify Product stock wording — ADMIN-PRODUCT-STOCK-WORDING-20 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Products, promotions and stock** and
+**Admin visual foundation**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`,
+**Phase 7 — Complete journeys and activation evidence**. The owner found the
+Add Product stock fields confusing. Acceptance: the form plainly distinguishes
+one shared stock total from actual counts by size, names the stock unit in
+ordinary language, explains bulk grams versus counted pieces, and preserves
+all stock behavior and authoring choices.
+
+Started on clean `main` at `e31148ee0a2640747b529568950d0e5b30c43ddf` with no
+tracked or non-ignored untracked changes. Another Admin slice advanced `main`
+to `0e89edb4` during this work; its committed files were preserved. The Add
+Product form now says “How is stock tracked?” with one-total and count-by-size
+choices, and “Stock unit” or “Bulk stock unit” according to the selection. Its
+short help text is associated with each select, and base-unit options show
+ordinary names. The Product detail summary uses “Stock unit” for consistency.
+Existing Web browser locators were updated; Core, contracts, storage,
+Storefront, authentication and business rules were not changed.
+
+On the edited working tree, `pnpm --filter @freshmarkets/web test --
+components/admin/product-form.test.tsx
+components/admin/product-detail-summary.test.tsx
+components/admin/admin-accessibility.test.tsx` passed (20 tests), as did Web
+typecheck, `pnpm lint`, focused `pnpm exec oxfmt --check` for the 12 changed
+Web files, and `git diff --check`. An authenticated local browser at
+`localhost:3000` showed shared-stock and counted-size text, automatic Gram
+selection for counted sizes, accessible select names, and readable desktop
+and narrow layouts. No Product was submitted. This is local presentation
+acceptance; no provider or deployment acceptance is claimed.
+
+Completion level: **one Product form wording correction locally verified**.
+Remaining Phase 7 browser/provider journeys are unchanged. Next action: resume
+the first unresolved Phase 7 journey under the commerce plan.
+
 ## Promotion Codes status switch correction — ADMIN-PROMOTION-SWITCH-23 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

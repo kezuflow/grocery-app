@@ -7,7 +7,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
 import { adminProductMediaMaxCount } from "@freshmarkets/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/admin/shadcn/button";
 import {
@@ -94,6 +94,8 @@ export function ProductForm({
   onChange: (value: ProductFormValue) => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
+  const stockTrackingHintId = useId();
+  const stockUnitHintId = useId();
   function updateDetail(index: number, field: "label" | "value", nextValue: string) {
     onChange({
       ...value,
@@ -564,68 +566,76 @@ export function ProductForm({
                 </label>
                 {units ? (
                   <>
-                    <label className="block space-y-1 text-sm font-medium">
-                      <span>Stock sold by</span>
-                      <select
-                        className="h-10 w-full rounded-md border border-border bg-card px-3"
-                        value={value.stockTracking ?? "SHARED"}
-                        onChange={(event) =>
-                          onChange({
-                            ...value,
-                            stockTracking:
-                              event.target.value === "COUNTED_SIZES" ? "COUNTED_SIZES" : "SHARED",
-                            inventoryBaseUnitId:
-                              event.target.value === "COUNTED_SIZES"
-                                ? units.find((unit) => unit.code === "GRAM")?.unitId
-                                : value.inventoryBaseUnitId,
-                            variants: value.variants?.map((variant) => ({
-                              ...variant,
-                              sellableUnitId: "",
-                              sellQuantity: event.target.value === "COUNTED_SIZES" ? "1" : "",
-                            })),
-                          })
-                        }
-                      >
-                        <option value="SHARED">Shared weight or identical pieces</option>
-                        <option value="COUNTED_SIZES">
-                          Actual counted sizes (Small, Medium, Large)
-                        </option>
-                      </select>
+                    <div className="flex flex-col gap-1">
+                      <label className="flex flex-col gap-1 text-sm font-medium">
+                        <span>How is stock tracked?</span>
+                        <select
+                          className="h-10 w-full rounded-md border border-border bg-card px-3"
+                          value={value.stockTracking ?? "SHARED"}
+                          aria-describedby={stockTrackingHintId}
+                          onChange={(event) =>
+                            onChange({
+                              ...value,
+                              stockTracking:
+                                event.target.value === "COUNTED_SIZES" ? "COUNTED_SIZES" : "SHARED",
+                              inventoryBaseUnitId:
+                                event.target.value === "COUNTED_SIZES"
+                                  ? units.find((unit) => unit.code === "GRAM")?.unitId
+                                  : value.inventoryBaseUnitId,
+                              variants: value.variants?.map((variant) => ({
+                                ...variant,
+                                sellableUnitId: "",
+                                sellQuantity: event.target.value === "COUNTED_SIZES" ? "1" : "",
+                              })),
+                            })
+                          }
+                        >
+                          <option value="SHARED">One stock total (grams or pieces)</option>
+                          <option value="COUNTED_SIZES">Count each size separately</option>
+                        </select>
+                      </label>
+                      <p id={stockTrackingHintId} className="text-xs text-muted-foreground">
+                        {countedSizes
+                          ? "Receive in grams, then count actual pieces or packs by size. Sales use that size's count."
+                          : "All selling options use the same stock total, measured in grams or pieces."}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="flex flex-col gap-1 text-sm font-medium">
+                        <span>{countedSizes ? "Bulk stock unit" : "Stock unit"}</span>
+                        <select
+                          className="h-10 w-full rounded-md border border-border bg-card px-3"
+                          value={value.inventoryBaseUnitId ?? ""}
+                          required
+                          aria-describedby={countedSizes ? stockUnitHintId : undefined}
+                          onChange={(event) =>
+                            onChange({ ...value, inventoryBaseUnitId: event.target.value })
+                          }
+                        >
+                          <option value="">Choose grams or pieces</option>
+                          {units
+                            .filter(
+                              (unit) =>
+                                unit.status === "active" &&
+                                unit.dimension !== "VOLUME" &&
+                                (countedSizes
+                                  ? unit.code === "GRAM"
+                                  : unit.code === unit.canonicalBaseCode) &&
+                                unit.conversionNumerator === unit.conversionDenominator,
+                            )
+                            .map((unit) => (
+                              <option key={unit.unitId} value={unit.unitId}>
+                                {unit.displayName}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
                       {countedSizes ? (
-                        <p className="text-xs font-normal text-muted-foreground">
-                          Receive bulk grams and count each size. Each piece or pack has its own
-                          shipping grams.
+                        <p id={stockUnitHintId} className="text-xs text-muted-foreground">
+                          Each size is counted in pieces.
                         </p>
                       ) : null}
-                    </label>
-                    <label className="block space-y-1 text-sm font-medium">
-                      <span>Inventory base unit</span>
-                      <select
-                        className="h-10 w-full rounded-md border border-border bg-card px-3"
-                        value={value.inventoryBaseUnitId ?? ""}
-                        required
-                        onChange={(event) =>
-                          onChange({ ...value, inventoryBaseUnitId: event.target.value })
-                        }
-                      >
-                        <option value="">Select a canonical base unit</option>
-                        {units
-                          .filter(
-                            (unit) =>
-                              unit.status === "active" &&
-                              unit.dimension !== "VOLUME" &&
-                              (countedSizes
-                                ? unit.code === "GRAM"
-                                : unit.code === unit.canonicalBaseCode) &&
-                              unit.conversionNumerator === unit.conversionDenominator,
-                          )
-                          .map((unit) => (
-                            <option key={unit.unitId} value={unit.unitId}>
-                              {unit.displayName} ({unit.code})
-                            </option>
-                          ))}
-                      </select>
-                    </label>
+                    </div>
                   </>
                 ) : null}
                 {value.status ? (

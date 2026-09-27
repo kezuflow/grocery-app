@@ -12,7 +12,7 @@ for (const failure of ["transport", "unconfirmed receipt"] as const)
     await page.getByLabel("Product name", { exact: true }).fill(name);
     await page.getByLabel("Product slug").fill(`list-recovery-${id}`);
     await page.getByLabel("Product category").selectOption({ index: 1 });
-    await page.getByLabel("Inventory base unit").selectOption("unit-gram");
+    await page.getByLabel("Stock unit").selectOption("unit-gram");
     await page.getByLabel("SKU", { exact: true }).fill(`LIST_${id.slice(0, 8)}`);
     await page.getByLabel("Variant name").fill("250 g");
     await page.getByLabel("Sell unit").selectOption("unit-gram");

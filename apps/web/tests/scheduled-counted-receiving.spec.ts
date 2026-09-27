@@ -15,7 +15,7 @@ for (const width of [1440, 390])
     await page.getByLabel("Product name", { exact: true }).fill(productName);
     await page.getByLabel("Product slug").fill(`scheduled-${id}`);
     await page.getByLabel("Product category").selectOption({ index: 1 });
-    await page.getByLabel("Stock sold by").selectOption("COUNTED_SIZES");
+    await page.getByLabel("How is stock tracked?").selectOption("COUNTED_SIZES");
     await page.getByLabel("SKU", { exact: true }).fill(`SMALL_${id.slice(0, 8)}`);
     await page.getByLabel("Variant name").fill("Small");
     await page.getByLabel("Sell unit").selectOption("Pack");

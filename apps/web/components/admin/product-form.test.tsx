@@ -195,7 +195,7 @@ describe("ProductForm", () => {
         }}
       />,
     );
-    expect(html).toContain("Gram (GRAM)");
+    expect(html).toContain('<option value="unit-gram">Gram</option>');
     expect(html).not.toContain("Milliliter");
     expect(html).not.toContain("MILLILITER");
   });

@@ -275,7 +275,7 @@ test("a Product manager can create, inspect, and edit customer-facing details", 
   await adminPage.getByLabel("Product slug").fill(`e2e-authored-${suffix}`);
   await adminPage.getByLabel("Product description").fill("A customer-facing description.");
   await adminPage.getByLabel("Product category").selectOption({ index: 1 });
-  await adminPage.getByLabel("Inventory base unit").selectOption("unit-gram");
+  await adminPage.getByLabel("Stock unit").selectOption("unit-gram");
   const variantCode = `E2E_${suffix.slice(0, 8)}`.toUpperCase();
   await adminPage.getByLabel("SKU").fill(variantCode);
   await adminPage.getByLabel("Variant name").fill("250 g");
