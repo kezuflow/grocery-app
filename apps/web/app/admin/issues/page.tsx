@@ -377,16 +377,16 @@ export default function IssuesPage() {
         </Alert>
       ) : null}
 
+      <AdminIndexViews
+        label="Order issue status views"
+        views={issueViews}
+        value={status}
+        disabled={commandLocked}
+        onChange={selectView}
+      />
+
       <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <h2 className="sr-only">Order issue queue</h2>
-        <AdminIndexViews
-          label="Order issue status views"
-          views={issueViews}
-          value={status}
-          disabled={commandLocked}
-          onChange={selectView}
-        />
-
         {state.phase === "loading" ? (
           <div className="p-4">
             <AdminPageState state="loading" title="Loading order issues" />
