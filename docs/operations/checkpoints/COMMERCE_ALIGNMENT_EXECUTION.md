@@ -26,10 +26,11 @@ already fail standalone `oxfmt --check`; this edit preserves their established f
 unrelated sections. A fresh remote D1 read was rejected by Cloudflare with `7403` account access, so
 the production 0103 fact is from the successful read in FIRST-LIVE-PAYMENT-TRACE-1, not a fresh
 observation. No deployment, remote migration, provider operation, outbound message or production
-business write was authorized or performed. Completion level: **one documentation and copy correction
-locally verified; zero production Scheduled rollouts**. Next action: commit/push this correction,
-then prepare the separately authorized production migration/paired Worker rollout to replace the
-live screen.
+business write was authorized or performed. The correction was committed to `main` as `2a26537b`
+and pushed to `origin/main`; the checkout was clean after push. Completion level: **one documentation
+and copy correction locally verified and pushed; zero production Scheduled rollouts**. Next action:
+prepare the separately authorized production migration/paired Worker rollout and audited
+provider-evidence cutover to replace the live screen.
 
 ## Current live-payment trace — FIRST-LIVE-PAYMENT-TRACE-1 (2026-09-27)
 
