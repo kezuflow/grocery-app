@@ -74,7 +74,7 @@ describe("GlobalProductPreviewPanel", () => {
     expect(identity).toContain('role="switch"');
     expect(identity).toContain('aria-label="Product status"');
     expect(identity).toContain('aria-checked="true"');
-    expect(identity).toContain("text-green-500");
+    expect(identity).toContain('class="text-sm font-medium">Active</span>');
     expect(identity).not.toContain("Vegetables");
     expect(identity).not.toContain(">zucchini<");
     expect(html).not.toContain("min-h-11 items-center rounded-lg border");
@@ -132,7 +132,7 @@ describe("GlobalProductPreviewPanel", () => {
     );
 
     expect(html).toContain('aria-checked="false"');
-    expect(html).toContain("text-destructive");
+    expect(html).toContain('class="text-sm font-medium">Inactive</span>');
     expect(html).toContain("data-[state=unchecked]:bg-destructive");
   });
 });

@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Neutral Product status text — ADMIN-PRODUCT-STATUS-TEXT-17 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
+Product preview**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`,
+**Phase 7 — Complete journeys and activation evidence**. The owner corrected
+the previous status-switch presentation: Active/Inactive text should use the
+normal text color, while the switch track remains green/red. Acceptance:
+neutral state text beside the existing switch, with unchanged status command,
+read-only guard and selling-option controls.
+
+Started on `main` at `8e48afe6`. Separate uncommitted Admin header changes in
+`admin-shell.tsx` and its design note were already present and are preserved
+outside this slice. Only the Global Product preview state label loses its
+green/red text class; the switch colors and behavior remain. No Core,
+provider, Storefront or auth behavior changes.
+
+`pnpm --filter @freshmarkets/web test -- product-preview-panel.test.tsx`
+(7/7), Web typecheck, lint, format check and `git diff --check` passed on the
+source working tree. Local authenticated browser review showed the Active
+label in normal text color beside a green checked switch. Inactive styling
+was checked by rendered component test; no live status command was submitted.
+This is local UI acceptance, not production/provider acceptance.
+
+Completion level: **one status-label color correction implemented and locally
+verified**. Next action: review both statuses in the target Admin environment,
+then resume the first unresolved Phase 7 provider journey under the commerce
+plan. No deployment or real provider transaction was authorized.
+
 ## Header scope dot removal — ADMIN-HEADER-SCOPE-17 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

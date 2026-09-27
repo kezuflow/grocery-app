@@ -12,7 +12,6 @@ import {
 import { ChevronsUpDown, ExternalLink, ImageIcon, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/admin/shadcn/button";
 import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { Input } from "@/components/admin/shadcn/input";
@@ -318,12 +317,7 @@ export function GlobalProductPreviewPanel({
                 Status
               </h3>
               <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    product.status === "active" ? "text-green-500" : "text-destructive",
-                  )}
-                >
+                <span className="text-sm font-medium">
                   {product.status === "active" ? "Active" : "Inactive"}
                 </span>
                 <Switch
