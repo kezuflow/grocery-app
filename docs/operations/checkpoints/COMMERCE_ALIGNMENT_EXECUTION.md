@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Latest completed owner request — ADMIN-ORDERS-TASKS-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested the shadcn Tasks example for
+`/admin/orders`. Acceptance: apply its compact title/filter/table/footer visual
+hierarchy with stock shadcn primitives and responsive controls, while preserving
+existing Order facts, status/cursor URLs, links, preview, scope, permissions and
+business flows. Storefront and auth are excluded.
+
+Started from clean synchronized `main`/`origin/main` at `189de057`. The source
+slice changed only the Admin Orders page, its existing browser test and DESIGN.
+The page now has a compact card header,
+status toolbar, bordered table at desktop/tablet widths, readable narrow records,
+mobile status Select and results footer. The Order query and commands are
+unchanged. No Core, contract, storage, provider or customer-data writes are
+involved.
+
+Verification on the final source working tree: `pnpm --filter @freshmarkets/web
+typecheck`, `pnpm lint`, `pnpm format:check` and `git diff --check` passed.
+Focused local Playwright tests passed **2/2** using isolated state
+`e2e-admin-orders-tasks-0927`, including keyboard status tabs, responsive status
+Select, status URL and mobile overflow. The managed test built the Web Worker and
+used a local deterministic fixture; it did not touch production. Direct local
+browser review covered desktop and mobile layouts. No actual provider journey
+acceptance is claimed.
+
+The source change was committed and pushed to `main` as `4fb44720`; the source
+commit contains the Admin Orders page, browser test and DESIGN. This checkpoint
+records its verified outcome. Completion level: **one Admin presentation slice
+locally and browser verified, committed and pushed**. Phase 7 provider journey
+acceptance remains open. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan; this request did not authorize a
+deployment or real provider transaction.
+
 ## Latest completed owner request — ADMIN-HEADER-SWAP-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. The owner
