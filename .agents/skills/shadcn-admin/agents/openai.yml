@@ -1,0 +1,5 @@
+interface:
+  display_name: "shadcn/ui for Admin"
+  short_description: "Guides shadcn/ui components for the FreshMarkets Admin dashboard only."
+  icon_small: "./assets/shadcn-small.png"
+  icon_large: "./assets/shadcn.png"

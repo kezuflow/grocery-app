@@ -29,6 +29,10 @@ The protected [Simplification Discussion](docs/product/SIMPLIFICATION_DISCUSSION
 
 Use current session model/settings choices. Do not change personal settings or delegate without explicit authorization. Resolve ordinary implementation choices independently; identify material business-policy or external-input blockers while continuing independent authorized work.
 
+## Admin-only shadcn skill
+
+Use the project-local `shadcn-admin` skill for Admin dashboard presentation work in `apps/web/app/admin` and `apps/web/components/admin`. Its upstream component guidance is subordinate to this router, DESIGN, and the existing FreshMarkets Admin decisions. Run shadcn discovery and component commands from `apps/web`, where `components.json` lives. Inspect their intended file changes before accepting them: shared `apps/web/components/ui` primitives and `apps/web/app/globals.css` can affect both Admin and Storefront. Keep any new styling under `.fm-admin` and verify affected Storefront consumers when shared code changes. Do not use this skill to redesign or generate Storefront pages or to change Storefront tokens, layout, or behavior. This skill setup alone does not authorize a UI migration or a global shadcn preset/theme switch.
+
 ## Checkpoint and completion evidence
 
 Update the one active checkpoint after meaningful milestones, failures and owner corrections, and before handoff. Replace stale current-state/next-action text; preserve useful old evidence in history. Record:
