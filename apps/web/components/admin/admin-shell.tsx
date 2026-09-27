@@ -687,7 +687,7 @@ function AdminSidebar({
             Online Store
           </Link>
         ) : null}
-        <div className="space-y-0">
+        <div className="flex flex-col gap-1">
           {group.items.map((item) => (
             <div
               key={item.code}
@@ -839,7 +839,7 @@ function DesktopNavigationParent({
   const parentActive =
     activeCode === item.code || item.children.some((child) => child.code === activeCode);
   const controlClassName = cn(
-    "flex h-8 items-center gap-2 overflow-hidden rounded-lg text-left text-sm font-normal text-sidebar-foreground transition-[width,height,padding] duration-150 ease-in-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "flex h-8 items-center gap-2 overflow-hidden rounded-md text-left text-sm font-normal text-sidebar-foreground transition-[width,height,padding] duration-150 ease-in-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     collapsed ? "w-8 px-2" : "w-full px-2",
     parentActive && "bg-sidebar-accent text-sidebar-accent-foreground",
   );
@@ -946,7 +946,10 @@ function DesktopNavigationParent({
         </Tooltip>
       )}
       {!collapsed && open && sidebarChildren.length > 0 ? (
-        <div id={`admin-nav-children-${item.code}`} className="ml-4 pl-2">
+        <div
+          id={`admin-nav-children-${item.code}`}
+          className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5"
+        >
           {sidebarChildren.map((child) => (
             <Link
               key={child.code}
@@ -954,7 +957,7 @@ function DesktopNavigationParent({
               prefetch={false}
               aria-current={activeCode === child.code ? "page" : undefined}
               className={cn(
-                "block rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                "flex h-7 min-w-0 -translate-x-px items-center overflow-hidden rounded-md px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                 activeCode === child.code &&
                   "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
               )}

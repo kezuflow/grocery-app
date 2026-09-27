@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Admin sidebar spacing — ADMIN-SIDEBAR-10 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested the `/admin/orders` left navigation
+use the shadcn `sidebar-07` menu spacing, hover highlight and nested guide line.
+Acceptance: compact separated rows, stock rounded hover/active surfaces, a thin
+line beside expanded child links, and unchanged routes, permissions and collapse
+behavior.
+
+Started on `main` at `077a710d`. Other Admin page edits and an untracked Admin
+component were already in progress and are excluded from this slice. Only
+`apps/web/components/admin/admin-shell.tsx` changes the desktop navigation:
+4px menu gaps, stock medium row corners, and the stock submenu inset, 1px rule,
+row height and hover treatment. Core, contracts, storage, provider, Storefront
+and auth are unchanged.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm exec oxfmt --check apps/web/components/admin/admin-shell.tsx` and
+`git diff --check -- apps/web/components/admin/admin-shell.tsx` passed on the
+source working tree. The local `/admin/orders` URL returned HTTP 200, but a
+fresh browser context showed the sign-in gate; the available in-app browser
+had no existing tab. Signed-in visual and interaction acceptance is therefore
+unverified. This is a presentation-only slice, not provider acceptance.
+
+Completion level: **one Admin sidebar presentation correction implemented and
+source-verified**. Next action: review the sidebar in an authenticated local
+Admin browser session, then resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction is
+authorized by this request.
+
 ## Problems Orders-style card — ADMIN-ISSUES-CARD-9 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
