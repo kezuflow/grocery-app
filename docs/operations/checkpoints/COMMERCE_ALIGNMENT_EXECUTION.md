@@ -1,5 +1,33 @@
 # Commerce alignment — active checkpoint
 
+## Promotion status Sonner copy — ADMIN-PROMOTION-TOAST-27 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked that the `/admin/promotions` success
+Sonner say, for example, "Beginner Campaign is active." Acceptance: after Core
+confirms activation or deactivation, the toast title uses the promotion name
+and confirmed active/inactive status; failed or pending commands do not show
+success. Storefront and status-command behavior stay unchanged.
+
+Started on clean `main` at `21076322`. The shared Admin promotion status
+control now reports "[name] is active" or "[name] is inactive" from the
+Core-confirmed summary. Its redundant status description was removed. The
+change also applies to the Admin Promotion Sale control, which uses the same
+component. No API, permission, business state, Storefront or auth code changed.
+
+Focused component tests (7/7), Web typecheck, focused oxlint and oxfmt checks
+passed. The test covers both success titles and the existing rejection path.
+`git diff --check` passed on the working tree.
+The toast copy was not observed in a browser because that would require
+changing a local campaign's status; no provider or production acceptance is
+claimed.
+
+Completion level: **one Admin success-toast copy correction implemented and
+locally tested**. Next action: resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction
+is authorized by this request.
+
 ## Promotion Codes Status column alignment — ADMIN-PROMOTION-ALIGN-26 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

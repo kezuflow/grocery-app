@@ -172,6 +172,7 @@ it("keeps plain status text and no spinner while the switch waits for Core", asy
     expectedVersion: 4,
   });
   expect(onApplied).toHaveBeenCalledWith(inactiveSummary);
+  expect(toast.success).toHaveBeenCalledWith("Spring merch is inactive", expect.anything());
 });
 
 it("sends the Core status command directly, with version and idempotency key, then reports the confirmed status", async () => {
@@ -191,7 +192,7 @@ it("sends the Core status command directly, with version and idempotency key, th
     expectedVersion: 3,
   });
   expect(onApplied).toHaveBeenCalledWith(activeSummary);
-  expect(toast.success).toHaveBeenCalledWith("Spring merch turned on", expect.anything());
+  expect(toast.success).toHaveBeenCalledWith("Spring merch is active", expect.anything());
 });
 
 it("keeps a disabled switch in place while its loading state crossfades", async () => {

@@ -73,8 +73,7 @@ export function PromotionStatusSwitch({
       if (payload.ok) {
         setError(null);
         notifyCommandSuccess(
-          active ? `${promotion.name} turned off` : `${promotion.name} turned on`,
-          `Status is now ${statusLabels[payload.value.status]}.`,
+          `${promotion.name} is ${statusLabels[payload.value.status].toLowerCase()}`,
         );
         onApplied?.(payload.value);
       } else {
