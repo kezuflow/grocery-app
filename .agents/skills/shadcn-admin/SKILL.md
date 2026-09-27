@@ -1,6 +1,6 @@
 ---
 name: shadcn-admin
-description: Use shadcn/ui component guidance only for FreshMarkets Admin dashboard presentation in apps/web/app/admin and apps/web/components/admin. Do not invoke for Storefront, auth, or general components.json presence.
+description: Use stock shadcn/ui component patterns for new or touched FreshMarkets Admin dashboard UI in apps/web/app/admin and apps/web/components/admin. Excludes Storefront and auth.
 user-invocable: false
 allowed-tools: Bash(npx shadcn@latest *), Bash(pnpm dlx shadcn@latest *), Bash(bunx --bun shadcn@latest *)
 ---
@@ -11,7 +11,7 @@ A framework for building ui, components and design systems. Components are added
 
 ## FreshMarkets scope
 
-This project copy of the official [shadcn/ui skill](https://github.com/shadcn-ui/ui/tree/main/skills/shadcn) applies only to Admin dashboard UI work. Follow `AGENTS.md` and `docs/design/DESIGN.md` first. Do not use this skill for `apps/web/app/(storefront)`, Storefront components, auth screens, or global visual changes. Existing shared primitives may be used by both surfaces; inspect their callers and verify Storefront impact before changing them. Keep Admin styling under `.fm-admin`. Do not run `init`, apply a preset, or switch the project's base, theme, or component library as a side effect of using this skill. The upstream examples and rules below guide new Admin composition; they do not mandate retrofitting unrelated screens or overriding existing product decisions. For ordinary Admin components, use the configured `@shadcn` registry without a routine registry question; ask only when the requested third-party source is genuinely ambiguous.
+This project copy of the official [shadcn/ui skill](https://github.com/shadcn-ui/ui/tree/main/skills/shadcn) applies only to Admin dashboard UI work. Follow `AGENTS.md` and `docs/design/DESIGN.md` for scope, layout and required behavior. For new or touched Admin components, use the upstream defaults for this project's Radix/new-york configuration as the visual and component baseline. Compare an installed component with the registry source before relying on it: existing `apps/web/components/ui` files contain FreshMarkets styling and variants, so their current appearance is not the stock shadcn default. Avoid copying that styling into new Admin work. Preserve the current Admin page layout. Do not use this skill for `apps/web/app/(storefront)`, Storefront components, auth screens, or global visual changes. Shared primitives may serve both surfaces; inspect callers and verify Storefront impact before changing them. Put any necessary Admin-only styling under `.fm-admin` or use an Admin-specific composition instead of replacing a shared primitive globally. Do not run `init`, apply a preset, switch the project's base/theme, or migrate all existing Admin screens as a side effect of using this skill. For ordinary Admin components, use the configured `@shadcn` registry without a routine registry question; ask only when the requested third-party source is genuinely ambiguous.
 
 > **IMPORTANT:** Run all CLI commands using the project's package runner: `npx shadcn@latest`, `pnpm dlx shadcn@latest`, or `bunx --bun shadcn@latest` — based on the project's `packageManager`. Examples below use `npx shadcn@latest` but substitute the correct runner for the project.
 
@@ -23,7 +23,7 @@ The command output contains the project config and installed components. Use `pn
 
 ## Principles
 
-1. **Use existing components first.** Use `npx shadcn@latest search` to check registries before writing custom UI. Check community registries too.
+1. **Start from stock components.** Use `npx shadcn@latest search` and `view` to inspect upstream components before writing Admin UI. Reuse an installed component only after checking whether its local customization suits the requested stock result; otherwise use an Admin-scoped implementation that preserves Storefront callers.
 2. **Compose, don't reinvent.** Settings page = Tabs + Card + form controls. Dashboard = Sidebar + Card + Chart + Table.
 3. **Use built-in variants before custom styles.** `variant="outline"`, `size="sm"`, etc.
 4. **Use semantic colors.** `bg-primary`, `text-muted-foreground` — never raw values like `bg-blue-500`.

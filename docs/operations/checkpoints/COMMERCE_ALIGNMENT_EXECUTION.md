@@ -1,6 +1,36 @@
 # Commerce alignment — active checkpoint
 
-## Current Admin presentation slice — ADMIN-SHADCN-VIEWS-1 (2026-09-27)
+## Current Admin component preference — SHADCN-ADMIN-STOCK-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. The owner
+clarified that new or touched Admin components should use stock shadcn styling and
+composition, while the current Admin page layout remains. Acceptance: the project
+skill and active guidance no longer treat FreshMarkets' customized shared UI files
+as the default shadcn appearance; Storefront and existing untouched Admin screens
+are preserved.
+
+Started on clean `main` at `608a28bc`, after the separate Admin line-Tabs slice was
+committed and pushed. `apps/web/components/ui/button.tsx` and `card.tsx` demonstrate
+that installed primitives contain FreshMarkets styles and variants, although
+`apps/web/components.json` configures Radix/new-york. The skill's scope and reuse
+rule, its metadata, `AGENTS.md` and DESIGN now specify upstream stock defaults for
+new or touched Admin work and require a registry comparison before relying on a
+local primitive. No application source, dependency, component, theme, layout,
+Storefront code or runtime behavior changed in this preference update.
+
+Verification on this working tree: `pnpm skills:check` passed with 31 mirrored
+files, `pnpm naming:check` passed, `pnpm harness:test` passed 37/37, and
+`git diff --check` passed. The skill creator
+quick validator reported the upstream skill's pre-existing `user-invocable`
+frontmatter key as unsupported by that validator; invocation metadata was not
+changed. No browser or provider acceptance applies to an instruction-only edit.
+Completion level: **one stock-component preference recorded; zero Admin or
+Storefront screens migrated**. Next action: on the next authorized Admin UI task,
+compare each touched local primitive with its upstream Radix/new-york source and
+implement the stock appearance without changing Storefront consumers. Commerce
+Phase 7 and provider journey acceptance remain open.
+
+## Prior Admin presentation slice — ADMIN-SHADCN-VIEWS-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**, presentation slice under `docs/design/DESIGN.md` **Admin visual foundation**. The owner approved shadcn primitives where appropriate and requested a line-style tab highlight for the All/Committed Admin views. Acceptance: shared in-page Admin status views and Payments use the configured Radix shadcn Tabs primitive with an underline, accessible selection and keyboard navigation; Payments' status filter uses the existing Select primitive; filter URLs and business actions remain unchanged. Storefront styling and the persisted Admin dark appearance remain under the approved design rule.
 
