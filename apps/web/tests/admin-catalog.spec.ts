@@ -121,7 +121,8 @@ test("Product status views retain scope-aware, unit-safe list context", async ({
   }
   const views = adminPage.getByRole("group", { name: "Product status views" });
   await expect(views.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
-  await expect(adminPage.getByText("Global catalog ownership")).toBeVisible();
+  await expect(adminPage.locator('dl[aria-label="Catalog readiness"]')).toBeVisible();
+  await expect(adminPage.getByText("Global catalog ownership")).toHaveCount(0);
   await expect(adminPage.getByRole("columnheader", { name: "Active variants" })).toBeVisible();
   await views.getByRole("button", { name: "Active", exact: true }).click();
   await expect(adminPage).toHaveURL(/\/admin\/catalog\/products\?status=active$/);

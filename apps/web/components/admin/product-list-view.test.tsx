@@ -143,7 +143,7 @@ describe("ProductListView", () => {
     expect(onStatusChange).toHaveBeenCalledWith("inactive");
   });
 
-  it("explains Global ownership without exposing location-only fields", () => {
+  it("keeps Global readiness beside status views without location-only fields", () => {
     const html = renderToStaticMarkup(
       <ProductListView
         page={{ ...page, scope: { kind: "GLOBAL" } }}
@@ -153,10 +153,12 @@ describe("ProductListView", () => {
       />,
     );
 
-    expect(html).toContain("Global catalog ownership");
-    expect(html).toContain(
-      "Global owns product identity, lifecycle, selling options, and categories",
-    );
+    expect(html).not.toContain("Global catalog ownership");
+    expect(html).toMatch(/<dt[^>]*>Active<\/dt><dd[^>]*>1<\/dd>/);
+    expect(html).toMatch(/<dt[^>]*>Inactive<\/dt><dd[^>]*>0<\/dd>/);
+    expect(html).toMatch(/<dt[^>]*>Missing Media<\/dt><dd[^>]*>0<\/dd>/);
+    expect(html.indexOf("Product status views")).toBeLessThan(html.indexOf("Catalog readiness"));
+    expect(html.indexOf("Catalog readiness")).toBeLessThan(html.indexOf("Product list"));
     expect(html).toContain(">Active variants</th>");
     expect(html).not.toContain(">Location price</th>");
     expect(html).not.toContain(">Selling status</th>");

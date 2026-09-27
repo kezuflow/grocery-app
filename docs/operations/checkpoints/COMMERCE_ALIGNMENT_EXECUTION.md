@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Products readiness placement — ADMIN-PRODUCTS-READINESS-12 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to remove the Global catalog ownership
+callout on `/admin/catalog/products` and place the readiness figures to the
+right of the pill-style status views. The owner clarified that each metric
+must be one inline label-value pair: Active 227, Inactive 0, Missing Media
+227. Acceptance: the three existing readiness values share the tabs row at
+desktop width and wrap cleanly on narrow screens; retain Product filters, table,
+preview, actions and scoped location behavior.
+
+Started on clean synchronized `main`/`origin/main` at `9016f051`. The Global
+ownership callout is removed. Catalog readiness now sits in a semantic
+definition list beside the existing stock segmented views with each label
+and value on one line; the metrics wrap below the tabs at narrow width. The
+location-specific pricing explanation and two
+additional location readiness metrics remain in their scoped view. No data,
+business commands, Core, contracts, storage, provider, Storefront or auth
+changes were made.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`,
+`pnpm --filter @freshmarkets/web test -- product-list-view.test.tsx` (6/6),
+and `git diff --check` passed on the source working tree. Local authenticated
+browser review at default desktop and 500px showed the requested inline Global
+figures (227, 0, 227), desktop alignment with the tabs, narrow wrapping and
+usable Product records. This is local UI acceptance, not production or
+provider acceptance.
+
+Completion level: **one Admin Products presentation correction implemented and
+locally verified**. Next action: review this change in the target Admin
+environment, then resume the first unresolved Phase 7 provider journey under
+the commerce plan. This request did not authorize deployment or real provider
+transactions.
+
 ## Admin navigation labels — ADMIN-NAV-GROUPS-12 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

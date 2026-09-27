@@ -244,48 +244,46 @@ export function ProductListView({
 
   const readiness = locationOperations
     ? ([
-        ["Active products", page.readiness.activeProducts],
-        ["Inactive products", page.readiness.inactiveProducts],
-        ["Missing primary media", page.readiness.missingPrimaryMedia],
+        ["Active", page.readiness.activeProducts],
+        ["Inactive", page.readiness.inactiveProducts],
+        ["Missing Media", page.readiness.missingPrimaryMedia],
         ["Missing location prices", page.readiness.missingPrices],
         ["Variants not selling", page.readiness.unavailableSkus],
       ] as const)
     : ([
-        ["Active products", page.readiness.activeProducts],
-        ["Inactive products", page.readiness.inactiveProducts],
-        ["Missing primary media", page.readiness.missingPrimaryMedia],
+        ["Active", page.readiness.activeProducts],
+        ["Inactive", page.readiness.inactiveProducts],
+        ["Missing Media", page.readiness.missingPrimaryMedia],
       ] as const);
   return (
     <div className="flex flex-col gap-4">
-      <AdminIndexViews
-        label="Product status views"
-        views={PRODUCT_STATUS_VIEWS}
-        value={status}
-        onChange={onStatusChange}
-      />
-      <section className="overflow-hidden rounded-md border border-border">
-        <h2 className="sr-only">Product list</h2>
-        <div className="border-b border-border px-4 py-3">
-          <p className="text-sm font-medium">
-            {locationScope ? `${locationScope.locationName} pricing` : "Global catalog ownership"}
-          </p>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {locationScope
-              ? `${locationScope.locationName} owns the exact prices shown here. Product identity remains Global; exact inventory quantities stay in each scoped Product preview.`
-              : "Global owns product identity, lifecycle, selling options, and categories. Exact prices and inventory context appear after choosing a fulfillment location."}
-          </p>
-        </div>
-        <dl
-          aria-label="Catalog readiness"
-          className="grid grid-cols-2 border-b border-border bg-muted sm:grid-cols-3 lg:grid-cols-5"
-        >
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <AdminIndexViews
+          label="Product status views"
+          views={PRODUCT_STATUS_VIEWS}
+          value={status}
+          onChange={onStatusChange}
+        />
+        <dl aria-label="Catalog readiness" className="flex flex-wrap gap-x-6 gap-y-2">
           {readiness.map(([label, value]) => (
-            <div className="border-r border-border px-4 py-3 last:border-r-0" key={label}>
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="mt-0.5 text-base font-semibold tabular-nums">{value}</dd>
+            <div className="flex items-baseline gap-1.5 whitespace-nowrap" key={label}>
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="text-sm font-semibold tabular-nums">{value}</dd>
             </div>
           ))}
         </dl>
+      </div>
+      <section className="overflow-hidden rounded-md border border-border">
+        <h2 className="sr-only">Product list</h2>
+        {locationScope ? (
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-sm font-medium">{locationScope.locationName} pricing</p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+              {locationScope.locationName} owns the exact prices shown here. Product identity
+              remains Global; exact inventory quantities stay in each scoped Product preview.
+            </p>
+          </div>
+        ) : null}
         {selectedIds.size > 0 ? (
           <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
             <div className="flex items-center gap-2">
