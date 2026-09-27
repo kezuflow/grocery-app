@@ -255,7 +255,10 @@ export function CategoriesPageClient({
   }
 
   const master = (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index space-y-6 p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader
         title="Categories"
         description="Global catalog hierarchy and Product assignments."
@@ -433,6 +436,7 @@ export function CategoriesPageClient({
             </p>
           ) : null}
           <AdminCursorPagination
+            compact
             pageNumber={pagination.pageNumber}
             nextCursor={payload.value.nextCursor}
             onPrevious={pagination.previous}

@@ -103,7 +103,7 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="fm-admin-task-index w-full space-y-6">
       <PageHeader
         title="Roles"
         description="Capability sets over the closed canonical vocabulary."
@@ -237,6 +237,7 @@ export default function RolesPage() {
               </Table>
             )}
             <AdminCursorPagination
+              compact
               pageNumber={pagination.pageNumber}
               nextCursor={state.page.nextCursor}
               onPrevious={pagination.previous}

@@ -226,7 +226,7 @@ export default function StaffPage() {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="fm-admin-task-index w-full space-y-6">
       <PageHeader
         title="Staff & Access"
         description="Identities, invitations, roles, and scopes. Administration is global-scope only."
@@ -435,6 +435,7 @@ export default function StaffPage() {
             )}
             {invitations || invitationPagination.pageNumber > 1 ? (
               <AdminCursorPagination
+                compact
                 pageNumber={invitationPagination.pageNumber}
                 nextCursor={readError || invitationError ? null : (invitations?.nextCursor ?? null)}
                 pending={locked || readLoading}
@@ -508,6 +509,7 @@ export default function StaffPage() {
             )}
             {staff ? (
               <AdminCursorPagination
+                compact
                 pageNumber={staffPagination.pageNumber}
                 nextCursor={readError ? null : staff.nextCursor}
                 pending={locked || readLoading}

@@ -341,7 +341,10 @@ function BannersWorkspace({ canManage }: { canManage: boolean }) {
   }
 
   const master = (
-    <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader
         title="Banners"
         description="Manage the standalone images displayed on your storefront."

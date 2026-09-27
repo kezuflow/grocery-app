@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
@@ -52,6 +53,7 @@ export function AdminCursorPagination({
   onPrevious,
   onNext,
   onPage,
+  compact = false,
 }: {
   pageNumber: number;
   nextCursor: string | null;
@@ -59,6 +61,7 @@ export function AdminCursorPagination({
   onPrevious(): void;
   onNext(cursor: string): void;
   onPage?(pageNumber: number): void;
+  compact?: boolean;
 }) {
   const lastKnownPage = pageNumber + (nextCursor === null ? 0 : 1);
   const numberedPages =
@@ -70,16 +73,21 @@ export function AdminCursorPagination({
   return (
     <nav
       aria-label="Results pagination"
-      className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-3"
+      className={cn(
+        "flex flex-wrap items-center justify-end gap-2 border-t border-border p-3",
+        compact && "border-t-0 px-4 py-4",
+      )}
     >
       <Button
         type="button"
         size="sm"
         variant="outline"
+        aria-label={compact ? "Previous page" : undefined}
+        className={compact ? "size-8 p-0" : undefined}
         disabled={pending || pageNumber <= 1}
         onClick={onPrevious}
       >
-        Previous
+        {compact ? <ChevronLeft aria-hidden="true" className="size-4" /> : "Previous"}
       </Button>
       {onPage ? (
         <div className="flex items-center gap-1" aria-label="Page numbers">
@@ -113,16 +121,18 @@ export function AdminCursorPagination({
           ))}
         </div>
       ) : (
-        <span className="text-xs text-muted-foreground">Page {pageNumber}</span>
+        <span className="px-2 text-xs text-muted-foreground">Page {pageNumber}</span>
       )}
       <Button
         type="button"
         size="sm"
         variant="outline"
+        aria-label={compact ? "Next page" : undefined}
+        className={compact ? "size-8 p-0" : undefined}
         disabled={pending || nextCursor === null}
         onClick={() => nextCursor && onNext(nextCursor)}
       >
-        Next
+        {compact ? <ChevronRight aria-hidden="true" className="size-4" /> : "Next"}
       </Button>
     </nav>
   );

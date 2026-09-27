@@ -303,7 +303,10 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
 
   const visibleCustomers = customers?.items ?? [];
   const master = (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index space-y-6 p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader
         title="Customers"
         action={
@@ -471,6 +474,7 @@ function CustomersWorkspace({ scopeKey, canManage }: { scopeKey: string; canMana
 
         {state.phase === "ready" ? (
           <AdminCursorPagination
+            compact
             pageNumber={pagination.pageNumber}
             nextCursor={customers?.nextCursor ?? null}
             pending={panelOpen}

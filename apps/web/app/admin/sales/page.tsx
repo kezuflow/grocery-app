@@ -725,7 +725,10 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
       ) : null}
 
       {state.phase === "ready" && !editorOpen ? (
-        <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
+        <section
+          className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
+          aria-labelledby="admin-page-title"
+        >
           <PageHeader
             title="Promotion Sale"
             description="Automatic discounts for selected products and locations."
@@ -895,6 +898,7 @@ function InventorySalesWorkspace({ canManage }: { canManage: boolean }) {
               )}
             </div>
             <AdminCursorPagination
+              compact
               pageNumber={pagination.pageNumber}
               nextCursor={page?.nextCursor ?? null}
               pending={createDirty || createLocked}

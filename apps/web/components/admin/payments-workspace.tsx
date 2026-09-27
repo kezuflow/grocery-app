@@ -457,7 +457,10 @@ export function PaymentsWorkspace({
   const selectedAttention =
     attention?.items.find((item) => item.groupKey === selectedIssue) ?? null;
   const master = (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index space-y-6 p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader title="Payments" />
       <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <AdminIndexViews<Tab>
@@ -675,6 +678,7 @@ export function PaymentsWorkspace({
         ) : null}
         {!listError && !loading && tab === "payments" && payments ? (
           <AdminCursorPagination
+            compact
             pageNumber={pages.pageNumber}
             nextCursor={payments.nextCursor}
             onPrevious={() => {
@@ -692,6 +696,7 @@ export function PaymentsWorkspace({
         ) : null}
         {!listError && !loading && tab === "attention" && attention ? (
           <AdminCursorPagination
+            compact
             pageNumber={pages.pageNumber}
             nextCursor={attention.nextCursor}
             onPrevious={() => {

@@ -906,7 +906,10 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
           style={{ "--fm-admin-workspace-panel-open-width": `${panelWidth}px` } as CSSProperties}
           className={`grid min-h-[calc(100svh-3.5rem)] md:min-h-[calc(100svh-4.5rem)] xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)] motion-reduce:transition-none ${panelResizing ? "xl:transition-none" : "xl:transition-[grid-template-columns] xl:duration-200 xl:ease-linear"} ${createOpen ? "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]" : "xl:[--fm-admin-workspace-panel-width:0px]"}`}
         >
-          <section className="flex min-w-0 flex-col p-5 sm:p-7" aria-labelledby="admin-page-title">
+          <section
+            className="fm-admin-task-index flex min-w-0 flex-col p-5 sm:p-7"
+            aria-labelledby="admin-page-title"
+          >
             <PageHeader
               title="Promotion Codes"
               description="Discount codes customers enter at checkout."
@@ -1116,6 +1119,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                 )}
               </div>
               <AdminCursorPagination
+                compact
                 pageNumber={pagination.pageNumber}
                 nextCursor={page?.nextCursor ?? null}
                 pending={createDirty || createLocked}

@@ -307,7 +307,10 @@ export function ProductsPageClient({
   }
 
   const master = (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index space-y-6 p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader
         title="Products"
         action={
@@ -417,6 +420,7 @@ export function ProductsPageClient({
             }
           />
           <AdminCursorPagination
+            compact
             pageNumber={pagination.pageNumber}
             nextCursor={payload.value.nextCursor}
             onPrevious={pagination.previous}

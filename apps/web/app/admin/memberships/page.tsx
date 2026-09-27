@@ -168,7 +168,10 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
 
   const memberships = page?.items ?? [];
   return (
-    <section className="space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
+    <section
+      className="fm-admin-task-index space-y-6 p-5 sm:p-7"
+      aria-labelledby="admin-page-title"
+    >
       <PageHeader
         title="Membership history"
         description="Retained membership records are available for review and supported cancellation only."
@@ -312,6 +315,7 @@ function MembershipsWorkspace({ scopeKey }: { scopeKey: string }) {
 
         {state.phase === "ready" ? (
           <AdminCursorPagination
+            compact
             pageNumber={pagination.pageNumber}
             nextCursor={page?.nextCursor ?? null}
             onPrevious={pagination.previous}

@@ -413,6 +413,57 @@ html.fm-admin-dark .fm-admin-orders {
   background: var(--fm-background);
 }
 
+/* The Orders list treatment, scoped to the requested Admin index pages. */
+html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
+  --fm-background: oklch(0.09 0 0);
+  --fm-card: var(--fm-background);
+  --fm-surface-muted: oklch(0.2 0 0);
+  --fm-hover: oklch(0.2 0 0);
+  background: var(--fm-background);
+}
+
+.fm-admin-task-index {
+  min-height: calc(100svh - 3.5rem);
+}
+
+.fm-admin-task-index > .border-b:has(#admin-page-title) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.fm-admin-task-index #admin-page-title {
+  font-weight: 600;
+}
+
+.fm-admin-task-index [data-slot="table-container"] {
+  border-block: 1px solid var(--fm-border);
+}
+
+.fm-admin-task-index [data-slot="table-row"] {
+  border-color: var(--fm-border);
+}
+
+.fm-admin-task-index [data-slot="table-header"] [data-slot="table-row"] {
+  background: transparent;
+}
+
+.fm-admin-task-index [data-slot="table-body"] > [data-slot="table-row"] {
+  min-height: 3rem;
+}
+
+.fm-admin-task-index [data-slot="table-head"],
+.fm-admin-task-index [data-slot="table-cell"] {
+  padding-block: 0.875rem;
+}
+
+.fm-admin-task-index [data-slot="table-body"] [data-slot="table-row"]:hover {
+  background: var(--fm-hover);
+}
+
+.fm-admin-task-index [data-slot="table-cell"]:first-child {
+  font-weight: 500;
+}
+
 .fm-admin :is(h1, h2, h3) {
   font-family: var(--font-sans);
   text-wrap: balance;

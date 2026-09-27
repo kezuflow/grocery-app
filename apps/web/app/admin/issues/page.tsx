@@ -287,7 +287,7 @@ export default function IssuesPage() {
   const selectedPresentation = pendingAction ? actionPresentation[pendingAction.action] : null;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="fm-admin-task-index w-full space-y-6">
       <PageHeader title="Problems" />
       <AdminLiveRegion message={notice} />
 
@@ -370,11 +370,6 @@ export default function IssuesPage() {
                     >
                       {orderLabel(issue)}
                     </Link>
-                    {issue.orderNumber ? (
-                      <p className="mt-0.5 max-w-40 truncate font-mono text-xs text-muted-foreground">
-                        {issue.orderId}
-                      </p>
-                    ) : null}
                   </TableCell>
                   <TableCell>
                     <p className="font-medium">{issue.customerName ?? "Customer"}</p>
@@ -464,6 +459,7 @@ export default function IssuesPage() {
 
         {state.phase === "ready" ? (
           <AdminCursorPagination
+            compact
             pageNumber={pagination.pageNumber}
             nextCursor={page?.nextCursor ?? null}
             pending={commandLocked}

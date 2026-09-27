@@ -71,7 +71,7 @@ export default function CatalogPage() {
   }, [globalReader]);
 
   return (
-    <div className="w-full space-y-6">
+    <div className="fm-admin-task-index w-full space-y-6">
       <PageHeader
         title="Catalog"
         description="Global Product and Category ownership with the controlled sell-unit reference."
