@@ -211,7 +211,7 @@ test("a catalog read-only principal sees no Product or Category mutation control
   const preview = catalogReadOnlyPage.locator("#product-detail-panel");
   await expect(preview).toContainText("This Global product is view-only with your current access.");
   await expect(preview.getByLabel("Product name")).toHaveCount(0);
-  await expect(preview.getByRole("combobox", { name: "Product status" })).toHaveCount(0);
+  await expect(preview.getByRole("switch", { name: "Product status" })).toBeDisabled();
   await expect(preview.getByRole("button", { name: "Product categories" })).toHaveCount(0);
   await expect(preview.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   if (process.env.SAUI_CAPTURE_PRODUCT_SCOPE === "1") {

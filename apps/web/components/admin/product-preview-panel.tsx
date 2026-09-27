@@ -12,6 +12,7 @@ import {
 import { ChevronsUpDown, ExternalLink, ImageIcon, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/admin/shadcn/button";
 import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { Input } from "@/components/admin/shadcn/input";
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/admin/shadcn/select";
 import { AdminStatusPill } from "./admin-status-pill";
+import { Switch } from "./shadcn/switch";
 import { useCategoryOptions } from "./category-authoring-state";
 import { useCatalogCommand } from "./catalog-command-state";
 import { useAdminScopeGuard } from "@/app/admin/admin-context-provider";
@@ -139,7 +141,7 @@ export function GlobalProductPreviewPanel({
   }
 
   async function setProductStatus(status: "active" | "inactive") {
-    if (status === product.status || commandLocked) return;
+    if (!canManage || status === product.status || commandLocked) return;
     const body = adminProductStatusBodySchema.parse({
       status,
       reason: "Changed from Global product preview",
@@ -315,31 +317,25 @@ export function GlobalProductPreviewPanel({
               <h3 id="product-preview-status" className="text-sm font-semibold">
                 Status
               </h3>
-              {canManage ? (
-                <Select
-                  value={product.status}
-                  disabled={commandLocked}
-                  onValueChange={(status) => {
-                    if (status === "active" || status === "inactive") void setProductStatus(status);
-                  }}
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    product.status === "active" ? "text-green-500" : "text-destructive",
+                  )}
                 >
-                  <SelectTrigger className="w-32" aria-label="Product status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <AdminStatusPill
-                  status={product.status}
-                  tone={product.status === "active" ? "success" : "danger"}
-                  label={product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                  {product.status === "active" ? "Active" : "Inactive"}
+                </span>
+                <Switch
+                  aria-label="Product status"
+                  checked={product.status === "active"}
+                  disabled={!canManage || commandLocked}
+                  onCheckedChange={(checked) =>
+                    void setProductStatus(checked ? "active" : "inactive")
+                  }
+                  className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-destructive"
                 />
-              )}
+              </div>
             </div>
           </div>
         </section>

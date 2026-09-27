@@ -1,5 +1,35 @@
 # Commerce alignment — active checkpoint
 
+## Global Product status switch — ADMIN-PRODUCT-STATUS-16 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
+Product preview**, within `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`,
+**Phase 7 — Complete journeys and activation evidence**. The owner replaced
+the Global Product preview's Active/Inactive status Select with a switch and
+requested green for Active and red for Inactive. Acceptance: the identity area
+shows the saved status as label and shadcn Switch, colors reflect each state,
+read-only users cannot toggle it, and the existing guarded status command,
+pending locks and recovery behavior remain intact.
+
+Started on clean synchronized `main`/`origin/main` at `844e740d`. The
+Admin-scoped preview uses the installed stock shadcn Switch, with green/red
+state classes and visible state text. It keeps the existing Core status
+endpoint and command intent, and guards read-only calls explicitly. Selling
+option status Select controls and all Storefront/auth code are unchanged.
+
+`pnpm --filter @freshmarkets/web test -- product-preview-panel.test.tsx`
+(7/7), Web typecheck and lint passed on the source working tree. Local
+authenticated browser review showed the Active label and checked green switch
+in the populated Global preview. Inactive red styling and read-only disabled
+state were checked in rendered component tests; no live Product status command
+was submitted. This is local UI acceptance, not production/provider acceptance.
+
+Completion level: **one Global Product status-control correction implemented
+and locally verified**. Next action: review both switch states in the target
+Admin environment, then resume the first unresolved Phase 7 provider journey
+under the commerce plan. No deployment or real provider transaction was
+authorized by this request.
+
 ## Remove Admin sidebar extras — ADMIN-NAV-EXTRAS-15 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

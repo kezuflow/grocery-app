@@ -71,7 +71,10 @@ describe("GlobalProductPreviewPanel", () => {
       /<section[^>]*aria-label="Product identity"[^>]*>(.*?)<\/section>/,
     )?.[1];
     expect(identity).toContain('id="product-preview-status"');
+    expect(identity).toContain('role="switch"');
     expect(identity).toContain('aria-label="Product status"');
+    expect(identity).toContain('aria-checked="true"');
+    expect(identity).toContain("text-green-500");
     expect(identity).not.toContain("Vegetables");
     expect(identity).not.toContain(">zucchini<");
     expect(html).not.toContain("min-h-11 items-center rounded-lg border");
@@ -82,7 +85,7 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).toContain('aria-label="Product categories"');
     expect(html).not.toContain("Add categories");
     expect(html).not.toContain("Save categories");
-    expect(html).not.toContain("rounded-full");
+    expect(html).toContain("data-[state=checked]:bg-green-600");
     expect(html).toContain("Primary category");
     expect(html).toContain('aria-label="Product status"');
     expect(html).toContain('aria-label="Zucchini · 1 kg status"');
@@ -112,8 +115,24 @@ describe("GlobalProductPreviewPanel", () => {
     expect(html).not.toContain("Choose one or more.");
     expect(html).toContain("Zucchini");
     expect(html).not.toContain('aria-label="Product name"');
-    expect(html).not.toContain('aria-label="Product status"');
+    expect(html).toContain('aria-label="Product status"');
+    const statusSwitch = html.match(/<button[^>]*role="switch"[^>]*>/)?.[0];
+    expect(statusSwitch).toContain('disabled=""');
     expect(html).not.toContain('aria-label="Product categories"');
     expect(html).not.toContain("₱85.00");
+  });
+
+  it("shows an inactive Product with a red off switch", () => {
+    const html = renderToStaticMarkup(
+      <GlobalProductPreviewPanel
+        product={{ ...product, status: "inactive" }}
+        fromQuery=""
+        onClose={() => {}}
+      />,
+    );
+
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("text-destructive");
+    expect(html).toContain("data-[state=unchecked]:bg-destructive");
   });
 });

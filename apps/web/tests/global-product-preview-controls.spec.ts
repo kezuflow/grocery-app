@@ -11,7 +11,7 @@ for (const width of [1440, 390]) {
 
     await expect(page.getByText("Global product preview", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Product name")).toHaveValue(/^Abiu/);
-    await expect(page.getByRole("combobox", { name: "Product status", exact: true })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Product status", exact: true })).toBeChecked();
     expect(await page.locator('[aria-label$=" status"]').count()).toBeGreaterThanOrEqual(2);
 
     await page.getByRole("button", { name: "Product categories" }).click();
