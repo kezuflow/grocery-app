@@ -101,7 +101,7 @@ describe("admin navigation mapping", () => {
         code: "procurement",
         label: "Delivery weeks",
         href: "/admin/procurement",
-        section: "orders",
+        section: "commerce",
       },
       {
         ...overview,
@@ -114,7 +114,7 @@ describe("admin navigation mapping", () => {
       { ...audit, section: "settings" },
     ]);
     const groups = groupAdminNavigation(items);
-    expect(groups.map((group) => group.code)).toEqual(["home", "orders", "products", "settings"]);
+    expect(groups.map((group) => group.code)).toEqual(["home", "commerce", "products", "settings"]);
     expect(groups.flatMap((group) => group.items.map((item) => item.code))).toEqual([
       "overview",
       "procurement",

@@ -324,6 +324,15 @@ describe("scoped admin context", () => {
   });
 
   it("publishes Procurement and Receiving independently with their actual permissions", async () => {
+    const setupAndWeeks = adminNavigationFor(["fulfillment.read", "procurement.read"]);
+    expect(setupAndWeeks.findIndex((item) => item.code === "procurement")).toBe(
+      setupAndWeeks.findIndex((item) => item.code === "scheduled-cycles") + 1,
+    );
+    expect(setupAndWeeks.find((item) => item.code === "procurement")).toMatchObject({
+      section: "commerce",
+      parentCode: null,
+    });
+
     const reader = await staffCookie({ permissionCodes: ["procurement.read"] });
     const readContext = await core.getAdminContext({
       requestId: crypto.randomUUID(),
@@ -335,7 +344,7 @@ describe("scoped admin context", () => {
       code: "procurement",
       label: "Delivery weeks",
       href: "/admin/procurement",
-      section: "orders",
+      section: "commerce",
       scopeKinds: ["GLOBAL", "LOCATION"],
       parentCode: null,
       kind: "workspace",

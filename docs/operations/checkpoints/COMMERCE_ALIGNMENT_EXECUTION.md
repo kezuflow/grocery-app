@@ -1,5 +1,37 @@
 # Commerce alignment — active checkpoint
 
+## Delivery weeks sidebar placement — ADMIN-NAV-WEEKS-13 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner moved Delivery weeks out of the Orders group
+to immediately below Fulfillment setup. Acceptance: one separate top-level
+Delivery weeks link follows Fulfillment setup on desktop and mobile when both
+are authorized; its route, `procurement.read` guard and Global/Location scope
+remain intact, and Orders no longer contains it.
+
+Started on `main` at `f96fae0d` after an unrelated Products slice was committed;
+the working tree was otherwise clean. Core now emits `procurement` after the
+Fulfillment setup destinations in the Commerce presentation section. Web keeps
+Core order and does not add a second route list. The owning API contract and
+design guide record the new placement. No business-write, storage, provider,
+Storefront or authentication behavior changed.
+
+`pnpm --filter @freshmarkets/core test --
+src/admin/application/admin-context.integration.test.ts` (17 tests),
+`pnpm --filter @freshmarkets/web test --
+components/admin/admin-navigation.test.ts` (17 tests), Core and Web typechecks,
+`pnpm lint`, focused `oxfmt --check` and `git diff --check` passed on the source
+working tree. The Core test verifies immediate ordered placement and independent
+capability visibility. Authenticated browser presentation remains unverified;
+there is no provider acceptance claim.
+
+Completion level: **one Admin navigation placement correction implemented and
+source/Worker-tested**. Next action: inspect Global and selected-location menus
+in an authenticated local browser, then resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Products readiness placement — ADMIN-PRODUCTS-READINESS-12 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

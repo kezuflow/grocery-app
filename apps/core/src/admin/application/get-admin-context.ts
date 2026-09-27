@@ -75,15 +75,6 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["orders.read", "orders.manage"],
   },
   {
-    code: "procurement",
-    label: "Delivery weeks",
-    href: "/admin/procurement",
-    section: "orders",
-    parentCode: null,
-    kind: "workspace",
-    capabilities: ["procurement.read"],
-  },
-  {
     code: "fulfillment",
     label: "Fulfillment",
     href: "/admin/fulfillment",
@@ -236,6 +227,15 @@ const WORKSPACES: ReadonlyArray<{
     parentCode: "fulfillment-setup",
     kind: "destination",
     capabilities: ["fulfillment.read"],
+  },
+  {
+    code: "procurement",
+    label: "Delivery weeks",
+    href: "/admin/procurement",
+    section: "commerce",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["procurement.read"],
   },
   {
     code: "customers",
