@@ -34,9 +34,9 @@ describe("Admin prefetch policy", () => {
     ).toBe(false);
   });
 
-  it("disables automatic prefetch at the Admin-to-Marketplace boundary", () => {
+  it("does not expose the removed Admin-to-Marketplace shortcut", () => {
     const shell = adminSource("./admin-shell.tsx");
-    expect(shell).toMatch(/href="\/"[\s\S]{0,120}prefetch=\{false\}/u);
+    expect(shell).not.toMatch(/href="\/"/u);
   });
 
   it("disables automatic prefetch for Core-authorized shell navigation", () => {
