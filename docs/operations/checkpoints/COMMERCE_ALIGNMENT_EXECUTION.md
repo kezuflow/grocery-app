@@ -1,6 +1,40 @@
 # Commerce alignment — active checkpoint
 
-## Active owner request — ADMIN-SHADCN-RESET-1 (2026-09-27)
+## Latest completed owner request — ADMIN-HEADER-SWAP-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. The owner
+requested that the Admin header search bar and Global/Places scope selector swap
+positions. Acceptance: the scope selector appears beside the Admin identity on the
+left and command search appears before notifications on the right; Global and
+location selection, search, keyboard/focus behavior and mobile header controls
+remain usable. Storefront, auth and business flows are outside this presentation
+slice.
+
+Started from clean, synchronized `main`/`origin/main` at `9ffea385`. The header
+reorders its existing controls and delays the brand text on narrow screens so the
+selector fits. The compact mobile selector retains its accessible name and value.
+Only the Admin shell, Admin foundation browser test, DESIGN and this checkpoint
+are changed. No Core, contract, schema or provider boundary is affected.
+
+Verification on the working tree based on `9ffea385`: `pnpm format:check`,
+`pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`, and `git diff --check`
+passed. Focused local Playwright Admin foundation verification passed **1/1**,
+covering selector/search/bell order at 1440px, unchanged notification position
+after selecting Central Cebu, and nonoverlapping visible controls at 320px.
+The managed test used fresh isolated state `e2e-admin-header-swap-0927`. Direct
+inspection of the local Admin browser also confirmed the reordered desktop header
+and narrow layout; its temporary viewport override was reset. No production page
+or data was changed.
+
+The three-file UI, test and DESIGN change was committed and pushed to `main` as
+`68a3c9dd`; `main` and `origin/main` matched after that push. This checkpoint
+update records its verified outcome. Completion level: **one Admin presentation
+slice locally and browser verified, committed and pushed**. Commerce Phase 7 and
+provider journey acceptance remain open. Next action: resume the first unresolved
+Phase 7 provider journey acceptance under the commerce plan; this UI request did
+not authorize deployment or a real provider transaction.
+
+## Prior Admin reset — ADMIN-SHADCN-RESET-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. The owner
 explicitly authorizes a full Admin dashboard visual reset to stock shadcn
@@ -34,9 +68,9 @@ did not complete, and later build gates were not reached. The unused Combobox
 parameter reported by aggregate lint was corrected; standalone lint and formatting
 then passed cleanly. No build or Core test success is claimed.
 
-Next action: review and commit this scoped Admin presentation reset to `main`, push
-`origin main`, and verify local/remote synchronization. No deploy, provider operation
-or real business write is authorized. Commerce Phase 7 and provider journey
+The reset was committed and pushed to `main` as `9ffea385`; checkout and
+`origin/main` matched with a clean working tree. No deploy, provider operation or
+real business write was performed. Commerce Phase 7 and provider journey
 acceptance remain open.
 
 ## Prior Admin component preference — SHADCN-ADMIN-STOCK-1 (2026-09-27)
