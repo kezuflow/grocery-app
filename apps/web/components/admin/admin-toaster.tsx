@@ -9,5 +9,5 @@ import { useAdminTheme } from "./admin-theme-provider";
  */
 export function AdminToaster() {
   const { theme } = useAdminTheme();
-  return <Toaster theme={theme} position="bottom-right" closeButton={false} />;
+  return <Toaster theme={theme} position="bottom-right" closeButton={false} richColors />;
 }

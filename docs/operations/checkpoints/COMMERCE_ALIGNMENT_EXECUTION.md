@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Admin Edit and Sonner contrast — ADMIN-CONTRAST-20 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation** and
+**Admin craft repair program**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked for readable Global Product preview Edit
+text in dark mode and readable Admin Sonner toasts in both light and dark modes.
+Acceptance: Edit retains foreground/background contrast in both appearances;
+Admin toasts use matching surface/text colors, with distinct success/error
+colors; Storefront and authentication styling remain unchanged.
+
+Started on `main` at `e38e94a7`. Concurrent Admin shell work was observed as an
+unstaged change and then committed separately as `80ae17e7`; this slice leaves
+that work untouched. The global anchor reset had overridden the stock Admin
+link-button foreground. An `.fm-admin` selector restores the default button
+foreground. The Admin Sonner wrapper now resolves its normal colors from the
+existing Admin tokens rather than undefined generic variables, and enables
+Sonner's built-in rich success/error colors. No command or workflow changed.
+
+Web typecheck, lint, focused source format check and `git diff --check` passed on
+this source working tree. Local browser computed styles confirmed Edit at dark foreground
+`oklch(0.205 0 0)` over `oklch(0.922 0 0)` in dark appearance, and light
+foreground `oklch(0.985 0 0)` over `oklch(0.205 0 0)` in light appearance.
+The local browser rendered default, info, success and error Sonner toasts in
+both appearances. Default toast colors were light `oklch(1 0 0)` background
+with `oklch(0.145 0 0)` text and dark `oklch(0.205 0 0)` background with
+`oklch(0.985 0 0)` text; rich-color toasts also had distinct contrasting
+foregrounds and backgrounds. A temporary local toast fixture was removed, and
+the dark appearance restored. No provider or production acceptance is claimed.
+
+Completion level: **one Admin contrast correction implemented and locally
+browser-verified**. Next action: resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction is
+authorized by this request.
+
 ## Account profile in Admin navigation — ADMIN-PROFILE-NAV-19 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

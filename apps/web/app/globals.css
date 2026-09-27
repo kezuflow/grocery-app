@@ -604,6 +604,11 @@ a {
   color: inherit;
 }
 
+/* The global anchor reset must not erase the foreground of Admin link buttons. */
+.fm-admin a[data-slot="button"][data-variant="default"] {
+  color: var(--fm-primary-foreground);
+}
+
 button,
 a,
 input,
