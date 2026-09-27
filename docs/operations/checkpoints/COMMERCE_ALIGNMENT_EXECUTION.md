@@ -1,5 +1,17 @@
 # Commerce alignment — active checkpoint
 
+## Current-main production release — ADMIN-CURRENT-MAIN-DEPLOY-31 (2026-09-27)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. The owner requested deployment of the separately committed Admin changes on current `main`. Acceptance: publish the synchronized Core/Web pair to `freshmarkets.ph`, preserve production resources and secrets, confirm readiness and 100% traffic, and record the limit of unauthenticated HTTP checks. The owner had instructed not to use browser skills. This release does not authorize an Order transition, provider transaction, outbound message or data reset.
+
+Started on clean, synchronized `main`/`origin/main` at `0fcbfbc0`. Relative to the prior production rollout `ce43611f`, source includes the Admin presentation commits and `66235563` Scheduled packing/manual handover change. Remote production D1 reported no pending migrations. The first migration-list request failed with Cloudflare code 7403; a retry succeeded without changing data. A stale Admin prefetch test still expected the intentionally removed Marketplace shortcut. Corrected only that assertion, reviewed its diff, committed it separately as `9b2748bc` (`test(admin): match removed marketplace shortcut`), and pushed `main`; the checkout was clean and synchronized at that revision before deployment.
+
+`pnpm check` passed on `9b2748bc`: format, naming, skill mirrors, terminology, harness, migration/schema, commit, architecture/readiness, lint, typechecks, **711/711 Web tests**, **1743/1743 Core Worker/D1 tests** and both builds. Core and Web `wrangler types --check` passed; `vinext check` reported 100% compatible. Production Web build, Worker readiness verifier and strict production Core/Web dry runs passed. Generated Web config resolved to `freshmarkets-web-production`, `https://freshmarkets.ph`, the production Custom Domain and `freshmarkets-core-production#CoreEntrypoint`; required secret names were present. No local browser or provider journey was run for this release.
+
+Strict deployment published Core version `d60b2842-c426-4df0-887e-bdc7213ade0d` and Web version `1547b74a-fd6f-4f01-95a6-23f5419e0d22`, each confirmed at **100% traffic**. Post-release Core `/health` and `/ready`, Web `/health` and `/api/core-health`, homepage, Role detail URL and Add Product URL returned HTTP 200; Core readiness reported runtime, database and payment adapter ready. Remote D1 still reported no pending migrations. The Admin route responses were unauthenticated HTTP checks, not evidence that the grouped capabilities or stock wording rendered in an authenticated session. No production business command, payment/courier transaction, remote migration, data reset or outbound message was performed.
+
+Completion level: **1 of 1 current-main paired production releases deployed and health-checked; 0 authenticated Admin visual checks and 0 actual provider transactions accepted**. Remaining Phase 7 customer/operator/provider journeys are unchanged. Next action: verify the Role detail and Add Product presentation in an authorized authenticated session without browser skills, then continue the first unresolved Phase 7 journey.
+
 ## Group Role capabilities by work area — ADMIN-ROLE-GROUPS-30 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
