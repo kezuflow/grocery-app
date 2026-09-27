@@ -1,5 +1,30 @@
 # Commerce alignment — active checkpoint
 
+## Promotion Codes Status column alignment — ADMIN-PROMOTION-ALIGN-26 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to center the Status column on
+`/admin/promotions`. Acceptance: the Status heading and each editable or
+read-only status value share the column center; the switch and behavior stay
+unchanged.
+
+Started on clean `main` at `a9092622`. The Status heading and cells now use
+center text alignment. The editable text-and-switch group centers as one unit
+inside the cell; read-only text centers through the same cell alignment. No
+command, route, permission, Storefront or Promotion Sale behavior changed.
+
+In the authenticated local browser, the measured centers of the Status
+heading, first Status cell and first text-and-switch group matched at the
+current desktop viewport, and the page looked centered. Web typecheck, lint,
+focused formatting and diff checks passed on the working tree. No status
+command or provider transaction was submitted.
+
+Completion level: **one Admin table alignment correction implemented and
+locally browser-verified**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Promotion Codes plain status text — ADMIN-PROMOTION-TEXT-25 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

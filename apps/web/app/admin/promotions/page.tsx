@@ -1008,7 +1008,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                           <TableHead>Benefit</TableHead>
                           <TableHead>Minimum subtotal</TableHead>
                           <TableHead>Period</TableHead>
-                          <TableHead>Status</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
                           <TableHead>
                             <span className="sr-only">Manage</span>
                           </TableHead>
@@ -1062,6 +1062,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                 </span>
                               </TableCell>
                               <TableCell
+                                className="text-center"
                                 onClick={(event) => event.stopPropagation()}
                                 onKeyDown={(event) => event.stopPropagation()}
                               >

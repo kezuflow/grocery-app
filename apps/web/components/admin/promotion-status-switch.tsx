@@ -92,7 +92,7 @@ export function PromotionStatusSwitch({
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", showStatusText && "items-center")}>
       <span
         data-pending={command.pending}
         aria-busy={showStatusText && command.pending}
