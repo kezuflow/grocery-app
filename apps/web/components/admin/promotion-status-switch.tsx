@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { AdminPromotionSummary } from "@freshmarkets/contracts";
 import { adminPromotionSummarySchema } from "@freshmarkets/validation";
 import { useCatalogCommand } from "./catalog-command-state";
@@ -25,6 +25,14 @@ export function PromotionStatusPill({ status }: { status: AdminPromotionSummary[
   );
 }
 
+export function PromotionStatusText({ status }: { status: AdminPromotionSummary["status"] }) {
+  return (
+    <span data-promotion-status-text className="cursor-default text-sm text-foreground">
+      {statusLabels[status]}
+    </span>
+  );
+}
+
 /**
  * Promotion/sale status control. The switch sends the status command; its
  * displayed state follows Core confirmation, never an optimistic status.
@@ -32,18 +40,21 @@ export function PromotionStatusPill({ status }: { status: AdminPromotionSummary[
 export function PromotionStatusSwitch({
   promotion,
   onApplied,
-  showStatusPill = false,
+  showStatusText = false,
 }: {
   promotion: Pick<AdminPromotionSummary, "promotionId" | "name" | "status" | "version">;
   onApplied?(summary: AdminPromotionSummary): void;
-  showStatusPill?: boolean;
+  showStatusText?: boolean;
 }) {
-  const switchId = useId();
   const command = useCatalogCommand(adminPromotionSummarySchema);
   const [error, setError] = useState<string | null>(null);
 
   if (promotion.status === "ARCHIVED") {
-    return <PromotionStatusPill status="ARCHIVED" />;
+    return showStatusText ? (
+      <PromotionStatusText status="ARCHIVED" />
+    ) : (
+      <PromotionStatusPill status="ARCHIVED" />
+    );
   }
 
   const active = promotion.status === "ACTIVE";
@@ -84,53 +95,44 @@ export function PromotionStatusSwitch({
     <div className="flex flex-col gap-1">
       <span
         data-pending={command.pending}
+        aria-busy={showStatusText && command.pending}
         className={cn(
-          "fm-status-switch relative inline-flex items-center justify-center",
-          !showStatusPill && "size-6",
+          "relative inline-flex items-center justify-center",
+          !showStatusText && "fm-status-switch size-6",
         )}
       >
         <span
           className={cn(
-            "fm-status-switch-control",
-            showStatusPill && "inline-flex items-center gap-2",
+            !showStatusText && "fm-status-switch-control",
+            showStatusText && "inline-flex items-center gap-2",
           )}
-          aria-hidden={command.pending}
-          inert={command.pending}
+          aria-hidden={!showStatusText && command.pending}
+          inert={!showStatusText && command.pending}
         >
-          {showStatusPill ? (
-            <label
-              htmlFor={switchId}
-              className="cursor-pointer"
-              onClick={(event) => {
-                event.preventDefault();
-                void commit();
-              }}
-            >
-              <PromotionStatusPill status={promotion.status} />
-            </label>
-          ) : null}
+          {showStatusText ? <PromotionStatusText status={promotion.status} /> : null}
           <Switch
-            id={switchId}
-            data-promotion-status-switch={showStatusPill || undefined}
-            data-status={showStatusPill ? promotion.status : undefined}
+            data-promotion-status-switch={showStatusText || undefined}
+            data-status={showStatusText ? promotion.status : undefined}
             aria-label={`${promotion.name} ${active ? "on" : "off"}`}
             checked={active}
             disabled={command.pending}
             onCheckedChange={() => void commit()}
-            size={showStatusPill ? "default" : "sm"}
+            size={showStatusText ? "default" : "sm"}
           />
         </span>
-        <span
-          role={command.pending ? "status" : undefined}
-          aria-label={command.pending ? "Updating promotion status" : undefined}
-          aria-hidden={!command.pending}
-          className="fm-status-switch-spinner pointer-events-none absolute inset-0 inline-flex items-center justify-center text-muted-foreground"
-        >
-          <LoaderCircle
-            className="size-4 animate-spin motion-reduce:animate-none"
-            aria-hidden="true"
-          />
-        </span>
+        {!showStatusText ? (
+          <span
+            role={command.pending ? "status" : undefined}
+            aria-label={command.pending ? "Updating promotion status" : undefined}
+            aria-hidden={!command.pending}
+            className="fm-status-switch-spinner pointer-events-none absolute inset-0 inline-flex items-center justify-center text-muted-foreground"
+          >
+            <LoaderCircle
+              className="size-4 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+          </span>
+        ) : null}
       </span>
       {error ? (
         <p role="alert" className="max-w-48 text-xs text-destructive">

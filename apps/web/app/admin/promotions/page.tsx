@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/admin/shadcn/table";
 import {
-  PromotionStatusPill,
+  PromotionStatusText,
   PromotionStatusSwitch,
 } from "../../../components/admin/promotion-status-switch";
 import { useCatalogCommand, catalogResultSchema } from "@/components/admin/catalog-command-state";
@@ -1068,7 +1068,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                 {canManage ? (
                                   <PromotionStatusSwitch
                                     promotion={promotion}
-                                    showStatusPill
+                                    showStatusText
                                     onApplied={(summary) =>
                                       setPage((current) =>
                                         current && !summary.productTargets?.length
@@ -1085,7 +1085,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                     }
                                   />
                                 ) : (
-                                  <PromotionStatusPill status={promotion.status} />
+                                  <PromotionStatusText status={promotion.status} />
                                 )}
                               </TableCell>
                               <TableCell

@@ -53,13 +53,13 @@ function fail(): Response {
   });
 }
 
-function render(promotion: SwitchProps, showStatusPill = false) {
+function render(promotion: SwitchProps, showStatusText = false) {
   act(() => {
     root.render(
       <PromotionStatusSwitch
         promotion={promotion}
         onApplied={onApplied}
-        showStatusPill={showStatusPill}
+        showStatusText={showStatusText}
       />,
     );
   });
@@ -113,29 +113,32 @@ it("renders an on/off switch pill and keeps archived promotions as a plain pill"
   expect(switchControl()).toBeNull();
 });
 
-it("renders a status label linked to the switch and leaves archived status read-only", () => {
+it("renders plain status text beside the switch and leaves archived status read-only", () => {
   render(draftSummary, true);
-  const label = host.querySelector<HTMLLabelElement>("label:has([data-promotion-status-pill])");
-  expect(label?.textContent).toBe("Draft");
-  expect(label?.htmlFor).toBe(switchControl().id);
+  const text = host.querySelector<HTMLElement>("[data-promotion-status-text]");
+  expect(text?.textContent).toBe("Draft");
+  expect(text?.tagName).toBe("SPAN");
+  expect(host.querySelector("label, [data-promotion-status-pill]")).toBeNull();
   expect(switchControl().getAttribute("data-status")).toBe("DRAFT");
 
   render({ ...draftSummary, status: "INACTIVE" }, true);
-  expect(host.querySelector("[data-promotion-status-pill]")?.textContent).toBe("Inactive");
+  expect(host.querySelector("[data-promotion-status-text]")?.textContent).toBe("Inactive");
   expect(switchControl().getAttribute("data-status")).toBe("INACTIVE");
 
   render({ ...draftSummary, status: "ARCHIVED" }, true);
   expect(host.textContent).toContain("Archived");
-  expect(host.querySelector("label:has([data-promotion-status-pill])")).toBeNull();
+  expect(host.querySelector("[data-promotion-status-text]")?.textContent).toBe("Archived");
   expect(switchControl()).toBeNull();
 });
 
-it("activates from the status label through the guarded Core command", async () => {
-  fetchMock.mockResolvedValue(ok(activeSummary));
+it("keeps status text noninteractive while the switch remains the command target", async () => {
   render(draftSummary, true);
-  await act(async () => {
-    host.querySelector<HTMLLabelElement>("label:has([data-promotion-status-pill])")!.click();
-  });
+  clickControl(host.querySelector("[data-promotion-status-text]")!);
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(switchControl().getAttribute("aria-checked")).toBe("false");
+
+  fetchMock.mockResolvedValue(ok(activeSummary));
+  await act(async () => clickControl(switchControl()));
 
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -144,7 +147,7 @@ it("activates from the status label through the guarded Core command", async () 
   expect(onApplied).toHaveBeenCalledWith(activeSummary);
 });
 
-it("deactivates from the switch without changing its status before Core confirms", async () => {
+it("keeps plain status text and no spinner while the switch waits for Core", async () => {
   let resolveResponse!: (response: Response) => void;
   fetchMock.mockReturnValue(
     new Promise<Response>((resolve) => {
@@ -157,6 +160,8 @@ it("deactivates from the switch without changing its status before Core confirms
 
   expect(control.disabled).toBe(true);
   expect(control.getAttribute("data-status")).toBe("ACTIVE");
+  expect(host.querySelector("[data-promotion-status-text]")?.textContent).toBe("Active");
+  expect(host.querySelector(".fm-status-switch-spinner")).toBeNull();
   expect(onApplied).not.toHaveBeenCalled();
 
   await act(async () => {

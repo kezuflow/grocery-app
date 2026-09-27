@@ -294,7 +294,7 @@ test("a promotions reader can inspect both indexes without manage controls", asy
   await expect(page.getByRole("menuitem", { name: "Edit details" })).toHaveCount(0);
 });
 
-test("clicking a Promotion Codes status pill sends one status command and updates the switch", async ({
+test("Promotion Codes status text stays plain while its switch sends the status command", async ({
   adminPage: page,
 }) => {
   await mockMixedPromotionPage(page);
@@ -314,9 +314,13 @@ test("clicking a Promotion Codes status pill sends one status command and update
   await page.goto("/admin/promotions");
   const row = page.getByRole("row", { name: /READ10/ });
   await expect(row.getByRole("switch")).not.toBeChecked();
-  await row.locator("[data-promotion-status-pill]").click();
+  await expect(row.locator("[data-promotion-status-text]")).toHaveText("Draft");
+  await expect(row.locator(".fm-status-switch-spinner")).toHaveCount(0);
+  await row.locator("[data-promotion-status-text]").click();
+  expect(requests).toHaveLength(0);
+  await row.getByRole("switch").click();
   await expect(row.getByRole("switch")).toBeChecked();
-  await expect(row.locator("[data-promotion-status-pill]")).toHaveText("Active");
+  await expect(row.locator("[data-promotion-status-text]")).toHaveText("Active");
   expect(requests).toEqual([{ action: "ACTIVATE", expectedVersion: 1 }]);
 });
 

@@ -1,5 +1,38 @@
 # Commerce alignment — active checkpoint
 
+## Promotion Codes plain status text — ADMIN-PROMOTION-TEXT-25 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to remove the Promotions status loading
+spinner and make Active/Inactive plain text, independent of pill interaction.
+Acceptance: status text has no badge treatment or click behavior; the switch
+is the only status action, remains disabled while pending, and still displays
+Core-confirmed state and inline errors. Promotion Sale and Storefront stay as
+they were.
+
+Started on `main` at `c6b941b1` with a clean working tree. Promotion Codes
+now renders ordinary text for Draft, Active, Inactive and Archived, including
+read-only rows. The text has a default cursor and no click handler. The
+Promotion Codes switch keeps its Active green/Inactive red track, guarded
+Core command and disabled pending state. Its spinner and pending crossfade
+are absent in this list; Promotion Sale retains those elements. No route,
+permission, API or business policy changed.
+
+Focused component tests (7/7), Web typecheck and lint passed. The local
+authenticated browser showed normal Active text with a default cursor beside
+the switch and no spinner. A managed Playwright browser regression was added
+for a text click sending no request and a switch click sending one request,
+but its isolated stack timed out during build before test execution. No live
+status command was issued for this slice; pointer behavior in that isolated
+browser remains unverified. No provider or production acceptance is claimed.
+
+Completion level: **one Promotion Codes presentation correction implemented
+and locally inspected**. Next action: rerun the focused managed browser
+regression when its stack can start, then resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Promotion Codes status pill pointer repair — ADMIN-PROMOTION-CLICK-24 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
