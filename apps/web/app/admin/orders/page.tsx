@@ -440,6 +440,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     <TableRow className="border-border">
                       <TableHead>Order ID</TableHead>
                       <TableHead>Customer</TableHead>
+                      <TableHead>Mode</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
@@ -480,14 +481,12 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate font-medium">
-                              {order.customerName ?? "Customer"}
-                            </span>
-                            <Badge variant="outline" className="shrink-0 capitalize">
-                              {order.fulfillmentMode.toLowerCase()}
-                            </Badge>
-                          </div>
+                          <span className="font-medium">{order.customerName ?? "Customer"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {order.fulfillmentMode.toLowerCase()}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">
                           {money(order.totalMinor, order.currency)}
