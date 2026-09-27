@@ -1,5 +1,31 @@
 # Commerce alignment — active checkpoint
 
+## Latest completed owner correction — ADMIN-ORDERS-TASKS-4 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner corrected the Admin Orders desktop table again:
+show the fulfillment-mode badge in a separate **Mode** column immediately after
+**Customer**. Acceptance: Customer contains the name alone, Mode contains the
+existing badge, and Orders data, URLs, filters, preview and Storefront behavior
+remain unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `efce445e`. Only the
+Admin Orders page and DESIGN changed in the source commit. The existing badge
+moved to its own cell with a Mode heading. Direct local browser inspection
+confirmed the column order and no table overflow at a 759px content width.
+`pnpm format:check`, `pnpm --filter @freshmarkets/web typecheck` and
+`git diff --check` passed on the working tree. No new browser fixture run was
+needed for this reversible markup move; prior Orders journey evidence remains
+recorded below. No Core, contract, storage, provider or Storefront code changed.
+
+The two-file source correction was committed and pushed to `main` as
+`fd32a4f6`; `main` and `origin/main` matched after the push. This checkpoint
+records its verified outcome. Completion level: **one Admin Orders presentation
+correction locally verified, committed and pushed**. Next action: resume the
+first unresolved Phase 7 provider journey under the commerce plan. This request
+did not authorize deployment or a real provider transaction.
+
 ## Latest completed owner correction — ADMIN-ORDERS-TASKS-3 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
