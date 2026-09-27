@@ -1,6 +1,36 @@
 # Commerce alignment — active checkpoint
 
-## Current source change — PACKING-MANUAL-RETRY-1 (2026-09-27)
+## Current Admin skill setup — SHADCN-ADMIN-SKILL-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**. This owner request
+adds the official shadcn/ui agent skill for Admin dashboard presentation only; it does
+not advance the commerce plan. Acceptance: the skill is available locally for Admin
+work, its trigger and instructions exclude Storefront, and shared component changes
+retain Storefront impact checks.
+
+Started on `main` at `66235563` with unrelated in-progress Admin changes in
+`apps/web/app/globals.css`, several `apps/web/components/admin` files,
+`apps/web/tests/admin-foundation.spec.ts`, `docs/design/DESIGN.md`, and an untracked
+`apps/web/components/ui/tabs.tsx`. These files were preserved and not staged for this
+setup. The official shadcn skill was installed into `.agents/skills/shadcn-admin`,
+mirrored under `.hermes/skills/shadcn-admin`, and scoped in its trigger and `AGENTS.md`
+to `apps/web/app/admin` and `apps/web/components/admin`. No application UI, Storefront
+code, shared component, CSS, dependency, or runtime configuration was changed by this
+request. Commit `17d11d81` contains only the skill bundle and router update.
+
+Verification on the working tree before that commit: `pnpm skills:check` passed with
+31 identical mirrored files; `pnpm naming:check` passed; `pnpm harness:test` passed
+37/37; `git diff --cached --check` passed. From `apps/web`,
+`pnpm dlx shadcn@latest info --json` succeeded and identified the existing Next.js,
+Tailwind v4, Radix, new-york configuration and installed components. No browser or
+actual provider acceptance was applicable to this instructions-only change. The
+commerce Phase 5/7 acceptance and live operational obligations below remain open.
+Completion level: **one Admin-only skill setup locally verified and committed; zero
+Storefront or application behavior changes**. Next action: use `shadcn-admin` for the
+next authorized Admin presentation task, inspect any generated shared files, and
+verify affected Storefront consumers.
+
+## Prior source change — PACKING-MANUAL-RETRY-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**
 and **Phase 7 — Complete journeys and activation evidence**. The owner authorized the
