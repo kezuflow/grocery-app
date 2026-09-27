@@ -31,10 +31,17 @@ import {
   useAdminUrlPagination,
 } from "../../../components/admin/admin-controls";
 import { AdminLiveRegion, AdminPageState } from "../../../components/admin/admin-page-state";
-import { PageHeader } from "../../../components/admin/admin-shell";
 import { useAdminRouteGuard } from "../../../components/admin/use-admin-route-guard";
 import { useAdminContext, useAdminScopeGuard } from "../admin-context-provider";
 import { Button } from "@/components/admin/shadcn/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/admin/shadcn/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -354,186 +361,210 @@ export default function IssuesPage() {
   const selectedPresentation = pendingAction ? actionPresentation[pendingAction.action] : null;
 
   return (
-    <div className="fm-admin-task-index w-full space-y-6">
-      <PageHeader title="Problems" />
+    <div className="fm-admin-task-index w-full">
       <AdminLiveRegion message={notice} />
 
-      {unresolved ? (
-        <Alert role="alert" className="border-border">
-          <AlertTitle>Problem action awaiting confirmation</AlertTitle>
-          <AlertDescription>
-            {notice} Keep this problem open until Core returns a final result.
-            <Button
-              ref={retryTrigger}
-              type="button"
-              size="sm"
-              className="mt-3 block"
-              disabled={commandIntent.pending}
-              onClick={() => void submitIntent(unresolved)}
-            >
-              {commandIntent.pending ? "Checking…" : "Retry the same request"}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <Card className="gap-0 overflow-hidden border-border py-0 shadow-none">
+        <CardHeader className="gap-1 px-4 pt-6 pb-5 sm:px-6 sm:pt-8 sm:pb-7">
+          <CardTitle>
+            <h1 id="admin-page-title" className="text-2xl font-semibold tracking-tight">
+              Problems
+            </h1>
+          </CardTitle>
+          <CardDescription>Review and manage order problems.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 px-4 pb-4 sm:px-6">
+          {unresolved ? (
+            <Alert role="alert" className="border-border">
+              <AlertTitle>Problem action awaiting confirmation</AlertTitle>
+              <AlertDescription>
+                {notice} Keep this problem open until Core returns a final result.
+                <Button
+                  ref={retryTrigger}
+                  type="button"
+                  size="sm"
+                  className="mt-3 block"
+                  disabled={commandIntent.pending}
+                  onClick={() => void submitIntent(unresolved)}
+                >
+                  {commandIntent.pending ? "Checking…" : "Retry the same request"}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      <AdminIndexViews
-        label="Order issue status views"
-        views={issueViews}
-        value={status}
-        disabled={commandLocked}
-        onChange={selectView}
-      />
+          <AdminIndexViews
+            label="Order issue status views"
+            views={issueViews}
+            value={status}
+            disabled={commandLocked}
+            onChange={selectView}
+          />
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <h2 className="sr-only">Order issue queue</h2>
-        {state.phase === "loading" ? (
-          <div className="p-4">
-            <AdminPageState state="loading" title="Loading order issues" />
-          </div>
-        ) : null}
-        {state.phase === "error" ? (
-          <div className="p-4">
-            <AdminPageState
-              state="error"
-              title="Problems could not be loaded"
-              message={state.message}
-              requestId={state.requestId}
-              onRetry={() => void load(status, pagination.cursor)}
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && issues.length === 0 ? (
-          <div className="p-4">
-            <AdminPageState
-              state={status ? "filtered-empty" : "empty"}
-              message="No order issues are visible in this view."
-            />
-          </div>
-        ) : null}
-        {state.phase === "ready" && issues.length > 0 ? (
-          <div>
-            <ul aria-label="Order issue list" className="divide-y divide-border lg:hidden">
-              {issues.map((issue) => (
-                <li key={issue.issueId} className="flex flex-col gap-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <Link
-                        className="font-semibold hover:underline"
-                        href={`/admin/orders/${issue.orderId}`}
-                        prefetch={false}
-                      >
-                        {orderLabel(issue)}
-                      </Link>
-                      <span className="truncate text-sm text-muted-foreground">
-                        {issue.customerName ?? issue.customerEmail}
-                      </span>
-                    </div>
-                    {issueActions(issue)}
-                  </div>
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <Link
-                      className="font-medium hover:underline"
-                      href={recordHref(issue)}
-                      prefetch={false}
-                    >
-                      {categoryLabel(issue.category)}
-                    </Link>
-                    {issue.details ? (
-                      <p className="truncate text-sm text-muted-foreground" title={issue.details}>
-                        {issue.details}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <IssueProgressStatus status={issue.status} />
-                    <span className="text-sm text-muted-foreground">{date(issue.createdAt)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Owner: {issue.assignedStaffName ?? "Unassigned"}
-                  </p>
-                </li>
-              ))}
-            </ul>
-            <div className="hidden lg:block">
-              <Table aria-label="Order issue queue">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Issue</TableHead>
-                    <TableHead>Reported</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-12">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+          <section className="overflow-hidden rounded-md border border-border">
+            <h2 className="sr-only">Order issue queue</h2>
+            {state.phase === "loading" ? (
+              <div className="p-4">
+                <AdminPageState state="loading" title="Loading order issues" />
+              </div>
+            ) : null}
+            {state.phase === "error" ? (
+              <div className="p-4">
+                <AdminPageState
+                  state="error"
+                  title="Problems could not be loaded"
+                  message={state.message}
+                  requestId={state.requestId}
+                  onRetry={() => void load(status, pagination.cursor)}
+                />
+              </div>
+            ) : null}
+            {state.phase === "ready" && issues.length === 0 ? (
+              <div className="p-4">
+                <AdminPageState
+                  state={status ? "filtered-empty" : "empty"}
+                  message="No order issues are visible in this view."
+                />
+              </div>
+            ) : null}
+            {state.phase === "ready" && issues.length > 0 ? (
+              <div>
+                <ul aria-label="Order issue list" className="divide-y divide-border xl:hidden">
                   {issues.map((issue) => (
-                    <TableRow key={issue.issueId} className="h-12 border-border">
-                      <TableCell>
-                        <Link
-                          className="font-medium hover:underline"
-                          href={`/admin/orders/${issue.orderId}`}
-                          prefetch={false}
-                        >
-                          {orderLabel(issue)}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">
-                          {issue.customerName ?? issue.customerEmail}
-                        </span>
-                      </TableCell>
-                      <TableCell className="max-w-72">
-                        <div className="flex min-w-0 items-center gap-2">
+                    <li key={issue.issueId} className="flex flex-col gap-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-col gap-1">
                           <Link
-                            className="shrink-0 font-medium hover:underline"
-                            href={recordHref(issue)}
+                            className="font-semibold hover:underline"
+                            href={`/admin/orders/${issue.orderId}`}
                             prefetch={false}
                           >
-                            {categoryLabel(issue.category)}
+                            {orderLabel(issue)}
                           </Link>
-                          {issue.details ? (
-                            <span className="truncate text-muted-foreground" title={issue.details}>
-                              {issue.details}
-                            </span>
-                          ) : null}
+                          <span className="truncate text-sm text-muted-foreground">
+                            {issue.customerName ?? issue.customerEmail}
+                          </span>
                         </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {date(issue.createdAt)}
-                      </TableCell>
-                      <TableCell>{issue.assignedStaffName ?? "Unassigned"}</TableCell>
-                      <TableCell>
+                        {issueActions(issue)}
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <Link
+                          className="font-medium hover:underline"
+                          href={recordHref(issue)}
+                          prefetch={false}
+                        >
+                          {categoryLabel(issue.category)}
+                        </Link>
+                        {issue.details ? (
+                          <p
+                            className="truncate text-sm text-muted-foreground"
+                            title={issue.details}
+                          >
+                            {issue.details}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <IssueProgressStatus status={issue.status} />
-                      </TableCell>
-                      <TableCell>{issueActions(issue)}</TableCell>
-                    </TableRow>
+                        <span className="text-sm text-muted-foreground">
+                          {date(issue.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Owner: {issue.assignedStaffName ?? "Unassigned"}
+                      </p>
+                    </li>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        ) : null}
-
+                </ul>
+                <div className="hidden xl:block">
+                  <Table aria-label="Order issue queue" className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[15%]">Order ID</TableHead>
+                        <TableHead className="w-[15%]">Customer</TableHead>
+                        <TableHead className="w-1/4">Issue</TableHead>
+                        <TableHead className="w-[12%]">Reported</TableHead>
+                        <TableHead className="w-[11%]">Owner</TableHead>
+                        <TableHead className="w-[17%]">Status</TableHead>
+                        <TableHead className="w-[5%]">
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {issues.map((issue) => (
+                        <TableRow key={issue.issueId} className="h-12 border-border">
+                          <TableCell>
+                            <Link
+                              className="font-medium hover:underline"
+                              href={`/admin/orders/${issue.orderId}`}
+                              prefetch={false}
+                            >
+                              {orderLabel(issue)}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">
+                              {issue.customerName ?? issue.customerEmail}
+                            </span>
+                          </TableCell>
+                          <TableCell className="max-w-72">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Link
+                                className="shrink-0 font-medium hover:underline"
+                                href={recordHref(issue)}
+                                prefetch={false}
+                              >
+                                {categoryLabel(issue.category)}
+                              </Link>
+                              {issue.details ? (
+                                <span
+                                  className="truncate text-muted-foreground"
+                                  title={issue.details}
+                                >
+                                  {issue.details}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {date(issue.createdAt)}
+                          </TableCell>
+                          <TableCell>{issue.assignedStaffName ?? "Unassigned"}</TableCell>
+                          <TableCell>
+                            <IssueProgressStatus status={issue.status} />
+                          </TableCell>
+                          <TableCell>{issueActions(issue)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </CardContent>
         {state.phase === "ready" ? (
-          <AdminCursorPagination
-            compact
-            pageNumber={pagination.pageNumber}
-            nextCursor={page?.nextCursor ?? null}
-            pending={commandLocked}
-            onPrevious={() => {
-              if (!commandLocked) pagination.previous();
-            }}
-            onNext={(cursor) => {
-              if (!commandLocked) pagination.next(cursor);
-            }}
-          />
+          <CardFooter className="flex-col items-start gap-1 px-4 pt-2 pb-5 sm:flex-row sm:justify-between sm:px-6">
+            <span className="text-sm text-muted-foreground">
+              Showing {issues.length} of {issues.length}{" "}
+              {issues.length === 1 ? "problem" : "problems"} on this page
+            </span>
+            <AdminCursorPagination
+              compact
+              pageNumber={pagination.pageNumber}
+              nextCursor={page?.nextCursor ?? null}
+              pending={commandLocked}
+              onPrevious={() => {
+                if (!commandLocked) pagination.previous();
+              }}
+              onNext={(cursor) => {
+                if (!commandLocked) pagination.next(cursor);
+              }}
+            />
+          </CardFooter>
         ) : null}
-      </section>
+      </Card>
 
       {pendingAction && selectedPresentation ? (
         <AdminConfirmationDialog
