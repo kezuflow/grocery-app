@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Admin table inset and Problems table — ADMIN-INDEX-TABLE-7 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to carry the Orders first-column safe
+spacing to the remaining Admin index tables and make `/admin/issues` read like
+the Orders table. Acceptance: first headings and values clear their table
+borders; Problems has compact one-line desktop rows and readable narrow records;
+existing issue views, links, actions, details and Storefront remain intact.
+
+Started from clean synchronized `main`/`origin/main` at `6123d0d3`. Source and
+design commit `0bd8b9d9`, pushed to `origin/main`, applies 16px first-column inset to the Admin index
+table scope, increasing to 24px at `xl`. The scope covers Problems, Products,
+Catalog, Categories, Customers, Memberships, Promotion Codes, Promotion Sale,
+Payments, Staff and Roles. Banners remains a gallery. Problems now shows
+Order ID, Customer, Issue summary, Reported, Owner and plain icon-and-text
+Status in compact desktop rows. Below `lg`, each issue is a readable record
+with the same issue/order links and action menu. Customer contact and full
+issue details remain on the issue detail route. No Core, contracts, storage,
+provider or business-write behavior changed.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree before commit. Local
+browser review showed the Problems desktop table, 24px computed padding on
+its first heading and value at a 1309px viewport, status filtering to New via
+`status=SUBMITTED`, and the 500px Problems record layout with its action menu.
+Catalog's first heading and value measured 16px at 1106px. The other named
+tables are covered by the shared scoped CSS but were not each browser checked.
+This is local UI acceptance, not production or provider acceptance.
+
+Completion level: **one shared Admin table inset and Problems table refresh
+implemented, locally verified and pushed**. Next action: resume the first
+unresolved Phase 7 provider journey under the commerce plan. This request did
+not authorize deployment or real provider transactions.
+
 ## Orders first-column inset — ADMIN-ORDERS-TASKS-6 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
