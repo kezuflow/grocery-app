@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Current owner correction — SCHEDULED-NO-RECEIVING-1 (2026-09-27)
+
+Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 5 — Scheduled operations**,
+with **Phase 7 — Complete journeys and activation evidence** still open. The owner reaffirmed that
+routine Scheduled staff work is a week-level Purchase complete approval after the configured
+Procurement starts time, followed by Finish packing order only after staff physically pack each
+Order. Supplier receipt/checking happen outside the app; in-app receiving or per-Order picking must
+not block this action. Acceptance for this correction: remove misleading active guidance and Admin
+copy, distinguish current source from the old live screen, and preserve the historical receiving
+adapter without claiming it is the routine requirement.
+
+Started from clean synchronized `main`/`origin/main` at
+`9ecd9c0142cf1ae9006e22178b3d0b576d8b346a`. PRODUCT and the Phase 5 plan already state the
+approved no-receiving flow. Current source has `completeAdminScheduledWeek` and
+`COMPLETE_SCHEDULED_PACKING` guarded by the saved purchase attestation and paid Order evidence; its
+Scheduled Fulfillment detail suppresses the historical receiving blocker. Production still ends at
+D1 migration 0103 and displays the earlier `MARK_PACKED` receiving gate. This correction updates
+stale PRODUCT/DESIGN/API/STATE wording, the early-close confirmation copy and the first-live-payment
+audit; it does not create a receiving record or change the paid Order. Verification on this working
+tree: Web typecheck passed; focused Core Worker/D1 week-purchase and fulfillment-recovery tests passed
+**14/14**; Web Scheduled detail tests passed **3/3**; targeted format check for the changed source,
+DESIGN/API/STATE/audit files and `git diff --check` passed. The baseline checkpoint and PRODUCT files
+already fail standalone `oxfmt --check`; this edit preserves their established format and changes no
+unrelated sections. A fresh remote D1 read was rejected by Cloudflare with `7403` account access, so
+the production 0103 fact is from the successful read in FIRST-LIVE-PAYMENT-TRACE-1, not a fresh
+observation. No deployment, remote migration, provider operation, outbound message or production
+business write was authorized or performed. Completion level: **one documentation and copy correction
+locally verified; zero production Scheduled rollouts**. Next action: commit/push this correction,
+then prepare the separately authorized production migration/paired Worker rollout to replace the
+live screen.
+
 ## Current live-payment trace — FIRST-LIVE-PAYMENT-TRACE-1 (2026-09-27)
 
 Active plan: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
@@ -22,8 +53,9 @@ Order-confirmed and cutoff emails show `SENT`; official invoice readiness is blo
 configuration. Provider settlement evidence does not establish bank payout.
 
 At the 2026-09-27 06:46–06:50 Manila read, this paid Order remained fulfillment `PACKING`, delivery
-`UNASSIGNED`, with no cycle purchase/receiving/counting/goods or courier dispatch attempt; its
-configured pickup time had passed and the customer window was 09:00–12:00 Manila. Five other cycle
+`UNASSIGNED`, with no courier dispatch attempt; its configured pickup time had passed and the customer
+window was 09:00–12:00 Manila. The older production screen treated absent in-app receiving as a
+packing blocker, but the approved Scheduled routine requires no such receipt. Five other cycle
 Payments remain `REQUIRES_ACTION` with seven open financial cases, no active actions and exhausted
 lookups. Production D1 ends at migration 0103; the approved 0104 Scheduled purchase/per-Order packing
 and Procurement-start rule are not deployed. Read-only

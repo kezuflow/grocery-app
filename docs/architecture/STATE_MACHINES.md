@@ -159,8 +159,9 @@ The approved ordinary purchase-confirmation command coordinates exact-demand agg
 The latest Scheduled owner correction replaces this ordinary per-option path with one
 week-level **Purchase complete** command over the frozen exact paid demand. It records
 staff's completed manual supplier purchase; no supplier contact is automated. The
-per-option command and detailed receiving records remain retained/historical until the
-new guarded path is implemented and accepted.
+per-option command and detailed receiving records remain for retained/historical
+operations. The guarded week path is implemented in source; production acceptance
+requires its migration and paired Worker rollout.
 
 Rules:
 

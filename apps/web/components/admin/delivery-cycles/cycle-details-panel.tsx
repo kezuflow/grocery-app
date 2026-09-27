@@ -248,7 +248,7 @@ export function CycleDetailsPanel({
           confirmation === "activate"
             ? "Activation makes the cycle eligible for ordering at its opening time and locks the schedule for editing."
             : confirmation === "close-ordering"
-              ? "New checkouts stop now. Started payments may still complete. Existing paid orders keep their original cancellation cutoff, so purchase and receiving still wait for that cutoff and payment confirmation. This cycle cannot reopen."
+              ? "New checkouts stop now. Started payments may still complete within the configured settlement window. Existing paid orders keep their original cancellation cutoff. Purchase complete becomes available at Procurement starts. This cycle cannot reopen."
               : "Deactivation closes unstarted checkout quotes and cannot be undone for this cycle."
         }
         reasonRequired={false}
