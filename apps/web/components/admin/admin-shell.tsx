@@ -56,12 +56,8 @@ import {
 
 const SIDEBAR_PREFERENCE_KEY = "fm-admin-sidebar-collapsed";
 const LABELED_NAVIGATION_GROUPS = new Set([
-  "discounts",
-  "content",
-  "finance",
   "sales_channels",
   "settings",
-  "commerce",
   "operations",
   "administration",
 ]);
@@ -498,9 +494,9 @@ function AdminMobileMenu({ items }: { items: ReadonlyArray<AdminNavigationEntry>
         <SheetHeader>
           <SheetTitle>Admin navigation</SheetTitle>
         </SheetHeader>
-        <nav aria-label="Admin navigation" className="space-y-5">
+        <nav aria-label="Admin navigation" className="flex flex-col gap-1">
           {groups.map((group) => (
-            <div key={group.code}>
+            <div key={group.code} className={cn(showNavigationGroupLabel(group.code) && "pt-3")}>
               {showNavigationGroupLabel(group.code) ? (
                 <p className="px-3 pb-1 text-xs font-medium text-muted-foreground">{group.label}</p>
               ) : null}
@@ -667,7 +663,13 @@ function AdminSidebar({
   const scrollingGroups = visibleGroups.filter((group) => group.code !== "settings");
   function renderGroup(group: AdminNavigationGroup) {
     return (
-      <div key={group.code} className="relative flex w-full min-w-0 flex-col p-2">
+      <div
+        key={group.code}
+        className={cn(
+          "relative flex w-full min-w-0 flex-col px-2",
+          showNavigationGroupLabel(group.code) ? "py-2" : "py-0.5",
+        )}
+      >
         {showNavigationGroupLabel(group.code) ? (
           <p
             className={cn(
@@ -773,7 +775,7 @@ function AdminSidebar({
             <nav aria-label="Admin navigation" className="flex min-h-0 flex-1 flex-col">
               <div
                 className={cn(
-                  "fm-admin-sidebar-scroll min-h-0 flex-1 overflow-x-hidden",
+                  "fm-admin-sidebar-scroll min-h-0 flex-1 overflow-x-hidden pt-2",
                   collapsed ? "overflow-y-hidden" : "overflow-y-auto",
                 )}
               >

@@ -1,5 +1,34 @@
 # Commerce alignment — active checkpoint
 
+## Admin navigation labels — ADMIN-NAV-GROUPS-12 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner requested removal of the Commerce, Discounts,
+Content and Finance sidebar headings and clearer grouping of their links.
+Acceptance: those four headings are absent on desktop and mobile; their
+authorized links keep the same order, routes, parent/child behavior and scope
+filters; the former group boundaries do not leave large empty gaps.
+
+Started on `main` at `9016f051` with a clean working tree. The Admin shell now
+shows the four sections as one compact run of task links, while Orders and
+Products retain their meaningful nested navigation and Settings remains
+pinned. The owning design guide records this owner correction. Core,
+contracts, storage, providers, Storefront and auth are unchanged.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm exec oxfmt --check apps/web/components/admin/admin-shell.tsx`,
+`pnpm --filter @freshmarkets/web test -- components/admin/admin-navigation.test.ts`
+(17 tests) and focused `git diff --check` passed on the source working tree.
+No authenticated browser session was available for visual acceptance; runtime
+presentation remains unverified. This slice has no provider acceptance claim.
+
+Completion level: **one Admin navigation grouping correction implemented and
+source-verified**. Next action: inspect the expanded desktop and mobile menu
+in an authenticated local browser, then resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Remaining Admin index cards — ADMIN-INDEX-CARDS-11 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
