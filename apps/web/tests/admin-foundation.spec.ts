@@ -174,21 +174,32 @@ test("Admin status views use line tabs with keyboard selection", async ({ adminP
   await expect(adminPage).toHaveURL(/status=COMMITTED/);
 });
 
-test("Orders uses scoped stock shadcn controls at desktop and tablet widths", async ({
+test("Orders uses the compact shadcn index and responsive status controls", async ({
   adminPage,
 }) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin/orders");
   const orders = adminPage.locator(".fm-admin-orders");
   await expect(orders.locator('[data-slot="card"]')).toBeVisible();
+  await expect(orders.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
   await expect(orders.locator('[data-slot="tabs-list"][data-variant="line"]')).toBeVisible();
+  await expect(orders.getByText(/Showing \d+ orders? on this page/)).toBeVisible();
   const previous = orders.getByRole("button", { name: "Previous" });
   await expect(previous).toBeVisible();
   await expect(previous).toHaveAttribute("data-slot", "button");
   expect(await previous.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
-  await adminPage.setViewportSize({ width: 900, height: 800 });
+  await adminPage.setViewportSize({ width: 1100, height: 800 });
   await expect(orders.locator('[data-slot="card"]')).toBeVisible();
   await expect(orders.getByRole("tablist", { name: "Order status views" })).toBeVisible();
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  const status = orders.getByRole("combobox", { name: "Order status view" });
+  await expect(status).toBeVisible();
+  await status.click();
+  await adminPage.getByRole("option", { name: "Committed" }).click();
+  await expect(adminPage).toHaveURL(/status=COMMITTED/);
+  expect(await adminPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    390,
+  );
 });
 
 test("Payments uses the shared tabs and status select", async ({ adminPage }) => {

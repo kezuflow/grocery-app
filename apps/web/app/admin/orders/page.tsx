@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminUrlPagination } from "../../../components/admin/admin-controls";
 import { useAdminContext } from "../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
-import { PageHeader } from "../../../components/admin/admin-shell";
 import { orderProgressFacts } from "../../../components/admin/order-progress-status";
 import { OrderPreviewPanel } from "../../../components/admin/order-preview-panel";
 import { tryChangeAdminWorkspace } from "../../../components/admin/use-admin-route-guard";
@@ -23,6 +22,7 @@ import { Button } from "../../../components/admin/shadcn/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -35,6 +35,15 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/admin/shadcn/dropdown-menu";
 import { Skeleton } from "../../../components/admin/shadcn/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/admin/shadcn/select";
 import {
   Table,
   TableBody,
@@ -115,7 +124,10 @@ function OrdersPagination({
   onNext(cursor: string): void;
 }) {
   return (
-    <nav aria-label="Results pagination" className="flex flex-wrap items-center justify-end gap-2">
+    <nav
+      aria-label="Results pagination"
+      className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto"
+    >
       <Button
         type="button"
         size="sm"
@@ -258,41 +270,81 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   );
 
   const master = (
-    <section className="fm-admin-orders space-y-6 p-5 sm:p-7" aria-labelledby="admin-page-title">
-      <PageHeader title="Orders" />
-
-      <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="px-0 py-0">
-          <CardTitle className="sr-only">Order list</CardTitle>
-          <Tabs value={status} onValueChange={selectView}>
-            <TabsList
-              variant="line"
-              aria-label="Order status views"
-              className="w-full justify-start overflow-x-auto border-b px-3 py-2"
-            >
-              {orderViews.map((view) => (
-                <TabsTrigger key={view.status} value={view.status} className="flex-none px-3">
-                  {view.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+    <section className="fm-admin-orders p-4 sm:p-6" aria-labelledby="admin-page-title">
+      <Card className="gap-0 overflow-hidden border-border py-0">
+        <CardHeader className="gap-1 border-b border-border px-4 py-5 sm:px-6">
+          <CardTitle>
+            <h1 id="admin-page-title" className="text-2xl font-semibold tracking-tight">
+              Orders
+            </h1>
+          </CardTitle>
+          <CardDescription>
+            Review order progress and open the full record or a quick preview.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="px-0">
+        <CardContent className="flex flex-col gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="w-full sm:hidden">
+              <Select
+                value={status || "ALL"}
+                onValueChange={(nextStatus) => selectView(nextStatus === "ALL" ? "" : nextStatus)}
+              >
+                <SelectTrigger aria-label="Order status view" className="w-full">
+                  <SelectValue placeholder="All orders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Status</SelectLabel>
+                    {orderViews.map((view) => (
+                      <SelectItem key={view.status} value={view.status || "ALL"}>
+                        {view.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <Tabs
+              value={status}
+              onValueChange={selectView}
+              className="hidden min-w-0 flex-1 sm:flex"
+            >
+              <div className="fm-scrollbar-none overflow-x-auto pb-1">
+                <TabsList
+                  variant="line"
+                  aria-label="Order status views"
+                  className="w-full min-w-max justify-start border-b border-border px-1 py-2"
+                >
+                  {orderViews.map((view) => (
+                    <TabsTrigger key={view.status} value={view.status} className="flex-none px-3">
+                      {view.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+            <span className="hidden shrink-0 text-xs text-muted-foreground lg:inline">
+              Newest first
+            </span>
+          </div>
           {copiedId ? (
             <p className="sr-only" role="status">
               Order ID copied.
             </p>
           ) : null}
           {state.phase === "loading" ? (
-            <div className="flex flex-col gap-3 p-4" role="status" aria-label="Loading orders">
+            <div
+              className="flex flex-col gap-3 rounded-md border border-border p-4"
+              role="status"
+              aria-label="Loading orders"
+            >
               <span className="sr-only">Loading orders</span>
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
           ) : null}
           {state.phase === "error" ? (
-            <div className="p-4">
+            <div>
               <Alert variant="destructive">
                 <AlertTitle>Orders could not be loaded</AlertTitle>
                 <AlertDescription>
@@ -316,7 +368,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
             </div>
           ) : null}
           {state.phase === "ready" && visibleOrders.length === 0 ? (
-            <div className="p-4">
+            <div>
               <Alert role="status">
                 <AlertTitle>{status ? "No matching results" : "Nothing to show"}</AlertTitle>
                 <AlertDescription>No orders are visible in this view.</AlertDescription>
@@ -324,8 +376,8 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
             </div>
           ) : null}
           {state.phase === "ready" && visibleOrders.length > 0 ? (
-            <>
-              <ul aria-label="Order list" className="divide-y divide-border xl:hidden">
+            <div className="overflow-hidden rounded-md border border-border">
+              <ul aria-label="Order list" className="divide-y divide-border lg:hidden">
                 {visibleOrders.map((order) => (
                   <li key={order.orderId} className="flex flex-col gap-3 p-4">
                     <div className="flex min-w-0 items-start gap-3">
@@ -353,6 +405,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="self-start"
                       onClick={() => openOrderPreview(order)}
                     >
                       Preview order
@@ -360,14 +413,14 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                   </li>
                 ))}
               </ul>
-              <div className="hidden xl:block">
+              <div className="hidden lg:block">
                 <Table aria-label="Order list">
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="border-border">
                       <TableHead>Order ID</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Amount</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-12">
@@ -381,7 +434,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                         key={order.orderId}
                         tabIndex={0}
                         aria-label={`Preview order ${orderLabel(order)}`}
-                        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        className="cursor-pointer border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                         onClick={(event) => {
                           if (
                             (event.target as Element).closest("button, a, input, [role='menuitem']")
@@ -415,10 +468,12 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                           <p className="font-medium">{order.customerName ?? "Customer"}</p>
                           <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
                         </TableCell>
-                        <TableCell className="text-sm capitalize">
-                          {order.fulfillmentMode.toLowerCase()}
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {order.fulfillmentMode.toLowerCase()}
+                          </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="text-right font-medium tabular-nums">
                           {money(order.totalMinor, order.currency)}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
@@ -458,11 +513,15 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                   </TableBody>
                 </Table>
               </div>
-            </>
+            </div>
           ) : null}
         </CardContent>
         {state.phase === "ready" ? (
-          <CardFooter className="justify-end border-t px-3 py-3">
+          <CardFooter className="flex-col items-start gap-3 border-t border-border px-4 py-4 sm:flex-row sm:justify-between sm:px-6">
+            <span className="text-sm text-muted-foreground">
+              Showing {visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"} on
+              this page
+            </span>
             <OrdersPagination
               pageNumber={pagination.pageNumber}
               nextCursor={page?.nextCursor ?? null}
