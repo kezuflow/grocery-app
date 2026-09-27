@@ -1,5 +1,31 @@
 # Commerce alignment — active checkpoint
 
+## Latest completed owner correction — ADMIN-ORDERS-TASKS-3 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner corrected the Admin Orders customer cell order:
+show the customer name first, followed by the existing fulfillment-mode badge.
+Acceptance: the desktop Orders table renders name then badge without changing
+the Order facts, URLs, preview, filters or Storefront.
+
+Started from clean synchronized `main`/`origin/main` at `943349b5`. Only
+`apps/web/app/admin/orders/page.tsx` and DESIGN changed in the source commit.
+The existing customer name and Badge were reordered within one table cell;
+no query, action, Core, contract, storage or provider behavior changed. Direct
+local browser inspection showed `Ana Santos` before `Instant` in the rendered
+cell. `pnpm format:check`, `pnpm --filter @freshmarkets/web typecheck` and
+`git diff --check` passed on the working tree. This small markup reorder did
+not warrant a new browser fixture run; the prior Orders browser flows remain
+recorded below, not claimed as rerun for this revision.
+
+The two-file source correction was committed and pushed to `main` as
+`8b847420`; `main` and `origin/main` matched after that push. This checkpoint
+records its verified outcome. Completion level: **one Admin Orders presentation
+correction locally verified, committed and pushed**. Next action: resume the
+first unresolved Phase 7 provider journey under the commerce plan. No
+deployment or real provider transaction was authorized by this request.
+
 ## Latest completed owner correction — ADMIN-ORDERS-TASKS-2 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
