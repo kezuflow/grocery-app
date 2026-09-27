@@ -392,8 +392,7 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
   const { state, selectScope } = useAdminContext();
   if (state.phase !== "ready") {
     return (
-      <span className="inline-flex h-7 items-center gap-2 rounded-lg px-2.5 text-sm font-medium">
-        <span className="size-4 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+      <span className="inline-flex h-7 items-center rounded-lg px-2.5 text-sm font-medium">
         {fallbackLabel.replace(/^Scope:\s*/, "")}
       </span>
     );
@@ -433,10 +432,6 @@ function AdminScopeSelector({ fallbackLabel }: { fallbackLabel: string }) {
         aria-label="Active admin scope"
         className="h-8 w-20 gap-1 rounded-md px-2 text-sm font-medium min-[380px]:w-28 sm:w-36 sm:gap-2 sm:px-2.5 lg:w-44 [&>svg:last-child]:hidden"
       >
-        <span
-          className="hidden size-2 shrink-0 rounded-full bg-muted-foreground sm:inline-flex"
-          aria-hidden="true"
-        />
         <span className="truncate">{selectedLabel ?? "Select scope…"}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </SelectTrigger>

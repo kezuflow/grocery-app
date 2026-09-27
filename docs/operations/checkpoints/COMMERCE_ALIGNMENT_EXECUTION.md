@@ -1,5 +1,32 @@
 # Commerce alignment — active checkpoint
 
+## Header scope dot removal — ADMIN-HEADER-SCOPE-17 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked to remove the circle beside Global in
+the Admin header. Acceptance: the scope label appears without a decorative
+dot in ready and loading states; scope selection, available options and other
+header controls remain intact.
+
+Started on `main` at `844e740d` while a separate Product-preview slice was
+in progress; that slice committed as `8e48afe6` before this handoff. Only the
+Admin shell scope selector and the owning design guide changed here. No Core,
+contracts, storage, provider, Storefront or authentication behavior changed.
+
+`pnpm --filter @freshmarkets/web typecheck`, `pnpm lint`,
+`pnpm --filter @freshmarkets/web test --
+components/admin/admin-accessibility.test.tsx` (15 tests), focused
+`pnpm exec oxfmt --check` and `git diff --check` passed on the source working
+tree. Authenticated browser presentation remains unverified; there is no
+provider acceptance claim.
+
+Completion level: **one Admin header presentation correction implemented and
+source-verified**. Next action: inspect Global and location labels in an
+authenticated local browser, then resume the first unresolved Phase 7 provider
+journey under the commerce plan. No deployment or real provider transaction is
+authorized by this request.
+
 ## Global Product status switch — ADMIN-PRODUCT-STATUS-16 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation and Global
