@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Promotion Codes status switch correction — ADMIN-PROMOTION-SWITCH-23 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner corrected the prior Promotion Codes status
+control: it should be a switch rather than a button-shaped pill. Acceptance:
+an authorized row uses the stock shadcn switch, a green Active/red Inactive
+status appearance, and the existing Core-confirmed status flow. The status
+pill remains a label linked to the switch; read-only and Archived rows remain
+noninteractive. Storefront and Promotion Sale styling stay unchanged.
+
+Started on `main` at `cc22de20` with unrelated unfinished Product form,
+summary and related test edits present; those edits were preserved. Promotion
+Codes now pairs the status label with the stock shadcn switch. The label
+activates the switch, and the switch retains the existing version-guarded
+Core command, pending indicator, error feedback and no optimistic status.
+Admin-scoped styles make Active green and Inactive red. No business command,
+permission rule, route or Storefront style changed.
+
+Focused status-control tests (7/7), Web typecheck, lint, formatting and diff
+checks passed on the working tree. The local authenticated browser showed a
+Draft label and switch and a green Active label and switch in the Promotion
+Codes table. The seed page had no Inactive row, so its red state was covered
+by component state assertions and source inspection. No status command was
+submitted in the browser; no provider or production acceptance is claimed.
+
+Completion level: **one Promotion Codes control correction implemented and
+locally browser-verified**. Next action: resume the first unresolved Phase 7
+provider journey under the commerce plan. No deployment or real provider
+transaction is authorized by this request.
+
 ## Promotion Codes clickable status pills — ADMIN-PROMOTION-PILL-22 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

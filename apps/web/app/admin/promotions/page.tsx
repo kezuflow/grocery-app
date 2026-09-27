@@ -1068,7 +1068,7 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                 {canManage ? (
                                   <PromotionStatusSwitch
                                     promotion={promotion}
-                                    presentation="pill"
+                                    showStatusPill
                                     onApplied={(summary) =>
                                       setPage((current) =>
                                         current && !summary.productTargets?.length

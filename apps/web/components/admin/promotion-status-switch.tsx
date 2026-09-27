@@ -1,13 +1,14 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { AdminPromotionSummary } from "@freshmarkets/contracts";
 import { adminPromotionSummarySchema } from "@freshmarkets/validation";
 import { useCatalogCommand } from "./catalog-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { Badge } from "./shadcn/badge";
 import { Switch } from "@/components/admin/shadcn/switch";
+import { cn } from "@/lib/utils";
 
 const statusLabels: Record<AdminPromotionSummary["status"], string> = {
   DRAFT: "Draft",
@@ -25,19 +26,19 @@ export function PromotionStatusPill({ status }: { status: AdminPromotionSummary[
 }
 
 /**
- * Promotion/sale status control. The switch or pill sends the same status
- * command; its displayed state follows Core confirmation, never an optimistic
- * status that Core has not accepted.
+ * Promotion/sale status control. The switch sends the status command; its
+ * displayed state follows Core confirmation, never an optimistic status.
  */
 export function PromotionStatusSwitch({
   promotion,
   onApplied,
-  presentation = "switch",
+  showStatusPill = false,
 }: {
   promotion: Pick<AdminPromotionSummary, "promotionId" | "name" | "status" | "version">;
   onApplied?(summary: AdminPromotionSummary): void;
-  presentation?: "switch" | "pill";
+  showStatusPill?: boolean;
 }) {
+  const switchId = useId();
   const command = useCatalogCommand(adminPromotionSummarySchema);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,42 +81,37 @@ export function PromotionStatusSwitch({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <span
         data-pending={command.pending}
-        className={
-          presentation === "pill"
-            ? "fm-status-switch relative inline-flex items-center justify-center"
-            : "fm-status-switch relative inline-flex size-6 items-center justify-center"
-        }
+        className={cn(
+          "fm-status-switch relative inline-flex items-center justify-center",
+          !showStatusPill && "size-6",
+        )}
       >
         <span
-          className="fm-status-switch-control"
+          className={cn(
+            "fm-status-switch-control",
+            showStatusPill && "inline-flex items-center gap-2",
+          )}
           aria-hidden={command.pending}
           inert={command.pending}
         >
-          {presentation === "pill" ? (
-            <Badge asChild variant="outline" className="min-h-8 min-w-20 cursor-pointer px-3 py-1">
-              <button
-                type="button"
-                data-promotion-status-pill
-                data-status={promotion.status}
-                aria-label={`${active ? "Deactivate" : "Activate"} ${promotion.name} (${statusLabels[promotion.status]})`}
-                disabled={command.pending}
-                onClick={() => void commit()}
-              >
-                {statusLabels[promotion.status]}
-              </button>
-            </Badge>
-          ) : (
-            <Switch
-              aria-label={`${promotion.name} ${active ? "on" : "off"}`}
-              checked={active}
-              disabled={command.pending}
-              onCheckedChange={() => void commit()}
-              size="sm"
-            />
-          )}
+          {showStatusPill ? (
+            <label htmlFor={switchId} className="cursor-pointer">
+              <PromotionStatusPill status={promotion.status} />
+            </label>
+          ) : null}
+          <Switch
+            id={switchId}
+            data-promotion-status-switch={showStatusPill || undefined}
+            data-status={showStatusPill ? promotion.status : undefined}
+            aria-label={`${promotion.name} ${active ? "on" : "off"}`}
+            checked={active}
+            disabled={command.pending}
+            onCheckedChange={() => void commit()}
+            size={showStatusPill ? "default" : "sm"}
+          />
         </span>
         <span
           role={command.pending ? "status" : undefined}

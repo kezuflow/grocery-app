@@ -786,12 +786,12 @@ html.fm-admin-dark .fm-admin [data-promotion-status-pill][data-status="INACTIVE"
   color: oklch(0.85 0.12 25);
 }
 
-.fm-admin button[data-promotion-status-pill]:not(:disabled):hover {
-  filter: brightness(0.94);
+.fm-admin [data-promotion-status-switch][data-status="ACTIVE"] {
+  background: oklch(0.48 0.16 150);
 }
 
-html.fm-admin-dark .fm-admin button[data-promotion-status-pill]:not(:disabled):hover {
-  filter: brightness(1.12);
+.fm-admin [data-promotion-status-switch][data-status="INACTIVE"] {
+  background: oklch(0.53 0.18 25);
 }
 
 @starting-style {
