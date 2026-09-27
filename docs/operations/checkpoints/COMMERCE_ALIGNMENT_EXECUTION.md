@@ -1,5 +1,36 @@
 # Commerce alignment — active checkpoint
 
+## Problems segmented status selector — ADMIN-ISSUES-SEGMENTED-1 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner supplied a pill-style segmented-control
+reference for All, New, Being handled and Resolved on `/admin/issues`.
+Acceptance: the four views share one rounded track with a distinct selected
+segment; existing status URLs, filtering, disabled state and keyboard behavior
+remain intact; other Admin tabs, Storefront and auth are unchanged.
+
+Started from clean synchronized `main`/`origin/main` at `92b03149`. The
+Problems list opts into a segmented appearance on the existing Admin index
+Tabs composition. It uses the installed Radix/new-york shadcn Tabs default
+variant, a rounded scrollable wrapper, and equal-width 128px segments. The
+default line appearance still serves every other caller. No Core, contract,
+storage, provider or business-flow code changed.
+
+`pnpm format:check`, `pnpm lint`, `pnpm --filter @freshmarkets/web typecheck`
+and `git diff --check` passed on the source working tree. Direct local browser
+review showed the four rounded segments, active All state, and retained issue
+table. Clicking New selected it and changed the URL to `status=SUBMITTED`;
+ArrowRight selected Being handled and changed the URL to `status=CLAIMED`.
+The source and design commit `f128fb19` was pushed to `main`. This is local
+browser acceptance for this presentation correction, not production/provider
+acceptance.
+
+Completion level: **one Problems status-selector correction implemented,
+locally verified, committed and pushed**. Next action: resume the first
+unresolved Phase 7 provider journey under the commerce plan. This request did
+not authorize deployment or real provider transactions.
+
 ## Admin index table presentation — ADMIN-INDEX-TASKS-1 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
