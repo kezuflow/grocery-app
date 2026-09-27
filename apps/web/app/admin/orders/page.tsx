@@ -481,12 +481,12 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex min-w-0 items-center gap-2">
-                            <Badge variant="outline" className="shrink-0 capitalize">
-                              {order.fulfillmentMode.toLowerCase()}
-                            </Badge>
                             <span className="truncate font-medium">
                               {order.customerName ?? "Customer"}
                             </span>
+                            <Badge variant="outline" className="shrink-0 capitalize">
+                              {order.fulfillmentMode.toLowerCase()}
+                            </Badge>
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">
