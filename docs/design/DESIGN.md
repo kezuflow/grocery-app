@@ -194,6 +194,8 @@ Owner-approved Shopify-style Admin direction, 2026-09-24: replace the earlier or
 | Fulfillment setup                                                         | One Commerce sidebar link and page with four authorized destinations                                  | The link never grants access; child-only capability remains reachable, dirty editors guard scope/navigation, Scheduled cycles remain calendar-led.                     |
 | Settings                                                                  | Staff, Roles and Audit                                                                                | A pinned visual group never grants access; existing scope and capability checks remain.                                                                                |
 
+The Role detail editor groups its existing capability choices by intended work area: administrator/setup, catalog/customers, orders/finance, fulfillment/stock, reporting, and retained membership access. Show assigned counts and explain that staff scope assignments still determine where a granted capability applies. Grouping does not change role grants, staff scopes, confirmation, or Core authorization.
+
 The screenshot is a scaled visual baseline for hierarchy and density, not a pixel-perfect source of hidden Shopify values or dynamic behavior. Validate keyboard, focus, responsive and asynchronous behavior in Freshmarkets browser tests. No proprietary reference image or Shopify artwork becomes an application asset.
 
 ## Admin craft repair program — 2026-09-12

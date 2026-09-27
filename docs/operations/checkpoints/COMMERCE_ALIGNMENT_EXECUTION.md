@@ -1,5 +1,40 @@
 # Commerce alignment — active checkpoint
 
+## Group Role capabilities by work area — ADMIN-ROLE-GROUPS-30 (2026-09-27)
+
+Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within
+`docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and
+activation evidence**. The owner asked for the Role detail capabilities at
+`/admin/staff/roles/role_local_admin` to be grouped by intended use case, such
+as administrator and fulfillment staff, instead of one flat list. The owner
+then clarified this is an Admin UI change and instructed not to use browser
+skills. Acceptance: every returned capability appears once in a named work
+area; assigned state, archived/read-error behavior, confirmation and complete
+role-grant replacement stay intact; staff scope assignments remain separate.
+
+Started on clean `main` at `afb802ad`. The Role detail page now renders the
+existing capability options in Administrator and setup, Catalog and customers,
+Orders and finance, Fulfillment and stock staff, Reporting, and Retained
+membership access groups. Each group shows its assigned count. The canonical
+capability-to-group map is exhaustive at compile time; the existing native
+checkbox event still supplies the confirmation's focus target and unchanged
+full-set command body. The design guide records the presentation choice. No
+Core authorization, contract, storage, scope assignment, Storefront or auth
+behavior changed.
+
+On the working tree, `pnpm --filter @freshmarkets/web test --
+components/admin/role-capability-groups.test.tsx
+components/admin/admin-accessibility.test.tsx` passed (17 tests), as did Web
+typecheck, `pnpm lint`, `pnpm naming:check`, focused `pnpm exec oxfmt --check`
+after the formatting fix, and `git diff --check`.
+The rendered component test covers all canonical capabilities once, assigned
+counts and archived disabled choices. No browser tools were used, per the
+owner's instruction; there is no browser/provider/deployment acceptance claim.
+
+Completion level: **one Role detail capability grouping source-verified**.
+Remaining Phase 7 journeys are unchanged. Next action: resume the first
+unresolved Phase 7 journey under the commerce plan.
+
 ## Admin index tabs rectangular treatment — ADMIN-TABS-29 (2026-09-27)
 
 Active guidance: `docs/design/DESIGN.md`, **Admin visual foundation**, within

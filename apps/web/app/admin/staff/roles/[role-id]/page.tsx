@@ -17,6 +17,7 @@ import {
 } from "../../../../../components/admin/admin-shell";
 import { useAdminCommand } from "../../../../../components/admin/use-admin-command";
 import { AdminConfirmationDialog } from "../../../../../components/admin/admin-controls";
+import { RoleCapabilityGroups } from "../../../../../components/admin/role-capability-groups";
 import { useAdminScopeGuard } from "../../../../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "../../../../../components/admin/use-admin-route-guard";
 
@@ -263,36 +264,28 @@ export default function RoleDetailPage({ params }: { params: Promise<{ "role-id"
           title="Capabilities"
           description={
             role.status === "ACTIVE"
-              ? "Atomic replacement over the closed canonical vocabulary."
-              : "Archived roles keep their history and cannot change capabilities."
+              ? "Choose what this role can do across each work area."
+              : "Archived roles keep their saved capabilities for history."
           }
         >
-          <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
-            {capabilities.map((capability) => (
-              <label key={capability.code} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  disabled={role.status !== "ACTIVE" || Boolean(capabilityError)}
-                  checked={assigned.has(capability.code)}
-                  onChange={(event) => {
-                    confirmationTrigger.current = event.currentTarget;
-                    const next = new Set(assigned);
-                    if (event.target.checked) next.add(capability.code);
-                    else next.delete(capability.code);
-                    setConfirmation({
-                      kind: "capabilities",
-                      capabilityCodes: [...next],
-                      expectedVersion: role.version,
-                      code: capability.code,
-                      grant: event.target.checked,
-                    });
-                  }}
-                />
-                <span className="font-mono text-xs">{capability.code}</span>
-                <span className="text-xs text-muted-foreground">{capability.description}</span>
-              </label>
-            ))}
-          </div>
+          <RoleCapabilityGroups
+            capabilities={capabilities}
+            assigned={assigned}
+            editable={role.status === "ACTIVE" && !capabilityError}
+            onToggle={(code, grant, trigger) => {
+              confirmationTrigger.current = trigger;
+              const next = new Set(assigned);
+              if (grant) next.add(code);
+              else next.delete(code);
+              setConfirmation({
+                kind: "capabilities",
+                capabilityCodes: [...next],
+                expectedVersion: role.version,
+                code,
+                grant,
+              });
+            }}
+          />
         </ListPageSection>
 
         {role.status === "ACTIVE" ? (
