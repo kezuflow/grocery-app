@@ -337,7 +337,7 @@ export function FulfillmentWorkspace({
       <div className="mx-auto w-full max-w-[88rem] space-y-5 px-4 py-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader
-            title="Point of Sale"
+            title="Picking & packing"
             description={`Paid order preparation for ${locationId ? label : "a selected location"}.`}
           />
           <Link href="/admin/fulfillment" className="min-h-11 py-2 text-sm font-medium underline">
@@ -368,7 +368,7 @@ export function FulfillmentWorkspace({
         {locationId ? (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <AdminIndexViews<FulfillmentQueueFilter>
-              label="Point of Sale order views"
+              label="Picking and packing order views"
               views={queueViews}
               value={view}
               disabled={commandLocked}
@@ -434,7 +434,7 @@ export function FulfillmentWorkspace({
                       type="button"
                       aria-label={`Open order ${item.operational?.orderNumber ?? item.orderId}`}
                       aria-pressed={selectedOrderId === item.orderId}
-                      aria-controls="point-of-sale-order"
+                      aria-controls="picking-packing-order"
                       disabled={commandLocked}
                       onClick={() => selectOrder(item.orderId)}
                       className={`min-h-28 w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
@@ -475,7 +475,7 @@ export function FulfillmentWorkspace({
               />
             </section>
             <div
-              id="point-of-sale-order"
+              id="picking-packing-order"
               className={`min-w-0 xl:sticky xl:top-20 xl:self-start ${selected ? "" : "hidden xl:block"}`}
             >
               {selected ? (
@@ -518,6 +518,13 @@ export function FulfillmentWorkspace({
         title="Fulfillment"
         description={`Paid order status and packing work for ${locationId ? label : "a selected location"}. Core controls each available action.`}
       />
+      {locationId ? (
+        <Button asChild variant="outline">
+          <Link href={`/admin/picking-packing?locationId=${encodeURIComponent(locationId)}`}>
+            Open picking & packing
+          </Link>
+        </Button>
+      ) : null}
       {orderId || cycleId ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-muted-foreground">

@@ -1,7 +1,7 @@
 import { expect, test } from "./admin-authenticated-fixture";
 import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 
-test("Point of Sale prepares a paid order through the scoped Fulfillment command", async ({
+test("Picking and packing prepares a paid order through the scoped Fulfillment command", async ({
   page,
 }) => {
   const locationId = "location-cebu-central";
@@ -19,8 +19,8 @@ test("Point of Sale prepares a paid order through the scoped Fulfillment command
       navigation: [
         {
           code: "point-of-sale",
-          label: "Point of Sale",
-          href: "/admin/point-of-sale",
+          label: "Picking & packing",
+          href: "/admin/picking-packing",
           section: "sales_channels",
           scopeKinds: ["LOCATION"],
           parentCode: null,
@@ -116,17 +116,17 @@ test("Point of Sale prepares a paid order through the scoped Fulfillment command
   });
 
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto("/admin/point-of-sale");
-  await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();
+  await page.goto(`/admin/picking-packing?locationId=${locationId}`);
+  await expect(page.getByRole("heading", { name: "Picking & packing" })).toBeVisible();
   await expect(
     page
       .getByRole("navigation", { name: "Admin navigation" })
-      .getByRole("link", { name: "Point of Sale" }),
+      .getByRole("link", { name: "Picking & packing" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Open order FM-1001" })).toBeVisible();
   await page.getByRole("button", { name: "Open order FM-1001" }).click();
-  await expect(page.getByRole("heading", { name: "Ordered item checklist" })).toBeVisible();
-  await page.screenshot({ path: "test-results/point-of-sale-tablet.png", fullPage: true });
+  await expect(page.getByRole("heading", { name: "Ordered items" })).toBeVisible();
+  await page.screenshot({ path: "test-results/picking-packing-tablet.png", fullPage: true });
   await page.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
   await expect(page.getByRole("button", { name: "Finish picking" })).toBeVisible();
   expect(command).toMatchObject({
@@ -138,11 +138,15 @@ test("Point of Sale prepares a paid order through the scoped Fulfillment command
   expect(commandKey).toBeTruthy();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();
-  await page.screenshot({ path: "test-results/point-of-sale-phone.png", fullPage: true });
+  await expect(page.getByRole("heading", { name: "Picking & packing" })).toBeVisible();
+  await page.screenshot({ path: "test-results/picking-packing-phone.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
   await page.getByRole("button", { name: "Back to orders" }).click();
   await expect(page.getByRole("button", { name: "Open order FM-1001" })).toBeVisible();
+
+  await page.goto(`/admin/point-of-sale?locationId=${locationId}&orderId=order-1`);
+  await expect(page.getByRole("heading", { name: "Picking & packing" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Order FM-1001" })).toBeVisible();
 });

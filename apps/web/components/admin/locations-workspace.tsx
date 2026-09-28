@@ -35,7 +35,7 @@ import {
 import { Checkbox } from "@/components/admin/shadcn/checkbox";
 import { LocationAddressMap } from "./location-address-map";
 import { useSetupNavigationLock } from "./location-setup-state";
-import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import { AdminStatusPill } from "./admin-status-pill";
 
@@ -102,6 +102,15 @@ export function LocationsWorkspace({
   onSaved?: (location: AdminLocationView) => void;
   saveLabel?: string;
 }) {
+  const { state: adminState } = useAdminContext();
+  const stationLocationIds =
+    adminState.phase === "ready" && adminState.context.capabilities.includes("fulfillment.read")
+      ? new Set(
+          adminState.scopes
+            .filter((scope) => scope.kind === "location")
+            .map((scope) => scope.locationId),
+        )
+      : new Set<string>();
   const [result, setResult] = useState(initial);
   const selected = initial.ok
     ? initial.value.items.find((item) => item.locationId === detailLocationId)
@@ -320,6 +329,16 @@ export function LocationsWorkspace({
                           Fulfillment
                         </Link>
                       )}
+                      {location.purpose === "CUSTOMER_FULFILLMENT" &&
+                      stationLocationIds.has(location.locationId) ? (
+                        <Link
+                          href={`/admin/picking-packing?locationId=${encodeURIComponent(location.locationId)}`}
+                          aria-label={`Picking and packing for ${location.name}`}
+                          className="text-sm font-medium underline-offset-4 hover:underline"
+                        >
+                          Picking & packing
+                        </Link>
+                      ) : null}
                       <Link
                         aria-label={`Review setup for ${location.name}`}
                         className="text-sm font-semibold underline-offset-4 hover:underline"

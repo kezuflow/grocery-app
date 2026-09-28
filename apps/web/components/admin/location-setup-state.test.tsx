@@ -5,6 +5,10 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { LocationSetupProvider, useSetupNavigationLock } from "./location-setup-state";
 import { LocationSetupNavigation } from "./location-setup-navigation";
 import { LocationReviewStep } from "./location-review-step";
+vi.mock("../../app/admin/admin-context-provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../app/admin/admin-context-provider")>()),
+  useAdminContext: () => ({ state: { phase: "loading" } }),
+}));
 const route = vi.hoisted(() => ({ pathname: "/admin/locations/central/pickup" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
 vi.mock("./admin-shell", () => ({ PageHeader: () => null }));

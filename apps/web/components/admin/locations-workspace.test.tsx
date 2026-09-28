@@ -4,6 +4,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminLocationsView } from "@freshmarkets/contracts";
 import { LocationsWorkspace } from "./locations-workspace";
+const admin = vi.hoisted(() => ({ stationAccess: false }));
+vi.mock("../../app/admin/admin-context-provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../app/admin/admin-context-provider")>()),
+  useAdminContext: () => ({
+    state: admin.stationAccess
+      ? {
+          phase: "ready",
+          context: { capabilities: ["fulfillment.read"] },
+          scopes: [{ kind: "location", locationId: "fulfillment-1" }],
+        }
+      : { phase: "loading" },
+  }),
+}));
 vi.mock("./admin-shell", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
   ListPageSection: ({ title, children }: { title: string; children: ReactNode }) => (
@@ -75,6 +88,7 @@ function button(text: string) {
   return result;
 }
 beforeEach(() => {
+  admin.stationAccess = false;
   // jsdom has no layout observer; real browser layout is covered by Playwright.
   vi.stubGlobal(
     "ResizeObserver",
@@ -97,6 +111,36 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("location workspace", () => {
+  it("links an assigned fulfillment location to its staff picking station", async () => {
+    admin.stationAccess = true;
+    const listed: AdminLocationsView = {
+      ...view,
+      items: [
+        {
+          ...view.items[0]!,
+          locationId: "fulfillment-1",
+          name: "Assigned hub",
+          purpose: "CUSTOMER_FULFILLMENT",
+        },
+        {
+          ...view.items[0]!,
+          locationId: "fulfillment-2",
+          name: "Other hub",
+          purpose: "CUSTOMER_FULFILLMENT",
+        },
+      ],
+    };
+    await act(async () =>
+      root.render(<LocationsWorkspace initial={{ ok: true, requestId: "test", value: listed }} />),
+    );
+    expect(
+      container.querySelector('a[href="/admin/picking-packing?locationId=fulfillment-1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('a[href="/admin/picking-packing?locationId=fulfillment-2"]'),
+    ).toBeNull();
+  });
+
   it("fills the moved pin address without snapping to the geocoder coordinate", async () => {
     fetchMock.mockResolvedValue(
       response({

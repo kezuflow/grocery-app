@@ -78,6 +78,7 @@ const FULL_BLEED_WORKSPACE_PATHS = [
   "/admin/customers",
   "/admin/banners",
   "/admin/point-of-sale",
+  "/admin/picking-packing",
 ] as const;
 
 function scopeSummary(scopes: ReadonlyArray<{ kind: string }>): string {

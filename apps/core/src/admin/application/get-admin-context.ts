@@ -311,8 +311,8 @@ const WORKSPACES: ReadonlyArray<{
   },
   {
     code: "point-of-sale",
-    label: "Point of Sale",
-    href: "/admin/point-of-sale",
+    label: "Picking & packing",
+    href: "/admin/picking-packing",
     section: "sales_channels",
     parentCode: null,
     kind: "workspace",

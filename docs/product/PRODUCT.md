@@ -65,6 +65,13 @@ existing Fulfillment status actions and ordered quantities; it does not create i
 sales or take in-person payments. Core's current Fulfillment authorization, goods checks,
 delivery policies and command receipts remain authoritative.
 
+Owner clarification, 2026-09-28: present this as a separate **Picking & packing** staff page
+inside the website, reachable for each assigned customer-fulfillment location and from the
+location's setup/review pages when the staff member also has setup access. The old Point of Sale
+URL remains a compatibility alias. The station shows that location's paid online Orders as they
+arrive and uses the existing preparation actions. It does not add a walk-in checkout or a second
+Order, Payment or fulfillment authority.
+
 Owner correction, 2026-09-23: Scheduled customer cancellation remains available only before both
 the snapshotted cutoff and the first Start packing transition. Once packing has started, the online
 Cancel order control is disabled even if cutoff is still in the future; a later shortage or return

@@ -9,7 +9,7 @@ import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
-import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
+import { useAdminContext, useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import { AdminStatusPill } from "./admin-status-pill";
 import { AdminConfirmationDialog } from "./admin-controls";
@@ -22,6 +22,7 @@ const responseSchema = z.union([
   }),
 ]);
 export function LocationReviewStep({ locationId }: { locationId: string }) {
+  const { state: adminState } = useAdminContext();
   const { data, loading, reload, navigationLocked } = useLocationSetup();
   const intent = useAdminCommandIntent();
   const [reason, setReason] = useState("");
@@ -102,6 +103,11 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
       if (navigationLocked) event.preventDefault();
     },
   };
+  const canOpenStation =
+    data.location.purpose === "CUSTOMER_FULFILLMENT" &&
+    adminState.phase === "ready" &&
+    adminState.context.capabilities.includes("fulfillment.read") &&
+    adminState.scopes.some((scope) => scope.kind === "location" && scope.locationId === locationId);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -111,10 +117,22 @@ export function LocationReviewStep({ locationId }: { locationId: string }) {
             Check saved details, location status and dispatch setup.
           </p>
         </div>
-        <AdminStatusPill
-          status={data.location.status}
-          tone={data.location.status === "active" ? "success" : "neutral"}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <AdminStatusPill
+            status={data.location.status}
+            tone={data.location.status === "active" ? "success" : "neutral"}
+          />
+          {canOpenStation ? (
+            <Button asChild variant="outline">
+              <Link
+                {...guardedLink}
+                href={`/admin/picking-packing?locationId=${encodeURIComponent(locationId)}`}
+              >
+                Open picking & packing
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
       <Button
         variant="outline"
