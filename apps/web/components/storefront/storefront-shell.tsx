@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
+import { MessageCircle, ShoppingCart } from "lucide-react";
 import { AccountPopover } from "./marketplace/account-popover";
 import { CustomerNotifications } from "./marketplace/customer-notifications";
 import type { ReactNode } from "react";
@@ -97,10 +97,17 @@ export function StorefrontSidebar() {
         <div className="my-5 border-t border-[var(--fm-border)]" />
         <Link
           href="/orders"
-          className="flex items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
+          className="flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
         >
           <ShoppingCart className="size-4" aria-hidden="true" />
           Orders
+        </Link>
+        <Link
+          href="/account/messages"
+          className="flex min-h-11 items-center gap-3 rounded-[var(--fm-radius-control)] px-3 py-2.5 text-sm font-medium hover:bg-[var(--fm-hover)]"
+        >
+          <MessageCircle className="size-4" aria-hidden="true" />
+          Messages
         </Link>
         <AccountPopover />
       </nav>
