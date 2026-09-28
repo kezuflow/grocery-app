@@ -32,7 +32,7 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   `);
 
   await signedInPage.goto(`/account/messages/${orderId}`);
-  await expect(signedInPage.getByRole("heading", { name: "Order messages" })).toBeVisible();
+  await expect(signedInPage.getByRole("heading", { name: `Order ${orderId}` })).toBeVisible();
   const customerComposer = signedInPage.getByRole("textbox", { name: "Message" });
   await expect(
     signedInPage.getByRole("status", { name: /FreshMarkets team unavailable/ }),

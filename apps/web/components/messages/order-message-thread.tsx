@@ -17,7 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   MessageScrollerProvider,
   MessageScroller,
@@ -89,12 +88,15 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
               className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[var(--fm-card)] ${chat.connected && chat.otherPresent ? "bg-[var(--fm-storefront-accent)]" : "bg-[#9ca3af]"}`}
             />
           </span>
-          <CardTitle>{compact ? <h2>Order messages</h2> : <h1>Order messages</h1>}</CardTitle>
+          <CardTitle>
+            {compact ? (
+              <h2>Order {chat.page?.conversation.orderNumber ?? orderId}</h2>
+            ) : (
+              <h1>Order {chat.page?.conversation.orderNumber ?? orderId}</h1>
+            )}
+          </CardTitle>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className="border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]">
-            Order {chat.page?.conversation.orderNumber ?? orderId}
-          </Badge>
           <Button
             type="button"
             variant="outline"
