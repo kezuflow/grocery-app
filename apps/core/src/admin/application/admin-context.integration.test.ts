@@ -89,6 +89,15 @@ async function staffCookie(options: {
 }
 
 describe("scoped admin context", () => {
+  it("offers a Messages workspace in Global and fulfillment locations for Orders staff", () => {
+    const messages = adminNavigationFor(["orders.read"]).find((item) => item.code === "messages");
+    expect(messages).toMatchObject({
+      href: "/admin/messages",
+      parentCode: null,
+      scopeKinds: ["GLOBAL", "LOCATION"],
+    });
+    expect(adminNavigationFor([]).some((item) => item.code === "messages")).toBe(false);
+  });
   it("advertises Fulfillment setup and Settings children only when their reads are authorized", () => {
     const codes = (capabilities: Parameters<typeof adminNavigationFor>[0]) =>
       adminNavigationFor(capabilities).map((item) => item.code);

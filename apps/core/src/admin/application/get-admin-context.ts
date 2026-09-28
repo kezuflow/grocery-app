@@ -75,6 +75,15 @@ const WORKSPACES: ReadonlyArray<{
     capabilities: ["orders.read", "orders.manage"],
   },
   {
+    code: "messages",
+    label: "Messages",
+    href: "/admin/messages",
+    section: "orders",
+    parentCode: null,
+    kind: "workspace",
+    capabilities: ["orders.read"],
+  },
+  {
     code: "fulfillment",
     label: "Fulfillment",
     href: "/admin/fulfillment",
@@ -375,6 +384,7 @@ const LOCATION_ONLY_NAVIGATION_CODES: ReadonlySet<string> = new Set([
 ]);
 
 const GLOBAL_AND_LOCATION_NAVIGATION_CODES: ReadonlySet<string> = new Set([
+  "messages",
   "fulfillment-setup",
   "locations",
   "locations-service-areas",

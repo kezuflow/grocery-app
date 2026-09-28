@@ -16,10 +16,12 @@ export function OrderMessagesInbox({
   side,
   embedded = false,
   onSelectOrder,
+  locationId,
 }: {
   side: "CUSTOMER" | "ADMIN";
   embedded?: boolean;
   onSelectOrder?: (orderId: string) => void;
+  locationId?: string;
 }) {
   const base = side === "ADMIN" ? "/api/admin/messages" : "/api/commerce/messages";
   const href = side === "ADMIN" ? "/admin/messages" : "/account/messages";
@@ -36,6 +38,7 @@ export function OrderMessagesInbox({
       try {
         const url = new URL(base, window.location.href);
         if (cursor) url.searchParams.set("cursor", cursor);
+        if (locationId && side === "ADMIN") url.searchParams.set("locationId", locationId);
         const response = await fetch(url, { cache: "no-store" });
         const result = (await response.json()) as RpcResult<OrderConversationsPage>;
         if (!result.ok) throw new Error(result.error.message);
@@ -64,7 +67,7 @@ export function OrderMessagesInbox({
         setLoading(false);
       }
     },
-    [base],
+    [base, locationId, side],
   );
 
   useEffect(() => {
@@ -80,6 +83,7 @@ export function OrderMessagesInbox({
     const open = () => {
       if (stopped || document.visibilityState !== "visible" || socket) return;
       const url = new URL(`${base}/stream`, window.location.href);
+      if (locationId && side === "ADMIN") url.searchParams.set("locationId", locationId);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       const next = new WebSocket(url);
       socket = next;
@@ -128,7 +132,7 @@ export function OrderMessagesInbox({
       if (fallback) window.clearInterval(fallback);
       socket?.close();
     };
-  }, [base, refresh]);
+  }, [base, locationId, refresh, side]);
 
   const content = (
     <>

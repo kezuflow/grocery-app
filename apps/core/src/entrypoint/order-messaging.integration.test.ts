@@ -285,9 +285,18 @@ it("commits one customer message and acknowledgement with exact replay, private 
   expect(await env.PRODUCT_MEDIA.head(upload?.objectKey ?? "missing")).toBeNull();
 });
 
-it("requires global Orders scope, read versus manage capability, and live staff access", async () => {
+it("requires Orders capability and current location scope for staff messages", async () => {
   const customer = await customerSession();
   const orderId = await committedOrder(customer.customerId);
+  const otherOrderId = await committedOrder(customer.customerId);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO order_fulfillment_snapshot
+      (order_id,location_id,zone_id,fulfillment_mode,sourcing_modes_json,created_at)
+      VALUES (?,'location-cebu-central','zone-a','INSTANT','{}',1)`).bind(orderId),
+    env.DB.prepare(`INSERT INTO order_fulfillment_snapshot
+      (order_id,location_id,zone_id,fulfillment_mode,sourcing_modes_json,created_at)
+      VALUES (?,'location-other','zone-b','INSTANT','{}',1)`).bind(otherOrderId),
+  ]);
   const staff = await staffSession();
   const rpc = createMessagesRpc(createCoreRpcContext(env), () => undefined);
   const headers = { cookie: staff.cookie };
@@ -323,6 +332,115 @@ it("requires global Orders scope, read versus manage capability, and live staff 
   )
     .bind("location-cebu-central", staff.staffId)
     .run();
+  expect(await rpc.getAdminOrderMessages({ requestId: "local", headers, orderId })).toMatchObject({
+    ok: true,
+  });
+  expect(
+    await rpc.listAdminOrderConversations({
+      requestId: "inbox",
+      headers,
+      locationId: "location-cebu-central",
+    }),
+  ).toMatchObject({ ok: true, value: { items: [{ orderId }] } });
+  expect(await rpc.listAdminOrderConversations({ requestId: "unscoped", headers })).toMatchObject({
+    ok: false,
+    error: { code: "FORBIDDEN" },
+  });
+  expect(await rpc.getOrderAcknowledgement({ requestId: "local-settings", headers })).toMatchObject(
+    { ok: false, error: { code: "FORBIDDEN" } },
+  );
+  expect(
+    await rpc.listAdminOrderConversations({
+      requestId: "other-inbox",
+      headers,
+      locationId: "location-other",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  const socketHeaders = {
+    upgrade: "websocket",
+    origin: "https://core.example.invalid",
+    cookie: staff.cookie,
+  };
+  expect(
+    (
+      await SELF.fetch("https://core.example.invalid/api/admin/messages/stream", {
+        headers: socketHeaders,
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await SELF.fetch(
+        "https://core.example.invalid/api/admin/messages/stream?locationId=location-other",
+        { headers: socketHeaders },
+      )
+    ).status,
+  ).toBe(403);
+  const locationStream = await SELF.fetch(
+    "https://core.example.invalid/api/admin/messages/stream?locationId=location-cebu-central",
+    { headers: socketHeaders },
+  );
+  expect(locationStream.status).toBe(101);
+  locationStream.webSocket?.accept();
+  locationStream.webSocket?.close();
+  expect(
+    await rpc.getAdminOrderMessages({ requestId: "other", headers, orderId: otherOrderId }),
+  ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  expect(
+    await rpc.sendAdminOrderMessage({
+      requestId: "other-send",
+      headers,
+      orderId: otherOrderId,
+      body: "Wrong location",
+      attachmentIds: [],
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  expect(
+    await rpc.sendAdminOrderMessage({
+      requestId: "local-send",
+      headers,
+      orderId,
+      body: "Location update",
+      attachmentIds: [],
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await env.DB.prepare("SELECT revision FROM order_message_revision WHERE audience_key=?")
+      .bind("location:location-cebu-central")
+      .first(),
+  ).toMatchObject({ revision: 2 });
+  const staged = await rpc.stageAdminOrderMessageAttachment({
+    requestId: "local-upload",
+    headers,
+    orderId,
+    bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]),
+    mimeType: "image/png",
+    fileName: "location-proof.png",
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(staged).toMatchObject({ ok: true });
+  if (!staged.ok) throw new Error("Location upload failed");
+  expect(
+    await rpc.sendAdminOrderMessage({
+      requestId: "local-file",
+      headers,
+      orderId,
+      body: "",
+      attachmentIds: [staged.value.id],
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await rpc.readAdminOrderMessageAttachment({
+      requestId: "local-download",
+      headers,
+      orderId,
+      attachmentId: staged.value.id,
+    }),
+  ).toMatchObject({ ok: true });
+  await env.DB.prepare("DELETE FROM staff_scope WHERE staff_id=?").bind(staff.staffId).run();
   expect(await rpc.getAdminOrderMessages({ requestId: "revoked", headers, orderId })).toMatchObject(
     { ok: false, error: { code: "FORBIDDEN" } },
   );

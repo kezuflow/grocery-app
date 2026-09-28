@@ -53,6 +53,7 @@ async function toConversation(
     status: row.orderStatus,
     closedAt: row.closedAt,
     lastMessageAt: row.latestMessageAt,
+    locationId: null,
   });
   const expired = expiry !== null && expiry <= now;
   const readSequence = kind === "CUSTOMER" ? row.customerReadSequence : row.adminReadSequence;
@@ -104,7 +105,7 @@ function decodeCursor(cursor: string | undefined): { at: number; id: string } | 
 
 export async function listOrderConversations(
   context: MessageContext,
-  request: AuthenticatedRequest & { cursor?: string; limit?: number },
+  request: AuthenticatedRequest & { cursor?: string; limit?: number; locationId?: string },
   kind: "CUSTOMER" | "ADMIN",
 ): Promise<RpcResult<OrderConversationsPage>> {
   const actor = await resolveMessageActor(context, request, kind);
@@ -118,6 +119,25 @@ export async function listOrderConversations(
   if (actor.value.kind === "CUSTOMER") {
     conditions.push("c.customer_id=?");
     binds.push(actor.value.customerId);
+  }
+  if (actor.value.kind === "ADMIN") {
+    if (request.locationId) {
+      if (!actor.value.global && !actor.value.locationIds.includes(request.locationId))
+        return fail("FORBIDDEN", "Location access is required", request.requestId);
+      conditions.push(`EXISTS (SELECT 1 FROM order_fulfillment_snapshot snapshot
+        WHERE snapshot.order_id=o.id AND snapshot.location_id=?)`);
+      binds.push(request.locationId);
+      conditions.push(`EXISTS (SELECT 1 FROM staff_scope scope WHERE scope.staff_id=?
+        AND (scope.scope_kind='global' OR
+          (scope.scope_kind='location' AND scope.location_id=?)))`);
+      binds.push(actor.value.staffId, request.locationId);
+    } else {
+      if (!actor.value.global)
+        return fail("FORBIDDEN", "Select a fulfillment location", request.requestId);
+      conditions.push(`EXISTS (SELECT 1 FROM staff_scope scope WHERE scope.staff_id=?
+        AND scope.scope_kind='global')`);
+      binds.push(actor.value.staffId);
+    }
   }
   if (cursor) {
     conditions.push("(c.last_message_at<? OR (c.last_message_at=? AND c.order_id<?))");

@@ -31,6 +31,27 @@ const audit = {
 };
 
 describe("admin navigation mapping", () => {
+  it("keeps the Messages icon in a selected fulfillment location", () => {
+    const messages = {
+      code: "messages",
+      label: "Messages",
+      href: "/admin/messages",
+      section: "orders" as const,
+      scopeKinds: ["GLOBAL", "LOCATION"] as const,
+      parentCode: null,
+      kind: "workspace" as const,
+    };
+    const scoped = adminNavigationItemsForScope([messages], {
+      kind: "LOCATION",
+      marketId: "market-a",
+      locationId: "location-a",
+    });
+    expect(scoped).toEqual([messages]);
+    expect(adminNavigationFromContext(scoped)[0]?.icon).toBeDefined();
+    expect(
+      mostSpecificActiveNavigation(adminNavigationFromContext(scoped), "/admin/messages")?.code,
+    ).toBe("messages");
+  });
   it("searches the Fulfillment setup workspace and its destinations", () => {
     const items = adminNavigationFromContext([
       {

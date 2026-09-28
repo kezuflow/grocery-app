@@ -18,7 +18,7 @@ export async function getOrderAcknowledgement(
   context: MessageContext,
   request: AuthenticatedRequest,
 ): Promise<RpcResult<OrderAcknowledgementView>> {
-  const actor = await resolveMessageActor(context, request, "ADMIN");
+  const actor = await resolveMessageActor(context, request, "ADMIN", false, true);
   if (!actor.ok) return actor;
   const settings = await context.env.DB.prepare(
     "SELECT acknowledgement_text AS text,version FROM order_message_settings WHERE id=1",
@@ -34,7 +34,7 @@ export async function saveOrderAcknowledgement(
   const text = request.text.trim();
   if (text.length < 1 || text.length > 500)
     return fail("VALIDATION_FAILED", "Acknowledgement must be 1–500 characters", request.requestId);
-  const actor = await resolveMessageActor(context, request, "ADMIN", true);
+  const actor = await resolveMessageActor(context, request, "ADMIN", true, true);
   if (!actor.ok) return actor;
   if (actor.value.kind !== "ADMIN")
     return fail("FORBIDDEN", "Admin access is required", request.requestId);

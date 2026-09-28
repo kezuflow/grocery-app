@@ -29,6 +29,7 @@ import { validationFailure } from "./validation-errors";
 const listSchema = authenticatedRequestSchema.extend({
   cursor: z.string().min(1).max(512).optional(),
   limit: z.number().int().min(1).max(50).optional(),
+  locationId: identifierSchema.optional(),
 });
 const threadSchema = authenticatedRequestSchema.extend({
   orderId: identifierSchema,
@@ -65,7 +66,7 @@ const acknowledgementSchema = authenticatedRequestSchema.extend({
 export function createMessagesRpc(context: CoreRpcContext, publish: () => void) {
   return {
     async listCustomerOrderConversations(
-      input: AuthenticatedRequest & { cursor?: string; limit?: number },
+      input: AuthenticatedRequest & { cursor?: string; limit?: number; locationId?: string },
     ) {
       const parsed = listSchema.safeParse(input);
       return parsed.success
@@ -73,7 +74,7 @@ export function createMessagesRpc(context: CoreRpcContext, publish: () => void) 
         : validationFailure(input.requestId, parsed.error);
     },
     async listAdminOrderConversations(
-      input: AuthenticatedRequest & { cursor?: string; limit?: number },
+      input: AuthenticatedRequest & { cursor?: string; limit?: number; locationId?: string },
     ) {
       const parsed = listSchema.safeParse(input);
       return parsed.success

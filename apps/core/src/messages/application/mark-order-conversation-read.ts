@@ -15,7 +15,7 @@ export async function markOrderConversationRead(
   const field = kind === "CUSTOMER" ? "customer_read_sequence" : "admin_read_sequence";
   try {
     await database.batch([
-      actorGuard(database, actor.value),
+      actorGuard(database, actor.value, false, request.orderId),
       orderGuard(database, actor.value, request.orderId),
       database
         .prepare(`UPDATE order_conversation SET ${field}=MAX(${field},MIN(?,next_sequence-1))

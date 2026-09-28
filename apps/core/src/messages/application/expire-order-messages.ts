@@ -18,6 +18,7 @@ export async function expireOrderMessages(
   const due = await database
     .prepare(`SELECT o.id,o.customer_id AS customerId,o.order_number AS orderNumber,
       o.status,c.last_message_at AS lastMessageAt,
+      (SELECT location_id FROM order_fulfillment_snapshot WHERE order_id=o.id) AS locationId,
       CASE o.status
         WHEN 'DELIVERED' THEN (SELECT MAX(d.delivered_at) FROM delivery_job d WHERE d.order_id=o.id AND d.status='DELIVERED')
         WHEN 'CANCELED' THEN (SELECT MAX(x.updated_at) FROM order_cancellation x WHERE x.order_id=o.id AND x.status='COMPLETED')
@@ -59,7 +60,12 @@ export async function expireOrderMessages(
           .prepare(`UPDATE order_message_upload SET status='DELETE_PENDING',file_name=NULL,
             next_attempt_at=?,updated_at=? WHERE order_id=? AND status='ATTACHED'`)
           .bind(now, now, order.id),
-        ...[`customer:${order.customerId}`, "admin", `order:${order.id}`].map((audience) =>
+        ...[
+          `customer:${order.customerId}`,
+          "admin",
+          `order:${order.id}`,
+          ...(order.locationId ? [`location:${order.locationId}`] : []),
+        ].map((audience) =>
           database
             .prepare(`INSERT INTO order_message_revision(audience_key,revision,published_revision)
               VALUES (?,1,0) ON CONFLICT(audience_key) DO UPDATE SET revision=revision+1`)

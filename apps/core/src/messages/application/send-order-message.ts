@@ -114,7 +114,7 @@ export async function sendOrderMessage(
     const acknowledgementDigest = acknowledge ? await digestPayload(acknowledgement?.text) : null;
     const guard = () => changedGuard(database);
     const statements: D1PreparedStatement[] = [
-      actorGuard(database, actor, true),
+      actorGuard(database, actor, true, request.orderId),
       orderGuard(database, actor, request.orderId),
       database
         .prepare(`INSERT OR IGNORE INTO order_conversation
@@ -213,7 +213,12 @@ export async function sendOrderMessage(
           now,
         ),
     );
-    for (const audience of [`customer:${order.customerId}`, "admin", `order:${request.orderId}`])
+    for (const audience of [
+      `customer:${order.customerId}`,
+      "admin",
+      `order:${request.orderId}`,
+      ...(order.locationId ? [`location:${order.locationId}`] : []),
+    ])
       statements.push(
         database
           .prepare(`INSERT INTO order_message_revision(audience_key,revision,published_revision)

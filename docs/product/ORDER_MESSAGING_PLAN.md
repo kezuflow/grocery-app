@@ -2,6 +2,8 @@
 
 Status: implemented and released 2026-09-28. Task `MSG-1`. The owner requested the feature PR, corrected the transport review, selected the retention rule below, and expanded the first release to live presence, typing, an acknowledgement reply and R2 attachments. After PR #3 was prepared, the owner separately authorized commit, push and production deployment. The release evidence and remaining acceptance limits are in the active checkpoint.
 
+Owner follow-up, 2026-09-28 (`MSG-1.LOCATION-NAV`): show a separate Messages icon in the Admin left navigation for each selected fulfillment location. Staff with `orders.read` may use the inbox for Orders whose immutable fulfillment snapshot belongs to a location they currently hold; a Global Orders grant retains the all-location inbox. Sending and staging attachments require `orders.manage`. Only Global `orders.manage` may edit the shared automatic acknowledgement. Market scope alone grants no messaging access. Location inboxes receive location-specific revision hints; thread access, sends and attachments recheck the Order's current staff scope in Core.
+
 ## Phase 0 — Decide the first-release behavior and architecture
 
 The owner requested customer ↔ Admin messages about an order, with an audible cue for new in-app notifications. The owner selected in-app sound only; browser push and email are outside this release. This is a new request beyond the earlier commerce-simplification exclusion of chat.

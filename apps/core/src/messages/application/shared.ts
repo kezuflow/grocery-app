@@ -1,8 +1,8 @@
 import type { AuthenticatedRequest, RpcResult } from "@freshmarkets/contracts";
-import {
-  resolveFinanceAdministrationAccess,
-  type FinanceAdministrationDeps,
-} from "../../admin/application/finance-administration-access";
+import { drizzle } from "drizzle-orm/d1";
+import { applicationContextForRequest } from "../../auth/authorization";
+import type { FinanceAdministrationDeps } from "../../admin/application/finance-administration-access";
+import { iamSchema } from "../../iam/schema";
 import type { ResolvedCustomer } from "../../customer/principal";
 
 export type MessageContext = {
@@ -33,7 +33,7 @@ export const ACTIVE_MESSAGE_HOLD_SQL = `
 
 export type MessageActor =
   | { kind: "CUSTOMER"; userId: string; customerId: string }
-  | { kind: "ADMIN"; userId: string; staffId: string };
+  | { kind: "ADMIN"; userId: string; staffId: string; global: boolean; locationIds: string[] };
 
 export type MessageOrder = {
   id: string;
@@ -42,6 +42,7 @@ export type MessageOrder = {
   status: string;
   closedAt: number | null;
   lastMessageAt: number | null;
+  locationId: string | null;
 };
 
 export function fail(
@@ -57,6 +58,7 @@ export async function resolveMessageActor(
   request: AuthenticatedRequest,
   kind: "CUSTOMER" | "ADMIN",
   write = false,
+  globalOnly = false,
 ): Promise<RpcResult<MessageActor>> {
   if (kind === "CUSTOMER") {
     const customer = await context.access.resolveAuthenticatedCustomer(request);
@@ -67,15 +69,29 @@ export async function resolveMessageActor(
       requestId: request.requestId,
     };
   }
-  const access = await resolveFinanceAdministrationAccess(
-    { auth: context.auth, db: context.env.DB },
+  const access = await applicationContextForRequest(
+    context.auth,
+    drizzle(context.env.DB, { schema: iamSchema }),
     request,
-    write ? "orders.manage" : "orders.read",
   );
   if (!access.ok) return access;
+  if (!access.value.authenticated || !access.value.principal)
+    return fail("UNAUTHENTICATED", "Authentication is required", request.requestId);
+  const staff = access.value.staffIdentity;
+  const global = access.value.scopes.some((scope) => scope.kind === "global");
+  const locationIds = access.value.scopes.flatMap((scope) =>
+    scope.kind === "location" ? [scope.locationId] : [],
+  );
+  if (
+    !staff ||
+    staff.status !== "active" ||
+    !access.value.capabilities.includes(write ? "orders.manage" : "orders.read") ||
+    (globalOnly ? !global : !global && locationIds.length === 0)
+  )
+    return fail("FORBIDDEN", "Orders access is required", request.requestId);
   return {
     ok: true,
-    value: { kind, userId: access.value.authUserId, staffId: access.value.staffId },
+    value: { kind, userId: access.value.principal.userId, staffId: staff.id, global, locationIds },
     requestId: request.requestId,
   };
 }
@@ -84,6 +100,7 @@ export function actorGuard(
   database: D1Database,
   actor: MessageActor,
   write = false,
+  orderId?: string,
 ): D1PreparedStatement {
   if (actor.kind === "CUSTOMER")
     return database
@@ -98,16 +115,22 @@ export function actorGuard(
       JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission p ON p.id=rp.permission_id
       JOIN staff_scope scope ON scope.staff_id=staff.id
       WHERE staff.id=? AND staff.auth_user_id=? AND staff.status='active'
-        AND scope.scope_kind='global' AND p.code=?)`)
-    .bind(actor.staffId, actor.userId, write ? "orders.manage" : "orders.read");
+        AND p.code=? AND (scope.scope_kind='global' OR
+          (scope.scope_kind='location' AND scope.location_id=(
+            SELECT location_id FROM order_fulfillment_snapshot WHERE order_id=?))))`)
+    .bind(actor.staffId, actor.userId, write ? "orders.manage" : "orders.read", orderId ?? "");
 }
+
+const ADMIN_ORDER_SCOPE_SQL = `EXISTS (SELECT 1 FROM staff_scope scope WHERE scope.staff_id=?
+  AND (scope.scope_kind='global' OR (scope.scope_kind='location' AND
+    scope.location_id=(SELECT location_id FROM order_fulfillment_snapshot WHERE order_id=o.id))))`;
 
 export function orderGuard(database: D1Database, actor: MessageActor, orderId: string) {
   return database
     .prepare(`INSERT INTO commitment_abort(id) SELECT -39 WHERE NOT EXISTS (
       SELECT 1 FROM grocery_order o WHERE o.id=? AND o.committed_at IS NOT NULL
-      ${actor.kind === "CUSTOMER" ? "AND o.customer_id=?" : ""})`)
-    .bind(...(actor.kind === "CUSTOMER" ? [orderId, actor.customerId] : [orderId]));
+      ${actor.kind === "CUSTOMER" ? "AND o.customer_id=?" : `AND ${ADMIN_ORDER_SCOPE_SQL}`})`)
+    .bind(...(actor.kind === "CUSTOMER" ? [orderId, actor.customerId] : [orderId, actor.staffId]));
 }
 
 export function changedGuard(database: D1Database): D1PreparedStatement {
@@ -122,14 +145,15 @@ export async function readMessageOrder(
   return database
     .prepare(`SELECT o.id, o.customer_id AS customerId, o.order_number AS orderNumber,
       o.status, c.last_message_at AS lastMessageAt,
+      (SELECT location_id FROM order_fulfillment_snapshot WHERE order_id=o.id) AS locationId,
       CASE o.status
         WHEN 'DELIVERED' THEN (SELECT MAX(d.delivered_at) FROM delivery_job d WHERE d.order_id=o.id AND d.status='DELIVERED')
         WHEN 'CANCELED' THEN (SELECT MAX(x.updated_at) FROM order_cancellation x WHERE x.order_id=o.id AND x.status='COMPLETED')
         ELSE NULL END AS closedAt
       FROM grocery_order o LEFT JOIN order_conversation c ON c.order_id=o.id
       WHERE o.id=? AND o.committed_at IS NOT NULL
-      ${actor.kind === "CUSTOMER" ? "AND o.customer_id=?" : ""}`)
-    .bind(...(actor.kind === "CUSTOMER" ? [orderId, actor.customerId] : [orderId]))
+      ${actor.kind === "CUSTOMER" ? "AND o.customer_id=?" : `AND ${ADMIN_ORDER_SCOPE_SQL}`}`)
+    .bind(...(actor.kind === "CUSTOMER" ? [orderId, actor.customerId] : [orderId, actor.staffId]))
     .first<MessageOrder>();
 }
 
@@ -158,7 +182,7 @@ export async function expireConversationIfDue(
   if (due === null || due > now || order.lastMessageAt === null) return true;
   try {
     await database.batch([
-      actorGuard(database, actor, true),
+      actorGuard(database, actor, true, order.id),
       orderGuard(database, actor, order.id),
       database
         .prepare(`UPDATE order_conversation SET last_message_at=NULL,acknowledgement_sent=0

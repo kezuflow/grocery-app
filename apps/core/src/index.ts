@@ -1120,7 +1120,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       const admin = path.startsWith("/api/admin/");
       const url = new URL(request.url);
       const orderId = url.searchParams.get("orderId");
+      const locationId = admin ? url.searchParams.get("locationId") : null;
       if (orderId && (orderId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(orderId)))
+        return new Response(null, { status: 400 });
+      if (locationId && (locationId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(locationId)))
         return new Response(null, { status: 400 });
       const input = {
         requestId: id,
@@ -1137,10 +1140,21 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         });
       if (orderId && !(await readMessageOrder(this.env.DB, actor.value, orderId)))
         return new Response(null, { status: 404 });
+      if (
+        admin &&
+        !orderId &&
+        actor.value.kind === "ADMIN" &&
+        (locationId
+          ? !actor.value.global && !actor.value.locationIds.includes(locationId)
+          : !actor.value.global)
+      )
+        return new Response(null, { status: 403 });
       const audience = orderId
         ? `order:${orderId}`
         : admin
-          ? "admin"
+          ? locationId
+            ? `location:${locationId}`
+            : "admin"
           : `customer:${actor.value.kind === "CUSTOMER" ? actor.value.customerId : ""}`;
       const headers = new Headers(request.headers);
       headers.set("x-message-role", orderId ? actor.value.kind : "INBOX");

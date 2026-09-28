@@ -26,6 +26,9 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
       SELECT '${orderId}',id,'${paymentId}','INSTANT',NULL,'{}',
         'PAID',100,'PHP',${now},${now}
       FROM customer WHERE auth_user_id='${userId}';
+    INSERT INTO order_fulfillment_snapshot
+      (order_id,location_id,zone_id,fulfillment_mode,sourcing_modes_json,created_at)
+      VALUES ('${orderId}','location-cebu-central','zone-a','INSTANT','{}',${now});
   `);
 
   await signedInPage.goto(`/account/messages/${orderId}`);
@@ -137,4 +140,15 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   expect(mobileChatBounds).not.toBeNull();
   expect(mobileChatBounds!.x).toBeGreaterThanOrEqual(0);
   expect(mobileChatBounds!.x + mobileChatBounds!.width).toBeLessThanOrEqual(390);
+
+  await adminPage.getByRole("combobox", { name: "Active admin scope" }).click();
+  await adminPage.getByRole("option", { name: "Central Cebu", exact: true }).click();
+  const messagesNav = adminPage
+    .getByRole("navigation", { name: "Admin navigation" })
+    .getByRole("link", { name: "Messages", exact: true });
+  await expect(messagesNav).toBeVisible();
+  await messagesNav.click();
+  await expect(adminPage).toHaveURL(/\/admin\/messages$/);
+  await expect(adminPage.getByRole("link", { name: new RegExp(orderId) })).toBeVisible();
+  await expect(adminPage.getByText("Acknowledgement settings")).toHaveCount(0);
 });

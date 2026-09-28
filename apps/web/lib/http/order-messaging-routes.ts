@@ -58,7 +58,12 @@ export async function listConversations(request: Request, side: MessageSide) {
   const query = new URL(request.url).searchParams;
   const rawLimit = query.get("limit");
   const limit = rawLimit ? Number(rawLimit) : undefined;
-  const input = { ...meta(request), cursor: query.get("cursor") ?? undefined, limit };
+  const input = {
+    ...meta(request),
+    cursor: query.get("cursor") ?? undefined,
+    limit,
+    locationId: side === "ADMIN" ? (query.get("locationId") ?? undefined) : undefined,
+  };
   const client = coreClient(env.CORE);
   return response(
     request,

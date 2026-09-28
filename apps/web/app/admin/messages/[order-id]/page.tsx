@@ -10,7 +10,7 @@ export default function AdminMessageThreadPage() {
   const { state } = useAdminContext();
   const allowed =
     state.phase === "ready" &&
-    state.selectedScope?.kind === "GLOBAL" &&
+    (state.selectedScope?.kind === "GLOBAL" || state.selectedScope?.kind === "LOCATION") &&
     state.context.capabilities.includes("orders.read");
   const canSend = allowed && state.context.capabilities.includes("orders.manage");
   return (
@@ -19,7 +19,9 @@ export default function AdminMessageThreadPage() {
         Back to messages
       </Link>
       {state.phase === "ready" && !allowed ? (
-        <p role="alert">Select Global scope with Orders access to view messages.</p>
+        <p role="alert">
+          Select Global or a fulfillment location with Orders access to view messages.
+        </p>
       ) : null}
       {allowed && orderId ? (
         <OrderMessageThread side="ADMIN" orderId={orderId} canSend={canSend} />

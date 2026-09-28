@@ -138,7 +138,7 @@ export async function stageOrderMessageAttachment(
     const objectKey = `messages/${request.orderId}/${id}`;
     try {
       await database.batch([
-        actorGuard(database, actor.value, true),
+        actorGuard(database, actor.value, true, request.orderId),
         orderGuard(database, actor.value, request.orderId),
         database
           .prepare(`INSERT OR IGNORE INTO order_conversation

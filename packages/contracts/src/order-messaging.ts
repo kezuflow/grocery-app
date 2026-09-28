@@ -95,7 +95,7 @@ export interface OrderMessagingService {
     request: AuthenticatedRequest & { cursor?: string; limit?: number },
   ): Promise<RpcResult<OrderConversationsPage>>;
   listAdminOrderConversations(
-    request: AuthenticatedRequest & { cursor?: string; limit?: number },
+    request: AuthenticatedRequest & { cursor?: string; limit?: number; locationId?: string },
   ): Promise<RpcResult<OrderConversationsPage>>;
   getCustomerOrderMessages(
     request: ListOrderMessagesRequest,
