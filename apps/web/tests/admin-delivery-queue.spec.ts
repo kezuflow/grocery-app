@@ -264,6 +264,53 @@ test("Read-only delivery staff cannot use provider recovery controls", async ({ 
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 });
 
+test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) => {
+  await installDeliveryScopes(page, false);
+  await page.route("**/api/admin/delivery?**", (route) => {
+    const item = {
+      ...deliveryItem(firstLocation, "tracking-order", "INSTANT"),
+      externalDispatch: {
+        dispatchId: "dispatch-tracking",
+        provider: "lalamove",
+        status: "ACTIVE",
+        providerStatus: "PENDING_PICKUP",
+        trackingUrl: null,
+        providerDeliveryId: "provider-tracking",
+        version: 1,
+      },
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { ...deliveryPage(firstLocation, "tracking-order").value, items: [item] },
+      }),
+    });
+  });
+  await page.route("**/api/admin/delivery-tracking?**", (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    expect(params.get("locationId")).toBe(firstLocation);
+    expect(params.get("orderId")).toBe("tracking-order");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          availability: "WAITING",
+          destination: { latitude: 10.3173, longitude: 123.9058 },
+          rider: null,
+          nextRefreshMilliseconds: 30_000,
+        },
+      }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  await page.getByRole("button", { name: "View map" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Waiting for the rider" })).toBeVisible();
+  await page.getByRole("button", { name: "Hide map" }).click();
+  await expect(page.getByRole("button", { name: "View map" })).toBeVisible();
+});
+
 test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignment, and shows saved evidence at 1440px", async ({
   page,
 }) => {

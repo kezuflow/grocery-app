@@ -100,6 +100,9 @@ import {
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { OperationalHub } from "./operations/infrastructure/operational-hub";
 import { MessageHub } from "./messages/infrastructure/message-hub";
+import { DeliveryTrackingHub } from "./delivery/infrastructure/delivery-tracking-hub";
+import { getDeliveryTracking } from "./delivery/application/get-delivery-tracking";
+import { resolveOperationsAdministrationAccess } from "./admin/application/operations-administration-access";
 import { publishMessageRevisions } from "./messages/application/publish-message-revisions";
 import { readMessageOrder, resolveMessageActor } from "./messages/application/shared";
 import { resolveOperationsAdministrationAnyAccess } from "./admin/application/operations-administration-access";
@@ -1030,6 +1033,7 @@ const issueActionSchema = authenticatedRequestSchema.extend({
 export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 export { OperationalHub };
 export { MessageHub };
+export { DeliveryTrackingHub };
 
 /**
  * Worker transport and dependency composition only. Every RPC validates its
@@ -2736,6 +2740,26 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
       validation.data,
     );
   }
+  async getAdminDeliveryTracking(
+    input: import("@freshmarkets/contracts").AdminDeliveryTrackingRequest,
+  ) {
+    const validation = adminOperationsLocationSchema
+      .extend({
+        orderId: validationSchema.string().trim().min(1).max(200),
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const access = await resolveOperationsAdministrationAccess(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
+      "delivery.read",
+      validation.data.locationId,
+      { concealOutOfScopeLocation: true },
+    );
+    if (!access.ok) return access;
+    return getDeliveryTracking(this.env, validation.data);
+  }
   async getLocationDeliveryProfile(
     input: import("@freshmarkets/contracts").AdminOperationsLocationRequest,
   ) {
@@ -3497,6 +3521,24 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").CustomerOrderDetailRequest,
   ) {
     return this.ordersRpc.getCustomerOrderDetail(input);
+  }
+  async getCustomerDeliveryTracking(
+    input: import("@freshmarkets/contracts").CustomerDeliveryTrackingRequest,
+  ) {
+    const validation = authenticatedRequestSchema
+      .extend({
+        orderId: validationSchema.string().trim().min(1).max(200),
+      })
+      .safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    const customer = await this.context.resolveAuthenticatedCustomer(input);
+    if (!customer.ok) return customer;
+    return getDeliveryTracking(this.env, {
+      orderId: validation.data.orderId,
+      requestId: input.requestId,
+      customerId: customer.value.customerId,
+    });
   }
 
   async getProvisionalTransactionSummary(

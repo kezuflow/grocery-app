@@ -12,7 +12,13 @@ const progress = {
 
 async function mockOrder(
   page: Page,
-  scenario: { progress?: typeof progress; orderStatus?: string; fulfillmentStatus?: string } = {},
+  scenario: {
+    progress?: typeof progress;
+    orderStatus?: string;
+    fulfillmentStatus?: string;
+    deliveryStatus?: string;
+    liveTrackingAvailable?: boolean;
+  } = {},
 ) {
   await page.route("**/api/commerce/orders/order-layout", (route) =>
     route.fulfill({
@@ -55,7 +61,8 @@ async function mockOrder(
           fulfillment: {
             mode: "INSTANT",
             status: scenario.fulfillmentStatus ?? "PACKING",
-            deliveryStatus: "UNASSIGNED",
+            deliveryStatus: scenario.deliveryStatus ?? "UNASSIGNED",
+            liveTrackingAvailable: scenario.liveTrackingAvailable ?? false,
             cycleId: null,
             deliveryDate: null,
             promisedAt: "2026-09-21T05:00:00.000Z",
@@ -92,6 +99,44 @@ async function mockOrder(
     }),
   );
 }
+
+test("shows provider tracking only after customer handoff", async ({ page }) => {
+  await mockOrder(page, {
+    orderStatus: "OUT_FOR_DELIVERY",
+    deliveryStatus: "EN_ROUTE",
+    liveTrackingAvailable: true,
+  });
+  await page.route("**/api/commerce/orders/order-layout/tracking", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          availability: "LIVE",
+          destination: { latitude: 10.3173, longitude: 123.9058 },
+          rider: {
+            coordinate: { latitude: 10.31, longitude: 123.9 },
+            updatedAt: new Date().toISOString(),
+          },
+          nextRefreshMilliseconds: 30_000,
+        },
+      }),
+    }),
+  );
+  await page.goto("/orders/order-layout");
+  await expect(page.getByRole("heading", { name: "Track delivery" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Rider location" })).toContainText(
+    "Rider location is available",
+  );
+  await expect(
+    page
+      .getByRole("region", { name: "Delivery tracking map" })
+      .or(page.getByText("Map is unavailable. Delivery status is shown above.")),
+  ).toBeVisible();
+  await mockOrder(page, { liveTrackingAvailable: true });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Track delivery" })).toHaveCount(0);
+});
 
 test("places the four order milestones above Items across responsive widths", async ({ page }) => {
   await mockOrder(page);

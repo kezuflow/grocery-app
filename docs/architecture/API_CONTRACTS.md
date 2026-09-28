@@ -6,6 +6,14 @@ Focused technical reference; load the sections affected by the current command o
 
 This document is authoritative for target Web/Core and provider-ingress application boundary semantics. Contracts live in `packages/contracts` and are shared as source/types within the monorepo. They define RPC method names, input validation, purpose-built DTOs, stable error codes, and pagination. They never export D1 row types, Better Auth table records, provider payloads, or infrastructure handles.
 
+`getAdminDeliveryTracking` requires current `delivery.read` authority for the requested location;
+`getCustomerDeliveryTracking` requires the owning Customer and returns no rider position before
+Out for delivery. Both return a provider-neutral `DeliveryTrackingView` with availability,
+destination, optional last reported rider coordinate/time and refresh advice. Manual attempts
+return `NOT_SUPPORTED`; terminal attempts return `FINISHED`. `LIVE` and `DELAYED` distinguish
+position freshness, and unavailable provider evidence never becomes a fabricated rider pin.
+The Web tracking GET routes carry the existing authentication context and request ID to Core.
+
 Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.
 
 Core owns implementation and authorization. Web owns presentation adapters. Contract changes follow the pre-launch interface policy in `ENGINEERING.md`. Update all consumers coherently and remove unused compatibility paths when safe; use additive evolution where retained deployments or temporary Web/Core version skew actually require it.

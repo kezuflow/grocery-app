@@ -29,6 +29,7 @@ type LalamoveStatusEvent = Readonly<{
   observedAt: number;
   status: ProviderDeliveryStatus;
   trackingUrl: string | null;
+  driverId: string | null;
 }>;
 
 function object(value: unknown): JsonObject | null {
@@ -88,6 +89,7 @@ function parseStatusEvent(payload: unknown): LalamoveStatusEvent | null {
     observedAt,
     status,
     trackingUrl: nonemptyString(order?.shareLink),
+    driverId: nonemptyString(order?.driverId),
   };
 }
 
@@ -307,6 +309,7 @@ export async function handleLalamoveWebhook(
       status: parsed.status,
       observedAt: parsed.observedAt,
       trackingUrl: parsed.trackingUrl,
+      driverId: parsed.driverId,
     },
     { inboxId },
   );

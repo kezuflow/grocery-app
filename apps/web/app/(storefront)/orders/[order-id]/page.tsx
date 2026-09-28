@@ -8,6 +8,7 @@ import { OrderTimeline } from "../../../../components/storefront/orders/order-ti
 import { ReorderAction } from "../../../../components/storefront/orders/reorder-action";
 import { OrderIssueForm } from "../../../../components/storefront/orders/order-issue-form";
 import { CancelOrderAction } from "../../../../components/storefront/orders/cancel-order-action";
+import { DeliveryTrackingMap } from "../../../../components/maps/delivery-tracking-map";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -85,6 +86,21 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
         <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
           <OrderTimeline progress={order.progress} />
         </div>
+        {order.fulfillment.liveTrackingAvailable &&
+        order.status !== "DELIVERED" &&
+        ["EN_ROUTE", "ARRIVED"].includes(order.fulfillment.deliveryStatus ?? "") ? (
+          <section
+            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
+            aria-labelledby="tracking-heading"
+          >
+            <h2 id="tracking-heading" className="mb-3 text-xl font-bold">
+              Track delivery
+            </h2>
+            <DeliveryTrackingMap
+              endpoint={`/api/commerce/orders/${encodeURIComponent(order.orderId)}/tracking`}
+            />
+          </section>
+        ) : null}
 
         <div className="divide-y divide-[var(--fm-border)] overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
           <section className="p-5 sm:p-6" aria-labelledby="order-items-heading">

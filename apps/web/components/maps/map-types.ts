@@ -32,6 +32,7 @@ export type MapLineString = Readonly<{
 
 export type MapScene = Readonly<{
   points?: ReadonlyArray<MapPoint>;
+  fitBoundsOnce?: ReadonlyArray<MapCoordinate>;
   clusterPoints?: boolean;
   selectedPointIds?: ReadonlyArray<string>;
   draggablePin?: MapDraggablePin;
@@ -45,6 +46,7 @@ export type MapAdapterInitialization = Readonly<{
   browserApiKey: string;
   mapId: string;
   initialView: MapInitialView;
+  fitBoundsOnInitialize?: ReadonlyArray<MapCoordinate>;
   scene: MapScene;
   reducedMotion: boolean;
   onPinMove: (position: MapCoordinate) => void;

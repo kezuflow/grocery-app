@@ -234,6 +234,7 @@ function parseDelivery(
       : fallbackQuote;
   return {
     providerDeliveryId: orderId,
+    driverId: nonemptyString(data.driverId),
     merchantOrderId: merchantReference(data) ?? fallbackMerchantOrderId,
     status: status(data.status),
     trackingUrl: nonemptyString(data.shareLink),
@@ -562,6 +563,43 @@ export function createLalamoveProvider(
                 : {}),
             }
           : resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true });
+      });
+    },
+    getDriverLocation(providerDeliveryId, driverId) {
+      return observed("LALAMOVE_DRIVER_LOCATION", async () => {
+        if (!providerDeliveryId.trim() || !driverId.trim())
+          return resultError("LALAMOVE_INVALID_REQUEST");
+        const response = await api(
+          `/v3/orders/${encodeURIComponent(providerDeliveryId)}/drivers/${encodeURIComponent(driverId)}`,
+          "GET",
+          "",
+          false,
+        );
+        if (!response.ok) return response;
+        const data = object(object(response.value)?.data);
+        const coordinates = object(data?.coordinates);
+        const latitude =
+          typeof coordinates?.lat === "string" || typeof coordinates?.lat === "number"
+            ? Number(coordinates.lat)
+            : Number.NaN;
+        const longitude =
+          typeof coordinates?.lng === "string" || typeof coordinates?.lng === "number"
+            ? Number(coordinates.lng)
+            : Number.NaN;
+        const updatedAt = nonemptyString(coordinates?.updatedAt);
+        if (
+          !Number.isFinite(latitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          !Number.isFinite(longitude) ||
+          longitude < -180 ||
+          longitude > 180 ||
+          !updatedAt ||
+          !Number.isFinite(Date.parse(updatedAt)) ||
+          nonemptyString(data?.driverId) !== driverId
+        )
+          return resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true });
+        return { ok: true, value: { coordinate: { latitude, longitude }, updatedAt } };
       });
     },
     cancel(providerDeliveryId) {

@@ -8,11 +8,13 @@
     "bindings": [
       { "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" },
       { "name": "MESSAGE_HUB", "class_name": "MessageHub" },
+      { "name": "DELIVERY_TRACKING_HUB", "class_name": "DeliveryTrackingHub" },
     ],
   },
   "migrations": [
     { "tag": "operational-hub-v1", "new_sqlite_classes": ["OperationalHub"] },
     { "tag": "message-hub-v1", "new_sqlite_classes": ["MessageHub"] },
+    { "tag": "delivery-tracking-hub-v1", "new_sqlite_classes": ["DeliveryTrackingHub"] },
   ],
   "observability": {
     "enabled": true,

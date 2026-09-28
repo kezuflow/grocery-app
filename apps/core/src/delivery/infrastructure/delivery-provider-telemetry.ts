@@ -8,6 +8,7 @@ export type DeliveryProviderOperation =
   | "LALAMOVE_QUOTE"
   | "LALAMOVE_CREATE"
   | "LALAMOVE_GET"
+  | "LALAMOVE_DRIVER_LOCATION"
   | "LALAMOVE_CANCEL";
 
 export type DeliveryProviderTelemetryEvent = Readonly<{

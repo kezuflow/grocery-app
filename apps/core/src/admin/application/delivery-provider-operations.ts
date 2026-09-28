@@ -711,6 +711,7 @@ async function providerMutation(
       observedAt: now,
       trackingUrl: observation.trackingUrl,
       pickupPin: observation.pickupPin,
+      driverId: observation.driverId,
     },
     {
       inboxId,

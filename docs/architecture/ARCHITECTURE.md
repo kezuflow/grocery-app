@@ -217,6 +217,14 @@ Core binds a location-keyed hibernatable Durable Object solely to fan out opaque
 
 Order messaging uses the same two-Worker ownership: Core authorizes and writes a single D1 transcript per committed Order, while Web supplies same-origin HTTP and WebSocket routes. `MessageHub` is a hibernating, audience-keyed Durable Object for opaque revision hints and short-lived typing/presence only. Clients fetch the authorized transcript over HTTP on connect, revision, focus and reconnect. D1 revision rows permit minute redrive after failed publication. The Core `IMAGES` binding decodes and re-encodes each new bounded attachment to still WebP before a durable write; it is a content-normalization gate, not antivirus certification. The existing `PRODUCT_MEDIA` R2 binding holds only processed new message attachments under generated `messages/` keys, while legacy attachments remain readable until retention. Core owns distinct submitted/stored digests, durable upload intents and deletion intents. This does not add a second database or a second business authority.
 
+`DeliveryTrackingHub` is one Core Durable Object per Lalamove market. After Core authorizes the
+specific Admin location or Customer Order, it coalesces read-only provider Order/Driver Details
+calls, keeps short-lived coordinates in memory and enforces a shared per-minute call budget in DO
+storage. Core exposes only the last verified rider coordinate/time and destination through typed
+Service Binding reads. D1 retains only the provider driver reference on the current attempt;
+provider location never changes Order or Delivery state. Web polls while the tracking view is open
+and visible.
+
 ### Workflows
 
 Workflows are deferred. They may later orchestrate genuinely long-running procurement, exception, or retry processes. Simple request/response operations and critical synchronous transitions do not use Workflows.

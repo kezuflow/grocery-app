@@ -290,6 +290,7 @@ describe("Lalamove delivery adapter", () => {
       providerRequestId: "lalamove-order-request",
       value: {
         providerDeliveryId: "order-lalamove-1",
+        driverId: null,
         merchantOrderId: "FM-1001",
         status: "ALLOCATING",
         trackingUrl: "https://share.lalamove.com/order-lalamove-1",
@@ -416,5 +417,58 @@ describe("Lalamove delivery adapter", () => {
     });
     expect(fetcher.mock.calls[0]?.[1]?.body).toBeUndefined();
     expect(fetcher.mock.calls[1]?.[1]?.body).toBeUndefined();
+  });
+
+  it("reads a bounded, signed driver coordinate and rejects invalid provider positions", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            driverId: "driver-1",
+            coordinates: { lat: "10.3173", lng: "123.9058", updatedAt: "2026-09-29T00:00:00.000Z" },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            driverId: "driver-1",
+            coordinates: { lat: "91", lng: "123.9058", updatedAt: "2026-09-29T00:00:00.000Z" },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            driverId: "driver-1",
+            coordinates: { lat: null, lng: "123.9058", updatedAt: "2026-09-29T00:00:00.000Z" },
+          },
+        }),
+      );
+    const provider = createLalamoveProvider({
+      apiKey: "key-1",
+      apiSecret: "secret-1",
+      market: "PH",
+      language: "en_PH",
+      environment: "sandbox",
+      fetcher,
+      now: () => 1_725_318_000_000,
+      telemetry: { clock: () => 0, sink: () => undefined },
+    });
+    await expect(provider.getDriverLocation?.("order-1", "driver-1")).resolves.toMatchObject({
+      ok: true,
+      value: { coordinate: { latitude: 10.3173, longitude: 123.9058 } },
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("/v3/orders/order-1/drivers/driver-1");
+    expect(fetcher.mock.calls[0]?.[1]?.body).toBeUndefined();
+    await expect(provider.getDriverLocation?.("order-1", "driver-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: "LALAMOVE_INVALID_RESPONSE" },
+    });
+    await expect(provider.getDriverLocation?.("order-1", "driver-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: "LALAMOVE_INVALID_RESPONSE" },
+    });
   });
 });

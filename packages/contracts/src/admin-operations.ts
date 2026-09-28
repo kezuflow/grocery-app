@@ -2,6 +2,7 @@ import type { RpcResult } from "./common";
 import type { AuthenticatedRequest } from "./auth";
 import type { OperationalExceptionItem } from "./operations";
 import type { FulfillmentAction } from "./states";
+import type { AdminDeliveryTrackingRequest, DeliveryTrackingView } from "./delivery-tracking";
 export {
   deliveryActions,
   deliveryJobStates as deliveryStatuses,
@@ -492,6 +493,9 @@ export type AdminOperationsService = {
   listDeliveryOperations(
     request: AdminDeliveryOperationsRequest,
   ): Promise<RpcResult<DeliveryOperationsSummary>>;
+  getAdminDeliveryTracking(
+    request: AdminDeliveryTrackingRequest,
+  ): Promise<RpcResult<DeliveryTrackingView>>;
   getLocationDeliveryProfile(
     request: AdminOperationsLocationRequest,
   ): Promise<RpcResult<LocationDeliveryProfileView>>;

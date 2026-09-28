@@ -3,7 +3,9 @@ import { defineConfig } from "@playwright/test";
 const managedStack = process.env.E2E_START_STACK === "1";
 const e2eStateName = process.env.E2E_STATE_NAME ?? "e2e-state";
 if (!/^e2e-[a-z0-9-]+$/.test(e2eStateName)) throw new Error("Invalid E2E_STATE_NAME");
-const managedPort = 3100;
+const managedPort = Number(process.env.E2E_PORT ?? "3100");
+if (!Number.isInteger(managedPort) || managedPort < 1024 || managedPort > 65_535)
+  throw new Error("Invalid E2E_PORT");
 // Only this opt-in test ingress exposes the local Core webhook alongside Web.
 const providerGateway =
   process.env.E2E_PROVIDER_GATEWAY === "1"
@@ -46,7 +48,7 @@ export default defineConfig({
         env: { ...process.env, E2E_AUTHENTICATED: "1" },
         port: managedPort,
         reuseExistingServer: false,
-        timeout: 180_000,
+        timeout: 300_000,
       }
     : undefined,
   use: {

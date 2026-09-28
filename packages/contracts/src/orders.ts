@@ -146,6 +146,7 @@ export type CustomerOrderDetailView = {
     mode: "INSTANT" | "SCHEDULED";
     status: FulfillmentState | null;
     deliveryStatus: DeliveryJobState | null;
+    liveTrackingAvailable: boolean;
     cycleId: string | null;
     deliveryDate: string | null;
     deliveryWindow?: { name: string; timezone: string; startsAt: string; endsAt: string } | null;
@@ -377,6 +378,9 @@ export type OrdersService = {
   getCustomerOrderDetail(
     request: CustomerOrderDetailRequest,
   ): Promise<RpcResult<CustomerOrderDetailView>>;
+  getCustomerDeliveryTracking(
+    request: import("./delivery-tracking").CustomerDeliveryTrackingRequest,
+  ): Promise<RpcResult<import("./delivery-tracking").DeliveryTrackingView>>;
   cancelCustomerOrder(
     request: CancelCustomerOrderRequest,
   ): Promise<RpcResult<OrderCancellationView>>;

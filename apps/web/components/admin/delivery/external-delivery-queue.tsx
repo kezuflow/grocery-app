@@ -12,6 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/a
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/admin/shadcn/card";
+import { DeliveryTrackingMap } from "@/components/maps/delivery-tracking-map";
 import {
   Table,
   TableBody,
@@ -99,6 +101,7 @@ export function ExternalDeliveryQueue() {
   );
   const summary = loaded?.key === readKey ? loaded.value : null;
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const loading = loadingKey === readKey;
   const [readError, setReadError] = useState<{ key: string; message: string } | null>(null);
@@ -396,6 +399,22 @@ export function ExternalDeliveryQueue() {
                                 Open provider tracking
                               </a>
                             ) : null}
+                            {item.externalDispatch.provider === "lalamove" &&
+                            item.externalDispatch.providerDeliveryId &&
+                            item.externalDispatch.status === "ACTIVE" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setTrackingOrderId((current) =>
+                                    current === item.orderId ? null : item.orderId,
+                                  )
+                                }
+                              >
+                                {trackingOrderId === item.orderId ? "Hide map" : "View map"}
+                              </Button>
+                            ) : null}
                           </div>
                         ) : item.manualDelivery ? (
                           "Manual delivery"
@@ -524,6 +543,26 @@ export function ExternalDeliveryQueue() {
             }}
           />
         </ListPageSection>
+      ) : null}
+      {locationId &&
+      trackingOrderId &&
+      summary?.items.some(
+        (item) =>
+          item.orderId === trackingOrderId &&
+          item.externalDispatch?.provider === "lalamove" &&
+          item.externalDispatch.status === "ACTIVE",
+      ) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Order {trackingOrderId.slice(0, 8)} delivery map</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DeliveryTrackingMap
+              key={`${locationId}:${trackingOrderId}`}
+              endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: trackingOrderId })}`}
+            />
+          </CardContent>
+        </Card>
       ) : null}
       <AdminConfirmationDialog
         open={cancelTarget !== null}

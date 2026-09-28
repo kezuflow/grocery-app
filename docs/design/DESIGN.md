@@ -1,5 +1,17 @@
 # FreshMarkets Design
 
+## Lalamove delivery tracking — owner approval 2026-09-29
+
+Admin Delivery offers View map for the active Lalamove attempt in its existing workspace. The
+Customer Order detail shows the same bounded map beneath progress only while Out for delivery.
+Show destination and the provider's last reported rider position, with explicit waiting,
+delayed, unavailable and finished text. Do not imply a road route, live movement between updates
+or an arrival estimate. Keep manual delivery in the existing status presentation without a map.
+The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
+This adapts the status-plus-map hierarchy from Mobbin's
+[GrabFood progress](https://mobbin.com/screens/f35fb2cc-a9f1-42ee-b8e2-889f5ab93b22) and
+[DoorDash tracking](https://mobbin.com/screens/b2543cf1-7f95-4718-92d6-74af14de04d5).
+
 ## Payments simplification — owner decisions 2026-09-21
 
 Implemented locally under

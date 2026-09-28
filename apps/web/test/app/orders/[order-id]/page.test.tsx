@@ -64,6 +64,7 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
       mode: "SCHEDULED",
       status: "PICKING",
       deliveryStatus: "UNASSIGNED",
+      liveTrackingAvailable: false,
       cycleId: "cycle-1",
       deliveryDate: "2026-09-05T00:00:00.000Z",
       promisedAt: null,

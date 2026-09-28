@@ -389,13 +389,14 @@ export async function requestProviderDelivery(
   const save = database
     .prepare(
       `UPDATE delivery_provider_dispatch
-       SET provider_delivery_id=?, status='ACTIVE', provider_status=?,
+       SET provider_delivery_id=?, driver_id=?, status='ACTIVE', provider_status=?,
            tracking_url=?, pickup_pin=?, quote_amount_minor=?, quote_currency=?,
            last_error_code=NULL, version=version+1, updated_at=?
        WHERE id=? AND version=? AND status='CREATING'`,
     )
     .bind(
       created.value.providerDeliveryId,
+      created.value.driverId ?? null,
       created.value.status,
       created.value.trackingUrl,
       created.value.pickupPin,
@@ -448,6 +449,7 @@ export async function requestProviderDelivery(
       status: created.value.status,
       observedAt,
       trackingUrl: created.value.trackingUrl,
+      driverId: created.value.driverId,
       pickupPin: created.value.pickupPin,
     },
     { inboxId },

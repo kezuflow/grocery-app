@@ -9,6 +9,7 @@ describe("Core Worker foundation", () => {
       DB: {} as D1Database,
       OPERATIONAL_HUB: {} as Env["OPERATIONAL_HUB"],
       MESSAGE_HUB: {} as Env["MESSAGE_HUB"],
+      DELIVERY_TRACKING_HUB: {} as Env["DELIVERY_TRACKING_HUB"],
       PRODUCT_MEDIA: {} as R2Bucket,
       IMAGES: {} as ImagesBinding,
       ENVIRONMENT: "development",

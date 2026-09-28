@@ -106,8 +106,16 @@ function createGoogleMapsAdapter(): MapAdapter {
         renderingType: google.maps.RenderingType.RASTER,
         gestureHandling: "greedy",
       });
+      if (options.fitBoundsOnInitialize && options.fitBoundsOnInitialize.length > 1) {
+        const bounds = new google.maps.LatLngBounds();
+        for (const position of options.fitBoundsOnInitialize) bounds.extend(latLng(position));
+        map.fitBounds(bounds, 52);
+      }
 
       let scene = options.scene;
+      let fittedTrackingBounds = Boolean(
+        options.fitBoundsOnInitialize && options.fitBoundsOnInitialize.length > 1,
+      );
       let pointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
       let draggableMarker: google.maps.marker.AdvancedMarkerElement | undefined;
       let draggableMarkerContent: LocationPinMarkerContent | undefined;
@@ -320,6 +328,12 @@ function createGoogleMapsAdapter(): MapAdapter {
       return {
         updateScene(nextScene): void {
           scene = nextScene;
+          if (!fittedTrackingBounds && scene.fitBoundsOnce && scene.fitBoundsOnce.length > 1) {
+            const bounds = new google.maps.LatLngBounds();
+            for (const position of scene.fitBoundsOnce) bounds.extend(latLng(position));
+            map.fitBounds(bounds, 52);
+            fittedTrackingBounds = true;
+          }
           syncPoints();
           syncShapes();
           syncPin();
@@ -357,6 +371,7 @@ export type GoogleMapProps = Readonly<{
   browserApiKey?: string;
   mapId?: string;
   initialView: MapInitialView;
+  fitBoundsOnInitialize?: ReadonlyArray<MapCoordinate>;
   scene: MapScene;
   adapter?: MapAdapter;
   ariaLabel?: string;
@@ -373,6 +388,7 @@ export function GoogleMap({
   browserApiKey,
   mapId,
   initialView,
+  fitBoundsOnInitialize,
   scene,
   adapter = defaultAdapter,
   ariaLabel = "Map",
@@ -429,6 +445,7 @@ export function GoogleMap({
         browserApiKey: key,
         mapId: configuredMapId,
         initialView,
+        fitBoundsOnInitialize,
         scene: initialScene,
         reducedMotion,
         onPinMove: (position) => pinMoveRef.current?.(position),

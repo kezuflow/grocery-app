@@ -174,6 +174,11 @@ export async function getCustomerOrderDetail(
                 AND CASE WHEN json_valid(event.after_json) THEN json_extract(event.after_json,'$.status') END='PACKING'
               )) AS packingStarted,
               d.id AS deliveryId, d.status AS deliveryStatus, d.updated_at AS deliveryUpdatedAt,
+              EXISTS(SELECT 1 FROM delivery_provider_dispatch tracking
+                WHERE tracking.id=(SELECT latest.id FROM delivery_provider_dispatch latest
+                  WHERE latest.delivery_job_id=d.id ORDER BY latest.attempt_sequence DESC LIMIT 1)
+                  AND tracking.method='EXTERNAL' AND tracking.provider='lalamove'
+                  AND tracking.status='ACTIVE' AND tracking.provider_delivery_id IS NOT NULL) AS liveTrackingAvailable,
               d.delivered_at AS deliveredAt,
               checkout_attempt.status AS checkoutPaymentStatus,
               checkout_attempt.updated_at AS checkoutPaymentUpdatedAt,
@@ -225,6 +230,7 @@ export async function getCustomerOrderDetail(
       packingStarted: number;
       deliveryId: string | null;
       deliveryStatus: string | null;
+      liveTrackingAvailable: number;
       deliveryUpdatedAt: number | null;
       deliveredAt: number | null;
       checkoutPaymentStatus: string | null;
@@ -626,6 +632,7 @@ export async function getCustomerOrderDetail(
         mode: row.fulfillmentMode,
         status: row.fulfillmentStatus as FulfillmentState | null,
         deliveryStatus: row.deliveryStatus as DeliveryJobState | null,
+        liveTrackingAvailable: Boolean(row.liveTrackingAvailable),
         cycleId: row.fulfillmentMode === "SCHEDULED" ? row.cycleId : null,
         deliveryDate: row.fulfillmentMode === "SCHEDULED" ? iso(row.deliveryDate) : null,
         deliveryWindow:

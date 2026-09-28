@@ -107,6 +107,7 @@ export type ProviderDeliveryStatus =
 
 export type ProviderDelivery = Readonly<{
   providerDeliveryId: string;
+  driverId?: string | null;
   /**
    * Present when the provider echoes FreshMarkets metadata. Some provider GET
    * responses expose only their own order identifier, so reconciliation must
@@ -128,5 +129,14 @@ export interface DeliveryProvider {
   ): Promise<DeliveryProviderResult<readonly DeliveryQuote[]>>;
   create(request: CreateDeliveryRequest): Promise<DeliveryProviderResult<ProviderDelivery>>;
   get(providerDeliveryId: string): Promise<DeliveryProviderResult<ProviderDelivery | null>>;
+  getDriverLocation?: (
+    providerDeliveryId: string,
+    driverId: string,
+  ) => Promise<
+    DeliveryProviderResult<{
+      coordinate: { latitude: number; longitude: number };
+      updatedAt: string;
+    }>
+  >;
   cancel(providerDeliveryId: string): Promise<DeliveryProviderResult<null>>;
 }

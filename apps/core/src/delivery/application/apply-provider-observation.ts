@@ -7,6 +7,7 @@ export type ProviderObservation = Readonly<{
   status: ProviderDeliveryStatus;
   observedAt: number;
   trackingUrl: string | null;
+  driverId?: string | null;
   pickupPin?: string | null;
 }>;
 
@@ -209,7 +210,7 @@ export async function applyProviderObservation(
   statements.push(
     database
       .prepare(`UPDATE delivery_provider_dispatch SET status=?,provider_status=?,provider_observed_at=?,provider_status_rank=?,
-      tracking_url=COALESCE(?,tracking_url),pickup_pin=COALESCE(?,pickup_pin),
+      tracking_url=COALESCE(?,tracking_url),driver_id=COALESCE(?,driver_id),pickup_pin=COALESCE(?,pickup_pin),
       handed_over_at=CASE WHEN ?=1 THEN COALESCE(handed_over_at,?) ELSE handed_over_at END,
       completed_at=CASE WHEN ?=1 THEN COALESCE(completed_at,?) ELSE completed_at END,
       last_error_code=?,version=version+1,updated_at=?
@@ -220,6 +221,7 @@ export async function applyProviderObservation(
         observation.observedAt,
         rank,
         observation.trackingUrl,
+        observation.driverId ?? null,
         observation.pickupPin ?? null,
         ["IN_DELIVERY", "COMPLETED"].includes(observation.status) ? 1 : 0,
         observation.observedAt,
