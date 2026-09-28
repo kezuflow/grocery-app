@@ -4,7 +4,11 @@ import handler from "vinext/server/fetch-handler";
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext): Promise<Response> {
     if (
-      new URL(request.url).pathname === "/api/admin/operational-stream" &&
+      [
+        "/api/admin/operational-stream",
+        "/api/admin/messages/stream",
+        "/api/commerce/messages/stream",
+      ].includes(new URL(request.url).pathname) &&
       request.method === "GET" &&
       request.headers.get("upgrade")?.toLowerCase() === "websocket"
     ) {

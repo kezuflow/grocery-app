@@ -4,6 +4,7 @@ import {
   UserRound,
   MapPin,
   ShoppingBag,
+  MessageCircle,
   ShoppingCart,
   KeyRound,
   Headphones,
@@ -30,6 +31,12 @@ const shortcuts = [
     title: "Order history",
     description: "View your grocery orders and their progress",
     icon: ShoppingBag,
+  },
+  {
+    href: "/account/messages",
+    title: "Order messages",
+    description: "Talk with our team about your orders",
+    icon: MessageCircle,
   },
   {
     href: "/cart",

@@ -13,6 +13,7 @@ import { providerActionExpiryJob } from "./jobs/provider-action-expiry";
 import { notificationDeliveryJob } from "./jobs/notification-delivery";
 import { providerSubscriptionReconciliationJob } from "./jobs/provider-subscription-reconciliation";
 import { orderCancellationRefundsJob } from "./jobs/order-cancellation-refunds";
+import { orderMessageRetentionJob } from "./jobs/order-message-retention";
 
 import { refundReconciliationJob } from "./jobs/refund-reconciliation";
 import { scheduledLateCaptureRefundsJob } from "./jobs/scheduled-late-capture-refunds";
@@ -36,6 +37,7 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
   ],
   [EVERY_FIFTEEN_MINUTES]: [
     productMediaCleanupJob,
+    orderMessageRetentionJob,
     deliveryObservationRedriveJob,
     deliveryCycleCloseoutJob,
     paymentsReactionRedriveJob,

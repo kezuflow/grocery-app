@@ -99,6 +99,9 @@ import {
 } from "./iam/application/accept-staff-invitation";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { OperationalHub } from "./operations/infrastructure/operational-hub";
+import { MessageHub } from "./messages/infrastructure/message-hub";
+import { publishMessageRevisions } from "./messages/application/publish-message-revisions";
+import { readMessageOrder, resolveMessageActor } from "./messages/application/shared";
 import { resolveOperationsAdministrationAnyAccess } from "./admin/application/operations-administration-access";
 import { publishOperationalRevisions } from "./operations/application/publish-operational-revisions";
 import {
@@ -298,6 +301,7 @@ import { getAdminSkuPrices as getAdminSkuPricesQuery } from "./admin/application
 import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
 import { createOrdersRpc } from "./entrypoint/orders-rpc";
+import { createMessagesRpc } from "./entrypoint/messages-rpc";
 import { createInventoryTransfersRpc } from "./entrypoint/inventory-transfers-rpc";
 import { createOperationsRpc } from "./entrypoint/operations-rpc";
 import { listAnalyticsMetricDefinitions } from "./analytics/application/list-metric-definitions";
@@ -1024,6 +1028,7 @@ const issueActionSchema = authenticatedRequestSchema.extend({
 
 export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness";
 export { OperationalHub };
+export { MessageHub };
 
 /**
  * Worker transport and dependency composition only. Every RPC validates its
@@ -1047,12 +1052,22 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly checkoutRpc = createCheckoutRpc(this.rpcContext);
   private readonly paymentsRpc = createPaymentsRpc(this.rpcContext);
   private readonly ordersRpc = createOrdersRpc(this.rpcContext);
+  private readonly messagesRpc = createMessagesRpc(this.rpcContext, () =>
+    this.scheduleMessagePublication(),
+  );
   private readonly inventoryTransfersRpc = createInventoryTransfersRpc(this.rpcContext);
   private readonly operationsRpc = createOperationsRpc(this.rpcContext);
   private readonly scheduleOperationalPublication = () => {
     this.ctx.waitUntil(
       publishOperationalRevisions(this.env.DB, this.env.OPERATIONAL_HUB).catch(() => {
         log("error", "operations.revision.publish_failed", {});
+      }),
+    );
+  };
+  private readonly scheduleMessagePublication = () => {
+    this.ctx.waitUntil(
+      publishMessageRevisions(this.env.DB, this.env.MESSAGE_HUB).catch(() => {
+        log("error", "messages.revision.publish_failed", {});
       }),
     );
   };
@@ -1097,6 +1112,41 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const id = requestId(request);
     const path = new URL(request.url).pathname;
+    if (path === "/api/commerce/messages/stream" || path === "/api/admin/messages/stream") {
+      if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket")
+        return new Response(null, { status: 426 });
+      if (request.headers.get("origin") !== new URL(request.url).origin)
+        return new Response(null, { status: 403 });
+      const admin = path.startsWith("/api/admin/");
+      const url = new URL(request.url);
+      const orderId = url.searchParams.get("orderId");
+      if (orderId && (orderId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(orderId)))
+        return new Response(null, { status: 400 });
+      const input = {
+        requestId: id,
+        headers: Object.fromEntries(
+          ["cookie", "origin", "referer", "user-agent", "x-request-id"]
+            .map((name) => [name, request.headers.get(name)])
+            .filter((entry): entry is [string, string] => entry[1] !== null),
+        ),
+      };
+      const actor = await resolveMessageActor(this.rpcContext, input, admin ? "ADMIN" : "CUSTOMER");
+      if (!actor.ok)
+        return new Response(null, {
+          status: actor.error.code === "UNAUTHENTICATED" ? 401 : 403,
+        });
+      if (orderId && !(await readMessageOrder(this.env.DB, actor.value, orderId)))
+        return new Response(null, { status: 404 });
+      const audience = orderId
+        ? `order:${orderId}`
+        : admin
+          ? "admin"
+          : `customer:${actor.value.kind === "CUSTOMER" ? actor.value.customerId : ""}`;
+      const headers = new Headers(request.headers);
+      headers.set("x-message-role", orderId ? actor.value.kind : "INBOX");
+      headers.set("x-message-actor", actor.value.userId);
+      return this.env.MESSAGE_HUB.getByName(audience).fetch(new Request(request, { headers }));
+    }
     if (path === "/api/admin/operational-stream") {
       if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket")
         return new Response(null, { status: 426 });
@@ -3359,6 +3409,74 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   async listCustomerNotifications(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
     return this.ordersRpc.listCustomerNotifications(input);
   }
+  async listCustomerOrderConversations(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & {
+      cursor?: string;
+      limit?: number;
+    },
+  ) {
+    return this.messagesRpc.listCustomerOrderConversations(input);
+  }
+  async listAdminOrderConversations(
+    input: import("@freshmarkets/contracts").AuthenticatedRequest & {
+      cursor?: string;
+      limit?: number;
+    },
+  ) {
+    return this.messagesRpc.listAdminOrderConversations(input);
+  }
+  async getCustomerOrderMessages(
+    input: import("@freshmarkets/contracts").ListOrderMessagesRequest,
+  ) {
+    return this.messagesRpc.getCustomerOrderMessages(input);
+  }
+  async getAdminOrderMessages(input: import("@freshmarkets/contracts").ListOrderMessagesRequest) {
+    return this.messagesRpc.getAdminOrderMessages(input);
+  }
+  async sendCustomerOrderMessage(input: import("@freshmarkets/contracts").SendOrderMessageRequest) {
+    return this.messagesRpc.sendCustomerOrderMessage(input);
+  }
+  async sendAdminOrderMessage(input: import("@freshmarkets/contracts").SendOrderMessageRequest) {
+    return this.messagesRpc.sendAdminOrderMessage(input);
+  }
+  async markCustomerOrderConversationRead(
+    input: import("@freshmarkets/contracts").MarkOrderConversationReadRequest,
+  ) {
+    return this.messagesRpc.markCustomerOrderConversationRead(input);
+  }
+  async markAdminOrderConversationRead(
+    input: import("@freshmarkets/contracts").MarkOrderConversationReadRequest,
+  ) {
+    return this.messagesRpc.markAdminOrderConversationRead(input);
+  }
+  async stageCustomerOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").StageOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.stageCustomerOrderMessageAttachment(input);
+  }
+  async stageAdminOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").StageOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.stageAdminOrderMessageAttachment(input);
+  }
+  async readCustomerOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").ReadOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.readCustomerOrderMessageAttachment(input);
+  }
+  async readAdminOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").ReadOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.readAdminOrderMessageAttachment(input);
+  }
+  async getOrderAcknowledgement(input: import("@freshmarkets/contracts").AuthenticatedRequest) {
+    return this.messagesRpc.getOrderAcknowledgement(input);
+  }
+  async saveOrderAcknowledgement(
+    input: import("@freshmarkets/contracts").SaveOrderAcknowledgementRequest,
+  ) {
+    return this.messagesRpc.saveOrderAcknowledgement(input);
+  }
 
   async getCustomerOrderDetail(
     input: import("@freshmarkets/contracts").CustomerOrderDetailRequest,
@@ -3483,8 +3601,10 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
    */
   async scheduled(controller: { readonly cron: string }): Promise<void> {
     await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
-    if (controller.cron === "* * * * *")
+    if (controller.cron === "* * * * *") {
       await publishOperationalRevisions(this.env.DB, this.env.OPERATIONAL_HUB);
+      await publishMessageRevisions(this.env.DB, this.env.MESSAGE_HUB);
+    }
   }
 
   /** Queue delivery is per-message isolated; domain state remains D1-owned. */

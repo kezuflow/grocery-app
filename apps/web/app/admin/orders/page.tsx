@@ -373,6 +373,9 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
             </h1>
           </CardTitle>
           <CardDescription>Review and manage your orders.</CardDescription>
+          <Button asChild variant="outline" size="sm" className="mt-2 self-start">
+            <Link href="/admin/messages">Order messages</Link>
+          </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 px-4 pb-4 sm:px-6">
           <form onSubmit={findOrder} className="flex flex-wrap items-end gap-2">

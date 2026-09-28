@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { CustomerNotificationsView, RpcResult } from "@freshmarkets/contracts";
 import { authClient } from "../../../lib/auth/auth-client";
 import { NotificationPanel, notificationRowClassName } from "../../notification-panel";
+import { playInAppNotificationSound } from "@/lib/notifications/in-app-sound";
 
 const READ_STORAGE_PREFIX = "freshmarkets:notification-read:";
 
@@ -41,6 +42,7 @@ export function CustomerNotifications() {
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasOpenedRef = useRef(false);
+  const observed = useRef<{ userId: string; ids: Set<string> } | null>(null);
   const [result, setResult] = useState<{
     userId: string;
     value: RpcResult<CustomerNotificationsView>;
@@ -48,7 +50,23 @@ export function CustomerNotifications() {
 
   useEffect(() => {
     hasOpenedRef.current = false;
+    observed.current = null;
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId || isPending || error) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") setAttempt((value) => value + 1);
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [userId, isPending, error]);
 
   useEffect(() => {
     setUnreadCount(0);
@@ -61,6 +79,18 @@ export function CustomerNotifications() {
         if (controller.signal.aborted) return;
         setResult({ userId, value });
         if (value.ok) {
+          const ids = new Set(value.value.items.map(notificationIdentity));
+          const prior = observed.current;
+          if (prior?.userId === userId) {
+            const incoming = value.value.items.find(
+              (item) => !prior.ids.has(notificationIdentity(item)),
+            );
+            if (incoming)
+              void playInAppNotificationSound(
+                `notification:${userId}:${notificationIdentity(incoming)}`,
+              );
+          }
+          observed.current = { userId, ids };
           const seen = readNotificationIdentities(userId);
           setUnreadCount(
             value.value.items.filter((item) => !seen.has(notificationIdentity(item))).length,

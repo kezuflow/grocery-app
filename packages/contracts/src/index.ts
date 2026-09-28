@@ -40,3 +40,4 @@ export * from "./scheduled-surplus";
 
 export * from "./banner-media";
 export * from "./storefront-banners";
+export * from "./order-messaging";

@@ -274,6 +274,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ "order-i
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <OrderStatusBadge status={order.status} />
+                {admin.state.phase === "ready" && admin.state.selectedScope?.kind === "GLOBAL" ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/admin/messages/${encodeURIComponent(order.orderId)}`}>
+                      Messages
+                    </Link>
+                  </Button>
+                ) : null}
                 {order.allowedActions.includes("CANCEL") ? (
                   <Button
                     ref={cancelTrigger}

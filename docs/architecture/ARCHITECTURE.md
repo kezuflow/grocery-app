@@ -215,6 +215,8 @@ KV is optional for cache/config-like workloads with acceptable staleness. It is 
 
 Core binds a location-keyed hibernatable Durable Object solely to fan out opaque operational revisions to authenticated WebSocket clients. Core checks current location scope and `fulfillment.read` or `delivery.read` before the upgrade. D1 remains authoritative for the revision and all Order, receiving, fulfillment and delivery facts; the hub stores no customer payload or business decision. A failed publication stays pending in D1 for the existing minute scheduler to retry. Scheduled commerce still has no capacity coordinator.
 
+Order messaging uses the same two-Worker ownership: Core authorizes and writes a single D1 transcript per committed Order, while Web supplies same-origin HTTP and WebSocket routes. `MessageHub` is a hibernating, audience-keyed Durable Object for opaque revision hints and short-lived typing/presence only. Clients fetch the authorized transcript over HTTP on connect, revision, focus and reconnect. D1 revision rows permit minute redrive after failed publication. The existing `PRODUCT_MEDIA` R2 binding holds private message attachments under generated `messages/` keys; Core owns their durable upload and deletion intents. This does not add a second database or a second business authority.
+
 ### Workflows
 
 Workflows are deferred. They may later orchestrate genuinely long-running procurement, exception, or retry processes. Simple request/response operations and critical synchronous transitions do not use Workflows.

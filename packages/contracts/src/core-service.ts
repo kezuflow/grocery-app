@@ -50,6 +50,7 @@ import type {
 import type { HealthService, ReadinessService } from "./common";
 import type { MembershipService } from "./membership";
 import type { OrdersService } from "./orders";
+import type { OrderMessagingService } from "./order-messaging";
 import type { OperationsReadService, OperationsService } from "./operations";
 import type {
   AmendmentPaymentIntentRequest,
@@ -74,6 +75,7 @@ export interface ImplementedCoreService
     Pick<PaymentsService, "beginRecurringAuthorization" | "completeRecurringAuthorization">,
     CheckoutService,
     OrdersService,
+    OrderMessagingService,
     OperationsReadService,
     OperationsService,
     InventoryTransfersService,
@@ -352,6 +354,20 @@ export const coreServiceMethodNames = [
   "listCustomerIncompleteCheckouts",
   "getCheckoutPaymentCompletion",
   "listCustomerNotifications",
+  "listCustomerOrderConversations",
+  "listAdminOrderConversations",
+  "getCustomerOrderMessages",
+  "getAdminOrderMessages",
+  "sendCustomerOrderMessage",
+  "sendAdminOrderMessage",
+  "markCustomerOrderConversationRead",
+  "markAdminOrderConversationRead",
+  "stageCustomerOrderMessageAttachment",
+  "stageAdminOrderMessageAttachment",
+  "readCustomerOrderMessageAttachment",
+  "readAdminOrderMessageAttachment",
+  "getOrderAcknowledgement",
+  "saveOrderAcknowledgement",
   "getCustomerOrderDetail",
   "getProvisionalTransactionSummary",
   "cancelCustomerOrder",

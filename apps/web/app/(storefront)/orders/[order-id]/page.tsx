@@ -74,6 +74,12 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           {label(order.fulfillment.mode)}
         </span>
       </div>
+      <Link
+        href={`/account/messages/${encodeURIComponent(order.orderId)}`}
+        className="mt-5 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
+      >
+        Message us about this Order
+      </Link>
 
       <div className="mt-7 space-y-6">
         <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">

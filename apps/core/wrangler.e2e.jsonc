@@ -5,9 +5,15 @@
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
-    "bindings": [{ "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" }],
+    "bindings": [
+      { "name": "OPERATIONAL_HUB", "class_name": "OperationalHub" },
+      { "name": "MESSAGE_HUB", "class_name": "MessageHub" },
+    ],
   },
-  "migrations": [{ "tag": "operational-hub-v1", "new_sqlite_classes": ["OperationalHub"] }],
+  "migrations": [
+    { "tag": "operational-hub-v1", "new_sqlite_classes": ["OperationalHub"] },
+    { "tag": "message-hub-v1", "new_sqlite_classes": ["MessageHub"] },
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

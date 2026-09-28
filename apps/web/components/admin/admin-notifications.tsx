@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import type { AdminDashboardNotification, AdminSelectedScope } from "@freshmarkets/contracts";
 import { useAdminContext } from "../../app/admin/admin-context-provider";
 import { useAdminOverview } from "../../app/admin/admin-overview-provider";
 import { useAdminOperationalRefresh } from "../../app/admin/admin-operational-refresh-provider";
+import { playInAppNotificationSound } from "@/lib/notifications/in-app-sound";
 import {
   NotificationPanel,
   NotificationTimestamp,
@@ -60,6 +62,40 @@ export function AdminNotifications() {
   const { state, selectScope, retry } = useAdminContext();
   const { result, refresh } = useAdminOverview();
   const operational = useAdminOperationalRefresh();
+  const latestRefresh = useRef(refresh);
+  latestRefresh.current = refresh;
+  useEffect(() => {
+    if (state.phase !== "ready" || state.selectedScope?.kind !== "GLOBAL") return;
+    const run = () => {
+      if (document.visibilityState === "visible") latestRefresh.current();
+    };
+    const timer = window.setInterval(run, 60_000);
+    window.addEventListener("focus", run);
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", run);
+      document.removeEventListener("visibilitychange", run);
+    };
+  }, [state.phase, state.phase === "ready" ? state.selectedScope?.kind : null]);
+  const scopeKey = state.phase === "ready" ? JSON.stringify(state.selectedScope) : "";
+  const notifications =
+    state.phase === "ready" && state.selectedScope?.kind === "LOCATION" && operational.enabled
+      ? operational.activity?.notifications
+      : result?.ok
+        ? result.value.notifications
+        : undefined;
+  const observed = useRef<{ scope: string; ids: Set<string> } | null>(null);
+  useEffect(() => {
+    if (!notifications) return;
+    const ids = new Set(notifications.map((item) => item.id));
+    const prior = observed.current;
+    if (prior?.scope === scopeKey) {
+      const incoming = notifications.find((item) => !prior.ids.has(item.id));
+      if (incoming) void playInAppNotificationSound(`admin-notification:${incoming.id}`);
+    }
+    observed.current = { scope: scopeKey, ids };
+  }, [notifications, scopeKey]);
   return (
     <NotificationPanel>
       {(close) => {

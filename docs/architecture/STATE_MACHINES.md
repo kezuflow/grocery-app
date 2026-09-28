@@ -334,3 +334,9 @@ Selected-item sales reuse the promotion lifecycle: target definitions change onl
 ## Standalone storefront banner
 
 Creation is DRAFT. saveAdminBanner can edit DRAFT, ACTIVE or INACTIVE and select any of these states, or terminal ARCHIVED. An ACTIVE target requires an active image at the guarded write boundary. ARCHIVED cannot be edited or receive new media. Every mutation requires Global promotions.manage, expectedVersion, stable command identity, audit and original receipt. Date windows control public visibility without changing lifecycle automatically; removing an image also hides a banner while retaining its state. Media upload/replacement/removal follows the durable media state machine independently of financial Promotions.
+
+## Order message content and attachments
+
+A committed Order permits a Customer or authorized Global Admin to start its single conversation. Sends append immutable sequence metadata and purgeable content; the first Customer send appends one automatic acknowledgement in that transaction. A staged attachment follows `PENDING/UNKNOWN -> STORED -> ATTACHED -> DELETE_PENDING -> DELETED`; an unattached upload enters `DELETE_PENDING` after 24 hours. Unknown R2 put outcomes are observed by stable object key before retry. No attachment becomes readable until an authorized send associates it with a message.
+
+Content is eligible only after the later of the last message and terminal Order close has aged 14 days. Active issues, cancellation, related refund/reconciliation/finance exceptions and reviewed holds suspend expiry. A guarded D1 batch first removes readable content and revokes attachment access; R2 deletion then retries independently until confirmed. A later send begins a fresh readable segment with the same monotonic sequence and one new first-Customer acknowledgement, while immutable prior send/receipt evidence remains. WebSocket typing and presence have no durable state or transition authority.
