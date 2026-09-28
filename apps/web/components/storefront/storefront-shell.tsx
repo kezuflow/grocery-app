@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { CartIndicator } from "./marketplace/cart-indicator";
 import { CartDrawer } from "./marketplace/cart-drawer";
+import { CustomerChatPopup } from "./marketplace/customer-chat-popup";
 import { mobileNavigation, storefrontNavigation } from "./marketplace/storefront-navigation";
 import { ToastAnnouncer } from "./marketplace/toast-announcer";
 import { DeliveryAddressDialog } from "./address/delivery-address-dialog";
@@ -29,6 +30,7 @@ export function StorefrontShell({ children }: { children: ReactNode }) {
       <StorefrontFooter />
       <MobileNavigation />
       <CartDrawer />
+      <CustomerChatPopup />
       <ToastAnnouncer />
     </div>
   );

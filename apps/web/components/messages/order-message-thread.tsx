@@ -1,7 +1,18 @@
 "use client";
 
 import { useRef } from "react";
-import { Bell, BellOff, FileText, Paperclip, RefreshCw, Send, X } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Bot,
+  FileText,
+  Headset,
+  Paperclip,
+  RefreshCw,
+  Send,
+  UserRound,
+  X,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -34,11 +45,12 @@ import {
   AttachmentTitle,
 } from "@/components/ui/attachment";
 import { Marker, MarkerContent } from "@/components/ui/marker";
+import { cn } from "@/lib/utils";
 import { useOrderThread } from "./use-order-thread";
 
-type Props = { side: "CUSTOMER" | "ADMIN"; orderId: string; canSend?: boolean };
+type Props = { side: "CUSTOMER" | "ADMIN"; orderId: string; canSend?: boolean; compact?: boolean };
 
-export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
+export function OrderMessageThread({ side, orderId, canSend = true, compact = false }: Props) {
   const chat = useOrderThread(side, orderId);
   const fileInput = useRef<HTMLInputElement>(null);
   const base = side === "ADMIN" ? "/api/admin/messages" : "/api/commerce/messages";
@@ -46,12 +58,20 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
   const items = chat.page?.items ?? [];
 
   return (
-    <Card className="fm-order-messages min-w-0">
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+    <Card
+      className={cn(
+        "fm-order-messages min-w-0",
+        compact && "h-full gap-2 border-0 py-2 shadow-none",
+      )}
+    >
+      <CardHeader
+        className={cn(
+          "flex flex-row flex-wrap items-start justify-between gap-3",
+          compact && "px-3",
+        )}
+      >
         <div className="flex flex-col gap-1">
-          <CardTitle>
-            <h1>Order messages</h1>
-          </CardTitle>
+          <CardTitle>{compact ? <h2>Order messages</h2> : <h1>Order messages</h1>}</CardTitle>
           <span
             role="status"
             aria-label={`${other} ${chat.connected && chat.otherPresent ? "available" : "unavailable"}${chat.connected ? "" : "; live updates reconnecting"}`}
@@ -82,7 +102,12 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-col gap-4">
+      <CardContent
+        className={cn(
+          "flex min-h-0 flex-col gap-4",
+          compact && "flex-1 gap-2 overflow-y-auto px-3",
+        )}
+      >
         {chat.error ? (
           <div role="alert" className="rounded-md border border-destructive p-3 text-sm">
             {chat.error}{" "}
@@ -91,11 +116,16 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
             </Button>
           </div>
         ) : null}
-        <div className="h-[min(55vh,32rem)] min-h-64 rounded-lg border border-border bg-card">
+        <div
+          className={cn(
+            "h-[min(55vh,32rem)] min-h-64 rounded-lg border border-border bg-card",
+            compact && "h-auto min-h-32 flex-1",
+          )}
+        >
           <MessageScrollerProvider autoScroll>
             <MessageScroller>
               <MessageScrollerViewport>
-                <MessageScrollerContent className="gap-4 p-4">
+                <MessageScrollerContent className="gap-2 p-3 sm:p-4">
                   {chat.page?.nextBeforeSequence ? (
                     <MessageScrollerItem messageId="load-older">
                       <div className="flex justify-center">
@@ -127,13 +157,30 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
                   {items.map((item) => {
                     const own = item.senderKind === side;
                     const automatic = item.senderKind === "AUTOMATION";
-                    const sender = own ? "You" : automatic ? "FreshMarkets automatic reply" : other;
+                    const sender = automatic
+                      ? "FreshMarkets automatic reply"
+                      : item.senderKind === "ADMIN"
+                        ? "FreshMarkets staff"
+                        : "Customer";
                     return (
                       <MessageScrollerItem key={item.id} messageId={item.id} scrollAnchor={own}>
                         <Message align={own ? "end" : "start"}>
-                          <MessageAvatar aria-hidden="true">{own ? "You" : "FM"}</MessageAvatar>
-                          <MessageContent>
-                            <MessageHeader>{sender}</MessageHeader>
+                          <MessageAvatar
+                            role="img"
+                            aria-label={sender}
+                            data-sender-kind={item.senderKind}
+                            className="size-8 border border-[var(--fm-success-border)] bg-[var(--fm-success-soft)] text-[var(--fm-storefront-accent)]"
+                          >
+                            {automatic ? (
+                              <Bot className="size-4" aria-hidden="true" />
+                            ) : item.senderKind === "ADMIN" ? (
+                              <Headset className="size-4" aria-hidden="true" />
+                            ) : (
+                              <UserRound className="size-4" aria-hidden="true" />
+                            )}
+                          </MessageAvatar>
+                          <MessageContent className="gap-1">
+                            {own ? null : <MessageHeader>{sender}</MessageHeader>}
                             <Bubble
                               variant={own ? "default" : "secondary"}
                               align={own ? "end" : "start"}

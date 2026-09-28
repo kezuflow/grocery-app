@@ -49,6 +49,18 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
     "rgb(255, 255, 255)",
   );
   await expect(signedInPage.getByText(/Our team has received your message/)).toBeVisible();
+  await expect(
+    signedInPage.locator('[data-slot="message-header"]').filter({ hasText: "You" }),
+  ).toHaveCount(0);
+  await expect(
+    signedInPage.locator('[data-slot="message-avatar"][data-sender-kind="CUSTOMER"] svg'),
+  ).toBeVisible();
+  await expect(
+    signedInPage.locator('[data-slot="message-avatar"][data-sender-kind="CUSTOMER"]'),
+  ).toHaveCSS("color", "rgb(0, 177, 79)");
+  await expect(
+    signedInPage.locator('[data-slot="message-avatar"][data-sender-kind="AUTOMATION"] svg'),
+  ).toBeVisible();
 
   await adminPage.goto("/admin/messages");
   await adminPage.getByRole("link", { name: new RegExp(orderId) }).click();
@@ -66,6 +78,25 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
     "rgb(0, 177, 79)",
   );
   await expect(signedInPage.getByText("We are checking it now.")).toBeVisible();
+  await expect(
+    signedInPage.locator('[data-slot="message-avatar"][data-sender-kind="ADMIN"] svg'),
+  ).toBeVisible();
+  await expect(
+    adminPage.locator('[data-slot="message-avatar"][data-sender-kind="CUSTOMER"] svg').first(),
+  ).toBeVisible();
+  const messageGaps = await signedInPage
+    .locator('[data-slot="message-scroller-item"]:has([data-slot="message-avatar"])')
+    .evaluateAll((elements) =>
+      elements
+        .slice(1)
+        .map((element, index) =>
+          Math.round(
+            element.getBoundingClientRect().top - elements[index].getBoundingClientRect().bottom,
+          ),
+        ),
+    );
+  expect(messageGaps.length).toBeGreaterThan(0);
+  expect(messageGaps.every((gap) => gap >= 0 && gap <= 16)).toBe(true);
 
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/WZkAAAAASUVORK5CYII=",
@@ -87,4 +118,23 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   const download = await adminPage.request.get(href ?? "");
   expect(download.ok()).toBe(true);
   expect(Buffer.from(await download.body())).toEqual(png);
+
+  await signedInPage.goto("/orders");
+  await signedInPage.getByRole("button", { name: "Open order chat" }).click();
+  await expect(signedInPage.getByRole("dialog", { name: "Order chat" })).toBeVisible();
+  await signedInPage
+    .getByRole("dialog", { name: "Order chat" })
+    .getByRole("button", { name: /^Order / })
+    .first()
+    .click();
+  await expect(
+    signedInPage.getByRole("dialog", { name: "Order chat" }).getByText("We are checking it now."),
+  ).toBeVisible();
+  await signedInPage.setViewportSize({ width: 390, height: 844 });
+  const mobileChatBounds = await signedInPage
+    .getByRole("dialog", { name: "Order chat" })
+    .boundingBox();
+  expect(mobileChatBounds).not.toBeNull();
+  expect(mobileChatBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(mobileChatBounds!.x + mobileChatBounds!.width).toBeLessThanOrEqual(390);
 });

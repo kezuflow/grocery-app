@@ -164,6 +164,15 @@ body {
   color: var(--fm-text);
 }
 
+.fm-order-messages [data-slot="message-scroller-content"] {
+  min-height: 0;
+  row-gap: 0.5rem;
+}
+
+.fm-order-messages [data-slot="message-scroller-item"] {
+  content-visibility: visible;
+}
+
 /* Storefront portals sit outside their surface wrapper. */
 body:has(.fm-storefront) :is(button, a) {
   --fm-radius-control: 9999px;
