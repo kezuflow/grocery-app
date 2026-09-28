@@ -37,6 +37,7 @@ export function useOrderThread(side: Side, orderId: string) {
   const initialized = useRef(false);
   const known = useRef(new Set<string>());
   const sendKey = useRef<string | null>(null);
+  const sendingRef = useRef(false);
   const typingAt = useRef(0);
 
   useEffect(() => setMuted(notificationSoundMuted()), []);
@@ -252,11 +253,12 @@ export function useOrderThread(side: Side, orderId: string) {
 
   const send = async () => {
     if (
-      sending ||
+      sendingRef.current ||
       attachments.some((item) => item.status !== "done") ||
       (!body.trim() && attachments.length === 0)
     )
       return;
+    sendingRef.current = true;
     setSending(true);
     const key = (sendKey.current ??= crypto.randomUUID());
     try {
@@ -276,6 +278,7 @@ export function useOrderThread(side: Side, orderId: string) {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Message could not be sent");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };

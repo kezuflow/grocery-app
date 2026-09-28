@@ -2,9 +2,9 @@
 
 import { useRef } from "react";
 import { Bell, BellOff, FileText, Paperclip, RefreshCw, Send, X } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -52,14 +52,11 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
           <CardTitle>
             <h1>Order messages</h1>
           </CardTitle>
-          <CardDescription>Private conversation about this Order.</CardDescription>
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {chat.connected
-              ? chat.otherPresent
-                ? `${other} is in this chat`
-                : `${other} is not in this chat`
-              : "Live updates are reconnecting"}
-          </p>
+          <span
+            role="status"
+            aria-label={`${other} ${chat.connected && chat.otherPresent ? "available" : "unavailable"}${chat.connected ? "" : "; live updates reconnecting"}`}
+            className={`inline-block size-3 rounded-full ${chat.connected && chat.otherPresent ? "bg-[var(--fm-storefront-accent)]" : "bg-[#9ca3af]"}`}
+          />
         </div>
         <div className="flex items-center gap-2">
           <Badge className="border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]">
@@ -206,11 +203,6 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
             </MessageScroller>
           </MessageScrollerProvider>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Messages and attachments expire 14 days after the later of the last message and Order
-          closure. Unresolved issues, refunds, disputes or a legal hold can delay deletion. Recovery
-          backups may retain an older copy temporarily after live content is removed.
-        </p>
         {canSend ? (
           <FieldGroup>
             <Field>
@@ -221,12 +213,15 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
                 rows={3}
                 value={chat.body}
                 onChange={(event) => chat.updateBody(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    if (!event.repeat) void chat.send();
+                  }
+                }}
                 onBlur={chat.stopTyping}
                 placeholder="Write a message about this Order"
               />
-              <FieldDescription>
-                Up to 2,000 characters and three private images or PDFs.
-              </FieldDescription>
             </Field>
             {chat.attachments.length ? (
               <AttachmentGroup>
