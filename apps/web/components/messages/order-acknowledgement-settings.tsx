@@ -66,7 +66,7 @@ export function OrderAcknowledgementSettings() {
   }
 
   return (
-    <Card>
+    <Card className="fm-order-messages">
       <CardHeader>
         <CardTitle>
           <h2>Automatic reply</h2>

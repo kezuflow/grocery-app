@@ -33,6 +33,14 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await signedInPage.getByRole("textbox", { name: "Message" }).fill("Where is my Order?");
   await signedInPage.getByRole("button", { name: "Send message" }).click();
   await expect(signedInPage.getByText("Where is my Order?")).toBeVisible();
+  await expect(signedInPage.getByText("Where is my Order?")).toHaveCSS(
+    "background-color",
+    "rgb(16, 137, 16)",
+  );
+  await expect(signedInPage.getByText("Where is my Order?")).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
   await expect(signedInPage.getByText(/Our team has received your message/)).toBeVisible();
 
   await adminPage.goto("/admin/messages");
@@ -43,6 +51,10 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await expect(signedInPage.getByText("FreshMarkets team is typing…")).toBeVisible();
   await adminPage.getByRole("button", { name: "Send message" }).click();
   await expect(adminPage.getByText("We are checking it now.")).toBeVisible();
+  await expect(adminPage.getByText("We are checking it now.")).toHaveCSS(
+    "background-color",
+    "rgb(16, 137, 16)",
+  );
   await expect(signedInPage.getByText("We are checking it now.")).toBeVisible();
 
   const png = Buffer.from(

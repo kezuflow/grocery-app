@@ -67,7 +67,7 @@
   --fm-disabled: #a6aaa0;
   --fm-destructive: #d92d20;
   --fm-warning: #a15c00;
-  --fm-success: #238636;
+  --fm-success: var(--fm-storefront-accent);
   --fm-info: #23658a;
   --fm-success-soft: #eff9ef;
   --fm-success-border: #b7ddb9;
@@ -83,9 +83,9 @@
   --fm-radius-overlay: 12px;
   --fm-primary-hover: #294f30;
   --fm-primary-foreground: #ffffff;
-  --fm-storefront-accent: #00b14f;
+  --fm-storefront-accent: #108910;
   --fm-storefront-action: var(--fm-storefront-accent);
-  --fm-storefront-action-hover: #009944;
+  --fm-storefront-action-hover: #0c700c;
   --fm-destructive-hover: #b42318;
   --fm-shadow-card: 0 8px 24px rgb(25 25 25 / 6%);
   --fm-shadow-overlay: 0 18px 48px rgb(25 25 25 / 14%);
@@ -144,6 +144,24 @@ body {
 
 .fm-storefront button {
   border-radius: 9999px;
+}
+
+.fm-order-messages {
+  --fm-primary-dark: var(--fm-storefront-accent);
+  --fm-primary-hover: var(--fm-storefront-action-hover);
+  --fm-primary-foreground: #ffffff;
+  --fm-focus: var(--fm-storefront-accent);
+}
+
+.fm-order-messages [data-slot="bubble"][data-variant="default"] [data-slot="bubble-content"] {
+  background: var(--fm-storefront-accent);
+  color: #ffffff;
+}
+
+.fm-order-messages [data-slot="bubble"][data-variant="secondary"] [data-slot="bubble-content"] {
+  border-color: color-mix(in srgb, var(--fm-storefront-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--fm-storefront-accent) 12%, var(--fm-card));
+  color: var(--fm-text);
 }
 
 /* Storefront portals sit outside their surface wrapper. */
@@ -375,7 +393,7 @@ html.fm-admin-dark:has(.fm-admin) {
   --fm-admin-accent: #b7f34a;
   --fm-admin-accent-strong: oklch(0.985 0 0);
   --fm-admin-accent-soft: oklch(0.269 0 0);
-  --fm-admin-chart-1: #00b14f;
+  --fm-admin-chart-1: var(--fm-storefront-accent);
   --fm-admin-chart-2: oklch(0.696 0.17 162.48);
   --fm-admin-chart-3: oklch(0.769 0.188 70.08);
   --fm-admin-chart-4: oklch(0.627 0.265 303.9);

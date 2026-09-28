@@ -139,37 +139,39 @@ test("storefront actions and text accents use the reference green without recolo
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Close welcome announcement" }).click();
   await page.getByRole("link", { name: "Baguio Strawberries details" }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Add to cart/ })).toHaveCSS(
     "background-color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
   await expect(dialog.getByRole("button", { name: /Add to cart/ })).toHaveCSS(
     "color",
     "rgb(255, 255, 255)",
   );
-  await expect(dialog.getByText("Available for delivery")).toHaveCSS("color", "rgb(0, 177, 79)");
+  await expect(dialog.getByText("Available for delivery")).toHaveCSS("color", "rgb(16, 137, 16)");
 
   await page.goto("/retail");
   await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
     "background-color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
   await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
     "color",
     "rgb(255, 255, 255)",
   );
   await page.goto("/");
+  await page.getByRole("button", { name: "Close welcome announcement" }).click();
   await expect(page.getByRole("button", { name: "Next Fruits products" })).not.toHaveCSS(
     "background-color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
   await page.goto("/?q=zzznothing");
   await expect(page.getByRole("link", { name: "Browse all groceries" })).toHaveCSS(
     "color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
 });
 

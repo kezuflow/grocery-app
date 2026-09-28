@@ -46,7 +46,7 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
   const items = chat.page?.items ?? [];
 
   return (
-    <Card className="min-w-0">
+    <Card className="fm-order-messages min-w-0">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <CardTitle>
@@ -62,7 +62,9 @@ export function OrderMessageThread({ side, orderId, canSend = true }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge>Order {chat.page?.conversation.orderNumber ?? orderId}</Badge>
+          <Badge className="border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]">
+            Order {chat.page?.conversation.orderNumber ?? orderId}
+          </Badge>
           <Button
             type="button"
             variant="outline"

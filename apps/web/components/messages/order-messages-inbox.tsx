@@ -123,7 +123,7 @@ export function OrderMessagesInbox({ side }: { side: "CUSTOMER" | "ADMIN" }) {
   }, [base, refresh]);
 
   return (
-    <Card>
+    <Card className="fm-order-messages">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <CardTitle>
@@ -163,7 +163,7 @@ export function OrderMessagesInbox({ side }: { side: "CUSTOMER" | "ADMIN" }) {
             <li key={item.orderId}>
               <Link
                 href={`${href}/${encodeURIComponent(item.orderId)}`}
-                className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-border p-3 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-border p-3 outline-none hover:border-[var(--fm-storefront-accent)] hover:bg-accent focus-visible:ring-2 focus-visible:ring-[var(--fm-storefront-accent)]"
               >
                 <span className="min-w-0">
                   <strong className="block text-sm">
@@ -174,7 +174,11 @@ export function OrderMessagesInbox({ side }: { side: "CUSTOMER" | "ADMIN" }) {
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  {item.unreadCount > 0 ? <Badge>{item.unreadCount} unread</Badge> : null}
+                  {item.unreadCount > 0 ? (
+                    <Badge className="border-transparent bg-[var(--fm-storefront-accent)] text-white">
+                      {item.unreadCount} unread
+                    </Badge>
+                  ) : null}
                   {item.latestMessageAt ? (
                     <time className="text-xs text-muted-foreground" dateTime={item.latestMessageAt}>
                       {new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric" }).format(

@@ -41,7 +41,7 @@ export function NotificationPanel({
         aria-label={
           unreadCount ? `Open notifications, ${unreadCount} unread` : "Open notifications"
         }
-        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--fm-text)] hover:bg-[var(--fm-hover)] focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--fm-text)] hover:bg-[var(--fm-hover)] hover:text-[var(--fm-storefront-accent)] focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <span className="relative inline-flex">
           <Bell className="size-6" aria-hidden="true" />

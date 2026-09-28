@@ -162,14 +162,14 @@ test("completed milestones and connectors use the exact green accent", async ({ 
   await expect(steps.locator('li[data-progress-state="COMPLETE"]')).toHaveCount(2);
   await expect(steps.locator("li").first().locator("[data-timeline-marker]")).toHaveCSS(
     "border-top-color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
   await expect(steps.getByRole("heading", { name: "Packed" })).toHaveCSS(
     "color",
-    "rgb(0, 177, 79)",
+    "rgb(16, 137, 16)",
   );
   const connector = steps.locator("li").first().locator(".fm-order-progress-fill").first();
-  await expect(connector).toHaveCSS("background-color", "rgb(0, 177, 79)");
+  await expect(connector).toHaveCSS("background-color", "rgb(16, 137, 16)");
   await expect(connector).toHaveCSS("opacity", "1");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(connector).toHaveCSS("transition-duration", "0s");
