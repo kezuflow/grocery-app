@@ -1,6 +1,6 @@
 # Order messaging — implementation plan
 
-Status: owner-directed feature plan, revised 2026-09-28. Task `MSG-1`. The owner requested the feature PR, corrected the transport review, selected the retention rule below, and expanded the first release to live presence, typing, an acknowledgement reply and R2 attachments. This plan does not authorize production migration or release. The deliverable is one feature PR from `codex/order-messaging`.
+Status: implemented and released 2026-09-28. Task `MSG-1`. The owner requested the feature PR, corrected the transport review, selected the retention rule below, and expanded the first release to live presence, typing, an acknowledgement reply and R2 attachments. After PR #3 was prepared, the owner separately authorized commit, push and production deployment. The release evidence and remaining acceptance limits are in the active checkpoint.
 
 ## Phase 0 — Decide the first-release behavior and architecture
 
