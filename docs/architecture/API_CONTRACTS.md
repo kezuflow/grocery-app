@@ -12,6 +12,10 @@ Out for delivery. Both return a provider-neutral `DeliveryTrackingView` with ava
 destination, optional last reported rider coordinate/time and refresh advice. Manual attempts
 return `NOT_SUPPORTED`; terminal attempts return `FINISHED`. `LIVE` and `DELAYED` distinguish
 position freshness, and unavailable provider evidence never becomes a fabricated rider pin.
+An invalidated driver reference (provider 404) cannot reuse that driver's cached coordinate;
+the resulting `WAITING` state clears the Web marker. Other temporary refresh failures may retain
+the last reported coordinate and its timestamp until a newer observation or terminal state.
+A failed optional driver-reference persistence does not discard an otherwise valid provider position.
 The Web tracking GET routes carry the existing authentication context and request ID to Core.
 
 Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.

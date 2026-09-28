@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeMapAdapter } from "./fake-map-adapter";
-import { GoogleMap } from "./google-map";
+import { GoogleMap, motorcycleMarkerContent } from "./google-map";
 import type { MapAdapter, MapAdapterInitialization, MapController } from "./map-types";
 
 const center = { longitude: 123.8854, latitude: 10.3157 };
@@ -63,6 +63,14 @@ afterEach(() => {
 });
 
 describe("GoogleMap", () => {
+  it("renders an accessible motorcycle marker for the rider", () => {
+    const marker = motorcycleMarkerContent("Rider's last reported location", "#23658a");
+    expect(marker.getAttribute("aria-label")).toBe("Rider's last reported location");
+    expect(marker.querySelectorAll("svg circle")).toHaveLength(2);
+    expect(marker.querySelector("svg path")).not.toBeNull();
+    expect(marker.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("passes browser-safe configuration and scene data to the adapter", async () => {
     const adapter = new FakeMapAdapter();
     const scene = { draggablePin: { position: center, label: "Delivery entrance" } };

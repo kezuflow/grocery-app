@@ -83,6 +83,40 @@ function markerContent(label: string, color: string, selected = false): HTMLButt
   return element;
 }
 
+export function motorcycleMarkerContent(
+  label: string,
+  color: string,
+  selected = false,
+): HTMLButtonElement {
+  const element = markerContent(label, color, selected);
+  element.style.width = "40px";
+  element.style.height = "40px";
+  element.style.display = "grid";
+  element.style.placeItems = "center";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 32 32");
+  svg.setAttribute("width", "26");
+  svg.setAttribute("height", "26");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "white");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  for (const cx of [6, 26]) {
+    const wheel = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    wheel.setAttribute("cx", String(cx));
+    wheel.setAttribute("cy", "24");
+    wheel.setAttribute("r", "3.5");
+    svg.appendChild(wheel);
+  }
+  const frame = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  frame.setAttribute("d", "M6 24h6l3-7h5l6 7M12 24h7l-4-7M10 14h6m3 3 3-4h4");
+  svg.appendChild(frame);
+  element.appendChild(svg);
+  return element;
+}
+
 function createGoogleMapsAdapter(): MapAdapter {
   return {
     async initialize(options: MapAdapterInitialization): Promise<MapController> {
@@ -147,11 +181,14 @@ function createGoogleMapsAdapter(): MapAdapter {
             position: latLng(point.position),
             title: point.label ?? "Map point",
             gmpClickable: true,
-            content: markerContent(
-              point.label ?? "Map point",
-              pointColor(point, selected),
-              selected,
-            ),
+            content:
+              point.kind === "motorcycle"
+                ? motorcycleMarkerContent(
+                    point.label ?? "Motorcycle rider",
+                    pointColor(point, selected),
+                    selected,
+                  )
+                : markerContent(point.label ?? "Map point", pointColor(point, selected), selected),
           });
           marker.addEventListener("gmp-click", () => options.onPointActivate(point.id));
           return marker;

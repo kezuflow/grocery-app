@@ -1,4 +1,5 @@
 import type { Coordinate, DeliveryTrackingView, RpcResult } from "@freshmarkets/contracts";
+import { log } from "../../observability";
 
 type TrackingRow = {
   customer_id: string;
@@ -113,25 +114,34 @@ export async function getDeliveryTracking(
     const observation = await env.DELIVERY_TRACKING_HUB.getByName(
       env.LALAMOVE_MARKET || "PH",
     ).snapshot(row.provider_delivery_id, row.driver_id);
-    if (observation.driverId && observation.driverId !== row.driver_id && row.dispatch_id)
-      await env.DB.prepare(
-        `UPDATE delivery_provider_dispatch SET driver_id=? WHERE id=? AND provider_delivery_id=?
-         AND status='ACTIVE' AND driver_id IS ? AND id=(SELECT id FROM delivery_provider_dispatch
-           WHERE delivery_job_id=(SELECT delivery_job_id FROM delivery_provider_dispatch WHERE id=?)
-           ORDER BY attempt_sequence DESC LIMIT 1)`,
-      )
-        .bind(
-          observation.driverId,
-          row.dispatch_id,
-          row.provider_delivery_id,
-          row.driver_id,
-          row.dispatch_id,
+    if (observation.driverId && observation.driverId !== row.driver_id && row.dispatch_id) {
+      try {
+        await env.DB.prepare(
+          `UPDATE delivery_provider_dispatch SET driver_id=? WHERE id=? AND provider_delivery_id=?
+           AND status='ACTIVE' AND driver_id IS ? AND id=(SELECT id FROM delivery_provider_dispatch
+             WHERE delivery_job_id=(SELECT delivery_job_id FROM delivery_provider_dispatch WHERE id=?)
+             ORDER BY attempt_sequence DESC LIMIT 1)`,
         )
-        .run();
+          .bind(
+            observation.driverId,
+            row.dispatch_id,
+            row.provider_delivery_id,
+            row.driver_id,
+            row.dispatch_id,
+          )
+          .run();
+      } catch {
+        // A driver-reference refresh is optional tracking evidence, not a prerequisite
+        // for returning the position already read from the provider.
+        log("warn", "delivery.tracking.driver_reference_write_failed", {
+          requestId: input.requestId,
+        });
+      }
+    }
     const lastUpdate = observation.position?.updatedAt ?? null;
     const age = lastUpdate ? Date.now() - Date.parse(lastUpdate) : Number.POSITIVE_INFINITY;
     const position =
-      age >= 0 && age <= 120_000
+      age >= 0
         ? coordinate(
             observation.position?.coordinate.latitude,
             observation.position?.coordinate.longitude,

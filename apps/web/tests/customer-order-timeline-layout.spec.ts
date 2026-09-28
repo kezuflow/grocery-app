@@ -125,9 +125,9 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
   );
   await page.goto("/orders/order-layout");
   await expect(page.getByRole("heading", { name: "Track delivery" })).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "Rider location" })).toContainText(
-    "Rider location is available",
-  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "Rider's last reported location" }),
+  ).toContainText("Rider's last reported location");
   await expect(
     page
       .getByRole("region", { name: "Delivery tracking map" })

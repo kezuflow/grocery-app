@@ -9,9 +9,8 @@ import type { MapCoordinate } from "./map-types";
 function description(value: DeliveryTrackingView): string {
   switch (value.availability) {
     case "LIVE":
-      return "Rider location is available.";
     case "DELAYED":
-      return "Rider location is delayed. The pin shows its last reported position.";
+      return "Rider's last reported location.";
     case "WAITING":
       return "Waiting for the rider's location.";
     case "UNAVAILABLE":
@@ -42,7 +41,11 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
       const result = (await response.json()) as RpcResult<DeliveryTrackingView>;
       if (request.signal.aborted) return;
       if (!result.ok) throw new Error("Tracking unavailable");
-      setSnapshot(result.value);
+      setSnapshot((previous) =>
+        result.value.availability === "UNAVAILABLE" && !result.value.rider && previous?.rider
+          ? { ...result.value, availability: "DELAYED", rider: previous.rider }
+          : result.value,
+      );
       finished.current =
         result.value.availability === "FINISHED" || result.value.availability === "NOT_SUPPORTED";
       setError(false);
@@ -96,7 +99,9 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
           : snapshot
             ? description(snapshot)
             : "Delivery tracking could not be loaded."}
-        {rider ? ` Last reported ${new Date(rider.updatedAt).toLocaleTimeString("en-PH")}.` : ""}
+        {rider
+          ? ` Reported ${new Date(rider.updatedAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}.`
+          : ""}
       </p>
       {error ? (
         <button type="button" className="text-sm underline" onClick={() => void load()}>
@@ -125,6 +130,7 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
                       position: rider.coordinate,
                       label: "Rider's last reported location",
                       tone: "assigned" as const,
+                      kind: "motorcycle" as const,
                     },
                   ]
                 : []),

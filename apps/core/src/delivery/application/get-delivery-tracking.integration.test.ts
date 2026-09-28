@@ -74,7 +74,7 @@ describe("delivery tracking projection", () => {
     ).toEqual({ driver_id: "driver-1" });
   });
 
-  it("hides an expired position and stops on a terminal dispatch", async () => {
+  it("retains the last provider report and stops on a terminal dispatch", async () => {
     const orderId = await seed();
     const snapshot = vi.fn(async () => ({
       driverId: "driver-1",
@@ -91,7 +91,10 @@ describe("delivery tracking projection", () => {
     const requestId = crypto.randomUUID();
     expect(
       await getDeliveryTracking(runtime, { orderId, customerId: `customer-${orderId}`, requestId }),
-    ).toMatchObject({ ok: true, value: { availability: "UNAVAILABLE", rider: null } });
+    ).toMatchObject({
+      ok: true,
+      value: { availability: "DELAYED", rider: { coordinate: { latitude: 10.31 } } },
+    });
     await env.DB.prepare("UPDATE delivery_provider_dispatch SET status='COMPLETED' WHERE id=?")
       .bind(`dispatch-${orderId}`)
       .run();
@@ -99,6 +102,53 @@ describe("delivery tracking projection", () => {
       await getDeliveryTracking(runtime, { orderId, customerId: `customer-${orderId}`, requestId }),
     ).toMatchObject({ ok: true, value: { availability: "FINISHED", rider: null } });
     expect(snapshot).toHaveBeenCalledOnce();
+  });
+
+  it("returns a valid rider position when the optional driver-reference write fails", async () => {
+    const orderId = await seed();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const database = {
+      prepare(statement: string) {
+        if (statement.includes("UPDATE delivery_provider_dispatch SET driver_id="))
+          return {
+            bind: () => ({
+              run: async () => {
+                throw new Error("D1 write unavailable");
+              },
+            }),
+          };
+        return env.DB.prepare(statement);
+      },
+    } as unknown as Env["DB"];
+    const runtime = {
+      ...env,
+      DB: database,
+      DELIVERY_TRACKING_HUB: {
+        getByName: () => ({
+          snapshot: async () => ({
+            driverId: "driver-1",
+            position: {
+              coordinate: { latitude: 10.31, longitude: 123.9 },
+              updatedAt: new Date().toISOString(),
+            },
+            unavailable: false,
+          }),
+        }),
+      },
+    } as unknown as Env;
+    const result = await getDeliveryTracking(runtime, {
+      orderId,
+      customerId: `customer-${orderId}`,
+      requestId: crypto.randomUUID(),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { availability: "LIVE", rider: { coordinate: { latitude: 10.31 } } },
+    });
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining("delivery.tracking.driver_reference_write_failed"),
+    );
+    warning.mockRestore();
   });
 
   it("reports a failed provider lookup without a rider assignment as unavailable", async () => {

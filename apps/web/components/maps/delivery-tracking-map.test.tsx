@@ -11,8 +11,10 @@ vi.mock("../storefront/storefront-runtime", () => ({
   }),
 }));
 vi.mock("./google-map", () => ({
-  GoogleMap: ({ scene }: { scene: { points: { id: string }[] } }) => (
-    <div data-testid="map">{scene.points.map((point) => point.id).join(",")}</div>
+  GoogleMap: ({ scene }: { scene: { points: { id: string; kind?: string }[] } }) => (
+    <div data-testid="map">
+      {scene.points.map((point) => `${point.id}:${point.kind ?? "pin"}`).join(",")}
+    </div>
   ),
 }));
 
@@ -35,7 +37,7 @@ describe("delivery tracking map", () => {
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: {
               coordinate: { latitude: 10.32, longitude: 123.91 },
-              updatedAt: "2026-09-29T00:00:00.000Z",
+              updatedAt: new Date().toISOString(),
             },
             nextRefreshMilliseconds: 30_000,
           },
@@ -48,9 +50,97 @@ describe("delivery tracking map", () => {
     await act(async () => {
       root.render(<DeliveryTrackingMap endpoint="/tracking" />);
     });
-    expect(container.textContent).toContain("Rider location is available");
-    expect(container.textContent).toContain("destination,rider");
+    expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.textContent).toContain("destination:pin,rider:motorcycle");
     expect(fetch).toHaveBeenCalledWith("/tracking", expect.objectContaining({ cache: "no-store" }));
+    act(() => root.unmount());
+  });
+
+  it("keeps the last motorcycle location when a refresh fails", async () => {
+    const firstRead = new Date("2026-09-29T00:00:00.000Z");
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "LIVE",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: {
+              coordinate: { latitude: 10.32, longitude: 123.91 },
+              updatedAt: firstRead.toISOString(),
+            },
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      })
+      .mockRejectedValue(new Error("network unavailable"));
+    vi.stubGlobal("fetch", fetcher);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
+
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.textContent).toContain("Retry tracking");
+    act(() => root.unmount());
+  });
+
+  it("keeps the last location through provider downtime and clears it for a missing driver", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "LIVE",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: {
+              coordinate: { latitude: 10.32, longitude: 123.91 },
+              updatedAt: new Date().toISOString(),
+            },
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "UNAVAILABLE",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: null,
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "WAITING",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: null,
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetcher);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
+    expect(container.textContent).toContain("rider:motorcycle");
+
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container.textContent).toContain("rider:motorcycle");
+    expect(container.textContent).toContain("Rider's last reported location");
+
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container.textContent).toContain("Waiting for the rider's location");
+    expect(container.textContent).not.toContain("rider:motorcycle");
     act(() => root.unmount());
   });
 

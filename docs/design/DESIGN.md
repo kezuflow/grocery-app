@@ -4,9 +4,13 @@
 
 Admin Delivery offers View map for the active Lalamove attempt in its existing workspace. The
 Customer Order detail shows the same bounded map beneath progress only while Out for delivery.
-Show destination and the provider's last reported rider position, with explicit waiting,
-delayed, unavailable and finished text. Do not imply a road route, live movement between updates
-or an arrival estimate. Keep manual delivery in the existing status presentation without a map.
+Show the destination pin and a motorcycle marker for the provider's last reported rider position,
+with explicit waiting, unavailable and finished text. Do not imply a road route, live
+movement between updates or an arrival estimate. Keep manual delivery in the existing status
+presentation without a map.
+Keep the last reported motorcycle position and its timestamp through a refresh failure. Replace
+it on a new provider location; clear it when the driver is invalidated or delivery finishes. The
+map does not show a delayed countdown or imply that a stationary marker is live movement.
 The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
 This adapts the status-plus-map hierarchy from Mobbin's
 [GrabFood progress](https://mobbin.com/screens/f35fb2cc-a9f1-42ee-b8e2-889f5ab93b22) and

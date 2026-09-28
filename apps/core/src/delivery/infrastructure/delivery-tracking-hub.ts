@@ -8,6 +8,17 @@ type TrackingResult = {
   unavailable: boolean;
 };
 
+/** A missing driver clears the old pin; other failures can retain a last report. */
+export function observationAfterLocationError(
+  errorCode: string,
+  driverId: string,
+  cachedPosition: Position | null,
+): TrackingResult {
+  return errorCode === "LALAMOVE_HTTP_404"
+    ? { driverId: null, position: null, unavailable: false }
+    : { driverId, position: cachedPosition, unavailable: true };
+}
+
 /** One per market. Provider coordinates remain only in this object's memory. */
 export class DeliveryTrackingHub extends DurableObject<Env> {
   private readonly positions = new Map<string, { position: Position; fetchedAt: number }>();
@@ -77,6 +88,7 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
         if (now - value.fetchedAt > 120_000) this.positions.delete(otherKey);
       return { driverId, position: observed.value, unavailable: false };
     }
+    if (observed.error.code === "LALAMOVE_HTTP_404") this.positions.delete(key);
     // A driver can be reassigned without a new status observation reaching Core.
     if (
       observed.error.code === "LALAMOVE_HTTP_404" &&
@@ -85,9 +97,11 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
       (await this.admit())
     ) {
       const order = await provider.get(providerOrderId);
-      if (order.ok && order.value?.driverId && order.value.driverId !== savedDriverId)
-        return this.read(providerOrderId, order.value.driverId, false);
+      if (order.ok && order.value?.driverId && order.value.driverId !== savedDriverId) {
+        const replacement = await this.read(providerOrderId, order.value.driverId, false);
+        return replacement.position ? replacement : { ...replacement, unavailable: false };
+      }
     }
-    return { driverId, position: cached?.position ?? null, unavailable: true };
+    return observationAfterLocationError(observed.error.code, driverId, cached?.position ?? null);
   }
 }
