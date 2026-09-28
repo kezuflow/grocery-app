@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Customer Messages staff label — MSG-1.COPY-4 (2026-09-28)
+
+Active plan: `docs/product/ORDER_MESSAGING_PLAN.md`, **Phase 3 — Storefront, Admin and sound**. The owner requested that the sender text in `/account/messages/` change from “FreshMarkets staff” to “freshmarkets staff”. Acceptance: staff messages show the requested lowercase label in the customer thread and its avatar accessibility name. Work began on clean synchronized `main` at `bf784c8f`; no other working-tree changes were present.
+
+The shared thread sender label now uses “freshmarkets staff”. Its existing `sender` value feeds both the visible message header and the avatar's `aria-label`; message transport, permissions and Admin layout are unchanged. Working-tree checks passed: `pnpm --filter @freshmarkets/web typecheck`, focused Oxlint, focused Oxfmt and source inspection of both label uses. Unrelated customer-notification source/test/design edits appeared later in the shared checkout and were preserved outside this slice. No browser, provider or production verification was performed for this copy change. Completion level: **one of one requested label changes locally verified**. Next action: include this committed source in a separately authorized production release.
+
 ## Admin fulfillment-location Messages navigation — MSG-1.LOCATION-NAV (2026-09-28)
 
 Active plan: `docs/product/ORDER_MESSAGING_PLAN.md`, **Phase 3 — Storefront, Admin and sound**, with the owner follow-up for a Messages icon in each selected fulfillment location. Acceptance: show a separate Admin left-navigation Messages icon in Global and location scopes; make the selected location inbox list only that location's committed Order conversations; permit authorized location staff to read, reply and use private attachments for matching Orders; keep shared acknowledgement settings Global-only and reject cross-location access. Started on clean synchronized `main` at `67b3fdbc`. Concurrent TEST-CLEANUP-2 contract/Core test edits and another Order-header presentation commit were preserved. No schema, production resource, Order or provider data change is required.

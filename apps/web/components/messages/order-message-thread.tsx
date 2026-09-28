@@ -173,7 +173,7 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                     const sender = automatic
                       ? "FreshMarkets automatic reply"
                       : item.senderKind === "ADMIN"
-                        ? "FreshMarkets staff"
+                        ? "freshmarkets staff"
                         : "Customer";
                     return (
                       <MessageScrollerItem key={item.id} messageId={item.id} scrollAnchor={own}>
