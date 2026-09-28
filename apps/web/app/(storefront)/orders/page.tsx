@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   customerOrderHistoryStates,
   type CustomerIncompleteCheckoutView,
   type CustomerOrderView,
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { PaymentReturnStatus } from "../../../components/storefront/orders/payment-return-status";
 const ordersResultSchema = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(true),
@@ -69,6 +70,7 @@ const incompleteResultSchema = z.discriminatedUnion("ok", [
           }),
         }),
       ),
+      nextCursor: z.string().nullable(),
     }),
   }),
   z.object({ ok: z.literal(false), error: z.object({ code: z.string() }) }),
@@ -78,6 +80,8 @@ export default function OrdersPage() {
   const [incomplete, setIncomplete] = useState<ReadonlyArray<CustomerIncompleteCheckoutView>>([]);
   const [filter, setFilter] = useState<"incomplete" | "all" | "active" | "completed">("all");
   const [targetPaymentId, setTargetPaymentId] = useState("");
+  const [paymentReturn, setPaymentReturn] = useState(false);
+  const [returnPaymentId, setReturnPaymentId] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [cursor, setCursor] = useState<string>();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -88,6 +92,14 @@ export default function OrdersPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("filter") === "incomplete") setFilter("incomplete");
     setTargetPaymentId(params.get("paymentIntentId") ?? "");
+    setPaymentReturn(["return", "submitted"].includes(params.get("payment") ?? ""));
+    const paymentId = params.get("paymentIntentId");
+    setReturnPaymentId(paymentId && paymentId.length <= 200 ? paymentId : null);
+  }, []);
+  const onPaymentCompleted = useCallback(() => {
+    setCursor(undefined);
+    setFilter("all");
+    setRetry((value) => value + 1);
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -95,8 +107,13 @@ export default function OrdersPage() {
       setLoading(true);
       setFailed(false);
       setOrders([]);
-      setNextCursor(null);
-      void fetch("/api/commerce/incomplete-checkouts", { signal: controller.signal })
+      if (!cursor) setIncomplete([]);
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      void fetch(`/api/commerce/incomplete-checkouts${params.size ? `?${params}` : ""}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      })
         .then((r) => r.json())
         .then((result: unknown) => {
           if (controller.signal.aborted) return;
@@ -106,7 +123,18 @@ export default function OrdersPage() {
             setFailed(payload.error.code !== "UNAUTHENTICATED");
             return;
           }
-          setIncomplete(payload.value.items);
+          setIncomplete((previous) =>
+            cursor
+              ? [
+                  ...previous,
+                  ...payload.value.items.filter(
+                    (item) =>
+                      !previous.some((prior) => prior.paymentIntentId === item.paymentIntentId),
+                  ),
+                ]
+              : payload.value.items,
+          );
+          setNextCursor(payload.value.nextCursor);
         })
         .catch(() => {
           if (!controller.signal.aborted) setFailed(true);
@@ -167,6 +195,14 @@ export default function OrdersPage() {
     <>
       <div className="min-h-screen w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
         <h1 className="text-3xl font-semibold">Orders</h1>
+        {paymentReturn ? (
+          <div className="mt-6">
+            <PaymentReturnStatus
+              paymentIntentId={returnPaymentId}
+              onCompleted={onPaymentCompleted}
+            />
+          </div>
+        ) : null}
         {authRequired ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
             <p className="font-medium">Sign in to view your orders.</p>
@@ -187,6 +223,8 @@ export default function OrdersPage() {
                 setNextCursor(null);
                 setFilter(value);
                 setTargetPaymentId("");
+                setPaymentReturn(false);
+                setReturnPaymentId(null);
                 window.history.replaceState(
                   null,
                   "",
@@ -202,7 +240,9 @@ export default function OrdersPage() {
         <div className="mt-4 grid gap-3">
           {filter === "incomplete"
             ? incomplete.map((item) => {
-                const actionable = item.action.actionType !== "NONE";
+                const actionable =
+                  ["INITIATED", "REQUIRES_ACTION"].includes(item.state) &&
+                  item.action.actionType !== "NONE";
                 const selected = targetPaymentId === item.paymentIntentId;
                 return (
                   <article
@@ -228,7 +268,9 @@ export default function OrdersPage() {
                               ? "The payment session expired. Its final status is being checked."
                               : item.state === "FAILED" || item.state === "EXPIRED"
                                 ? "This payment session can no longer be completed."
-                                : "Payment status is still being confirmed."}
+                                : item.state === "SUCCEEDED"
+                                  ? "Payment received. Your order is being finalized."
+                                  : "Payment status is still being confirmed."}
                         </p>
                       </div>
                       {actionable ? (
@@ -286,7 +328,7 @@ export default function OrdersPage() {
               className="rounded border px-4 py-3"
               onClick={() => setCursor(nextCursor)}
             >
-              Load more orders
+              {filter === "incomplete" ? "Load more checkouts" : "Load more orders"}
             </button>
           ) : null}
           {(filter === "incomplete" ? incomplete.length === 0 : orders.length === 0) &&

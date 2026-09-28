@@ -79,15 +79,18 @@ export function createOrdersRpc(context: CoreRpcContext) {
       });
     },
     async listCustomerIncompleteCheckouts(
-      input: import("@freshmarkets/contracts").AuthenticatedRequest,
+      input: import("@freshmarkets/contracts").ListCustomerIncompleteCheckoutsRequest,
     ) {
-      const validation = authenticatedRequestSchema.safeParse(input);
+      const validation = authenticatedRequestSchema
+        .extend({ cursor: z.string().min(1).max(2048).optional() })
+        .safeParse(input);
       if (!validation.success) return validationFailure(input.requestId, validation.error);
       const customer = await context.access.resolveAuthenticatedCustomer(input);
       if (!customer.ok) return customer;
       return listCustomerIncompleteCheckouts(context.env.DB, {
         customerId: customer.value.customerId,
         requestId: input.requestId,
+        cursor: validation.data.cursor,
       });
     },
     async getCheckoutPaymentCompletion(input: CheckoutPaymentCompletionRequest) {

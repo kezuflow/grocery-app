@@ -151,6 +151,17 @@ export async function createPayment(
   }
 
   const intentId = crypto.randomUUID();
+  let providerReturnUrl = command.returnUrl;
+  if (command.purpose === "GROCERY_CHECKOUT") {
+    try {
+      const returnUrl = new URL(command.returnUrl);
+      returnUrl.searchParams.set("payment", "return");
+      returnUrl.searchParams.set("paymentIntentId", intentId);
+      providerReturnUrl = returnUrl.toString();
+    } catch {
+      return failure("VALIDATION_FAILED", "Invalid payment return URL", command.requestId);
+    }
+  }
   const now = Date.now();
   try {
     const insertIntent = database
@@ -341,7 +352,7 @@ export async function createPayment(
       providerCustomerId: providerCustomerRef,
       amountMinor: command.amountMinor,
       currency: command.currency,
-      returnUrl: command.returnUrl,
+      returnUrl: providerReturnUrl,
       idempotencyKey: command.idempotencyKey,
       paymentMethod,
     });

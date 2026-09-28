@@ -824,7 +824,7 @@ export function CheckoutClient({
           expectedTaxMinor: pendingQuote.taxMinor,
           expectedTotalMinor: pendingQuote.totalMinor,
           paymentMethod: selectedPaymentMethod,
-          returnUrl: window.location.origin + "/orders",
+          returnUrl: window.location.origin + "/orders?payment=return",
         }),
       });
       const responseText = await paymentResponse.text();

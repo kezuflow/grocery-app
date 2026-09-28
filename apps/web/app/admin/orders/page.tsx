@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAdminUrlPagination } from "../../../components/admin/admin-controls";
 import { useAdminContext } from "../admin-context-provider";
 import { AdminMasterDetailWorkspace } from "../../../components/admin/admin-master-detail-workspace";
@@ -47,6 +47,7 @@ import {
 } from "../../../components/admin/shadcn/dropdown-menu";
 import { Skeleton } from "../../../components/admin/shadcn/skeleton";
 import { Input } from "../../../components/admin/shadcn/input";
+import { Field, FieldGroup, FieldLabel } from "../../../components/admin/shadcn/field";
 import {
   Select,
   SelectContent,
@@ -179,11 +180,15 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
   const searchParams = useSearchParams();
   const requestedStatus = searchParams.get("status") ?? "";
   const status = orderViews.some((view) => view.status === requestedStatus) ? requestedStatus : "";
+  const reference = searchParams.get("reference") ?? "";
+  const [referenceDraft, setReferenceDraft] = useState(reference);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pageFilter, setPageFilter] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderSummary | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const pagination = useAdminUrlPagination("/admin/orders");
+  const [updatesDelayed, setUpdatesDelayed] = useState(false);
+  useEffect(() => setReferenceDraft(reference), [reference]);
   const listUrl = `/admin/orders${searchParams.size ? `?${searchParams}` : ""}`;
   function recordHref(order: AdminOrderSummary) {
     return `/admin/orders/${encodeURIComponent(order.orderId)}?returnTo=${encodeURIComponent(listUrl)}&returnScope=${encodeURIComponent(scopeKey)}`;
@@ -218,39 +223,94 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
     window.history.pushState(null, "", `/admin/orders${next.size ? `?${next}` : ""}`);
   }
 
-  const load = useCallback(async (nextStatus: string, cursor: string | null) => {
-    const version = ++requestVersion.current;
-    setState({ phase: "loading" });
-    try {
-      const query = new URLSearchParams({ limit: "50" });
-      if (nextStatus) query.set("status", nextStatus);
-      if (cursor) query.set("cursor", cursor);
-      const payload = (await (
-        await fetch(`/api/admin/orders?${query}`)
-      ).json()) as RpcResult<AdminOrderPage>;
-      if (version !== requestVersion.current) return;
-      if (!payload.ok) {
-        setState({
-          phase: "error",
-          message: payload.error.message,
-          requestId: payload.error.requestId,
-        });
-        return;
+  function findOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPageFilter("");
+    const next = new URLSearchParams(searchParams.toString());
+    const value = referenceDraft.trim();
+    if (value) {
+      next.set("reference", value);
+      next.delete("status");
+    } else next.delete("reference");
+    pagination.reset(next);
+    window.history.pushState(null, "", `/admin/orders${next.size ? `?${next}` : ""}`);
+  }
+
+  function clearOrderSearch() {
+    setReferenceDraft("");
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("reference");
+    pagination.reset(next);
+    window.history.pushState(null, "", `/admin/orders${next.size ? `?${next}` : ""}`);
+  }
+
+  const load = useCallback(
+    async (
+      nextStatus: string,
+      cursor: string | null,
+      nextReference: string,
+      background = false,
+    ) => {
+      const version = ++requestVersion.current;
+      if (!background) setState({ phase: "loading" });
+      try {
+        const query = new URLSearchParams({ limit: "50" });
+        if (nextStatus) query.set("status", nextStatus);
+        if (nextReference) query.set("reference", nextReference);
+        if (cursor) query.set("cursor", cursor);
+        const payload = (await (
+          await fetch(`/api/admin/orders?${query}`, { cache: "no-store" })
+        ).json()) as RpcResult<AdminOrderPage>;
+        if (version !== requestVersion.current) return;
+        if (!payload.ok) {
+          if (background && !["FORBIDDEN", "UNAUTHENTICATED"].includes(payload.error.code)) {
+            setUpdatesDelayed(true);
+            return;
+          }
+          setPage(null);
+          setState({
+            phase: "error",
+            message: payload.error.message,
+            requestId: payload.error.requestId,
+          });
+          return;
+        }
+        setPage(payload.value);
+        setUpdatesDelayed(false);
+        setState({ phase: "ready" });
+      } catch {
+        if (version !== requestVersion.current) return;
+        if (background) {
+          setUpdatesDelayed(true);
+          return;
+        }
+        setState({ phase: "error", message: "Network error loading orders." });
       }
-      setPage(payload.value);
-      setState({ phase: "ready" });
-    } catch {
-      if (version !== requestVersion.current) return;
-      setState({ phase: "error", message: "Network error loading orders." });
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
-    void load(status, pagination.cursor);
+    void load(status, pagination.cursor, reference);
     return () => {
       requestVersion.current += 1;
     };
-  }, [status, load, pagination.cursor]);
+  }, [status, reference, load, pagination.cursor]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (state.phase === "ready" && document.visibilityState === "visible")
+        void load(status, pagination.cursor, reference, true);
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [state.phase, status, reference, pagination.cursor, load]);
 
   const pageOrders = page?.items ?? [];
   const normalizedFilter = pageFilter.trim().toLocaleLowerCase();
@@ -295,9 +355,9 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
             }
           : current,
       );
-      if (status && status !== order.status) void load(status, pagination.cursor);
+      if (status && status !== order.status) void load(status, pagination.cursor, reference);
     },
-    [load, pagination.cursor, status],
+    [load, pagination.cursor, reference, status],
   );
 
   const master = (
@@ -315,6 +375,26 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
           <CardDescription>Review and manage your orders.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 px-4 pb-4 sm:px-6">
+          <form onSubmit={findOrder} className="flex flex-wrap items-end gap-2">
+            <FieldGroup className="w-full max-w-sm">
+              <Field>
+                <FieldLabel htmlFor="admin-order-reference">Find an order</FieldLabel>
+                <Input
+                  id="admin-order-reference"
+                  placeholder="Exact order number or ID"
+                  value={referenceDraft}
+                  maxLength={200}
+                  onChange={(event) => setReferenceDraft(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+            <Button type="submit">Find order</Button>
+            {reference ? (
+              <Button type="button" variant="outline" onClick={clearOrderSearch}>
+                Clear
+              </Button>
+            ) : null}
+          </form>
           <div className="flex flex-wrap items-center gap-2">
             <Input
               aria-label="Filter orders on this page"
@@ -342,6 +422,23 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
               </SelectContent>
             </Select>
           </div>
+          {updatesDelayed && state.phase === "ready" ? (
+            <Alert role="status">
+              <AlertTitle>Updates are delayed</AlertTitle>
+              <AlertDescription>
+                Showing the last loaded orders. Use Refresh to try again.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => void load(status, pagination.cursor, reference, true)}
+                >
+                  Refresh
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {copiedId ? (
             <p className="sr-only" role="status">
               Order ID copied.
@@ -374,7 +471,7 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
                     size="sm"
                     variant="outline"
                     className="mt-3"
-                    onClick={() => void load(status, pagination.cursor)}
+                    onClick={() => void load(status, pagination.cursor, reference)}
                   >
                     Retry
                   </Button>
@@ -386,12 +483,14 @@ function OrdersWorkspace({ scopeKey }: { scopeKey: string }) {
             <div>
               <Alert role="status">
                 <AlertTitle>
-                  {pageFilter || status ? "No matching results" : "Nothing to show"}
+                  {pageFilter || status || reference ? "No matching results" : "Nothing to show"}
                 </AlertTitle>
                 <AlertDescription>
                   {pageFilter
                     ? "No orders on this page match the filter."
-                    : "No orders are visible in this view."}
+                    : reference
+                      ? "No order matches that exact number or ID."
+                      : "No orders are visible in this view."}
                 </AlertDescription>
               </Alert>
             </div>

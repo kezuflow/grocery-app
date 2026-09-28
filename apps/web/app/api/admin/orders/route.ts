@@ -33,6 +33,7 @@ async function GETHandler(request: Request) {
     requestId: webRequestId(request),
     headers: requestHeaders(request),
     status: params.get("status") ?? undefined,
+    reference: params.get("reference") ?? undefined,
     cursor: params.get("cursor") ?? undefined,
     limit,
   });

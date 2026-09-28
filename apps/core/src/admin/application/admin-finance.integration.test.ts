@@ -259,6 +259,45 @@ describe("finance administration", () => {
     expect(second.value.items[0]?.orderId).toBe(older.orderId);
   });
 
+  it("finds an older order by its exact customer number or ID across pages", async () => {
+    const manager = await seedManager();
+    const older = await seedOrderWithPayment();
+    const newer = await seedOrderWithPayment();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE grocery_order SET committed_at=? WHERE id=?").bind(1, older.orderId),
+      env.DB.prepare("UPDATE grocery_order SET committed_at=? WHERE id=?").bind(
+        Date.now() + 100_000,
+        newer.orderId,
+      ),
+    ]);
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      limit: 1,
+    };
+    const olderNumber = await env.DB.prepare("SELECT order_number FROM grocery_order WHERE id=?")
+      .bind(older.orderId)
+      .first<{ order_number: string }>();
+    expect(olderNumber).not.toBeNull();
+    for (const reference of [olderNumber!.order_number, older.orderId]) {
+      const result = await core.listAdminOrders({ ...request, reference });
+      expect(result).toMatchObject({
+        ok: true,
+        value: { items: [{ orderId: older.orderId }], nextCursor: null },
+      });
+    }
+    const absent = await core.listAdminOrders({ ...request, reference: "FM-NO-SUCH-ORDER" });
+    expect(absent).toMatchObject({ ok: true, value: { items: [] } });
+    const local = await seedManager(["orders.read"], "location");
+    expect(
+      await core.listAdminOrders({
+        ...request,
+        headers: { cookie: local.cookie },
+        reference: older.orderId,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+
   it("derives order actions from both lifecycle state and the caller's capabilities", async () => {
     const reader = await seedManager(["orders.read"]);
     const { orderId } = await seedOrderWithPayment();

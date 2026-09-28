@@ -83,6 +83,21 @@ describe("payment intent creation", () => {
     expect(attempts).toBe(1);
   });
 
+  it("places the grocery payment identity in the provider return URL", async () => {
+    const attempt = await command({
+      purpose: "GROCERY_CHECKOUT",
+      subjectType: "checkout_quote",
+      returnUrl: "https://app.example/orders?payment=return",
+    });
+    const result = await createPayment(env.DB, testRegistry(), attempt);
+    if (!result.ok || !result.value.redirectUrl) throw new Error("Expected redirect payment");
+    const redirect = new URL(result.value.redirectUrl);
+    const providerReturn = new URL(redirect.searchParams.get("returnTo") ?? "", redirect.origin);
+    expect(providerReturn.pathname).toBe("/orders");
+    expect(providerReturn.searchParams.get("payment")).toBe("return");
+    expect(providerReturn.searchParams.get("paymentIntentId")).toBe(result.value.paymentIntentId);
+  });
+
   it("durably persists the provider customer before creating the payment", async () => {
     const attempt = await command();
 

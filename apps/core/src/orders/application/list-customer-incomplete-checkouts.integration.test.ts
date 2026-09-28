@@ -88,5 +88,63 @@ describe("customer incomplete checkout read", () => {
         now,
       ),
     ).toMatchObject({ ok: true, value: { items: [] } });
+
+    const extra: D1PreparedStatement[] = [];
+    for (let index = 0; index < 27; index++) {
+      const nextQuoteId = crypto.randomUUID();
+      const nextPaymentId = crypto.randomUUID();
+      const createdAt = now + index + 1;
+      extra.push(
+        env.DB.prepare(`INSERT INTO checkout_quote
+          (id,attempt_id,customer_id,cart_id,address_id,delivery_cycle_id,fulfillment_mode,currency,
+           subtotal_minor,total_minor,lines_json,status,version,expires_at,idempotency_key,created_at,updated_at)
+          VALUES (?,?,?,?,?,NULL,'INSTANT','PHP',100,15000,'[]','ACTIVE',1,?,?,?,?)`).bind(
+          nextQuoteId,
+          nextQuoteId,
+          customerId,
+          crypto.randomUUID(),
+          addressId,
+          now + 60_000,
+          crypto.randomUUID(),
+          createdAt,
+          createdAt,
+        ),
+        env.DB.prepare(
+          "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,15000,'PHP',?,?,?,?)",
+        ).bind(
+          nextPaymentId,
+          nextQuoteId,
+          customerId,
+          index === 25 ? "FAILED" : index === 26 ? "EXPIRED" : "PROCESSING",
+          crypto.randomUUID(),
+          createdAt,
+          createdAt,
+        ),
+      );
+    }
+    await env.DB.batch(extra);
+    const first = await listCustomerIncompleteCheckouts(env.DB, {
+      customerId,
+      requestId: "first-page",
+    });
+    if (!first.ok || !first.value.nextCursor) throw new Error("Expected more active payments");
+    expect(first.value.items).toHaveLength(25);
+    expect(first.value.items.every((item) => item.state === "PROCESSING")).toBe(true);
+    const second = await listCustomerIncompleteCheckouts(env.DB, {
+      customerId,
+      requestId: "second-page",
+      cursor: first.value.nextCursor,
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      value: { items: [{ paymentIntentId: paymentId }], nextCursor: null },
+    });
+    expect(
+      await listCustomerIncompleteCheckouts(env.DB, {
+        customerId: otherCustomerId,
+        requestId: "wrong-owner",
+        cursor: first.value.nextCursor,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 });

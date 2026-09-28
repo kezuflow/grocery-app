@@ -924,6 +924,7 @@ const adminOperationalExceptionResolveSchema = adminOperationsLocationSchema.ext
 
 const orderListSchema = authenticatedRequestSchema.extend({
   status: validationSchema.string().trim().min(1).max(60).optional(),
+  reference: validationSchema.string().trim().min(1).max(200).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 });

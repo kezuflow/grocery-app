@@ -48,6 +48,37 @@ async function click(name: string) {
   await act(async () => button.click());
 }
 describe("customer order history", () => {
+  it("refreshes the order list only after the returned payment has an Order receipt", async () => {
+    window.history.replaceState(null, "", "/orders?payment=return&paymentIntentId=payment-return");
+    let orderReads = 0;
+    const fetcher = vi.fn((input: string) => {
+      if (input.startsWith("/api/checkout/payment/status"))
+        return Promise.resolve(
+          Response.json({
+            ok: true,
+            value: {
+              paymentIntentId: "payment-return",
+              state: "COMPLETED",
+              orderId: "confirmed",
+            },
+          }),
+        );
+      orderReads += 1;
+      return Promise.resolve(
+        Response.json({
+          ok: true,
+          value: { items: orderReads === 1 ? [] : [item("confirmed")], nextCursor: null },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () => root.render(<OrdersPage />));
+    expect(container.textContent).toContain("Order confirmed");
+    expect(container.querySelector('a[href="/orders/confirmed"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="View order confirmed"]')).not.toBeNull();
+    expect(orderReads).toBeGreaterThanOrEqual(2);
+  });
+
   it("shows an incomplete checkout with a durable payment action", async () => {
     const pending = {
       paymentIntentId: "payment-pending",
@@ -71,7 +102,9 @@ describe("customer order history", () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ ok: true, value: { items: [], nextCursor: null } }))
-      .mockResolvedValueOnce(Response.json({ ok: true, value: { items: [pending] } }));
+      .mockResolvedValueOnce(
+        Response.json({ ok: true, value: { items: [pending], nextCursor: null } }),
+      );
     vi.stubGlobal("fetch", fetcher);
     await act(async () => root.render(<OrdersPage />));
     await click("Needs payment");
@@ -79,6 +112,49 @@ describe("customer order history", () => {
     expect(container.textContent).toContain("Instant checkout");
     expect(container.textContent).toContain("3 items");
     expect(container.textContent).toContain("Continue payment");
+  });
+
+  it("pages unfinished checkouts and keeps the earlier results", async () => {
+    const incomplete = (paymentIntentId: string) => ({
+      paymentIntentId,
+      checkoutAttemptId: `quote-${paymentIntentId}`,
+      state: "PROCESSING",
+      fulfillmentMode: "SCHEDULED",
+      submittedAt: new Date(1000).toISOString(),
+      totalMinor: 25000,
+      currency: "PHP",
+      itemCount: 1,
+      action: {
+        paymentIntentId,
+        state: "PROCESSING",
+        paymentMethod: null,
+        actionType: "NONE",
+        redirectUrl: null,
+        clientToken: null,
+        expiresAt: null,
+      },
+    });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, value: { items: [], nextCursor: null } }))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: { items: [incomplete("payment-1")], nextCursor: "next-incomplete" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          value: { items: [incomplete("payment-2")], nextCursor: null },
+        }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () => root.render(<OrdersPage />));
+    await click("Needs payment");
+    await click("Load more checkouts");
+    expect(fetcher.mock.calls[2]?.[0]).toContain("cursor=next-incomplete");
+    expect(container.querySelectorAll("article")).toHaveLength(2);
   });
 
   it("loads more orders and restarts pagination when the server-side filter changes", async () => {

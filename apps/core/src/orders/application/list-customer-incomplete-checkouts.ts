@@ -3,13 +3,38 @@ import type {
   PaymentActionView,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { z } from "@freshmarkets/validation";
+
+const PAGE_SIZE = 25;
+const cursorSchema = z.object({
+  version: z.literal(1),
+  customerId: z.string(),
+  createdAt: z.number().int().safe(),
+  id: z.string().min(1).max(200),
+});
 
 /** Customer-owned checkout payments that have not produced an Order yet. */
 export async function listCustomerIncompleteCheckouts(
   database: D1Database,
-  input: { customerId: string; requestId: string },
+  input: { customerId: string; requestId: string; cursor?: string },
   now = Date.now(),
 ): Promise<RpcResult<CustomerIncompleteCheckoutsView>> {
+  let cursor: z.infer<typeof cursorSchema> | null = null;
+  if (input.cursor !== undefined) {
+    try {
+      cursor = cursorSchema.parse(JSON.parse(input.cursor));
+      if (cursor.customerId !== input.customerId) throw new Error("Invalid cursor owner");
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "Invalid checkout page",
+          requestId: input.requestId,
+        },
+      };
+    }
+  }
   const rows = await database
     .prepare(`SELECT p.id payment_intent_id,p.subject_id checkout_attempt_id,p.status,p.created_at,
       p.amount_minor,p.currency,q.fulfillment_mode,q.lines_json,
@@ -19,10 +44,19 @@ export async function listCustomerIncompleteCheckouts(
     JOIN checkout_quote q ON p.subject_type='checkout_quote' AND q.id=p.subject_id AND q.customer_id=p.customer_id
     LEFT JOIN payment_provider_action a ON a.payment_intent_id=p.id AND a.status='ACTIVE' AND a.expires_at>?
     WHERE p.customer_id=? AND p.purpose='GROCERY_CHECKOUT'
-      AND p.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED','FAILED','EXPIRED')
+      AND p.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED')
       AND NOT EXISTS (SELECT 1 FROM order_payment_reaction committed WHERE committed.payment_intent_id=p.id)
-    ORDER BY p.created_at DESC,p.id DESC LIMIT 25`)
-    .bind(now, input.customerId)
+      AND (? IS NULL OR p.created_at < ? OR (p.created_at = ? AND p.id < ?))
+    ORDER BY p.created_at DESC,p.id DESC LIMIT ?`)
+    .bind(
+      now,
+      input.customerId,
+      cursor?.createdAt ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.id ?? null,
+      PAGE_SIZE + 1,
+    )
     .all<{
       payment_intent_id: string;
       checkout_attempt_id: string;
@@ -39,11 +73,13 @@ export async function listCustomerIncompleteCheckouts(
       expires_at: number | null;
     }>();
 
+  const page = rows.results.slice(0, PAGE_SIZE);
+  const last = page.at(-1);
   return {
     ok: true,
     requestId: input.requestId,
     value: {
-      items: rows.results.map((row) => {
+      items: page.map((row) => {
         let itemCount = 0;
         try {
           const lines = JSON.parse(row.lines_json) as Array<{ quantity?: unknown }>;
@@ -78,6 +114,15 @@ export async function listCustomerIncompleteCheckouts(
           action,
         };
       }),
+      nextCursor:
+        rows.results.length > PAGE_SIZE && last
+          ? JSON.stringify({
+              version: 1,
+              customerId: input.customerId,
+              createdAt: last.created_at,
+              id: last.payment_intent_id,
+            })
+          : null,
     },
   };
 }

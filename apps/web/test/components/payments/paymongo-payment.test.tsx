@@ -119,6 +119,9 @@ describe("PayMongoPayment", () => {
     expect(container.querySelector('img[alt="QR Ph payment code"]')?.getAttribute("src")).toBe(
       "data:image/png;base64,first",
     );
+    expect(
+      container.querySelector('a[href="/orders?payment=submitted&paymentIntentId=payment-1"]'),
+    ).not.toBeNull();
     expect(container.textContent).not.toContain("storage unavailable");
   });
 

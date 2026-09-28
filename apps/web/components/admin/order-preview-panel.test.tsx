@@ -99,6 +99,7 @@ describe("OrderPreviewPanel", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/orders/order-1", {
       signal: expect.any(AbortSignal),
+      cache: "no-store",
     });
     expect(host.textContent).toContain("Order Preview");
     expect(host.textContent).toContain("Ordered items");
@@ -107,5 +108,25 @@ describe("OrderPreviewPanel", () => {
     expect(host.querySelector('table[aria-label="Ordered items for FM-1001"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Order status"]')).not.toBeNull();
     expect(onUpdated).toHaveBeenCalledWith(detail);
+  });
+
+  it("refreshes an open preview on focus and drops actions revoked by current Core state", async () => {
+    const delivered: AdminOrderDetail = {
+      ...detail,
+      status: "DELIVERED",
+      version: detail.version + 1,
+      allowedActions: [],
+    };
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ ok: true, value: detail }))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: delivered }));
+    await act(async () => {
+      root.render(<OrderPreviewPanel order={detail} onClose={() => {}} onUpdated={onUpdated} />);
+    });
+    expect(host.textContent).toContain("Committed");
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(host.textContent).toContain("Delivered");
+    expect(host.textContent).not.toContain("Canceled");
+    expect(onUpdated).toHaveBeenLastCalledWith(delivered);
   });
 });

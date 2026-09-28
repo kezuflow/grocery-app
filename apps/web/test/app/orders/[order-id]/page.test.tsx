@@ -1,4 +1,7 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
+import { act } from "react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CustomerOrderDetailView } from "@freshmarkets/contracts";
@@ -19,7 +22,9 @@ vi.mock("@/components/storefront/storefront-shell", () => ({
   StorefrontShell: ({ children }: { children: ReactNode }) => children,
 }));
 
-import { OrderDetailContent } from "@/app/(storefront)/orders/[order-id]/page";
+import CustomerOrderDetailPage, {
+  OrderDetailContent,
+} from "@/app/(storefront)/orders/[order-id]/page";
 
 function detail(source: CustomerOrderDetailView["financial"]["source"]): CustomerOrderDetailView {
   const components = source === "ORDER_TOTAL_ONLY" ? null : 0;
@@ -143,6 +148,43 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
 }
 
 describe("customer order detail", () => {
+  it("refreshes an open order when the customer returns to the tab", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const current = detail("CHECKOUT_QUOTE");
+    const packed: CustomerOrderDetailView = {
+      ...current,
+      status: "PACKED",
+      version: current.version + 1,
+      actions: current.actions.filter((action) => action.action !== "CANCEL"),
+      progress: { ...current.progress, detail: "Your order is packed." },
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, value: current }))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: packed }))
+      .mockResolvedValueOnce(
+        Response.json({ ok: false, error: { code: "FORBIDDEN", message: "Forbidden" } }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      await act(async () => root.render(<CustomerOrderDetailPage />));
+      expect(host.textContent).toContain("Your items are being picked.");
+      await act(async () => window.dispatchEvent(new Event("focus")));
+      expect(host.textContent).toContain("Your order is packed.");
+      expect(host.textContent).not.toContain("Cancel order");
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await act(async () => window.dispatchEvent(new Event("focus")));
+      expect(host.textContent).not.toContain("Your order is packed.");
+      expect(host.textContent).not.toContain("Red onion");
+    } finally {
+      act(() => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+    }
+  });
   it("keeps cancellation with active order options and hides delivery follow-up and invoice UI", () => {
     const html = renderToStaticMarkup(<OrderDetailContent order={detail("CHECKOUT_QUOTE")} />);
     expect(html).toContain("FM-2026-ORDER1");

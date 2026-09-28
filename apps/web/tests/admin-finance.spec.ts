@@ -360,6 +360,61 @@ test("Orders Back restores the list scroll position within the same scope", asyn
     .toBeLessThan(50);
 });
 
+test("Orders finds an exact older reference and refreshes its progress on focus", async ({
+  adminPage,
+}) => {
+  let status = "COMMITTED";
+  const requests: string[] = [];
+  await adminPage.route("**/api/admin/orders?**", (route) => {
+    const reference = new URL(route.request().url()).searchParams.get("reference");
+    requests.push(reference ?? "");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          items:
+            reference === "FM-OLDER-123"
+              ? [
+                  {
+                    orderId: "older-order-id",
+                    orderNumber: "FM-OLDER-123",
+                    customerName: "Older Customer",
+                    customerEmail: "older@example.test",
+                    fulfillmentMode: "SCHEDULED",
+                    status,
+                    totalMinor: 12_000,
+                    currency: "PHP",
+                    paymentStatus: "SUCCEEDED",
+                    fulfillmentStatus: status === "DELIVERED" ? "COMPLETED" : "PACKING",
+                    deliveryStatus: status === "DELIVERED" ? "DELIVERED" : null,
+                    deliveryDispatchStatus: null,
+                    deliveryProviderStatus: null,
+                    committedAt: "2026-09-01T08:00:00.000Z",
+                    version: status === "DELIVERED" ? 2 : 1,
+                  },
+                ]
+              : [],
+          nextCursor: null,
+        },
+      }),
+    });
+  });
+  await adminPage.goto("/admin/orders");
+  await adminPage.getByRole("textbox", { name: "Find an order" }).fill("FM-OLDER-123");
+  await adminPage.getByRole("button", { name: "Find order" }).click();
+  await expect(adminPage).toHaveURL(/reference=FM-OLDER-123/);
+  await expect(adminPage.getByRole("link", { name: "FM-OLDER-123" })).toBeVisible();
+  expect(requests).toContain("FM-OLDER-123");
+  status = "DELIVERED";
+  await adminPage.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    adminPage
+      .getByRole("row", { name: "Preview order FM-OLDER-123" })
+      .getByLabel("Order progress: Delivered"),
+  ).toBeVisible();
+});
+
 test("Order number opens the record and Back restores the filtered cursor page", async ({
   adminPage,
 }) => {

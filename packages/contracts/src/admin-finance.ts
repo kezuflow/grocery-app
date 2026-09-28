@@ -173,6 +173,8 @@ export type AdminOrderDetail = AdminOrderSummary & {
 
 export type AdminOrderListRequest = AuthenticatedRequest & {
   status?: string;
+  /** Exact customer-facing order number or internal Order ID. */
+  reference?: string;
   cursor?: string;
   limit?: number;
 };

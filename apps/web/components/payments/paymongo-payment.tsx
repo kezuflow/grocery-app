@@ -75,6 +75,13 @@ function clearStoredAction(key: string): void {
   }
 }
 
+function paymentStatusPath(path: string, paymentIntentId: string | undefined): string {
+  if (!paymentIntentId) return path;
+  const url = new URL(path, "https://freshmarkets.invalid");
+  url.searchParams.set("paymentIntentId", paymentIntentId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export function PayMongoPayment({
   storageKey,
   title,
@@ -105,6 +112,8 @@ export function PayMongoPayment({
   const qrGenerationInFlight = useRef(false);
   const qrAutoGenerationStarted = useRef(false);
   const paymentIntentId = action?.paymentIntentId;
+  const paymentReturnPath = paymentStatusPath(returnPath, paymentIntentId);
+  const paymentDonePath = paymentStatusPath(donePath, paymentIntentId);
   const hasAction = action !== null;
 
   useEffect(() => {
@@ -267,7 +276,7 @@ export function PayMongoPayment({
                 payment_method: paymentMethodId,
                 client_key: action.clientToken,
                 ...(includeReturnUrl
-                  ? { return_url: `${window.location.origin}${returnPath}` }
+                  ? { return_url: `${window.location.origin}${paymentReturnPath}` }
                   : {}),
               },
             },
@@ -279,7 +288,7 @@ export function PayMongoPayment({
         throw new Error(intent.errors?.[0]?.detail ?? "PayMongo could not start this payment.");
       return intent;
     },
-    [action, publicKey, returnPath],
+    [action, publicKey, paymentReturnPath],
   );
 
   const startQrPh = useCallback(
@@ -415,7 +424,7 @@ export function PayMongoPayment({
       const intent = await attachMethod(paymentMethodId, true);
       const redirect = intent.data?.attributes?.next_action?.redirect?.url;
       clearStoredAction(storageKey);
-      window.location.assign(redirect || donePath);
+      window.location.assign(redirect || paymentDonePath);
     } catch (error) {
       setMessage((error as Error).message);
       setBusy(false);
@@ -466,7 +475,10 @@ export function PayMongoPayment({
             We’re finalizing your order now. Keep this page open and it will update automatically.
           </p>
           {pollingStopped ? (
-            <Link href={donePath} className="mt-4 inline-block text-sm font-medium underline">
+            <Link
+              href={paymentDonePath}
+              className="mt-4 inline-block text-sm font-medium underline"
+            >
               Check your orders
             </Link>
           ) : null}
@@ -514,7 +526,7 @@ export function PayMongoPayment({
                 </p>
               ) : null}
               <Link
-                href={donePath}
+                href={paymentDonePath}
                 className="inline-flex min-h-11 items-center justify-center rounded bg-[var(--fm-storefront-action)] px-4 font-medium text-white! hover:bg-[var(--fm-storefront-action-hover)]"
               >
                 Check payment status

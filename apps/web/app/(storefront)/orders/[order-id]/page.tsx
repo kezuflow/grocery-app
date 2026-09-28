@@ -302,36 +302,63 @@ export default function CustomerOrderDetailPage() {
     "loading" | "ready" | "not-found" | "unauthenticated" | "error"
   >("loading");
   const [order, setOrder] = useState<CustomerOrderDetailView | null>(null);
+  const [updatesDelayed, setUpdatesDelayed] = useState(false);
 
   useEffect(() => {
     if (!orderId) {
       setState("not-found");
       return;
     }
-    let active = true;
-    void fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}`, {
-      cache: "no-store",
-      credentials: "same-origin",
-    })
-      .then((response) => response.json() as Promise<RpcResult<CustomerOrderDetailView>>)
-      .then((result) => {
-        if (!active) return;
+    setOrder(null);
+    setState("loading");
+    setUpdatesDelayed(false);
+    const controller = new AbortController();
+    let inFlight = false;
+    let firstRead = true;
+    const load = async () => {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/commerce/orders/${encodeURIComponent(orderId)}`, {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
+        const result = (await response.json()) as RpcResult<CustomerOrderDetailView>;
+        if (controller.signal.aborted) return;
         if (result.ok) {
           setOrder(result.value);
           setState("ready");
-          return;
+          setUpdatesDelayed(false);
+        } else if (["NOT_FOUND", "UNAUTHENTICATED", "FORBIDDEN"].includes(result.error.code)) {
+          setOrder(null);
+          setState(result.error.code === "UNAUTHENTICATED" ? "unauthenticated" : "not-found");
+        } else if (firstRead) {
+          setState("error");
+        } else {
+          setUpdatesDelayed(true);
         }
-        setState(
-          result.error.code === "NOT_FOUND"
-            ? "not-found"
-            : result.error.code === "UNAUTHENTICATED"
-              ? "unauthenticated"
-              : "error",
-        );
-      })
-      .catch(() => active && setState("error"));
+      } catch (error) {
+        if (controller.signal.aborted || (error as Error).name === "AbortError") return;
+        if (firstRead) setState("error");
+        else setUpdatesDelayed(true);
+      } finally {
+        firstRead = false;
+        inFlight = false;
+      }
+    };
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    void load();
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
-      active = false;
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [orderId]);
 
@@ -362,7 +389,26 @@ export default function CustomerOrderDetailPage() {
           <p className="mt-2">Try again from your orders list.</p>
         </div>
       ) : null}
-      {state === "ready" && order ? <OrderDetailContent order={order} /> : null}
+      {state === "ready" && order ? (
+        <>
+          {updatesDelayed ? (
+            <div
+              role="status"
+              className="mx-4 mt-4 rounded-lg border bg-white p-4 text-sm sm:mx-6 lg:mx-10"
+            >
+              The latest order update could not be loaded. Showing the last confirmed view.{" "}
+              <button
+                type="button"
+                className="font-semibold underline"
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : null}
+          <OrderDetailContent order={order} />
+        </>
+      ) : null}
     </>
   );
 }

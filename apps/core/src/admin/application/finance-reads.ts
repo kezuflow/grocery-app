@@ -216,6 +216,10 @@ export async function listAdminOrders(
     clauses.push("o.status = ?");
     binds.push(request.status);
   }
+  if (request.reference !== undefined) {
+    clauses.push("(o.order_number = ? OR o.id = ?)");
+    binds.push(request.reference, request.reference);
+  }
   if (cursor) {
     clauses.push(
       "(COALESCE(o.committed_at,o.created_at) < ? OR (COALESCE(o.committed_at,o.created_at) = ? AND o.id < ?))",

@@ -282,6 +282,17 @@ Web may poll this read while the provider continuation is visible, with visibili
 intervals and no shared caching. It stops on a terminal result and never derives success from the QR,
 browser return, timer, or provider-client response.
 
+For grocery checkout redirects, Core adds the newly durable Payment Intent ID to the provider
+return URL; the card SDK and QR continuation link carry the same ID. The customer Orders page
+polls the same customer-owned completion read while visible, presents `FINALIZING_ORDER` separately,
+and links the exact Order only after `COMPLETED` includes its committed Order ID. A legacy return
+without an ID offers the incomplete-checkout read and cannot assert payment success.
+`listCustomerIncompleteCheckouts({ cursor? })` includes only uncommitted `INITIATED`,
+`REQUIRES_ACTION`, `PROCESSING`, and `SUCCEEDED` checkout Payments. Failed/expired sessions do not
+occupy the **Needs payment** list. It returns 25 newest-first items and a customer-bound keyset
+`nextCursor` so an older unresolved Payment remains reachable. Neither this read nor polling
+mutates payment or Order state.
+
 Core receives payment provider webhooks through a signed public webhook handler rather than Web RPC:
 
 - verify signature and timestamp;
@@ -381,6 +392,12 @@ Customer cancellation accepts no actor or cause authority from Web. Core resolve
 `ProvisionalTransactionSummaryView` projects immutable buyer/address, line, financial, payment, refund, amendment, and invoice-readiness snapshots. Its fixed document kind is `PROVISIONAL_TRANSACTION_SUMMARY` and its literal disclaimer is `NOT AN OFFICIAL BIR INVOICE`. It never accepts or returns invented seller/TIN, official serial, or unapproved tax computation.
 
 ## Admin Foundation, Audit, and Application IAM
+
+`listAdminOrders({ reference? })` accepts an exact Order number or Order ID after current Global
+`orders.read` authorization. Core applies that predicate before keyset pagination, so staff can
+locate an older Order without paging through unrelated results. Admin Web retains its separate
+current-page filter and refreshes the open list and preview while visible; every write still uses
+fresh Core-derived legal actions and expected versions.
 
 - `admin.context.get() -> AdminContextView`
 - `admin.scopes.list() -> AdminScopeOptionView[]`

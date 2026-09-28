@@ -54,6 +54,11 @@ export type CustomerIncompleteCheckoutView = {
 
 export type CustomerIncompleteCheckoutsView = {
   items: readonly CustomerIncompleteCheckoutView[];
+  nextCursor: string | null;
+};
+
+export type ListCustomerIncompleteCheckoutsRequest = AuthenticatedRequest & {
+  cursor?: string;
 };
 
 export type CheckoutPaymentCompletionRequest = AuthenticatedRequest & {
@@ -364,7 +369,7 @@ export type OrdersService = {
   ): Promise<RpcResult<OrderAdditionOptionsView>>;
   listCustomerOrders(request: ListCustomerOrdersRequest): Promise<RpcResult<CustomerOrdersPage>>;
   listCustomerIncompleteCheckouts(
-    request: AuthenticatedRequest,
+    request: ListCustomerIncompleteCheckoutsRequest,
   ): Promise<RpcResult<CustomerIncompleteCheckoutsView>>;
   getCheckoutPaymentCompletion(
     request: CheckoutPaymentCompletionRequest,

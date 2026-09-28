@@ -13,6 +13,7 @@ import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
 import { OrderStatusBadge } from "./order-status-badge";
 import { Button } from "@/components/admin/shadcn/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
   Select,
   SelectContent,
@@ -67,6 +68,7 @@ export function OrderPreviewPanel({
 }) {
   const [detail, setDetail] = useState<AdminOrderDetail | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [updatesDelayed, setUpdatesDelayed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | undefined>();
   const [confirming, setConfirming] = useState(false);
@@ -76,29 +78,46 @@ export function OrderPreviewPanel({
   onUpdatedRef.current = onUpdated;
   const commandLocked =
     cancelIntent.pending || cancelIntent.uncertain || savedCancellation !== null || confirming;
+  const commandLockedRef = useRef(commandLocked);
+  commandLockedRef.current = commandLocked;
   useAdminRouteGuard(false, commandLocked);
   useAdminScopeGuard(false, commandLocked);
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
-      setState("loading");
-      setRequestId(undefined);
+    async (signal?: AbortSignal, background = false) => {
+      if (!background) {
+        setState("loading");
+        setRequestId(undefined);
+      }
       try {
         const response = await fetch(`/api/admin/orders/${encodeURIComponent(order.orderId)}`, {
           signal,
+          cache: "no-store",
         });
         const payload = (await response.json()) as RpcResult<AdminOrderDetail>;
+        if (signal?.aborted) return;
+        if (background && commandLockedRef.current) return;
         if (!payload.ok) {
+          if (background && !["FORBIDDEN", "UNAUTHENTICATED"].includes(payload.error.code)) {
+            setUpdatesDelayed(true);
+            return;
+          }
+          setDetail(null);
           setMessage(payload.error.message);
           setRequestId(payload.error.requestId);
           setState("error");
           return;
         }
         setDetail(payload.value);
+        setUpdatesDelayed(false);
         setState("ready");
         onUpdatedRef.current(payload.value);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
+        if (background) {
+          setUpdatesDelayed(true);
+          return;
+        }
         setMessage("Network error loading the order preview.");
         setState("error");
       }
@@ -110,11 +129,29 @@ export function OrderPreviewPanel({
     const controller = new AbortController();
     setDetail(null);
     setMessage(null);
+    setUpdatesDelayed(false);
     setConfirming(false);
     setSavedCancellation(null);
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      if (state === "ready" && document.visibilityState === "visible" && !commandLockedRef.current)
+        void load(controller.signal, true);
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load, state]);
 
   async function submitCancellation(body: string) {
     setSavedCancellation(body);
@@ -195,6 +232,23 @@ export function OrderPreviewPanel({
         ) : null}
         {state === "ready" && detail ? (
           <div className="space-y-5">
+            {updatesDelayed ? (
+              <Alert role="status">
+                <AlertTitle>Updates are delayed</AlertTitle>
+                <AlertDescription>
+                  Showing the last loaded order. Review current details before making a change.
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => void load(undefined, true)}
+                  >
+                    Refresh
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {message ? (
               <div role="status" className="rounded-lg border border-border bg-muted p-3 text-sm">
                 <p>{message}</p>
