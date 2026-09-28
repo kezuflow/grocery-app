@@ -5,6 +5,13 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "worker.ts",
   "images": { "binding": "IMAGES" },
+  "ratelimits": [
+    {
+      "name": "MESSAGE_UPLOAD_RATE",
+      "namespace_id": "290920261",
+      "simple": { "limit": 20, "period": 60 },
+    },
+  ],
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -44,6 +51,13 @@
   "env": {
     "staging": {
       "images": { "binding": "IMAGES" },
+      "ratelimits": [
+        {
+          "name": "MESSAGE_UPLOAD_RATE",
+          "namespace_id": "290920262",
+          "simple": { "limit": 20, "period": 60 },
+        },
+      ],
       "workers_dev": true,
       "services": [
         {
@@ -65,6 +79,13 @@
     },
     "production": {
       "images": { "binding": "IMAGES" },
+      "ratelimits": [
+        {
+          "name": "MESSAGE_UPLOAD_RATE",
+          "namespace_id": "290920263",
+          "simple": { "limit": 20, "period": 60 },
+        },
+      ],
       "workers_dev": true,
       // Cart and other business RPCs execute with this fetch handler. The D1
       // primary serves from Singapore, so keep those calls near the database.

@@ -1,5 +1,6 @@
 import type {
   AuthenticatedRequest,
+  CancelOrderMessageAttachmentRequest,
   ListOrderMessagesRequest,
   MarkOrderConversationReadRequest,
   ReadOrderMessageAttachmentRequest,
@@ -13,6 +14,7 @@ import {
   saveOrderAcknowledgement,
 } from "../messages/application/order-acknowledgement";
 import {
+  cancelOrderMessageAttachment,
   readOrderMessageAttachment,
   stageOrderMessageAttachment,
 } from "../messages/application/order-message-attachments";
@@ -56,6 +58,10 @@ const stageSchema = authenticatedRequestSchema.extend({
 const attachmentSchema = authenticatedRequestSchema.extend({
   orderId: identifierSchema,
   attachmentId: identifierSchema,
+});
+const cancelAttachmentSchema = authenticatedRequestSchema.extend({
+  orderId: identifierSchema,
+  idempotencyKey: idempotencyKeySchema,
 });
 const acknowledgementSchema = authenticatedRequestSchema.extend({
   text: z.string().trim().min(1).max(500),
@@ -129,6 +135,18 @@ export function createMessagesRpc(context: CoreRpcContext, publish: () => void) 
       const parsed = stageSchema.safeParse(input);
       return parsed.success
         ? stageOrderMessageAttachment(context, parsed.data, "ADMIN")
+        : validationFailure(input.requestId, parsed.error);
+    },
+    async cancelCustomerOrderMessageAttachment(input: CancelOrderMessageAttachmentRequest) {
+      const parsed = cancelAttachmentSchema.safeParse(input);
+      return parsed.success
+        ? cancelOrderMessageAttachment(context, parsed.data, "CUSTOMER")
+        : validationFailure(input.requestId, parsed.error);
+    },
+    async cancelAdminOrderMessageAttachment(input: CancelOrderMessageAttachmentRequest) {
+      const parsed = cancelAttachmentSchema.safeParse(input);
+      return parsed.success
+        ? cancelOrderMessageAttachment(context, parsed.data, "ADMIN")
         : validationFailure(input.requestId, parsed.error);
     },
     async readCustomerOrderMessageAttachment(input: ReadOrderMessageAttachmentRequest) {

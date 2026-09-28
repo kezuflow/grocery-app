@@ -15,8 +15,9 @@ export type DraftAttachment = {
   file: File;
   uploadFile: File | null;
   id: string | null;
-  status: "preparing" | "uploading" | "done" | "error";
+  status: "preparing" | "uploading" | "done" | "error" | "removing" | "remove-error";
   error: string | null;
+  retryable: boolean;
 };
 
 function errorMessage(result: RpcResult<unknown>): string {
@@ -41,6 +42,8 @@ export function useOrderThread(side: Side, orderId: string) {
   const sendKey = useRef<string | null>(null);
   const sendingRef = useRef(false);
   const typingAt = useRef(0);
+  const removed = useRef(new Set<string>());
+  const uploads = useRef(new Map<string, AbortController>());
 
   useEffect(() => setMuted(notificationSoundMuted()), []);
 
@@ -206,26 +209,37 @@ export function useOrderThread(side: Side, orderId: string) {
   };
 
   const upload = async (entry: DraftAttachment) => {
-    if (!entry.uploadFile) return;
+    if (!entry.uploadFile || removed.current.has(entry.key)) return;
     const form = new FormData();
     form.set("file", entry.uploadFile);
+    const controller = new AbortController();
+    uploads.current.set(entry.key, controller);
     try {
       const response = await fetch(`${base}/${encodeURIComponent(orderId)}/attachments`, {
         method: "POST",
         headers: { "idempotency-key": entry.key },
         body: form,
+        signal: controller.signal,
       });
       if (response.status === 413) throw new Error("Photo exceeds the 18 MB upload limit");
       const result = (await response.json()) as RpcResult<{ id: string }>;
-      if (!result.ok) throw new Error(errorMessage(result));
+      if (!result.ok) {
+        const failure = new Error(errorMessage(result));
+        Object.assign(failure, {
+          retryable: !["VALIDATION_FAILED", "CONFIGURATION_ERROR"].includes(result.error.code),
+        });
+        throw failure;
+      }
+      if (removed.current.has(entry.key)) return;
       setAttachments((current) =>
         current.map((item) =>
-          item.key === entry.key
+          item.key === entry.key && !removed.current.has(entry.key)
             ? { ...item, id: result.value.id, status: "done", error: null }
             : item,
         ),
       );
     } catch (reason) {
+      if (removed.current.has(entry.key)) return;
       setAttachments((current) =>
         current.map((item) =>
           item.key === entry.key
@@ -233,22 +247,32 @@ export function useOrderThread(side: Side, orderId: string) {
                 ...item,
                 status: "error",
                 error: reason instanceof Error ? reason.message : "Upload failed",
+                retryable:
+                  reason instanceof Error && "retryable" in reason
+                    ? reason.retryable === true
+                    : true,
               }
             : item,
         ),
       );
+    } finally {
+      uploads.current.delete(entry.key);
     }
   };
 
   const prepareAndUpload = async (entry: DraftAttachment) => {
     try {
       const uploadFile = await prepareMessageImage(entry.file);
+      if (removed.current.has(entry.key)) return;
       const prepared = { ...entry, uploadFile, status: "uploading" as const };
       setAttachments((current) =>
-        current.map((item) => (item.key === entry.key ? prepared : item)),
+        current.map((item) =>
+          item.key === entry.key && !removed.current.has(entry.key) ? prepared : item,
+        ),
       );
       await upload(prepared);
     } catch (reason) {
+      if (removed.current.has(entry.key)) return;
       setAttachments((current) =>
         current.map((item) =>
           item.key === entry.key
@@ -256,6 +280,7 @@ export function useOrderThread(side: Side, orderId: string) {
                 ...item,
                 status: "error",
                 error: reason instanceof Error ? reason.message : "Photo preparation failed",
+                retryable: false,
               }
             : item,
         ),
@@ -273,6 +298,7 @@ export function useOrderThread(side: Side, orderId: string) {
         id: null,
         status: "preparing",
         error: null,
+        retryable: true,
       };
       setAttachments((current) => [...current, entry]);
       void prepareAndUpload(entry);
@@ -318,6 +344,39 @@ export function useOrderThread(side: Side, orderId: string) {
     });
   };
 
+  const removeAttachment = async (key: string) => {
+    if (sendingRef.current) return;
+    removed.current.add(key);
+    uploads.current.get(key)?.abort();
+    setAttachments((current) =>
+      current.map((item) =>
+        item.key === key ? { ...item, status: "removing", error: null } : item,
+      ),
+    );
+    try {
+      const response = await fetch(`${base}/${encodeURIComponent(orderId)}/attachments`, {
+        method: "DELETE",
+        headers: { "idempotency-key": key },
+      });
+      const result = (await response.json()) as RpcResult<unknown>;
+      if (!result.ok) throw new Error(errorMessage(result));
+      setAttachments((current) => current.filter((item) => item.key !== key));
+      sendKey.current = null;
+    } catch (reason) {
+      setAttachments((current) =>
+        current.map((item) =>
+          item.key === key
+            ? {
+                ...item,
+                status: "remove-error",
+                error: reason instanceof Error ? reason.message : "Photo could not be removed",
+              }
+            : item,
+        ),
+      );
+    }
+  };
+
   return {
     page,
     loading,
@@ -327,12 +386,15 @@ export function useOrderThread(side: Side, orderId: string) {
     attachments,
     addFiles,
     removeAttachment: (key: string) => {
-      setAttachments((current) => current.filter((item) => item.key !== key));
-      sendKey.current = null;
+      void removeAttachment(key);
     },
     retryAttachment: (key: string) => {
       const entry = attachments.find((item) => item.key === key);
-      if (entry) {
+      if (entry?.status === "remove-error") {
+        void removeAttachment(key);
+        return;
+      }
+      if (entry?.status === "error" && entry.retryable) {
         setAttachments((current) =>
           current.map((item) =>
             item.key === key

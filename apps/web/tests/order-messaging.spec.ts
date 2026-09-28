@@ -126,6 +126,91 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   expect(processed.toString("ascii", 8, 12)).toBe("WEBP");
   expect(processed).not.toEqual(png);
 
+  // A real browser-generated, phone-sized original exercises bounded decode,
+  // WebP preparation, Web/Core upload and private download end to end.
+  await signedInPage.evaluate(() => {
+    const observed = window as typeof window & {
+      messageImageUpload?: { name: string; type: string; size: number };
+    };
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      if (
+        init?.method === "POST" &&
+        String(input).endsWith("/attachments") &&
+        init.body instanceof FormData
+      ) {
+        const file = init.body.get("file");
+        if (file instanceof File)
+          observed.messageImageUpload = { name: file.name, type: file.type, size: file.size };
+      }
+      return original(input, init);
+    };
+  });
+  const largeBytes = await signedInPage.getByLabel("Attach images").evaluate(async (element) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 2200;
+    canvas.height = 1600;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas unavailable");
+    const image = context.createImageData(canvas.width, canvas.height);
+    let value = 0x12345678;
+    for (let index = 0; index < image.data.length; index += 4) {
+      value ^= value << 13;
+      value ^= value >>> 17;
+      value ^= value << 5;
+      image.data[index] = value & 255;
+      image.data[index + 1] = (value >>> 8) & 255;
+      image.data[index + 2] = (value >>> 16) & 255;
+      image.data[index + 3] = 255;
+    }
+    context.putImageData(image, 0, 0);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (result) => (result ? resolve(result) : reject(new Error("PNG encode failed"))),
+        "image/png",
+      ),
+    );
+    const file = new File([blob], "large-proof.png", { type: "image/png" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = element as HTMLInputElement;
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return file.size;
+  });
+  expect(largeBytes).toBeGreaterThan(5 * 1024 * 1024);
+  expect(largeBytes).toBeLessThan(18_000_000);
+  await expect(signedInPage.getByText("Ready", { exact: true })).toBeVisible();
+  const upload = await signedInPage.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          messageImageUpload?: { name: string; type: string; size: number };
+        }
+      ).messageImageUpload,
+  );
+  expect(upload).toMatchObject({ name: "large-proof.webp", type: "image/webp" });
+  expect(upload?.size).toBeLessThan(5 * 1024 * 1024);
+  await signedInPage.getByRole("textbox", { name: "Message" }).fill("Large photo attached.");
+  await signedInPage.getByRole("button", { name: "Send message" }).click();
+  await expect(adminPage.getByText("Large photo attached.")).toBeVisible();
+  await expect(adminPage.getByRole("link", { name: "Open large-proof.webp" })).toBeVisible();
+
+  await signedInPage.getByLabel("Attach images").setInputFiles({
+    name: "discard.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(signedInPage.getByText("Ready", { exact: true })).toBeVisible();
+  const removal = signedInPage.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url().endsWith(`/messages/${orderId}/attachments`),
+  );
+  await signedInPage.getByRole("button", { name: "Remove discard.png" }).click();
+  expect((await removal).status()).toBe(200);
+  await expect(signedInPage.getByRole("button", { name: "Remove discard.png" })).toHaveCount(0);
+
   await signedInPage.goto("/orders");
   await signedInPage.getByRole("button", { name: "Open order chat" }).click();
   await expect(signedInPage.getByRole("dialog", { name: "Order chat" })).toBeVisible();

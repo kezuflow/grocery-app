@@ -3498,6 +3498,16 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   ) {
     return this.messagesRpc.stageAdminOrderMessageAttachment(input);
   }
+  async cancelCustomerOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").CancelOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.cancelCustomerOrderMessageAttachment(input);
+  }
+  async cancelAdminOrderMessageAttachment(
+    input: import("@freshmarkets/contracts").CancelOrderMessageAttachmentRequest,
+  ) {
+    return this.messagesRpc.cancelAdminOrderMessageAttachment(input);
+  }
   async readCustomerOrderMessageAttachment(
     input: import("@freshmarkets/contracts").ReadOrderMessageAttachmentRequest,
   ) {

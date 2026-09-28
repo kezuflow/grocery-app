@@ -365,6 +365,8 @@ export const coreServiceMethodNames = [
   "markAdminOrderConversationRead",
   "stageCustomerOrderMessageAttachment",
   "stageAdminOrderMessageAttachment",
+  "cancelCustomerOrderMessageAttachment",
+  "cancelAdminOrderMessageAttachment",
   "readCustomerOrderMessageAttachment",
   "readAdminOrderMessageAttachment",
   "getOrderAcknowledgement",

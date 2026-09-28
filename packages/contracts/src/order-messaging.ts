@@ -69,6 +69,11 @@ export type StageOrderMessageAttachmentRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type CancelOrderMessageAttachmentRequest = AuthenticatedRequest & {
+  orderId: string;
+  idempotencyKey: string;
+};
+
 export type ReadOrderMessageAttachmentRequest = AuthenticatedRequest & {
   orderId: string;
   attachmentId: string;
@@ -120,6 +125,12 @@ export interface OrderMessagingService {
   stageAdminOrderMessageAttachment(
     request: StageOrderMessageAttachmentRequest,
   ): Promise<RpcResult<OrderMessageAttachmentView>>;
+  cancelCustomerOrderMessageAttachment(
+    request: CancelOrderMessageAttachmentRequest,
+  ): Promise<RpcResult<{ canceled: true }>>;
+  cancelAdminOrderMessageAttachment(
+    request: CancelOrderMessageAttachmentRequest,
+  ): Promise<RpcResult<{ canceled: true }>>;
   readCustomerOrderMessageAttachment(
     request: ReadOrderMessageAttachmentRequest,
   ): Promise<RpcResult<OrderMessageAttachmentContent>>;

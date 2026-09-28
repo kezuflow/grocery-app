@@ -20,11 +20,13 @@ function response<T>(request: Request, result: RpcResult<T>): Response {
           ? 404
           : result.error.code === "VALIDATION_FAILED"
             ? 400
-            : result.error.code === "IDEMPOTENCY_CONFLICT" ||
-                result.error.code === "CONFLICT" ||
-                result.error.code === "STALE_VERSION"
-              ? 409
-              : 500;
+            : result.error.code === "CONFIGURATION_ERROR"
+              ? 503
+              : result.error.code === "IDEMPOTENCY_CONFLICT" ||
+                  result.error.code === "CONFLICT" ||
+                  result.error.code === "STALE_VERSION"
+                ? 409
+                : 500;
   return Response.json(result, {
     status,
     headers: {
@@ -124,6 +126,43 @@ export async function markRead(request: Request, side: MessageSide, orderId: str
 export async function stageAttachment(request: Request, side: MessageSide, orderId: string) {
   const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
   if (!key.success) return invalid(request, "An upload identity is required");
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > orderMessageImageMaxInputBytes + 16_384)
+    return invalid(request, "Photo exceeds the 18 MB upload limit", 413);
+  const client = coreClient(env.CORE);
+  const access =
+    side === "CUSTOMER"
+      ? await client.getCustomerOrderMessages({ ...meta(request), orderId, limit: 1 })
+      : await client.getAdminOrderMessages({ ...meta(request), orderId, limit: 1 });
+  if (!access.ok) return response(request, access);
+  // The validated session, rather than a shared mobile-network IP, is the
+  // edge key. Core's D1 quota remains authoritative across locations.
+  const sessionToken = request.headers
+    .get("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => /^(?:__Secure-)?better-auth\.session_token=/.test(part))
+    ?.split("=", 2)[1];
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(sessionToken ?? request.headers.get("cookie") ?? ""),
+  );
+  const keyHash = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const limited = await env.MESSAGE_UPLOAD_RATE.limit({ key: `message-photo:${keyHash}` });
+  if (!limited.success)
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          message: "Too many photo uploads; try again in a minute",
+          requestId: webRequestId(request),
+        },
+      },
+      { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } },
+    );
   const bytes = await readBoundedBytes(request, {
     maxBytes: orderMessageImageMaxInputBytes + 16_384,
     contentTypes: ["multipart/form-data"],
@@ -153,12 +192,24 @@ export async function stageAttachment(request: Request, side: MessageSide, order
     mimeType,
     bytes: new Uint8Array(await file.arrayBuffer()),
   };
-  const client = coreClient(env.CORE);
   return response(
     request,
     side === "CUSTOMER"
       ? await client.stageCustomerOrderMessageAttachment(input)
       : await client.stageAdminOrderMessageAttachment(input),
+  );
+}
+
+export async function cancelAttachment(request: Request, side: MessageSide, orderId: string) {
+  const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
+  if (!key.success) return invalid(request, "An upload identity is required");
+  const input = { ...meta(request), orderId, idempotencyKey: key.data };
+  const client = coreClient(env.CORE);
+  return response(
+    request,
+    side === "CUSTOMER"
+      ? await client.cancelCustomerOrderMessageAttachment(input)
+      : await client.cancelAdminOrderMessageAttachment(input),
   );
 }
 

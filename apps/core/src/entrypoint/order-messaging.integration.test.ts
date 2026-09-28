@@ -1,9 +1,13 @@
 import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createCoreRpcContext } from "./context";
 import { createMessagesRpc } from "./messages-rpc";
 import { expireOrderMessages } from "../messages/application/expire-order-messages";
+import {
+  cancelOrderMessageAttachment,
+  stageOrderMessageAttachment,
+} from "../messages/application/order-message-attachments";
 
 const png = Uint8Array.from(
   atob(
@@ -195,12 +199,12 @@ it("commits one customer message and acknowledgement with exact replay, private 
       fileName: "corrupt.png",
       idempotencyKey: invalidKey,
     }),
-  ).toMatchObject({ ok: false });
+  ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   expect(
     await env.DB.prepare("SELECT id FROM order_message_upload WHERE idempotency_key=?")
       .bind(invalidKey)
       .first(),
-  ).toBeNull();
+  ).toMatchObject({ id: expect.any(String) });
   const uploadRequest = {
     requestId: "upload",
     headers,
@@ -412,6 +416,184 @@ it("commits one customer message and acknowledgement with exact replay, private 
     .first<{ objectKey: string; status: string }>();
   expect(upload?.status).toBe("DELETED");
   expect(await env.PRODUCT_MEDIA.head(upload?.objectKey ?? "missing")).toBeNull();
+});
+
+it("limits unsent photos before transformation and cancels removed uploads", async () => {
+  const { cookie, customerId } = await customerSession();
+  const orderId = await committedOrder(customerId);
+  const rpc = createMessagesRpc(createCoreRpcContext(env), () => undefined);
+  const headers = { cookie };
+  const request = (key: string) => ({
+    requestId: key,
+    headers,
+    orderId,
+    bytes: png,
+    mimeType: "image/png",
+    fileName: "proof.png",
+    idempotencyKey: key,
+  });
+  const keys = Array.from({ length: 4 }, () => crypto.randomUUID());
+  const staged = await Promise.all(
+    keys.slice(0, 3).map(async (key) => rpc.stageCustomerOrderMessageAttachment(request(key))),
+  );
+  expect(staged.every((result) => result.ok)).toBe(true);
+  expect(await rpc.stageCustomerOrderMessageAttachment(request(keys[3]))).toMatchObject({
+    ok: false,
+    error: { code: "CONFLICT" },
+  });
+  expect(
+    await env.DB.prepare("SELECT id FROM order_message_upload WHERE idempotency_key=?")
+      .bind(keys[3])
+      .first(),
+  ).toBeNull();
+  const cancel = { requestId: "cancel", headers, orderId, idempotencyKey: keys[0] };
+  expect(await rpc.cancelCustomerOrderMessageAttachment(cancel)).toMatchObject({
+    ok: true,
+    value: { canceled: true },
+  });
+  expect(await rpc.cancelCustomerOrderMessageAttachment(cancel)).toMatchObject({ ok: true });
+  expect(await rpc.stageCustomerOrderMessageAttachment(request(keys[0]))).toMatchObject({
+    ok: false,
+    error: { code: "CONFLICT" },
+  });
+  expect(await rpc.stageCustomerOrderMessageAttachment(request(keys[3]))).toMatchObject({
+    ok: true,
+  });
+  const canceled = await env.DB.prepare(`SELECT object_key AS objectKey,status,file_name AS fileName
+    FROM order_message_upload WHERE idempotency_key=?`)
+    .bind(keys[0])
+    .first<{ objectKey: string; status: string; fileName: string | null }>();
+  expect(canceled).toMatchObject({ status: "DELETE_PENDING", fileName: null });
+  await expireOrderMessages(env.DB, env.PRODUCT_MEDIA, Date.now() + 180_000);
+  expect(await env.PRODUCT_MEDIA.head(canceled?.objectKey ?? "missing")).toBeNull();
+
+  const removedBeforeUpload = crypto.randomUUID();
+  expect(
+    await rpc.cancelCustomerOrderMessageAttachment({
+      requestId: "cancel-early",
+      headers,
+      orderId,
+      idempotencyKey: removedBeforeUpload,
+    }),
+  ).toMatchObject({ ok: true });
+  expect(await rpc.stageCustomerOrderMessageAttachment(request(removedBeforeUpload))).toMatchObject(
+    {
+      ok: false,
+      error: { code: "CONFLICT" },
+    },
+  );
+  expect(
+    await env.DB.prepare("SELECT id FROM order_message_upload WHERE idempotency_key=?")
+      .bind(removedBeforeUpload)
+      .first(),
+  ).toBeNull();
+});
+
+it("prevents a conversion already in flight from storing a removed photo", async () => {
+  const { cookie, customerId } = await customerSession();
+  const orderId = await committedOrder(customerId);
+  const rpcContext = createCoreRpcContext(env);
+  let entered!: () => void;
+  let release!: () => void;
+  const converting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const images = {
+    info: async (stream: ReadableStream<Uint8Array>) => {
+      entered();
+      await gate;
+      return env.IMAGES.info(stream);
+    },
+    input: (stream: ReadableStream<Uint8Array>) => env.IMAGES.input(stream),
+  } as ImagesBinding;
+  const context = {
+    env: { DB: env.DB, PRODUCT_MEDIA: env.PRODUCT_MEDIA, IMAGES: images },
+    auth: rpcContext.auth,
+    access: rpcContext.access,
+  };
+  const idempotencyKey = crypto.randomUUID();
+  const request = {
+    requestId: "racing-stage",
+    headers: { cookie },
+    orderId,
+    bytes: png,
+    mimeType: "image/png",
+    fileName: "race.png",
+    idempotencyKey,
+  };
+  const stage = stageOrderMessageAttachment(context, request, "CUSTOMER");
+  await converting;
+  expect(
+    await cancelOrderMessageAttachment(
+      context,
+      { ...request, requestId: "racing-cancel" },
+      "CUSTOMER",
+    ),
+  ).toMatchObject({ ok: true });
+  release();
+  expect(await stage).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+  const row = await env.DB.prepare(`SELECT object_key AS objectKey,status FROM order_message_upload
+    WHERE idempotency_key=?`)
+    .bind(idempotencyKey)
+    .first<{ objectKey: string; status: string }>();
+  expect(row?.status).toBe("DELETE_PENDING");
+  expect(await env.PRODUCT_MEDIA.head(row?.objectKey ?? "missing")).toBeNull();
+});
+
+it("returns permanent validation and account-quota errors without storing originals", async () => {
+  const { cookie, customerId } = await customerSession();
+  const orderId = await committedOrder(customerId);
+  const rpcContext = createCoreRpcContext(env);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    for (const [providerCode, appCode] of [
+      [9520, "VALIDATION_FAILED"],
+      [9422, "CONFIGURATION_ERROR"],
+    ] as const) {
+      const images = {
+        info: async () => {
+          throw { code: providerCode };
+        },
+      } as unknown as ImagesBinding;
+      const context = {
+        env: { DB: env.DB, PRODUCT_MEDIA: env.PRODUCT_MEDIA, IMAGES: images },
+        auth: rpcContext.auth,
+        access: rpcContext.access,
+      };
+      const key = crypto.randomUUID();
+      expect(
+        await stageOrderMessageAttachment(
+          context,
+          {
+            requestId: `image-error-${providerCode}`,
+            headers: { cookie },
+            orderId,
+            bytes: png,
+            mimeType: "image/png",
+            fileName: "proof.png",
+            idempotencyKey: key,
+          },
+          "CUSTOMER",
+        ),
+      ).toMatchObject({ ok: false, error: { code: appCode } });
+      expect(
+        await env.DB.prepare(`SELECT status,file_name AS fileName,normalization_ready AS ready
+        FROM order_message_upload WHERE idempotency_key=?`)
+          .bind(key)
+          .first(),
+      ).toMatchObject({ status: "DELETED", fileName: null, ready: 0 });
+    }
+    expect(logged.mock.calls.map(([entry]) => String(entry))).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('"event":"message_image_processing_failure","code":9422'),
+      ]),
+    );
+  } finally {
+    logged.mockRestore();
+  }
 });
 
 it("requires Orders capability and current location scope for staff messages", async () => {

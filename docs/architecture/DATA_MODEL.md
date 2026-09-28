@@ -508,6 +508,8 @@ It identifies the provider-assigned driver for the current external attempt and 
 provider reassignment. It contains no rider coordinate. Coordinates are transient provider
 observations in the tracking hub's memory and are never persisted to D1.
 
-### Order message image normalization (0108, 2026-09-29)
+### Order message image normalization and hardening (0108–0109, 2026-09-29)
 
 Migration `0108_order_message_image_normalization.sql` adds nullable submitted-image MIME, byte size and SHA-256 digest fields to `order_message_upload`. Null identifies legacy rows whose original object bytes and existing metadata remain authoritative. New rows keep these submitted facts for idempotency while the existing `mime_type`, `byte_size` and `content_digest` columns describe the processed WebP object (at most 5 MiB) in R2. The raw upload is never stored for new rows. Unknown R2 outcomes compare against the processed digest and stable key; a replay can accept an already matching object without another image transformation. Unsent-upload cleanup and readable-content expiry retain their existing transition rules.
+
+Migration `0109_order_message_upload_hardening.sql` adds `normalization_ready` and a bounded conversion claim to the existing intent; legacy rows default ready. New rows reserve input identity with placeholder output metadata, then replace it with the normalized WebP size/digest before storing any bytes. `order_message_upload_cancel` retains keyed cancellation even when Remove arrives before staging. A canceled unsent row preserves its object key for scheduled R2 cleanup and cannot become attached. Active-unsent and rolling-day reservation limits execute in the same D1 batch as reservation.

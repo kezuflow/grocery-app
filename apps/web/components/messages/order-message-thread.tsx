@@ -291,9 +291,11 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                   <Attachment
                     key={entry.key}
                     state={
-                      entry.status === "preparing" || entry.status === "uploading"
+                      entry.status === "preparing" ||
+                      entry.status === "uploading" ||
+                      entry.status === "removing"
                         ? "uploading"
-                        : entry.status === "error"
+                        : entry.status === "error" || entry.status === "remove-error"
                           ? "error"
                           : "done"
                     }
@@ -310,20 +312,24 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                             ? "Preparing photo…"
                             : entry.status === "uploading"
                               ? "Uploading…"
-                              : "Ready")}
+                              : entry.status === "removing"
+                                ? "Removing…"
+                                : "Ready")}
                       </AttachmentDescription>
                     </AttachmentContent>
                     <AttachmentActions>
-                      {entry.status === "error" ? (
+                      {(entry.status === "error" && entry.retryable) ||
+                      entry.status === "remove-error" ? (
                         <AttachmentAction
                           type="button"
                           onClick={() => chat.retryAttachment(entry.key)}
                         >
-                          Retry
+                          {entry.status === "remove-error" ? "Retry remove" : "Retry"}
                         </AttachmentAction>
                       ) : null}
                       <AttachmentAction
                         type="button"
+                        disabled={chat.sending || entry.status === "removing"}
                         aria-label={`Remove ${entry.file.name}`}
                         onClick={() => chat.removeAttachment(entry.key)}
                       >
