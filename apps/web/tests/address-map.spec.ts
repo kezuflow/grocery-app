@@ -373,9 +373,9 @@ for (const width of [1440, 390])
     await expect(dialog).toHaveCount(0);
     await expect(inlinePrompt).toBeVisible();
     await expect(inlinePrompt.getByText("Where should we deliver?")).toBeVisible();
-    await expect(inlinePrompt).toHaveCSS("border-bottom-color", "rgb(16, 137, 16)");
+    await expect(inlinePrompt).toHaveCSS("border-bottom-color", "rgb(0, 177, 79)");
     const setLocation = inlinePrompt.getByRole("button", { name: "Set delivery location" });
-    await expect(setLocation).toHaveCSS("background-color", "rgb(16, 137, 16)");
+    await expect(setLocation).toHaveCSS("background-color", "rgb(0, 177, 79)");
     await page.screenshot({ path: testInfo.outputPath(`inline-delivery-${width}.png`) });
     await setLocation.click();
     await expect(dialog).toBeVisible();

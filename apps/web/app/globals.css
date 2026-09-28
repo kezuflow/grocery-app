@@ -83,9 +83,9 @@
   --fm-radius-overlay: 12px;
   --fm-primary-hover: #294f30;
   --fm-primary-foreground: #ffffff;
-  --fm-storefront-accent: #108910;
+  --fm-storefront-accent: #00b14f;
   --fm-storefront-action: var(--fm-storefront-accent);
-  --fm-storefront-action-hover: #0c700c;
+  --fm-storefront-action-hover: #009944;
   --fm-destructive-hover: #b42318;
   --fm-shadow-card: 0 8px 24px rgb(25 25 25 / 6%);
   --fm-shadow-overlay: 0 18px 48px rgb(25 25 25 / 14%);

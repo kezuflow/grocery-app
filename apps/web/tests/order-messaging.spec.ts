@@ -30,12 +30,19 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
 
   await signedInPage.goto(`/account/messages/${orderId}`);
   await expect(signedInPage.getByRole("heading", { name: "Order messages" })).toBeVisible();
-  await signedInPage.getByRole("textbox", { name: "Message" }).fill("Where is my Order?");
-  await signedInPage.getByRole("button", { name: "Send message" }).click();
+  const customerComposer = signedInPage.getByRole("textbox", { name: "Message" });
+  await expect(
+    signedInPage.getByRole("status", { name: /FreshMarkets team unavailable/ }),
+  ).toHaveCSS("background-color", "rgb(156, 163, 175)");
+  await customerComposer.fill("Where is my");
+  await customerComposer.press("Shift+Enter");
+  await expect(customerComposer).toHaveValue("Where is my\n");
+  await customerComposer.fill("Where is my Order?");
+  await customerComposer.press("Enter");
   await expect(signedInPage.getByText("Where is my Order?")).toBeVisible();
   await expect(signedInPage.getByText("Where is my Order?")).toHaveCSS(
     "background-color",
-    "rgb(16, 137, 16)",
+    "rgb(0, 177, 79)",
   );
   await expect(signedInPage.getByText("Where is my Order?")).toHaveCSS(
     "color",
@@ -46,14 +53,17 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await adminPage.goto("/admin/messages");
   await adminPage.getByRole("link", { name: new RegExp(orderId) }).click();
   await expect(adminPage.getByText("Where is my Order?")).toBeVisible();
-  await expect(signedInPage.getByText("FreshMarkets team is in this chat")).toBeVisible();
+  await expect(signedInPage.getByRole("status", { name: "FreshMarkets team available" })).toHaveCSS(
+    "background-color",
+    "rgb(0, 177, 79)",
+  );
   await adminPage.getByRole("textbox", { name: "Message" }).fill("We are checking it now.");
   await expect(signedInPage.getByText("FreshMarkets team is typing…")).toBeVisible();
   await adminPage.getByRole("button", { name: "Send message" }).click();
   await expect(adminPage.getByText("We are checking it now.")).toBeVisible();
   await expect(adminPage.getByText("We are checking it now.")).toHaveCSS(
     "background-color",
-    "rgb(16, 137, 16)",
+    "rgb(0, 177, 79)",
   );
   await expect(signedInPage.getByText("We are checking it now.")).toBeVisible();
 
