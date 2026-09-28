@@ -88,7 +88,7 @@ function deliveryPage(locationId: string, orderId: string, nextCursor: string | 
 
 test("Delivery queue isolates location reads and reaches later cursor pages at 1440px", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installDeliveryScopes(page);
   let releaseFirst!: () => void;
@@ -132,7 +132,6 @@ test("Delivery queue isolates location reads and reaches later cursor pages at 1
   await expect(firstHillsRow).toContainText("Courier action unavailable");
   releaseFirst();
   await expect(page.getByText("harbor-order", { exact: true })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("delivery-queue-1440.png"), fullPage: true });
 
   const pagination = page.getByRole("navigation", { name: "Results pagination" });
   await pagination.getByRole("button", { name: "Next" }).click();
@@ -267,7 +266,7 @@ test("Read-only delivery staff cannot use provider recovery controls", async ({ 
 
 test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignment, and shows saved evidence at 1440px", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installDeliveryScopes(page);
   let assigned = false;
@@ -337,7 +336,6 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   await expect(row.getByRole("textbox", { name: "Person delivering" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Request Lalamove" })).toBeEnabled();
   await page.waitForTimeout(250);
-  await page.screenshot({ path: testInfo.outputPath("dispatch-choice-1440.png"), fullPage: true });
   await expect(row.getByRole("button", { name: "Request Lalamove" })).toBeEnabled();
   await row.getByRole("textbox", { name: "Person delivering" }).fill("Dispatch helper");
   await row.getByRole("textbox", { name: "Phone including country code" }).fill("+639171110000");
@@ -490,7 +488,7 @@ test("An older queue read cannot unmount an unknown manual request", async ({ pa
 
 test("Provider cancellation asks accessibly and retries one saved request after an unknown result", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installDeliveryScopes(page);
   await page.route("**/api/admin/delivery?**", (route) => {
@@ -540,10 +538,6 @@ test("Provider cancellation asks accessibly and retries one saved request after 
   const dialog = page.getByRole("alertdialog", { name: "Cancel Lalamove delivery?" });
   await expect(dialog).toContainText("Order cancel-order");
   await page.waitForTimeout(250);
-  await page.screenshot({
-    path: testInfo.outputPath("delivery-cancel-dialog-1440.png"),
-    fullPage: true,
-  });
   expect(requests).toHaveLength(0);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -615,7 +609,7 @@ test("Delivery pagination asks before discarding a manual draft and restores foc
 
 test("Delivery shows provider progress and offers replacement only after definite closure", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installDeliveryScopes(page);
   const states = [
@@ -707,10 +701,6 @@ test("Delivery shows provider progress and offers replacement only after definit
     ).toBeVisible();
     await expect(row.getByRole("button", { name: "Refresh provider" })).toBeVisible();
   }
-  await page.screenshot({
-    path: testInfo.outputPath("delivery-recovery-states-1440.png"),
-    fullPage: true,
-  });
 });
 
 test("An uncertain courier booking keeps one request identity and never reports a confirmed booking", async ({

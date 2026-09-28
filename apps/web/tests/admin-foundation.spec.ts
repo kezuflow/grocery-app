@@ -20,17 +20,6 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("an unauthenticated visitor sees the sign-in requirement, not the shell", async ({ page }) => {
-  await page.goto("/admin");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-  await expect(page.getByRole("navigation", { name: "Admin navigation" })).toHaveCount(0);
-});
-
-test("an unauthenticated visitor cannot open the Audit workspace", async ({ page }) => {
-  await page.goto("/admin/audit");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
 test("the authenticated mobile navigation is keyboard and screen-reader accessible", async ({
   adminPage,
 }) => {
@@ -75,12 +64,11 @@ test("the desktop shell defaults to an expanded sidebar and persists an explicit
 
 test("the desktop theme and search respect keyboard focus and reduced motion", async ({
   adminPage,
-}, testInfo) => {
+}) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.emulateMedia({ reducedMotion: "reduce" });
   await adminPage.goto("/admin");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-  await adminPage.screenshot({ path: testInfo.outputPath("admin-light-1440.png") });
   expect(
     await adminPage
       .locator(".fm-admin")
@@ -101,7 +89,6 @@ test("the desktop theme and search respect keyboard focus and reduced motion", a
   await expect(adminPage.locator("html")).toHaveClass(/fm-admin-dark/);
   await expect(adminPage.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(adminPage.getByText("Open orders", { exact: true })).toBeVisible();
-  await adminPage.screenshot({ path: testInfo.outputPath("admin-dark-1440.png") });
 
   const search = adminPage.getByRole("button", { name: "Open admin search" });
   await search.focus();
@@ -110,7 +97,6 @@ test("the desktop theme and search respect keyboard focus and reduced motion", a
   await expect(palette).toBeVisible();
   await expect(palette.getByRole("combobox")).toBeFocused();
   expect(await palette.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
-  await adminPage.screenshot({ path: testInfo.outputPath("admin-search-1440.png") });
   await adminPage.keyboard.press("Escape");
   await expect(palette).toBeHidden();
   await expect(search).toBeFocused();

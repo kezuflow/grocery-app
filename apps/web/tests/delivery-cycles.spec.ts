@@ -30,7 +30,7 @@ function calendarDate(value: string) {
 for (const width of [1440, 390]) {
   test(`operator plans, activates and deactivates one connected cycle with response recovery at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width, height: 950 });
     await page.goto("/admin/settings/scheduled-cycles");
     const scope = page.getByRole("combobox", { name: "Active admin scope" });
@@ -112,10 +112,6 @@ for (const width of [1440, 390]) {
     await expect(editor.getByLabel("Planning note", { exact: true })).toHaveValue(
       "Prepare weekly service",
     );
-    await page.screenshot({
-      path: testInfo.outputPath("scheduled-cycle-review.png"),
-      fullPage: false,
-    });
     await expect(editor.getByRole("heading", { name: "Review and save" })).toBeVisible();
 
     const attempts: { key: string | undefined; body: string | null }[] = [];
@@ -160,7 +156,6 @@ for (const width of [1440, 390]) {
     expect(attempts).toHaveLength(4);
     expect(attempts[1]).toEqual(attempts[0]);
     expect(attempts[3]).toEqual(attempts[2]);
-    await page.screenshot({ path: testInfo.outputPath("scheduled-cycle.png"), fullPage: false });
 
     await details.getByRole("button", { name: "Deactivate", exact: true }).click();
     const deactivate = page.getByRole("alertdialog");
@@ -171,7 +166,6 @@ for (const width of [1440, 390]) {
     await expect(details).toContainText("Canceled");
     expect(attempts).toHaveLength(6);
     expect(attempts[5]).toEqual(attempts[4]);
-    await page.screenshot({ path: testInfo.outputPath("canceled-cycle.png"), fullPage: false });
 
     await page.route("**/api/admin/delivery-cycles?**", async (route) => {
       const requestUrl = new URL(route.request().url());

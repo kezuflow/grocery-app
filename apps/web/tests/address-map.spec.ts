@@ -356,9 +356,7 @@ test("public serviceability checks a confirmed search result without saving or s
 });
 
 for (const width of [1440, 390])
-  test(`inline delivery prompt opens the address flow at ${width}px`, async ({
-    page,
-  }, testInfo) => {
+  test(`inline delivery prompt opens the address flow at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await mockAddressResolution(page);
     await page.route("**/api/serviceability", (route) =>
@@ -376,7 +374,6 @@ for (const width of [1440, 390])
     await expect(inlinePrompt).toHaveCSS("border-bottom-color", "rgb(0, 177, 79)");
     const setLocation = inlinePrompt.getByRole("button", { name: "Set delivery location" });
     await expect(setLocation).toHaveCSS("background-color", "rgb(0, 177, 79)");
-    await page.screenshot({ path: testInfo.outputPath(`inline-delivery-${width}.png`) });
     await setLocation.click();
     await expect(dialog).toBeVisible();
     await expect

@@ -2,7 +2,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 
 // Captured-payment linkage is fixture evidence; refund admission/submission/replay use real Web/Core with the test-only provider.
 for (const width of [1440, 390])
-  test(`Recover a submitted refund at ${width}px`, async ({ adminPage: page }, testInfo) => {
+  test(`Recover a submitted refund at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(120_000);
     const suffix = crypto.randomUUID();
     const now = Date.now();
@@ -133,5 +133,4 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("refund.png"), fullPage: true });
   });

@@ -2,9 +2,7 @@ import { z } from "@freshmarkets/validation";
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 import { selectDeliveryWeek } from "./select-delivery-week";
 for (const width of [1440, 390])
-  test(`Weighed Scheduled sizes to packing at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Weighed Scheduled sizes to packing at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width, height: 1000 });
     const id = crypto.randomUUID(),
@@ -109,10 +107,6 @@ for (const width of [1440, 390])
       .filter({ hasText: `${productName} · 3,500 g measured` });
     await expect(history).toContainText("Small: 2 accepted");
     await expect(history).toContainText("Large: 3 accepted");
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-counts-${width}.png`),
-      fullPage: true,
-    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

@@ -3,7 +3,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 for (const width of [1440, 390])
   test(`releases an Instant checkout after a lost response at ${width}px`, async ({
     signedInPage: page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width, height: 1000 });
     const schedule = JSON.stringify({
       weekly: Array.from({ length: 7 }, (_, index) => ({
@@ -91,9 +91,5 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath("checkout-abandonment.png"),
-      fullPage: true,
-    });
     await page.unrouteAll({ behavior: "ignoreErrors" });
   });

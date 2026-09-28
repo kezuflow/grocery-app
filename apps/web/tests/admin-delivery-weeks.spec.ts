@@ -148,7 +148,7 @@ test.beforeEach(async () => {
 
 test("desktop week prioritizes customer arrival and preserves its card during section reads", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await bootstrap(page);
   const delayed: { release?: () => void } = {};
@@ -175,7 +175,6 @@ test("desktop week prioritizes customer arrival and preserves its card during se
     "true",
   );
   await expect(page.getByRole("button", { name: "Paid orders" })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("delivery-week-1440.png"), fullPage: true });
   await page.getByRole("button", { name: "Quantities to buy" }).click();
   await expect(dates.getByText("Customer arrival")).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Loading quantities to buy");
@@ -388,9 +387,7 @@ test("uncertain purchase blocks Back and confirmed purchase suppresses stale act
   await expect(page.getByRole("button", { name: "Confirm purchase", exact: true })).toHaveCount(0);
 });
 
-test("Global Demand keeps Core full-cycle totals on each destination page", async ({
-  page,
-}, testInfo) => {
+test("Global Demand keeps Core full-cycle totals on each destination page", async ({ page }) => {
   await bootstrap(page);
   const item = {
     locationId,
@@ -458,7 +455,6 @@ test("Global Demand keeps Core full-cycle totals on each destination page", asyn
   await expect(table.locator("tbody tr")).toContainText("Central Cebu");
   await expect(table.locator("tbody tr")).toContainText("5 sold units");
   await expect(table.locator("tbody tr")).toContainText("2,500 g");
-  await page.screenshot({ path: testInfo.outputPath("demand-global-1440.png"), fullPage: true });
   await page
     .getByRole("navigation", { name: "Results pagination" })
     .getByRole("button", { name: "Next" })

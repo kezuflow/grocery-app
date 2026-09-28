@@ -2,7 +2,7 @@ import { test, expect } from "./admin-authenticated-fixture";
 for (const width of [1440, 390]) {
   test(`Global saves fulfillment readiness with response recovery at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width, height: 950 });
     await page.goto("/admin/locations");
     await page
@@ -45,9 +45,5 @@ for (const width of [1440, 390]) {
       page.getByLabel("Instant delivery promise (minutes)", { exact: true }),
     ).toHaveValue(promise);
     await expect(readiness).toHaveAttribute("aria-checked", String(nextReady));
-    await page.screenshot({
-      path: testInfo.outputPath("fulfillment-readiness.png"),
-      fullPage: true,
-    });
   });
 }

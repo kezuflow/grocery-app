@@ -13,7 +13,7 @@ const versioned = z.object({ version: z.number() });
 
 test("Admin campaign reaches a real customer Quote at the authored code length boundary", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   test.setTimeout(120000);
   const locationId = "location-cebu-central";
   const reason = "Synthetic local promotion acceptance prerequisites";
@@ -186,9 +186,5 @@ test("Admin campaign reaches a real customer Quote at the authored code length b
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    await page.screenshot({
-      path: testInfo.outputPath(`authored-promotion-real-quote-${width}.png`),
-      fullPage: true,
-    });
   }
 });

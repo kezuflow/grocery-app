@@ -79,7 +79,7 @@ function receipt(locationId: string, name: string) {
 
 test("Receiving keeps the current location and cursor while showing inspected quantities", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await bootstrap(page);
   const delayed: { release?: () => void } = {};
@@ -178,5 +178,4 @@ test("Receiving keeps the current location and cursor while showing inspected qu
   await expect(page.getByRole("navigation", { name: "Results pagination" })).toContainText(
     "Page 1",
   );
-  await page.screenshot({ path: testInfo.outputPath("receiving-harbor-1440.png"), fullPage: true });
 });

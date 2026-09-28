@@ -126,7 +126,6 @@ test("Picking and packing prepares a paid order through the scoped Fulfillment c
   await expect(page.getByRole("button", { name: "Open order FM-1001" })).toBeVisible();
   await page.getByRole("button", { name: "Open order FM-1001" }).click();
   await expect(page.getByRole("heading", { name: "Ordered items" })).toBeVisible();
-  await page.screenshot({ path: "test-results/picking-packing-tablet.png", fullPage: true });
   await page.getByRole("button", { name: "Accept order & start picking", exact: true }).click();
   await expect(page.getByRole("button", { name: "Finish picking" })).toBeVisible();
   expect(command).toMatchObject({
@@ -139,7 +138,6 @@ test("Picking and packing prepares a paid order through the scoped Fulfillment c
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Picking & packing" })).toBeVisible();
-  await page.screenshot({ path: "test-results/picking-packing-phone.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

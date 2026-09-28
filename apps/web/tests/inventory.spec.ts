@@ -2,9 +2,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 
 // Catalog setup is a fixture; stock creation, recovery and removal use the live Web/Core path.
 for (const width of [1440, 390])
-  test(`Create and recover inspected stock at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Create and recover inspected stock at ${width}px`, async ({ adminPage: page }) => {
     const id = `00-stock-${crypto.randomUUID()}`,
       name = `Inspected stock ${width} ${id.slice(-6)}`;
     executeAdminE2eSql(`
@@ -70,5 +68,4 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("inventory.png"), fullPage: true });
   });

@@ -4,7 +4,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 for (const width of [1440, 390])
   test(`Receive and resolve inspected Scheduled goods at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     const id = crypto.randomUUID(),
       name = `Inspected receipt ${width} ${id.slice(0, 8)}`;
     executeAdminE2eSql(`
@@ -43,5 +43,4 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("receiving.png"), fullPage: true });
   });

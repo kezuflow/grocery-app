@@ -2,7 +2,7 @@ import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture"
 
 // Pending financial state is a fixture seam; recheck acceptance/replay use real Web/Core/D1.
 for (const width of [1440, 390])
-  test(`Recover a queued payment check at ${width}px`, async ({ adminPage: page }, testInfo) => {
+  test(`Recover a queued payment check at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(60_000);
     const suffix = crypto.randomUUID();
     const now = Date.now();
@@ -87,5 +87,4 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("payment-lookup.png"), fullPage: true });
   });

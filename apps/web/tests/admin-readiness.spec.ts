@@ -22,9 +22,32 @@ test("unauthenticated Admin state has a labelled heading and alert", async ({ pa
 });
 
 test("unauthenticated workspace state does not expose navigation", async ({ page }) => {
-  await page.goto("/admin/orders");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in required");
-  await expect(page.getByRole("navigation", { name: "Admin navigation" })).toHaveCount(0);
+  test.setTimeout(90_000);
+  for (const path of [
+    "/admin/orders",
+    "/admin/audit",
+    "/admin/catalog",
+    "/admin/inventory",
+    "/admin/promotions",
+    "/admin/customers",
+    "/admin/staff",
+    "/admin/staff/roles",
+    "/admin/memberships",
+    "/admin/issues",
+    "/admin/procurement",
+    "/admin/receiving",
+    "/admin/fulfillment",
+    "/admin/delivery",
+    "/admin/settings/fulfillment-mode",
+    "/admin/issues/operational-exceptions",
+  ]) {
+    await test.step(path, async () => {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in required");
+      await expect(page.getByRole("alert")).toContainText("staff account");
+      await expect(page.getByRole("navigation", { name: "Admin navigation" })).toHaveCount(0);
+    });
+  }
 });
 
 test("authenticated shell supports keyboard focus, menu focus return, and responsive navigation", async ({

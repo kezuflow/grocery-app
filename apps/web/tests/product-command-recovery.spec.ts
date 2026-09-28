@@ -28,9 +28,7 @@ async function loseNextResponse(page: Page, method: string, pathname: string) {
 }
 
 for (const width of [1440, 390]) {
-  test(`Product create edit and status recovery at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Product create edit and status recovery at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width, height: 1000 });
     const id = crypto.randomUUID();
@@ -117,9 +115,5 @@ for (const width of [1440, 390]) {
     expect(requests).toHaveLength(6);
     for (let index = 0; index < 6; index += 2) expect(requests[index + 1]).toEqual(requests[index]);
     expect(new Set(requests.map((request) => request.key)).size).toBe(3);
-    await page.screenshot({
-      path: testInfo.outputPath("product-command-recovery.png"),
-      fullPage: true,
-    });
   });
 }

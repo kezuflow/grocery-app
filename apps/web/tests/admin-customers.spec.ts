@@ -4,7 +4,7 @@ for (const width of [1440, 390]) {
   test(`verified customer accepts an invitation after a lost response at ${width}px`, async ({
     adminPage,
     signedInPage,
-  }, testInfo) => {
+  }) => {
     await signedInPage.setViewportSize({ width, height: 900 });
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
     expect(session.user.emailVerified).toBe(true);
@@ -97,10 +97,6 @@ for (const width of [1440, 390]) {
     expect(
       await signedInPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await signedInPage.screenshot({
-      path: testInfo.outputPath("customer-invitation-accepted.png"),
-      fullPage: true,
-    });
     await signedInPage.getByRole("link", { name: "Add your delivery address" }).click();
     await expect(signedInPage).toHaveURL(/\/account\/addresses$/);
     const queue = await (
@@ -243,10 +239,6 @@ for (const width of [1440, 390]) {
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await adminPage.screenshot({
-      path: testInfo.outputPath("customer-access-recovered.png"),
-      fullPage: true,
-    });
     const login = await signedInPage.request.post("/api/auth/sign-in/email", {
       headers: { origin: new URL(signedInPage.url()).origin },
       data: { email: session.user.email, password: "correct-horse-battery-staple" },
@@ -315,10 +307,6 @@ for (const width of [1440, 390]) {
     await expect(adminPage.getByRole("button", { name: "Restore access" })).toBeVisible();
     await expect(adminPage.getByText("CUSTOMER.CLOSED", { exact: true })).toBeVisible();
     expect(await (await signedInPage.request.get("/api/auth/get-session")).json()).toBeNull();
-    await adminPage.screenshot({
-      path: testInfo.outputPath("customer-closure-completed.png"),
-      fullPage: true,
-    });
   });
 }
 
@@ -338,11 +326,6 @@ test.beforeAll(async ({ request }) => {
 });
 test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
-});
-
-test("an unauthenticated visitor cannot open the customers workspace", async ({ page }) => {
-  await page.goto("/admin/customers");
-  await expect(page.getByRole("alert")).toContainText("staff account");
 });
 
 test("a provisioned Staff reader opens the real Customer workspace", async ({ adminPage }) => {

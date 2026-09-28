@@ -24,9 +24,7 @@ test("desktop service-area draft stays Global and guards scope changes", async (
   await expect(page.getByRole("heading", { name: "Service areas", exact: true })).toBeVisible();
 });
 for (const width of [1440, 390]) {
-  test(`global service-area editor is operational at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`global service-area editor is operational at ${width}px`, async ({ adminPage: page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/admin/locations/service-areas");
     await expect(page).toHaveURL(/\/admin\/locations\/service-areas$/);
@@ -54,20 +52,12 @@ for (const width of [1440, 390]) {
         await page.getByRole("button", { name: "Add boundary point" }).click();
       }
       await page.getByLabel("Reason").fill("Browser acceptance boundary");
-      await page.screenshot({
-        path: testInfo.outputPath("service-area-editor.png"),
-        fullPage: true,
-      });
       await page.getByRole("button", { name: "Publish service area" }).click();
       await expect(
         page.getByText("Service area published. New address checks now use this boundary."),
       ).toBeVisible({ timeout: 15000 });
       await expect(page.getByRole("heading", { name: areaName, exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: `Edit ${areaName}` })).toBeVisible();
-      await page.screenshot({
-        path: testInfo.outputPath("service-areas-list.png"),
-        fullPage: true,
-      });
     }
 
     await expect

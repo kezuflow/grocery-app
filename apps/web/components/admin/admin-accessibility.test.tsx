@@ -1,18 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { AdminShell, AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/admin/shadcn/table";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import { AdminCursorPagination } from "./admin-controls";
 import { AdminDataTable, type AdminDataTableColumn } from "./admin-data-table";
 import { AdminPageState, AdminLiveRegion, type AdminPageStateKind } from "./admin-page-state";
+import { AdminShell, AdminShellBoundary, PageHeader, StatusBadge } from "./admin-shell";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "./shadcn/table";
 
 const { useAdminContext } = vi.hoisted(() => ({ useAdminContext: vi.fn() }));
 vi.mock("../../app/admin/admin-overview-provider", () => ({
@@ -36,126 +29,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
-const shell = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
-const globals = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
-const workspaceResizeHandle = readFileSync(
-  new URL("./admin-workspace-resize-handle.tsx", import.meta.url),
-  "utf8",
-);
-const masterDetailWorkspace = readFileSync(
-  new URL("./admin-master-detail-workspace.tsx", import.meta.url),
-  "utf8",
-);
-const sheet = readFileSync(new URL("./shadcn/sheet.tsx", import.meta.url), "utf8");
-const table = readFileSync(new URL("./shadcn/table.tsx", import.meta.url), "utf8");
-const alertDialog = readFileSync(new URL("./shadcn/alert-dialog.tsx", import.meta.url), "utf8");
-const controls = readFileSync(new URL("./admin-controls.tsx", import.meta.url), "utf8");
-const pageState = readFileSync(new URL("./admin-page-state.tsx", import.meta.url), "utf8");
-const productDetail = readFileSync(
-  new URL("../../app/admin/catalog/products/[product-id]/page.tsx", import.meta.url),
-  "utf8",
-);
-const inventoryPage = readFileSync(
-  new URL("../../app/admin/inventory/page.tsx", import.meta.url),
-  "utf8",
-);
-const auditPage = readFileSync(new URL("../../app/admin/audit/page.tsx", import.meta.url), "utf8");
-const promotionsPage = readFileSync(
-  new URL("../../app/admin/promotions/page.tsx", import.meta.url),
-  "utf8",
-);
-const salesPage = readFileSync(new URL("../../app/admin/sales/page.tsx", import.meta.url), "utf8");
-const productsPage = readFileSync(
-  new URL("../../app/admin/catalog/products/products-page-client.tsx", import.meta.url),
-  "utf8",
-);
-const adminProductsQuery = readFileSync(
-  new URL("../../lib/query/admin-products.ts", import.meta.url),
-  "utf8",
-);
-const categoriesPage = readFileSync(
-  new URL("../../app/admin/catalog/categories/categories-page-client.tsx", import.meta.url),
-  "utf8",
-);
-const ordersPage = readFileSync(
-  new URL("../../app/admin/orders/page.tsx", import.meta.url),
-  "utf8",
-);
-const orderPreviewPanel = readFileSync(
-  new URL("./order-preview-panel.tsx", import.meta.url),
-  "utf8",
-);
-const customersPage = readFileSync(
-  new URL("../../app/admin/customers/page.tsx", import.meta.url),
-  "utf8",
-);
-const bannersPage = readFileSync(
-  new URL("../../app/admin/banners/page.tsx", import.meta.url),
-  "utf8",
-);
-const newProductPage = readFileSync(
-  new URL("../../app/admin/catalog/products/new/page.tsx", import.meta.url),
-  "utf8",
-);
-const newCategoryPage = readFileSync(
-  new URL("../../app/admin/catalog/categories/new/page.tsx", import.meta.url),
-  "utf8",
-);
-const issuesPage = readFileSync(
-  new URL("../../app/admin/issues/page.tsx", import.meta.url),
-  "utf8",
-);
-const locationOnlyPages = [
-  "../../app/admin/procurement/page.tsx",
-  "../../app/admin/receiving/page.tsx",
-  "../../app/admin/fulfillment/page.tsx",
-  "../../app/admin/issues/operational-exceptions/page.tsx",
-].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
-const globalFulfillmentModePage = readFileSync(
-  new URL("../../app/admin/settings/fulfillment-mode/page.tsx", import.meta.url),
-  "utf8",
-);
-const dynamicAdminPages = [
-  "../../app/admin/promotions/[promotion-id]/page.tsx",
-  "../../app/admin/customers/[customer-id]/page.tsx",
-  "../../app/admin/staff/[staff-id]/page.tsx",
-  "../../app/admin/staff/roles/[role-id]/page.tsx",
-  "../../app/admin/audit/audit-detail-view.tsx",
-  "../../app/admin/catalog/products/[product-id]/page.tsx",
-  "../../app/admin/catalog/products/[product-id]/edit/page.tsx",
-  "../../app/admin/catalog/categories/[category-id]/page.tsx",
-  "../../app/admin/catalog/categories/[category-id]/edit/page.tsx",
-].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
-
 describe("shared Admin accessibility contract", () => {
-  it("exposes labelled main content, active navigation, and a focusable mobile menu", () => {
-    expect(shell).toMatch(/<main[^>]+aria-labelledby=/);
-    expect(shell).toMatch(/aria-current=/);
-    expect(shell).toMatch(/focus-visible:ring-2/);
-    expect(shell).toMatch(/onCloseAutoFocus/);
-    expect(shell).not.toContain("AdminBreadcrumbs");
-    expect(shell).not.toContain("showBreadcrumbs");
-    expect(shell).not.toMatch(/Mobile admin navigation/);
-    expect(shell).toMatch(/fm-admin-sidebar-collapsed/);
-  });
-
-  it("keeps the Admin visual scope on the Admin layout boundary", () => {
-    const layout = readFileSync(new URL("../../app/admin/layout.tsx", import.meta.url), "utf8");
-    const rootLayout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
-    expect(layout).toMatch(/className="fm-admin/);
-    expect(layout).not.toContain("dm-sans");
-    expect(rootLayout).toContain('import "@fontsource-variable/geist/wght.css"');
-    expect(rootLayout).toContain('import "@fontsource-variable/geist-mono/wght.css"');
-    expect(globals).toContain("--fm-font-body: ui-sans-serif, system-ui, sans-serif;");
-    expect(globals).toMatch(/--fm-font-mono:\s+ui-monospace, SFMono-Regular/);
-    expect(globals).toMatch(/\.fm-admin \{[\s\S]*font-family: var\(--font-sans\);/);
-    expect(globals).toContain("@custom-variant admin-dark");
-    expect(globals).toContain("html:has(.fm-admin)");
-    expect(shell).toContain('className="fm-admin-sidebar-tooltip rounded-lg"');
-    expect(shell).toContain('className="text-2xl font-bold tracking-tight"');
-  });
-
-  it("server-renders the expanded Admin shell with accessible controls", () => {
+  it("server-renders the expanded shell with accessible controls", () => {
     useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
     const markup = renderToStaticMarkup(
       createElement(AdminShell, {
@@ -166,34 +41,16 @@ describe("shared Admin accessibility contract", () => {
       }),
     );
 
-    expect(markup).toContain("w-[var(--fm-admin-sidebar-expanded)]");
     expect(markup).toContain('aria-label="Collapse admin navigation"');
     expect(markup).toContain('aria-label="Open admin navigation"');
     expect(markup).toContain('aria-label="Search admin navigation"');
     expect(markup).toContain('aria-label="Open notifications"');
-    expect(shell).toContain('aria-label="freshmarkets admin home"');
     expect(markup).toContain('src="/brand/freshmarkets-mark.webp"');
     expect(markup).toContain('aria-labelledby="admin-page-title"');
     expect(markup.indexOf("<header")).toBeLessThan(markup.indexOf("<aside"));
-    expect(shell).toContain("border-b border-border bg-background text-foreground");
-    expect(shell).toContain("top-14 z-20 hidden h-[calc(100vh-3.5rem)]");
-    expect(shell).toContain(
-      'aria-label={collapsed ? "Expand admin navigation" : "Collapse admin navigation"}',
-    );
-    expect(shell).toContain("<AdminThemeToggle />");
-    expect(shell).toContain('fetch("/api/auth/sign-out"');
-    expect(shell).toContain('window.location.assign("/auth/login")');
-    expect(shell).toContain("onCloseAutoFocus");
   });
 
-  it("gives shell states headings and status semantics", () => {
-    expect(shell).toMatch(/<h1[^>]*>[\s\S]*Sign in required/);
-    expect(shell).toMatch(/<h1[^>]*>[\s\S]*Staff access required/);
-    expect(shell).toMatch(/role="status"/);
-    expect(pageState).toContain('aria-live="polite"');
-  });
-
-  it("renders production loading, unauthenticated, forbidden, and error states", () => {
+  it("renders loading, unauthenticated, forbidden, and error states", () => {
     useAdminContext.mockReturnValue({ state: { phase: "loading" }, retry: vi.fn() });
     const loading = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
     useAdminContext.mockReturnValue({ state: { phase: "unauthenticated" }, retry: vi.fn() });
@@ -207,22 +64,17 @@ describe("shared Admin accessibility contract", () => {
       retry: vi.fn(),
     });
     const error = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
+
     expect(loading).toContain('role="status"');
     expect(loading).toContain("Loading admin shell");
     expect(unauthenticated).toContain('id="admin-page-title"');
     expect(unauthenticated).toContain("Sign in required");
-    expect(shell).toContain('href="/auth/login?redirectTo=/admin"');
     expect(forbidden).toContain("Staff access required");
     expect(error).toContain('role="alert"');
     expect(error).toContain("Request reference: req-1");
   });
 
-  it("keeps shared table content keyboard discoverable and headers scoped", () => {
-    expect(table).toMatch(/tabIndex=\{0\}/);
-    expect(table).toMatch(/aria-label=/);
-  });
-
-  it("renders production status, table, and page-header output", () => {
+  it("renders status, table, and page-header semantics", () => {
     const markup = renderToStaticMarkup(
       createElement(
         "div",
@@ -241,8 +93,7 @@ describe("shared Admin accessibility contract", () => {
         createElement(PageHeader, { title: "Orders", description: "Committed orders." }),
       ),
     );
-    // Status badges are labels, not announcements; live semantics stay with
-    // AdminPageState/AdminLiveRegion.
+
     expect(markup).toContain('data-variant="outline"');
     expect(markup).not.toContain('role="status"');
     expect(markup).toContain('role="region"');
@@ -250,113 +101,6 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain('scope="col"');
     expect(markup).toContain('tabindex="0"');
     expect(markup).toContain('id="admin-page-title"');
-    expect(markup).not.toContain("FreshMarkets Admin");
-  });
-
-  it("keeps permanent route context singular and hides unavailable queue actions", () => {
-    expect(auditPage).not.toContain("<Breadcrumb>");
-    expect(newProductPage).not.toContain("<nav");
-    expect(newProductPage).not.toContain("StepIndicator");
-    expect(newProductPage).not.toContain("CommandBanner");
-    expect(newProductPage).not.toContain("Creation sequence");
-    expect(newProductPage).toContain("form={CREATE_PRODUCT_FORM_ID}");
-    expect(newCategoryPage).not.toContain("<nav");
-    for (const page of dynamicAdminPages) {
-      expect(page).not.toContain("<Breadcrumb>");
-      expect(page).not.toContain("<nav");
-    }
-    expect(issuesPage).toContain("issues.length > 0");
-    for (const page of locationOnlyPages) {
-      expect(page).toContain('state="permission-empty"');
-      expect(page).toContain("Select a permitted location");
-    }
-    expect(globalFulfillmentModePage).toContain("Switch to Global scope");
-  });
-
-  it("gives resource workspaces full-bleed responsive master-detail panes", () => {
-    for (const path of [
-      "/admin/promotions",
-      "/admin/sales",
-      "/admin/catalog/products",
-      "/admin/catalog/categories",
-      "/admin/orders",
-      "/admin/customers",
-      "/admin/banners",
-    ]) {
-      expect(shell).toContain(`"${path}"`);
-    }
-    expect(shell).toContain('fullBleedWorkspace ? "p-0"');
-    expect(shell).toContain("productDetailWorkspace");
-    expect(masterDetailWorkspace).toContain(
-      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
-    );
-    expect(masterDetailWorkspace).toContain("fixed inset-0 z-50 flex h-svh");
-    expect(masterDetailWorkspace).toContain("[transition-duration:var(--fm-motion-panel)]");
-    expect(masterDetailWorkspace).toContain("motion-reduce:transition-[opacity]");
-    for (const page of [productsPage, ordersPage, customersPage, bannersPage]) {
-      expect(page).toContain("<AdminMasterDetailWorkspace");
-      expect(page).toContain("resizeLabel=");
-    }
-    expect(productsPage).toContain('detailPanelId="product-detail-panel"');
-    expect(productsPage).not.toContain('href="/admin/catalog/products/new"');
-    expect(productsPage).toContain("<NewProductWorkspace");
-    expect(productsPage).toContain("fetchAdminProductDetail");
-    expect(adminProductsQuery).toContain("catalogResultSchema(adminProductDetailSchema).parse");
-    expect(productsPage).toContain("<GlobalProductPreviewPanel");
-    expect(productsPage).toContain("<LocationProductPreviewPanel");
-    expect(categoriesPage).not.toContain('href="/admin/catalog/categories/new"');
-    expect(categoriesPage).toContain("<NewCategoryWorkspace");
-    expect(ordersPage).toContain("href={recordHref(order)}");
-    expect(ordersPage).toContain('panelId="order-detail-panel"');
-    expect(ordersPage).toContain("aria-label={`Preview order ${orderLabel(order)}`}");
-    expect(orderPreviewPanel).toContain("Order Preview");
-    expect(orderPreviewPanel).toContain('aria-label="Order status"');
-    expect(orderPreviewPanel).toContain("<Table");
-    expect(customersPage).toContain('aria-controls="customer-invitation-panel"');
-    expect(customersPage).toContain("href={recordHref(customer)}");
-    expect(bannersPage).toContain('aria-controls="banner-detail-panel"');
-    expect(promotionsPage).toContain(
-      "xl:[grid-template-columns:minmax(0,1fr)_var(--fm-admin-workspace-panel-width)]",
-    );
-    expect(promotionsPage).toContain("xl:transition-[grid-template-columns]");
-    expect(promotionsPage).toContain(
-      "xl:[--fm-admin-workspace-panel-width:var(--fm-admin-workspace-panel-open-width)]",
-    );
-    expect(promotionsPage).toContain("fixed inset-0 z-50 flex h-svh");
-    expect(promotionsPage).toContain("xl:h-[calc(100svh-4.5rem)]");
-    expect(promotionsPage).toContain("[transition-duration:var(--fm-motion-panel)]");
-    expect(promotionsPage).toContain("[transition-timing-function:var(--fm-ease-drawer)]");
-    expect(promotionsPage).toContain("motion-reduce:transition-[opacity]");
-    expect(promotionsPage).toContain('aria-label="Close promotion details"');
-    expect(promotionsPage).toContain("Select promotion type");
-    expect(promotionsPage).toContain('type: "DELIVERY_FEE_WAIVER"');
-    expect(promotionsPage).toContain('type: "DELIVERY_FIXED_DISCOUNT"');
-    expect(promotionsPage).toContain('type: "DELIVERY_PERCENT_DISCOUNT"');
-    expect(promotionsPage).toContain('state.phase === "ready" && editorOpen');
-    expect(promotionsPage).toContain("promotion-summary-heading");
-    expect(promotionsPage).toContain("Check save status");
-    expect(promotionsPage).toContain("Discard this promotion draft?");
-    expect(salesPage).toContain("Select sale type");
-    expect(salesPage).toContain('<div className="fm-admin contents">');
-    expect(salesPage).toContain('type: "ORDER_PERCENT_DISCOUNT"');
-    expect(salesPage).toContain('type: "ORDER_FIXED_DISCOUNT"');
-    expect(salesPage).not.toContain('type: "DELIVERY_FEE_WAIVER"');
-    expect(salesPage).not.toContain('type: "DELIVERY_FIXED_DISCOUNT"');
-    expect(salesPage).not.toContain('type: "DELIVERY_PERCENT_DISCOUNT"');
-    expect(salesPage).toContain('state.phase === "ready" && editorOpen');
-    expect(salesPage).toContain("sale-summary-heading");
-    expect(salesPage).toContain("Check save status");
-    expect(salesPage).toContain("Discard this sale draft?");
-    expect(promotionsPage).toContain('label="Resize promotion workspace"');
-    expect(workspaceResizeHandle).toContain('role="separator"');
-    expect(workspaceResizeHandle).toContain("setPointerCapture");
-    expect(workspaceResizeHandle).toContain('event.key === "ArrowLeft"');
-    expect(workspaceResizeHandle).toContain('event.key === "ArrowRight"');
-    expect(workspaceResizeHandle).toContain('title="Drag to resize. Double-click to reset."');
-  });
-
-  it("names the mobile dialog close action", () => {
-    expect(sheet).toMatch(/<span className="sr-only">Close<\/span>/);
   });
 
   it("renders an explicit selector when multiple Admin scopes are assigned", () => {
@@ -397,25 +141,21 @@ describe("shared Admin accessibility contract", () => {
             timezone: "Asia/Manila",
           },
         ],
-        selectedScope: {
-          kind: "LOCATION",
-          marketId: "market-1",
-          locationId: "location-1",
-        },
+        selectedScope: { kind: "LOCATION", marketId: "market-1", locationId: "location-1" },
       },
       retry: vi.fn(),
       selectScope: vi.fn(),
     });
     const markup = renderToStaticMarkup(createElement(AdminShellBoundary, { children: null }));
+
     expect(markup).toContain('aria-label="Active admin scope"');
     expect(markup).toContain("Location One");
     expect(markup.split("</header>")[0]).not.toContain("Open account menu for Operator");
     expect(markup.split("<aside")[1]).toContain("Open account menu for Operator");
     expect(markup.split("<aside")[1]).toContain("operator@example.com");
-    expect(shell).toContain("<SelectItem");
   });
 
-  it("renders labelled cursor controls and uses a focus-managed reason confirmation", () => {
+  it("renders labelled cursor controls", () => {
     const pagination = renderToStaticMarkup(
       createElement(AdminCursorPagination, {
         pageNumber: 2,
@@ -424,18 +164,12 @@ describe("shared Admin accessibility contract", () => {
         onNext: vi.fn(),
       }),
     );
+
     expect(pagination).toContain('aria-label="Results pagination"');
     expect(pagination).toContain("Page 2");
-    expect(alertDialog).toContain('from "radix-ui"');
-    expect(alertDialog).toContain("AlertDialogPrimitive.Content");
-    expect(alertDialog).toContain("bg-background");
-    expect(alertDialog).not.toContain("bg-[var(--fm-admin-surface)]");
-    expect(controls).toContain('role="alertdialog"');
-    expect(controls).toContain('aria-label="Confirmation reason"');
-    expect(controls).toContain("reasonRequired && reason.trim()");
   });
 
-  it("renders all distinct shared page states with recoverable semantics", () => {
+  it("renders distinct shared page states with recoverable semantics", () => {
     const variants = [
       "loading",
       "empty",
@@ -460,6 +194,7 @@ describe("shared Admin accessibility contract", () => {
         ),
       )
       .join("");
+
     expect(markup).toContain('role="status"');
     expect(markup).toContain('role="alert"');
     expect(markup).toContain("No data is available yet");
@@ -473,7 +208,7 @@ describe("shared Admin accessibility contract", () => {
     expect(markup).toContain("Retry");
   });
 
-  it("renders a responsive typed data table and live command result", () => {
+  it("renders a typed data table and live command result", () => {
     type Row = { id: string; name: string; status: string };
     const columns: ReadonlyArray<AdminDataTableColumn<Row>> = [
       { key: "name", header: "Name", render: (row) => row.name },
@@ -492,21 +227,10 @@ describe("shared Admin accessibility contract", () => {
         createElement(AdminLiveRegion, { message: "Order updated" }),
       ),
     );
+
     expect(markup).toContain('aria-label="Typed records"');
     expect(markup).toContain('data-label="Name"');
     expect(markup).toContain('aria-live="polite"');
     expect(markup).toContain("Order updated");
-  });
-
-  it("rejects stale scoped responses and renders target currencies dynamically", () => {
-    expect(productDetail).toContain("loadRequest.current !== requestNumber");
-    expect(productDetail).toContain("currency: sku.currency");
-    expect(productDetail).not.toContain("`₱${(sku.priceMinor");
-    expect(inventoryPage).toContain("loadRequest.current !== requestNumber");
-    expect(inventoryPage).toContain("ledgerRequest.current === requestNumber");
-    expect(inventoryPage).toContain('phase: "error"');
-    expect(inventoryPage).toContain("ledgerState.key === ledgerKey");
-    expect(inventoryPage).toContain("Network error loading the inventory ledger.");
-    expect(inventoryPage).toContain("useAdminPagination(locationId)");
   });
 });

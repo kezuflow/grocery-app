@@ -387,10 +387,6 @@ for (const width of [1440, 390]) {
     await admin.goto(`/admin/fulfillment?orderId=${orderId}`);
     await admin.getByRole("button", { name: "Finish packing order", exact: true }).click();
     await expect(admin.getByText("Order packed", { exact: false })).toBeVisible();
-    await admin.screenshot({
-      path: testInfo.outputPath(`scheduled-week-complete-${width}.png`),
-      fullPage: true,
-    });
 
     expect(
       z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
@@ -440,10 +436,6 @@ for (const width of [1440, 390]) {
     ).toBe("DELIVERED");
     await page.goto(`/orders/${orderId}`);
     await expect(page.getByRole("heading", { name: "Delivered", level: 1 })).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-delivered-${width}.png`),
-      fullPage: true,
-    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

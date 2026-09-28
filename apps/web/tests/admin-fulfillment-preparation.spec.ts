@@ -2,7 +2,7 @@ import { expect, test, executeAdminE2eSql } from "./admin-authenticated-fixture"
 
 test("Scheduled paid preparation handles shortage and stops at unreceived goods", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -65,9 +65,6 @@ test("Scheduled paid preparation handles shortage and stops at unreceived goods"
   ).toHaveAttribute("href", `/admin/receiving?cycleId=${id}`);
   await expect(detail.getByRole("button", { name: "Finish packing" })).toHaveCount(0);
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10000 });
-  await page.screenshot({
-    path: testInfo.outputPath("fulfillment-preparation-blocked-1440.png"),
-  });
 
   const current = await page.request.get(
     `/api/admin/fulfillment?locationId=location-cebu-central&orderId=${orderId}&limit=1`,

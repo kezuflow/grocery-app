@@ -128,7 +128,7 @@ const initialPrices: AdminSkuPricesView = {
 };
 
 for (const width of [1440, 390]) {
-  test(`Central Cebu inline Product price editor at ${width}px`, async ({ page }, testInfo) => {
+  test(`Central Cebu inline Product price editor at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     let saved = false;
     let command: Record<string, unknown> | null = null;
@@ -201,9 +201,6 @@ for (const width of [1440, 390]) {
       marketId: "market-1",
       amountMinor: 2_550,
       expectedVersion: 0,
-    });
-    await page.locator("#product-detail-panel").screenshot({
-      path: testInfo.outputPath("location-product-price-preview.png"),
     });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

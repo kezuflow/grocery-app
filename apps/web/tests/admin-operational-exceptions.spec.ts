@@ -109,9 +109,7 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core for browser acceptance.");
 });
 
-test("links only to authorized source workspaces with exact order context", async ({
-  page,
-}, testInfo) => {
+test("links only to authorized source workspaces with exact order context", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFixture(page);
   await page.route("**/api/admin/exceptions?**", (route) =>
@@ -167,7 +165,6 @@ test("links only to authorized source workspaces with exact order context", asyn
   await expect(page.getByText("Source link unavailable")).toHaveCount(1);
   await expect(page.getByText("Retry fulfillment").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry fulfillment" })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("operational-exceptions-1440.png") });
 });
 
 test("keeps the current cursor and visible rows during shared refresh, then reports a delayed read", async ({

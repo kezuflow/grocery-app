@@ -14,9 +14,7 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("Analytics workspace renders numeric and unavailable Core values", async ({
-  page,
-}, testInfo) => {
+test("Analytics workspace renders numeric and unavailable Core values", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installAdminBootstrapFixture(page, {
     context: {
@@ -170,7 +168,6 @@ test("Analytics workspace renders numeric and unavailable Core values", async ({
   await expect(page.getByRole("combobox", { name: "Timezone", exact: true })).toHaveValue(
     "Asia/Manila",
   );
-  await page.screenshot({ path: testInfo.outputPath("analytics-1440.png"), fullPage: true });
   const dimensionedRequest = page.waitForRequest((request) => {
     if (!request.url().includes("/api/admin/analytics/overview")) return false;
     const dimensions = new URL(request.url()).searchParams.get("dimensions");

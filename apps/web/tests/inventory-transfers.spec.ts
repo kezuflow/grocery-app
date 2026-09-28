@@ -14,7 +14,7 @@ async function value(response: APIResponse): Promise<unknown> {
 for (const width of [1280, 390]) {
   test(`Warehouse stock to two destinations with partial acceptance at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     test.setTimeout(210000);
     await page.setViewportSize({ width, height: 1000 });
     const suffix = crypto.randomUUID(),
@@ -238,10 +238,6 @@ for (const width of [1280, 390]) {
     await page.getByRole("button", { name: "Record checked goods", exact: true }).click();
     await expect(page.getByText("partially received", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Accepted receipts" })).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`warehouse-discrepancy-${width}.png`),
-      fullPage: true,
-    });
     const resolutions: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/transfers/*/resolve", async (route) => {
       resolutions.push({
@@ -302,10 +298,6 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByText("Damaged · Verified sellable return", { exact: false }),
     ).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`warehouse-resolved-${width}.png`),
-      fullPage: true,
-    });
     await page.goto("/admin/transfers");
     await page.getByRole("button", { name: "View distribution", exact: true }).click();
     await page.getByLabel("Distribution product search", { exact: true }).fill(productName);
@@ -323,9 +315,5 @@ for (const width of [1280, 390]) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath(`warehouse-distribution-${width}.png`),
-      fullPage: true,
-    });
   });
 }

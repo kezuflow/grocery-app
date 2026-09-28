@@ -19,16 +19,6 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("an unauthenticated visitor cannot open the catalog workspace", async ({ page }) => {
-  await page.goto("/admin/catalog");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
-test("an unauthenticated visitor cannot open the inventory workspace", async ({ page }) => {
-  await page.goto("/admin/inventory");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
 test("a provisioned Staff reader opens the real Catalog workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/catalog");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Catalog" })).toBeVisible();

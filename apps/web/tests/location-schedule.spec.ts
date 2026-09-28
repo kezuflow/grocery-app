@@ -2,7 +2,7 @@ import { test, expect } from "./admin-authenticated-fixture";
 for (const width of [1440, 390]) {
   test(`Global configures weekly hours and a closure with response recovery at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width, height: 950 });
     await page.goto("/admin/locations");
     await page
@@ -84,6 +84,5 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("Closure 1 reason", { exact: true })).toHaveValue(
       "Planned maintenance",
     );
-    await page.screenshot({ path: testInfo.outputPath("operating-schedule.png"), fullPage: true });
   });
 }

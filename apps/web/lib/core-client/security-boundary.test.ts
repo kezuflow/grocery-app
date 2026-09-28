@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
 import { resolveSecurityHeaderEnvironment, webStaticSecurityHeaders } from "../security/headers";
 import { requestHeaders } from "./request";
@@ -49,11 +49,6 @@ describe("Core client request boundary", () => {
     expect(headers["x-google-maps-server-key"]).toBeUndefined();
     expect(headers["x-google-maps-browser-key"]).toBeUndefined();
     expect(JSON.stringify(headers)).not.toContain("password");
-  });
-
-  it("keeps the Core binding as the only route dependency", async () => {
-    const core = { getAdminContext: vi.fn().mockResolvedValue({ ok: false }) };
-    expect(core.getAdminContext).toBeDefined();
   });
 
   it("matches the runbook to the implemented CSP and pin-based delivery model", async () => {

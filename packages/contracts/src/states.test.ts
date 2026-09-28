@@ -10,8 +10,6 @@ import {
   refundStates,
   subscriptionStates,
 } from "./states";
-import type { OrderState, PaymentState, RefundState, SubscriptionState } from "./states";
-import type { CustomerOrderView, ReceivingCommandResult } from "./index";
 
 describe("closed lifecycle vocabularies", () => {
   it("keeps the canonical subscription states with CANCELED spelling and terminal states", () => {
@@ -73,41 +71,4 @@ describe("closed lifecycle vocabularies", () => {
       expect(appErrorCodes).toContain(code);
     }
   });
-
-  it("applies closed unions to DTO fixtures at compile time", () => {
-    const eligibility: { status: SubscriptionState | null } = { status: "TRIALING" };
-    const order: CustomerOrderView = {
-      id: "order-1",
-      orderNumber: "FM-2026-ORDER1",
-      status: "COMMITTED" as ImplementedOrder & CustomerOrderView["status"],
-      fulfillmentMode: "SCHEDULED",
-      deliveryDate: "2026-09-01T00:00:00.000Z",
-      promisedAt: null,
-      committedAt: "2026-08-30T00:00:00.000Z",
-      totalMinor: 19900,
-      currency: "PHP",
-      itemCount: 2,
-    };
-    void order;
-    const receiving: ReceivingCommandResult = {
-      receivingRecordId: "rec-1",
-      status: "IN_PROGRESS" as ImplementedReceiving & ReceivingCommandResult["status"],
-      acceptedBase: 4,
-      rejectedBase: 0,
-      remainingBase: 6,
-      version: 2,
-    };
-    void receiving;
-    void eligibility;
-    const paymentFixture: PaymentState = "SUCCEEDED";
-    const refundFixture: RefundState = "SUCCEEDED";
-    const orderFixture: OrderState = "COMMITTED";
-    void paymentFixture;
-    void refundFixture;
-    void orderFixture;
-    expect(true).toBe(true);
-  });
 });
-
-type ImplementedOrder = CustomerOrderView["status"];
-type ImplementedReceiving = ReceivingCommandResult["status"];

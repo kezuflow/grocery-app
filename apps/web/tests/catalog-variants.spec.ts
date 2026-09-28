@@ -3,7 +3,7 @@ import { test, expect } from "./admin-authenticated-fixture";
 for (const width of [1440, 390]) {
   test(`Create variant and save local price after lost responses at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     test.setTimeout(90000);
     await page.setViewportSize({ width, height: 1000 });
     const suffix = crypto.randomUUID();
@@ -113,6 +113,5 @@ for (const width of [1440, 390]) {
     await expect(row.getByRole("status").filter({ hasText: /^Selling$/ })).toBeVisible();
     await expect(row.getByRole("button", { name: /^Edit variant/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Save price", exact: true })).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath("catalog-variant.png"), fullPage: true });
   });
 }

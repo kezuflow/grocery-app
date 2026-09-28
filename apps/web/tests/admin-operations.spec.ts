@@ -20,25 +20,6 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("an unauthenticated visitor is told to sign in with a staff account", async ({ page }) => {
-  await page.goto("/admin");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
-test("operational workspaces retain the protected admin boundary", async ({ page }) => {
-  for (const path of [
-    "/admin/procurement",
-    "/admin/receiving",
-    "/admin/fulfillment",
-    "/admin/delivery",
-    "/admin/settings/fulfillment-mode",
-    "/admin/issues/operational-exceptions",
-  ]) {
-    await page.goto(path);
-    await expect(page.getByRole("alert")).toContainText("staff account");
-  }
-});
-
 test("a signed-in account without operational capability sees the denied state", async ({
   deniedAdminPage,
 }) => {

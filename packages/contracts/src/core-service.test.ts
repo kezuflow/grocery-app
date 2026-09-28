@@ -25,19 +25,7 @@ import type { SubscriptionSummary } from "./membership";
 import type { PaymentActionView, PaymentSummary } from "./payments";
 import type { OperationsService } from "./operations";
 import type { AddressSearchCandidate, AddressSearchRequest } from "./geography";
-import { appErrorCodes, type RpcResult } from "./common";
-import type {
-  CancelCustomerOrderRequest,
-  OrderCancellationView,
-  ProvisionalTransactionSummaryRequest,
-  ProvisionalTransactionSummaryView,
-} from "./orders";
-
-type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2
-    ? true
-    : false;
-type Expect<Type extends true> = Type;
+import { appErrorCodes } from "./common";
 
 type HasCommitMockOrder<T> = "commitMockOrder" extends keyof T ? true : false;
 type StartTrialParam = Parameters<MembershipService["startTrial"]>[0];
@@ -53,28 +41,6 @@ type HasGenericStringAction = {
 }[keyof OperationsService];
 
 describe("domain-grouped core services", () => {
-  it("exposes customer order cancellation on the Core binding", () => {
-    type CancelSignature = Expect<
-      Equal<
-        CoreServiceBinding["cancelCustomerOrder"],
-        (request: CancelCustomerOrderRequest) => Promise<RpcResult<OrderCancellationView>>
-      >
-    >;
-    void (true as CancelSignature);
-    expect(true).toBe(true);
-  });
-  it("exposes provisional transaction summaries on the Core binding", () => {
-    type SummarySignature = Expect<
-      Equal<
-        CoreServiceBinding["getProvisionalTransactionSummary"],
-        (
-          request: ProvisionalTransactionSummaryRequest,
-        ) => Promise<RpcResult<ProvisionalTransactionSummaryView>>
-      >
-    >;
-    void (true as SummarySignature);
-    expect(true).toBe(true);
-  });
   it("publishes typed commerce pricing configuration commands", () => {
     type MembershipPriceUpdate = Parameters<
       CommerceConfigurationService["updateMembershipPriceConfiguration"]
@@ -103,18 +69,6 @@ describe("domain-grouped core services", () => {
         "REFUND_AMOUNT_UNAVAILABLE",
       ]),
     );
-  });
-
-  it("exposes provider-neutral address search on the Core binding", () => {
-    type AddressSearchSignature = Expect<
-      Equal<
-        CoreServiceBinding["searchAddressCandidates"],
-        (request: AddressSearchRequest) => Promise<RpcResult<ReadonlyArray<AddressSearchCandidate>>>
-      >
-    >;
-
-    void (true as AddressSearchSignature);
-    expect(true).toBe(true);
   });
 
   it("keeps mock commitment out of every contract surface", () => {

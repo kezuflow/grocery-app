@@ -5,7 +5,7 @@ for (const width of [1280, 390])
   test(`campaign image publication from Admin to anonymous storefront at ${width}px`, async ({
     adminPage: page,
     browser,
-  }, testInfo) => {
+  }) => {
     test.setTimeout(90000);
     await page.setViewportSize({ width, height: 1000 });
     const code = `IMAGE_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
@@ -69,14 +69,6 @@ for (const width of [1280, 390])
       });
       await expect(replacement).toBeVisible();
       expect((await storefront.request.get(original)).status()).toBe(404);
-      await storefront.screenshot({
-        path: testInfo.outputPath(`campaign-storefront-${width}.png`),
-        fullPage: true,
-      });
-      await page.screenshot({
-        path: testInfo.outputPath(`campaign-admin-${width}.png`),
-        fullPage: true,
-      });
       const replacedSource = await replacement.getAttribute("src");
       if (!replacedSource) throw new Error("Missing replacement source");
       await page.getByLabel("Reason", { exact: true }).fill("End campaign");

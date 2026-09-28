@@ -27,9 +27,7 @@ async function loseNextResponse(page: Page, method: string, pathname: string) {
   );
 }
 for (const width of [1440, 390]) {
-  test(`Category create edit and status recovery at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Category create edit and status recovery at ${width}px`, async ({ adminPage: page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const id = crypto.randomUUID();
     const requests: Array<{ method: string; url: string; body: string | null; key: string }> = [];
@@ -92,7 +90,6 @@ for (const width of [1440, 390]) {
     expect(requests).toHaveLength(6);
     for (let index = 0; index < 6; index += 2) expect(requests[index + 1]).toEqual(requests[index]);
     expect(new Set(requests.map((request) => request.key)).size).toBe(3);
-    await page.screenshot({ path: testInfo.outputPath("category-recovery.png"), fullPage: true });
   });
 
   test(`Category list deactivation retains its request after a lost response at ${width}px`, async ({

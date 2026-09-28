@@ -24,7 +24,7 @@ for (const width of [1440, 390]) {
   test(`Instant checkout automatically books Lalamove when packing starts at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
-  }, testInfo) => {
+  }) => {
     test.skip(
       process.env.E2E_PROVIDER_GATEWAY !== "1",
       "Requires the managed test-provider ingress.",
@@ -247,9 +247,6 @@ for (const width of [1440, 390]) {
         .parse(await value(await quoteResponse));
       expect(quote.merchandiseSubtotalMinor).toBe(quantity * 100);
       expect(quote.itemDiscountMinor).toBe(0);
-      await page.getByRole("complementary", { name: "Order summary" }).screenshot({
-        path: testInfo.outputPath(`checkout-delivery-policy-${width}.png`),
-      });
       await page
         .getByRole("radiogroup", { name: "Payment method" })
         .getByRole("radio", { name: "QR Ph" })
@@ -391,9 +388,6 @@ for (const width of [1440, 390]) {
     await page.goto(`/orders/${orderId}`);
     await expect(page.getByText("Original promise", { exact: true })).toBeVisible();
     await expect(page.getByText("Agreed delivery time", { exact: true })).toBeVisible();
-    await page
-      .getByRole("region", { name: "Delivery", exact: true })
-      .screenshot({ path: testInfo.outputPath(`agreed-delivery-time-${width}.png`) });
     await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
     await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
     await expect(courierRow).toContainText("Finding rider");
@@ -404,14 +398,6 @@ for (const width of [1440, 390]) {
     expect((await delivery()).externalDispatch?.dispatchId).toBe(
       retried.externalDispatch?.dispatchId,
     );
-    await admin.screenshot({
-      path: testInfo.outputPath(`instant-auto-booking-${width}.png`),
-      fullPage: true,
-    });
     await completeLocalCourierDelivery(admin, page, orderId, locationId);
-    await page.screenshot({
-      path: testInfo.outputPath(`instant-delivered-${width}.png`),
-      fullPage: true,
-    });
   });
 }

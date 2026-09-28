@@ -23,7 +23,7 @@ function seedProblem() {
 
 test("a real paid-order Problem moves from New through handling to resolved without a refund", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const problem = seedProblem();
   await page.goto("/admin/issues?status=SUBMITTED");
@@ -35,11 +35,6 @@ test("a real paid-order Problem moves from New through handling to resolved with
   const row = page.getByRole("row").filter({ hasText: problem.orderNumber });
   await expect(row).toContainText("Missing Item");
   await expect(row).toContainText("Unassigned");
-  await page.screenshot({
-    path: testInfo.outputPath("problems-new-1440.png"),
-    mask: [page.locator("td p").filter({ hasText: /@example\./ }), page.locator('a[href^="tel:"]')],
-    maskColor: "#CBD5E1",
-  });
   await row.getByRole("link", { name: "Missing Item" }).click();
   await expect(
     page.locator("#main-content").getByRole("link", { name: "Problems" }),
@@ -61,11 +56,6 @@ test("a real paid-order Problem moves from New through handling to resolved with
   await expect(page.getByText("Report handled; any refund needs separate approval")).toBeVisible();
   await expect(page.getByText("Resolved", { exact: true })).toBeVisible();
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10000 });
-  await page.screenshot({
-    path: testInfo.outputPath("problem-resolved-1440.png"),
-    mask: [page.locator('a[href^="mailto:"]'), page.locator('a[href^="tel:"]')],
-    maskColor: "#CBD5E1",
-  });
   const order = await page.request.get(`/api/admin/orders/${problem.orderId}`);
   expect(await order.json()).toMatchObject({ ok: true, value: { status: "DELIVERED" } });
   const issue = await page.request.get(`/api/admin/order-issues/${problem.issueId}`);

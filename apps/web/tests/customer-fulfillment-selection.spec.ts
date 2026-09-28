@@ -207,7 +207,6 @@ for (const width of [1440, 390]) {
     );
     await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
 
-    await page.screenshot({ path: `test-results/checkout-delivery-${width}.png` });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

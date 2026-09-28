@@ -3,9 +3,7 @@ import { expect, test } from "./admin-authenticated-fixture";
 test.describe.configure({ timeout: 180000 });
 test.use({ actionTimeout: 15000 });
 for (const width of [1440, 390]) {
-  test(`customer account recovery and sign-out at ${width}px`, async ({
-    signedInPage: page,
-  }, testInfo) => {
+  test(`customer account recovery and sign-out at ${width}px`, async ({ signedInPage: page }) => {
     await page.setViewportSize({ width, height: 900 });
     const session = await (await page.request.get("/api/auth/get-session")).json();
     await page.goto("/account");
@@ -15,10 +13,6 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("link", { name: "Request account closure", exact: true }),
     ).toHaveCount(0);
-    await page.screenshot({
-      path: testInfo.outputPath(`ca78-account-${width}.png`),
-      fullPage: true,
-    });
     await page.getByRole("link", { name: "Reset your password", exact: true }).click();
     await page.getByRole("textbox", { name: "Email", exact: true }).fill(session.user.email);
     let resetRequests = 0;

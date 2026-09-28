@@ -5,7 +5,7 @@ for (const width of [1440, 390])
   for (const previouslyRefunded of [0, 100, 500])
     test(`Recover an accepted cancellation after ${previouslyRefunded} refunded at ${width}px`, async ({
       adminPage: page,
-    }, testInfo) => {
+    }) => {
       const id = crypto.randomUUID(),
         now = Date.now();
       executeAdminE2eSql(`
@@ -106,7 +106,6 @@ for (const width of [1440, 390])
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
         .toBe(true);
-      await page.screenshot({ path: testInfo.outputPath("cancellation.png") });
     });
 function responseValue(value: unknown): unknown {
   if (typeof value !== "object" || value === null || !("value" in value))

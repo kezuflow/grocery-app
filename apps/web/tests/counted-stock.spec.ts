@@ -14,7 +14,7 @@ async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknow
 for (const width of [1280, 390]) {
   test(`Actual counted sizes from bulk receipt to stock at ${width}px`, async ({
     adminPage: page,
-  }, testInfo) => {
+  }) => {
     test.setTimeout(150000);
     await page.setViewportSize({ width, height: 1000 });
     const suffix = crypto.randomUUID(),
@@ -151,10 +151,6 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByText("18,000 g receipt · Small: 20 pieces/packs", { exact: true }),
     ).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`counted-receipt-${width}.png`),
-      fullPage: true,
-    });
     await page.getByLabel(`Accept ${productName} (grams)`, { exact: true }).fill("2000");
     await page.getByLabel(`Missing remaining for ${productName}`, { exact: true }).fill("0");
     await expect(page.getByLabel(`Count Small for ${productName}`)).toHaveValue("");
@@ -206,14 +202,6 @@ for (const width of [1280, 390]) {
     await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(row(`${productName} — Small`)).toContainText("21");
-    await row(`${productName} — Small`).screenshot({
-      path: testInfo.outputPath(`counted-small-${width}.png`),
-    });
-    await row(productName).screenshot({ path: testInfo.outputPath(`counted-bulk-${width}.png`) });
-    await page.screenshot({
-      path: testInfo.outputPath(`counted-inventory-${width}.png`),
-      fullPage: true,
-    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -372,9 +360,5 @@ for (const width of [1280, 390]) {
       .parse(await value(await quoteResponse));
     expect(quote.merchandiseSubtotalMinor).toBe(200000);
     await expect(page.getByRole("complementary", { name: "Order summary" })).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`counted-checkout-${width}.png`),
-      fullPage: true,
-    });
   });
 }

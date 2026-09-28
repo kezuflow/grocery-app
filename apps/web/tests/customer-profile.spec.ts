@@ -6,7 +6,7 @@ test.use({ actionTimeout: 15000 });
 for (const width of [1440, 390]) {
   test(`customer preferences persist after a lost response at ${width}px`, async ({
     signedInPage,
-  }, testInfo) => {
+  }) => {
     await signedInPage.setViewportSize({ width, height: 900 });
     await signedInPage.goto("/account/profile");
     await expect(signedInPage.getByRole("heading", { name: "Your account details" })).toBeVisible();
@@ -63,10 +63,6 @@ for (const width of [1440, 390]) {
     expect(
       await signedInPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBe(true);
-    await signedInPage.screenshot({
-      path: testInfo.outputPath("customer-preferences.png"),
-      fullPage: true,
-    });
 
     const candidate = {
       candidateKey: "synthetic-account-address",
@@ -199,9 +195,5 @@ for (const width of [1440, 390]) {
     await expect(signedInPage.getByRole("textbox", { name: /^Phone number/ })).toHaveValue(
       "+639171234567",
     );
-    await signedInPage.screenshot({
-      path: testInfo.outputPath(`ca76-address-book-${width}.png`),
-      fullPage: true,
-    });
   });
 }

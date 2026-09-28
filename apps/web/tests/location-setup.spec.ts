@@ -2,13 +2,12 @@ import { expect, test } from "./admin-authenticated-fixture";
 
 test("desktop Locations index separates global service areas from pickup sites", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/admin/locations");
   await expect(page.getByRole("heading", { name: "Locations", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Manage global service areas" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Review setup for Central Cebu" })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("locations-index.png") });
 });
 
 test("desktop location draft keeps its URL target across scope changes", async ({
@@ -45,7 +44,7 @@ test("desktop location draft keeps its URL target across scope changes", async (
 
 test("desktop location setup saves each step and explicitly enables dispatch", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/admin/locations/location-cebu-central");
   await expect(page.getByText(/Step 1 of 4/)).toBeVisible();
@@ -97,7 +96,6 @@ test("desktop location setup saves each step and explicitly enables dispatch", a
   await expect(deactivation.getByLabel("Confirmation reason")).toBeVisible();
   await deactivation.getByRole("button", { name: "Keep unchanged" }).click();
   await expect(deactivation).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("location-setup-review.png"), fullPage: true });
 
   const attempts: { key: string | undefined; body: string | null }[] = [];
   await page.route("**/api/admin/locations", async (route) => {

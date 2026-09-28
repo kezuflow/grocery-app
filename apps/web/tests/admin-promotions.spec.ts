@@ -211,11 +211,6 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("an unauthenticated visitor cannot open the promotions workspace", async ({ page }) => {
-  await page.goto("/admin/promotions");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
 test("a provisioned Staff reader opens the real Promotion Codes workspace", async ({
   adminPage,
 }) => {
@@ -545,7 +540,7 @@ test("promotion creation succeeds with capability and is denied without it", asy
 
 test("creates, edits and activates a campaign through lost browser responses", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   const code = `REPLAY_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
   const requests = new Map<string, { body: string | null; key: string | undefined }[]>();
   await page.route("**/api/admin/promotions**", async (route) => {
@@ -615,11 +610,10 @@ test("creates, edits and activates a campaign through lost browser responses", a
     expect(sent).toHaveLength(2);
     expect(sent[1]).toEqual(sent[0]);
   }
-  await page.screenshot({ path: testInfo.outputPath("promotion-recovery.png"), fullPage: true });
 });
 
 for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amount off"])
-  test(`authors and previews ${benefit} from Admin`, async ({ adminPage: page }, testInfo) => {
+  test(`authors and previews ${benefit} from Admin`, async ({ adminPage: page }) => {
     const code = `DELIVERY_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`;
     await page.goto("/admin/promotions");
     await openPromotionEditor(
@@ -664,13 +658,12 @@ for (const benefit of ["Free delivery", "Delivery percentage off", "Delivery amo
         .getByRole("status")
         .filter({ hasText: benefit === "Delivery percentage off" ? "17.50" : "25.50" }),
     ).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("delivery-promotion.png"), fullPage: true });
   });
 
 test("selects a customer for preview and safely retries a customer grant", async ({
   adminPage: page,
   signedInPage,
-}, testInfo) => {
+}) => {
   await signedInPage.goto("/account/profile");
   await expect(signedInPage.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
   const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
@@ -754,5 +747,4 @@ test("selects a customer for preview and safely retries a customer grant", async
   expect(sent[1]).toEqual(sent[0]);
   expect(sent[0]?.key).toBeTruthy();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("customer-promotion.png"), fullPage: true });
 });

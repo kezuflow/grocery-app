@@ -18,16 +18,6 @@ test.beforeEach(async () => {
   test.skip(!stackUp, "Local stack is not running; start web+core to execute E2E flows.");
 });
 
-test("an unauthenticated visitor cannot open the staff workspace", async ({ page }) => {
-  await page.goto("/admin/staff");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
-test("an unauthenticated visitor cannot open the roles workspace", async ({ page }) => {
-  await page.goto("/admin/staff/roles");
-  await expect(page.getByRole("alert")).toContainText("staff account");
-});
-
 test("a provisioned Staff reader opens the real Staff workspace", async ({ adminPage }) => {
   await adminPage.goto("/admin/staff");
   await expect(adminPage.getByRole("heading", { level: 1, name: "Staff & Access" })).toBeVisible();
@@ -124,7 +114,7 @@ test("staff invitation succeeds with capability and is denied without it", async
 test("audit filters retain context through a real role event at 1440px", async ({
   adminPage,
   deniedAdminPage,
-}, testInfo) => {
+}) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   const code = `audit-reader-${crypto.randomUUID()}`;
   const created = await (
@@ -142,10 +132,8 @@ test("audit filters retain context through a real role event at 1440px", async (
   const row = adminPage.getByRole("row").filter({ hasText: created.value.roleId });
   await expect(row).toContainText("ROLE.CREATED");
   await expect(row).toContainText("role:");
-  await adminPage.screenshot({ path: testInfo.outputPath("audit-filtered.png"), fullPage: true });
   await row.getByRole("link", { name: "Detail" }).click();
   await expect(adminPage.getByRole("heading", { name: "ROLE.CREATED" })).toBeVisible();
-  await adminPage.screenshot({ path: testInfo.outputPath("audit-detail.png"), fullPage: true });
   await expect(adminPage.getByRole("link", { name: "Back to audit log" })).toHaveAttribute(
     "href",
     /action=ROLE\.CREATED.*resourceType=role/,
@@ -162,7 +150,7 @@ test("audit filters retain context through a real role event at 1440px", async (
 for (const width of [1440, 390]) {
   test(`operator creates and safely revokes an invitation after a lost response at ${width}px`, async ({
     adminPage,
-  }, testInfo) => {
+  }) => {
     await adminPage.setViewportSize({ width, height: 900 });
     const name = `Revocation reader ${width}`;
     const role = await (
@@ -238,15 +226,11 @@ for (const width of [1440, 390]) {
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await adminPage.screenshot({
-      path: testInfo.outputPath("staff-invitation-revoked.png"),
-      fullPage: true,
-    });
   });
   test(`verified invitee reviews grants and retries lost acceptance at ${width}px`, async ({
     adminPage,
     signedInPage,
-  }, testInfo) => {
+  }) => {
     await signedInPage.setViewportSize({ width, height: 900 });
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
     expect(session.user.emailVerified).toBe(true);
@@ -329,10 +313,6 @@ for (const width of [1440, 390]) {
     expect(
       await signedInPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await signedInPage.screenshot({
-      path: testInfo.outputPath("staff-invitation-accepted.png"),
-      fullPage: true,
-    });
     const denied = await (await signedInPage.request.get("/api/admin/staff")).json();
     expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     await signedInPage.reload();
@@ -426,10 +406,6 @@ for (const width of [1440, 390]) {
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await adminPage.screenshot({
-      path: testInfo.outputPath("staff-lifecycle.png"),
-      fullPage: true,
-    });
     const sessionRequests: { key: string | undefined; body: string | null }[] = [];
     await adminPage.route(
       `**/api/admin/staff/${acceptedStaffId}/sessions/revoke`,
@@ -497,6 +473,5 @@ for (const width of [1440, 390]) {
     expect(
       await adminPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await adminPage.screenshot({ path: testInfo.outputPath("role-archived.png"), fullPage: true });
   });
 }

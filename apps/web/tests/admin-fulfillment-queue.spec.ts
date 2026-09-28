@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
 import type { Capability } from "@freshmarkets/contracts";
 import { expect, test } from "./admin-authenticated-fixture";
@@ -134,14 +133,6 @@ test("Fulfillment views use Core filters, keep keyboard selection and honor deep
   await expect(page.getByRole("complementary", { name: "Order FM-Q1 details" })).toContainText(
     "Sep 22, 2026, 9:00 AM Asia/Manila",
   );
-  await page.screenshot({
-    path: resolve(
-      process.cwd(),
-      "../../docs/operations/checkpoints/evidence/saui-07/fulfillment-queue-1440.png",
-    ),
-    mask: [page.getByText("+639170000000", { exact: true })],
-    maskColor: "#f9fafb",
-  });
   await page.getByRole("button", { name: "FM-Q2" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Order FM-Q2" })).toBeVisible();

@@ -49,7 +49,7 @@ function detail(id: string, name: string) {
 
 test("Finance restores URL cursor and detail independently, without carrying a refund draft", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.route("**/api/admin/payments?**", (route) => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
@@ -121,12 +121,11 @@ test("Finance restores URL cursor and detail independently, without carrying a r
   await expect(page.getByRole("navigation", { name: "Results pagination" })).toContainText(
     "Page 1",
   );
-  await page.screenshot({ path: testInfo.outputPath("finance-payments-1440.png"), fullPage: true });
 });
 
 test("Finance issue selection clears the previous recovery action and reason", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const issues = [
     {
@@ -193,10 +192,6 @@ test("Finance issue selection clears the previous recovery action and reason", a
   await expect(page).toHaveURL(/issue=finance-issue-alpha/);
   await expect(page.getByRole("button", { name: "Check payment status" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Recovery reason" })).toHaveCount(0);
-  await page.screenshot({
-    path: testInfo.outputPath("finance-attention-1440.png"),
-    fullPage: true,
-  });
 });
 
 test("Finance ignores a delayed Refresh after switching to Needs attention", async ({

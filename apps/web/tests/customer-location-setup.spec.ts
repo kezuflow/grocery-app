@@ -3,7 +3,7 @@ test.describe.configure({ timeout: 240000 });
 test("Global creates a ready site and a customer confirms delivery there", async ({
   adminPage: page,
   page: customer,
-}, testInfo) => {
+}) => {
   const name = `Customer site ${crypto.randomUUID().slice(0, 8)}`;
   const coordinate = {
     latitude: 10.445 + Math.random() / 1000,
@@ -105,7 +105,6 @@ test("Global creates a ready site and a customer confirms delivery there", async
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("customer-site-ready.png"), fullPage: true });
 
   // Only transient search is synthetic. Confirmation and routing use the actual
   // Core commands with the test-only permanent geocoder transport.
@@ -158,8 +157,4 @@ test("Global creates a ready site and a customer confirms delivery there", async
   await expect(
     customer.getByRole("button", { name: "Choose delivery address", exact: true }),
   ).toContainText("Confirmed delivery entrance");
-  await customer.screenshot({
-    path: testInfo.outputPath("customer-site-selected.png"),
-    fullPage: true,
-  });
 });

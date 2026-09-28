@@ -2,7 +2,7 @@ import { test, expect } from "./admin-authenticated-fixture";
 
 test("Global pause retains its request through a lost response and scope change", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 390, height: 950 });
   await page.goto("/admin/settings/fulfillment-mode");
   const scope = page.getByRole("combobox", { name: "Active admin scope" });
@@ -41,5 +41,4 @@ test("Global pause retains its request through a lost response and scope change"
   expect(attempts[1]).toEqual(attempts[0]);
   await page.reload();
   await expect(page.getByRole("button", { name: "Reopen selling", exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("paused-commerce.png"), fullPage: true });
 });

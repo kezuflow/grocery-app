@@ -2,7 +2,7 @@ import { test, expect } from "./admin-authenticated-fixture";
 
 test("desktop pickup contact keeps the original save after a lost response", async ({
   adminPage: page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.goto("/admin/locations/location-cebu-central/pickup");
   await expect(page.getByText("Pickup location from step 1")).toBeVisible();
@@ -35,8 +35,4 @@ test("desktop pickup contact keeps the original save after a lost response", asy
 
   await page.goto("/admin/locations/location-cebu-central/pickup");
   await expect(page.getByRole("textbox", { name: "Sender name", exact: true })).toHaveValue(sender);
-  await page.screenshot({
-    path: testInfo.outputPath("pickup-profile-recovered.png"),
-    fullPage: true,
-  });
 });

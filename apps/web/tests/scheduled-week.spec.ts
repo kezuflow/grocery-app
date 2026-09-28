@@ -5,9 +5,7 @@ import { selectDeliveryWeek } from "./select-delivery-week";
 // Pending/failure history below is a fixture seam; signed provider closure is tested in Core.
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
 for (const width of [1440, 390])
-  test(`Scheduled cycle paid Order summary at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Scheduled cycle paid Order summary at ${width}px`, async ({ adminPage: page }) => {
     const id = crypto.randomUUID();
     const now = Date.now();
     executeAdminE2eSql(`
@@ -65,10 +63,6 @@ for (const width of [1440, 390])
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-order-summary-${width}.png`),
-      fullPage: true,
-    });
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     const demand = page.getByRole("table", { name: "Paid quantities to buy" });
     await expect(demand).toContainText("Recorded shipping weight: Not recorded");
@@ -76,9 +70,7 @@ for (const width of [1440, 390])
   });
 
 for (const width of [1440, 390])
-  test(`Delivery week purchase to receiving at ${width}px`, async ({
-    adminPage: page,
-  }, testInfo) => {
+  test(`Delivery week purchase to receiving at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(90000);
     const id = crypto.randomUUID(),
       name = `Delivery week ${width} ${id.slice(0, 6)}`,
@@ -153,10 +145,6 @@ for (const width of [1440, 390])
     await expect(demand.getByRole("button", { name: "Confirm purchase", exact: true })).toHaveCount(
       0,
     );
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-week-pending-${width}.png`),
-      fullPage: true,
-    });
     executeAdminE2eSql(
       `UPDATE payment_intent SET status='FAILED',version=version+1 WHERE id='pending-${id}'`,
     );
@@ -186,10 +174,6 @@ for (const width of [1440, 390])
         .locator("tbody tr")
         .filter({ hasText: "Central Cebu" }),
     ).toContainText("not purchased");
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-week-global-${width}.png`),
-      fullPage: true,
-    });
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
     await page.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await selectDeliveryWeek(page, id);
@@ -230,10 +214,6 @@ for (const width of [1440, 390])
     ).toBeVisible();
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toContainText("ordered");
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-week-${width}.png`),
-      fullPage: true,
-    });
     await page
       .getByRole("region", { name: "Delivery week dates" })
       .getByRole("link", { name: "Receiving", exact: true })
@@ -281,10 +261,6 @@ for (const width of [1440, 390])
       "href",
       `/admin/orders/o-${id}`,
     );
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-shortage-orders-${width}.png`),
-      fullPage: true,
-    });
     await page
       .getByRole("region", { name: "Delivery week dates" })
       .getByRole("link", { name: "Receiving", exact: true })
@@ -321,10 +297,6 @@ for (const width of [1440, 390])
     await selectDeliveryWeek(page, id);
     await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
     await expect(demand).toContainText("Accepted 1,000 g");
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-week-received-${width}.png`),
-      fullPage: true,
-    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -379,10 +351,6 @@ for (const width of [1440, 390])
     expect(releases).toHaveLength(2);
     expect(releases[1]).toEqual(releases[0]);
     await expect(leftovers).toContainText("600 g unused · 400 g released to stock");
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-surplus-${width}.png`),
-      fullPage: true,
-    });
     // A second destination cannot source replacements. Keep synthetic paid history
     // explicit, then use the actual receiving -> Order -> cancellation UI path.
     executeAdminE2eSql(`
@@ -443,10 +411,6 @@ for (const width of [1440, 390])
       0,
     );
     await expect(row.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
-    await page.screenshot({
-      path: testInfo.outputPath(`scheduled-canceled-supply-${width}.png`),
-      fullPage: true,
-    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

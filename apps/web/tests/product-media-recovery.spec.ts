@@ -6,7 +6,7 @@ for (const width of [1440, 390]) {
   test(`Product image upload and storefront at ${width}px`, async ({
     adminPage: page,
     browser,
-  }, testInfo) => {
+  }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width, height: 1000 });
     const suffix = crypto.randomUUID();
@@ -143,10 +143,6 @@ for (const width of [1440, 390]) {
     await expect(
       cartPage.getByRole("img", { name: "Fresh abiu preview", exact: true }).first(),
     ).toBeVisible();
-    await cartPage.screenshot({
-      path: testInfo.outputPath("cart-product-image.png"),
-      fullPage: true,
-    });
     await cartPage.close();
     const customerContext = await browser.newContext({
       baseURL: new URL(page.url()).origin,
@@ -169,10 +165,6 @@ for (const width of [1440, 390]) {
       expect(imageUrl).toContain("/media/products/");
       const response = await customer.request.get(imageUrl!);
       expect(response.status()).toBe(200);
-      await customer.screenshot({
-        path: testInfo.outputPath("published-product-image.png"),
-        fullPage: true,
-      });
       await expect(customer.getByRole("button", { name: /^Show photo/ })).toHaveCount(5);
       await expect(customer.getByRole("dialog", { name: "Choose delivery address" })).toHaveCount(
         0,
@@ -242,10 +234,6 @@ for (const width of [1440, 390]) {
           ),
         )
         .toBe(true);
-      await page.screenshot({
-        path: testInfo.outputPath("product-image-controls.png"),
-        fullPage: true,
-      });
       const formerImage = await customer.request.get(imageUrl!, {
         headers: { "if-none-match": response.headers().etag },
       });
@@ -271,10 +259,6 @@ for (const width of [1440, 390]) {
         .getByRole("button", { name: "Show photo 2: Abiu photo 1", exact: true })
         .click();
       await expect(quickView.getByRole("img", { name: "Abiu photo 1", exact: true })).toBeVisible();
-      await customer.screenshot({
-        path: testInfo.outputPath("quick-view-gallery.png"),
-        fullPage: true,
-      });
     } finally {
       await customerContext.close();
     }

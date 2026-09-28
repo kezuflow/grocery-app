@@ -1,7 +1,7 @@
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 // Exhausted verified receipt is a fixture seam; queue/replay/reads use real Web/Core/D1.
 for (const width of [1440, 390])
-  test(`Retry an exhausted commitment at ${width}px`, async ({ adminPage: page }, testInfo) => {
+  test(`Retry an exhausted commitment at ${width}px`, async ({ adminPage: page }) => {
     test.setTimeout(60000);
     const id = crypto.randomUUID(),
       now = Date.now(),
@@ -63,8 +63,4 @@ for (const width of [1440, 390])
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath("payment-reaction-retry.png"),
-      fullPage: true,
-    });
   });

@@ -4,7 +4,7 @@ for (const width of [1440, 390]) {
   test(`Global customer preferences and support notes recover at ${width}px`, async ({
     adminPage,
     signedInPage,
-  }, testInfo) => {
+  }) => {
     await signedInPage.goto("/account/profile");
     await expect(signedInPage.getByRole("heading", { name: "Account details" })).toBeVisible();
     const session = await (await signedInPage.request.get("/api/auth/get-session")).json();
@@ -102,9 +102,5 @@ for (const width of [1440, 390]) {
     expect(await adminPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await adminPage.screenshot({
-      path: testInfo.outputPath("customer-support-notes.png"),
-      fullPage: true,
-    });
   });
 }

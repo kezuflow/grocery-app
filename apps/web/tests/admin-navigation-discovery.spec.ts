@@ -28,9 +28,7 @@ test("real Core navigation shows Stock Transfer only in Global scope", async ({ 
   await expect(adminPage.getByRole("heading", { level: 1, name: "Stock Transfer" })).toBeVisible();
 });
 
-test("Fulfillment setup is one sidebar link with four authorized areas", async ({
-  adminPage,
-}, testInfo) => {
+test("Fulfillment setup is one sidebar link with four authorized areas", async ({ adminPage }) => {
   await adminPage.setViewportSize({ width: 1440, height: 900 });
   await adminPage.goto("/admin");
   const navigation = adminPage.getByRole("navigation", { name: "Admin navigation" });
@@ -45,9 +43,6 @@ test("Fulfillment setup is one sidebar link with four authorized areas", async (
   await navigation.getByRole("button", { name: "Staff" }).click();
   await expect(navigation.getByRole("link", { name: "Roles" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Audit log" })).toBeVisible();
-  await navigation.screenshot({
-    path: testInfo.outputPath("fulfillment-setup-navigation-1440.png"),
-  });
   await setupLink.click();
   await expect(
     adminPage.getByRole("heading", { level: 1, name: "Fulfillment setup" }),

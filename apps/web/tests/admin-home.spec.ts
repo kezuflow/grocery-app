@@ -121,10 +121,6 @@ test("Global Home prioritizes real operational cards and authorized links", asyn
   const metricTop = (await metrics.boundingBox())?.y ?? 0;
   const notificationTop = (await page.locator("#notifications").boundingBox())?.y ?? 0;
   expect(metricTop).toBeLessThan(notificationTop);
-  await page.screenshot({
-    path: "../../docs/operations/checkpoints/evidence/saui-10/home-global-1440.png",
-    fullPage: true,
-  });
   await page.getByRole("button", { name: "Select location" }).click();
   await expect(page.getByRole("combobox", { name: "Active admin scope" })).toContainText(
     "Central Cebu",
@@ -199,20 +195,12 @@ test("Home clears Global figures on location switch and omits unavailable links"
   await expect(
     page.getByText("Material operations are outside your current access."),
   ).toBeVisible();
-  await page.screenshot({
-    path: "../../docs/operations/checkpoints/evidence/saui-10/home-location-1440.png",
-    fullPage: true,
-  });
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(metrics.getByRole("link", { name: "Open workspace" })).toHaveCount(1);
   await expect(metrics.getByText("2", { exact: true })).toBeVisible();
   await expect(page.getByText("fulfillment.manage access is required.")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open delivery failed exception" })).toBeVisible();
   await expect(metrics.getByText("Open orders")).toHaveCount(0);
-  await page.screenshot({
-    path: "../../docs/operations/checkpoints/evidence/saui-10/home-location-active-1440.png",
-    fullPage: true,
-  });
 });
 
 test("local read-only Home links fulfillment without offering exception actions", async ({

@@ -75,10 +75,6 @@ for (const width of [1440, 390]) {
     const panel = page.getByRole("dialog", { name: "Notifications" });
     await expect(panel.getByText("Order confirmed", { exact: true })).toBeVisible();
     await expect(panel.locator(`a[href="/orders/${order}"]`)).toBeVisible();
-    await page.screenshot({
-      path: `test-results/customer-notifications-${width}.png`,
-      fullPage: false,
-    });
     await page.keyboard.press("Escape");
     await checkPanel(page, true);
     await notificationBell(page).click();
@@ -96,10 +92,6 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("Open orders", { exact: true })).toBeVisible();
     await checkPanel(page);
     await notificationBell(page).click();
-    await page.screenshot({
-      path: `test-results/admin-notifications-${width}.png`,
-      fullPage: false,
-    });
     await expect(
       page
         .getByRole("dialog", { name: "Notifications" })
@@ -159,7 +151,6 @@ test("mobile customer handles failed reads and a long bounded list", async ({
   await expect(panel.getByRole("link", { name: "View all orders" })).toBeVisible();
   expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/customer-notifications-320-long.png" });
   await page.keyboard.press("Escape");
   await expect(notificationBell(page)).toBeFocused();
 });

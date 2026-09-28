@@ -41,10 +41,6 @@ test("first administrator reviews access, recovers a lost response and opens sta
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath(`initial-setup-${width}.png`),
-      fullPage: true,
-    });
   }
   const requests: { key: string | undefined; body: string | null }[] = [];
   await page.route("**/api/setup", async (route) => {

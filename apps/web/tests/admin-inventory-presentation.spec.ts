@@ -75,7 +75,7 @@ function stock(locationId: string, name: string, unit: string) {
 
 test("Inventory separates stock meanings and hides old rows during cursor and scope reads", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await bootstrap(page);
   const delayed: { release?: () => void } = {};
@@ -168,5 +168,4 @@ test("Inventory separates stock meanings and hides old rows during cursor and sc
   ).toBeVisible();
   await expect(activity.locator("tbody tr").locator("td").nth(2)).toContainText("0 mL");
   await expect(activity.locator("tbody tr").locator("td").nth(3)).toContainText("+250 mL");
-  await page.screenshot({ path: testInfo.outputPath("inventory-harbor-1440.png"), fullPage: true });
 });

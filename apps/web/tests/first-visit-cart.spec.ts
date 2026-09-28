@@ -192,10 +192,6 @@ for (const width of [1440, 390]) {
         (item) => item.availability === "LOCATION_REQUIRED" && item.priceMinor === null,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath(`ca75-unlocated-${width}.png`),
-      fullPage: true,
-    });
     await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
     await expect(locationDialog).toBeVisible();
     await locationDialog.getByRole("button", { name: "Choose map", exact: true }).click();
@@ -310,9 +306,5 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await page.screenshot({
-      path: testInfo.outputPath(`ca75-carryover-${width}.png`),
-      fullPage: true,
-    });
   });
 }
