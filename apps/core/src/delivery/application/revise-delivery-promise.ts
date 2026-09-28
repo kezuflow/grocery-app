@@ -10,7 +10,12 @@ import {
 } from "../../admin/application/operations-administration-access";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
-import { deliveryRetryReadySql, returnedDeliveryInspectionSql } from "./delivery-retry-readiness";
+import {
+  deliveryRetryReadySql,
+  returnedDeliveryInspectionSql,
+  scheduledDeliveryDeadlineSql,
+  undispatchedDeliveryAgreementReadySql,
+} from "./delivery-retry-readiness";
 
 const identity = z.string().trim().min(1).max(200);
 const schema = z.object({
@@ -73,7 +78,8 @@ export async function reviseDeliveryPromise(
     COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),
       CASE WHEN job.fulfillment_mode='INSTANT' THEN snapshot.promised_at ELSE COALESCE(delivery_window.ends_at,snapshot.delivery_date) END) AS promised_at,
     attempt.id AS dispatch_id,attempt.version AS dispatch_version,
-    (${deliveryRetryReadySql}) AS eligible, (${returnedDeliveryInspectionSql}) AS return_eligible
+    (${deliveryRetryReadySql}) AS eligible, (${returnedDeliveryInspectionSql}) AS return_eligible,
+    (${undispatchedDeliveryAgreementReadySql}) AS undispatched_eligible
     FROM delivery_job job JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=job.order_id
     JOIN grocery_order grocery ON grocery.id=job.order_id JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
     LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=job.order_id
@@ -88,6 +94,7 @@ export async function reviseDeliveryPromise(
       dispatch_version: number | null;
       eligible: number;
       return_eligible: number;
+      undispatched_eligible: number;
       order_version: number;
       order_status: string;
       fulfillment_version: number;
@@ -112,18 +119,24 @@ export async function reviseDeliveryPromise(
   if (prior) return prior;
   if (row.version !== command.expectedVersion)
     return fail("STALE_VERSION", "Delivery changed; refresh before recording the agreement");
+  const now = (deps.now ?? Date.now)();
   const inspectingReturn = command.returnInspection !== undefined;
-  const eligibilitySql = inspectingReturn ? returnedDeliveryInspectionSql : deliveryRetryReadySql;
-  if (
-    !(inspectingReturn ? row.return_eligible : row.eligible) ||
-    !row.dispatch_id ||
-    row.promised_at === null
-  )
+  const undispatched = !inspectingReturn && !row.dispatch_id;
+  const eligibilitySql = inspectingReturn
+    ? returnedDeliveryInspectionSql
+    : undispatched
+      ? undispatchedDeliveryAgreementReadySql
+      : deliveryRetryReadySql;
+  const eligible = inspectingReturn
+    ? row.return_eligible
+    : undispatched
+      ? row.undispatched_eligible && row.promised_at !== null && row.promised_at <= now
+      : row.eligible;
+  if (!eligible || row.promised_at === null)
     return fail(
       "ILLEGAL_TRANSITION",
-      "Close the prior courier attempt before changing the delivery time; returned goods require inspection first",
+      "Only a missed packed Scheduled delivery or a definitely closed attempt can change the delivery time; returned goods require inspection first",
     );
-  const now = (deps.now ?? Date.now)();
   const promisedAt = Date.parse(command.promisedAt);
   if (promisedAt <= now || (!inspectingReturn && promisedAt === row.promised_at))
     return fail("VALIDATION_FAILED", "Choose a new agreed delivery time in the future");
@@ -146,14 +159,13 @@ export async function reviseDeliveryPromise(
       // Preserve the delivery-status timestamp; agreement time lives in its own record.
       db
         .prepare(`UPDATE delivery_job AS job SET promised_at=?,version=version+1 WHERE job.id=? AND job.location_id=? AND job.version=? AND ${eligibilitySql}
-        AND EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt WHERE attempt.id=? AND attempt.version=? AND attempt.attempt_sequence=(SELECT MAX(attempt_sequence) FROM delivery_provider_dispatch WHERE delivery_job_id=job.id))`)
+        ${undispatched ? `AND ${scheduledDeliveryDeadlineSql}<=?` : `AND EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt WHERE attempt.id=? AND attempt.version=? AND attempt.attempt_sequence=(SELECT MAX(attempt_sequence) FROM delivery_provider_dispatch WHERE delivery_job_id=job.id))`}`)
         .bind(
           promisedAt,
           command.jobId,
           command.locationId,
           row.version,
-          row.dispatch_id,
-          row.dispatch_version,
+          ...(undispatched ? [now] : [row.dispatch_id, row.dispatch_version]),
         ),
       guard(),
       db

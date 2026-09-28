@@ -13,6 +13,24 @@ export const deliveryRetryReadySql = `job.status IN ('UNASSIGNED','RETRY_SCHEDUL
   AND NOT EXISTS (SELECT 1 FROM delivery_provider_command command JOIN delivery_provider_dispatch previous ON previous.id=command.dispatch_id
     WHERE previous.delivery_job_id=job.id AND command.operation='CANCEL' AND command.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`;
 
+/** A missed Scheduled promise can be revised before the first delivery attempt.
+ * The deadline check is separate so the read and guarded write use the same clock.
+ */
+export const undispatchedDeliveryAgreementReadySql = `job.fulfillment_mode='SCHEDULED' AND job.status='UNASSIGNED'
+  AND job.batch_id IS NULL AND job.rider_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch attempt WHERE attempt.delivery_job_id=job.id)
+  AND EXISTS (SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
+    WHERE grocery.id=job.order_id AND fulfillment.location_id=job.location_id
+      AND grocery.status='FULFILLMENT_READY' AND fulfillment.status='PACKED')`;
+
+export const scheduledDeliveryDeadlineSql = `(SELECT COALESCE(
+    (SELECT revision.promised_at FROM delivery_promise_revision revision
+      WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),
+    delivery_window.ends_at,snapshot.delivery_date)
+  FROM order_fulfillment_snapshot snapshot
+  LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id
+  WHERE snapshot.order_id=job.order_id)`;
+
 /** A closed attempt with recorded departure can be reviewed only against still-packed paid goods. */
 export const returnedDeliveryInspectionSql = `job.status='FAILED' AND job.batch_id IS NULL AND job.rider_id IS NULL
   AND EXISTS (SELECT 1 FROM delivery_provider_dispatch previous

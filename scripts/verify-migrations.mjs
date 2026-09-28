@@ -723,6 +723,94 @@ assert.equal(
 assert.deepEqual(deliveryProviderUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
 deliveryProviderUpgrade.close();
 
+// Preserve retained, attempt-linked agreements when the dispatch link becomes
+// nullable for a missed Scheduled delivery before its first attempt.
+const deliveryAgreementUpgrade = database();
+apply(
+  deliveryAgreementUpgrade,
+  migrations.filter((migration) => migration.name <= "0104_scheduled_week_completion.sql"),
+);
+deliveryAgreementUpgrade.exec(`INSERT INTO user (id,name,email,created_at,updated_at)
+    VALUES ('migration-agreement-actor','Operator','migration-agreement@example.com',1,1)`);
+deliveryAgreementUpgrade.exec(`
+  INSERT INTO customer (id,auth_user_id,status,created_at,updated_at)
+    VALUES ('migration-agreement-customer','migration-agreement-actor','active',1,1);
+  INSERT INTO payment_attempt
+    (id,customer_id,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
+    VALUES ('migration-agreement-payment','migration-agreement-customer',100,'PHP',
+      'SUCCEEDED','mock','migration-agreement-payment-key',1,1);
+  INSERT INTO grocery_order
+    (id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,
+     total_minor,currency,payment_id,created_at)
+    VALUES ('migration-agreement-order','migration-agreement-customer',NULL,'INSTANT',
+      '{}','FULFILLMENT_READY',100,'PHP','migration-agreement-payment',1);
+`);
+deliveryAgreementUpgrade.exec(`
+  INSERT INTO delivery_job
+    (id,order_id,cycle_id,fulfillment_mode,location_id,zone_id,status,
+     context_resolution_status,address_snapshot_json,version,created_at,updated_at)
+    VALUES ('migration-agreement-job','migration-agreement-order',NULL,'SCHEDULED',
+      NULL,NULL,'ESCALATED','LEGACY_UNRESOLVED','{}',2,1,1);
+`);
+deliveryAgreementUpgrade.exec(`
+  INSERT INTO delivery_provider_dispatch
+    (id,delivery_job_id,provider,merchant_order_id,request_hash,request_snapshot_json,
+     status,attempt_count,version,created_at,updated_at)
+    VALUES ('migration-agreement-dispatch','migration-agreement-job','lalamove',
+      'FM-MIGRATION-AGREEMENT','hash','{}','FAILED',1,1,1,1);
+`);
+deliveryAgreementUpgrade.exec(`
+  INSERT INTO delivery_promise_revision
+    (id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,
+     agreement_note,actor_user_id,recorded_at)
+    VALUES ('migration-old-agreement','migration-agreement-job',
+      'migration-agreement-dispatch',2,100,200,'Historical agreement',
+      'migration-agreement-actor',2);
+`);
+apply(
+  deliveryAgreementUpgrade,
+  migrations.filter((migration) => migration.name === "0105_undispatched_delivery_agreements.sql"),
+);
+assert.deepEqual(
+  {
+    ...deliveryAgreementUpgrade
+      .prepare("SELECT * FROM delivery_promise_revision WHERE id='migration-old-agreement'")
+      .get(),
+  },
+  {
+    id: "migration-old-agreement",
+    delivery_job_id: "migration-agreement-job",
+    dispatch_id: "migration-agreement-dispatch",
+    job_version: 2,
+    previous_promised_at: 100,
+    promised_at: 200,
+    agreement_note: "Historical agreement",
+    return_inspection_note: null,
+    return_inspected_at: null,
+    actor_user_id: "migration-agreement-actor",
+    recorded_at: 2,
+  },
+);
+deliveryAgreementUpgrade.exec(`
+  INSERT INTO delivery_promise_revision
+    (id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,
+     agreement_note,actor_user_id,recorded_at)
+    VALUES ('migration-unstarted-agreement','migration-agreement-job',NULL,3,200,300,
+      'Agreement before dispatch','migration-agreement-actor',3);
+`);
+assert.throws(() =>
+  deliveryAgreementUpgrade.exec(
+    "UPDATE delivery_promise_revision SET promised_at=301 WHERE id='migration-unstarted-agreement'",
+  ),
+);
+assert.throws(() =>
+  deliveryAgreementUpgrade.exec(
+    "DELETE FROM delivery_promise_revision WHERE id='migration-old-agreement'",
+  ),
+);
+assert.deepEqual(deliveryAgreementUpgrade.prepare("PRAGMA foreign_key_check").all(), []);
+deliveryAgreementUpgrade.close();
+
 console.log(
-  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, 0046 -> 0047 customer launch, and 0055 -> current delivery-provider upgrades are valid.",
+  "Migrations verified: fresh apply plus populated 0020 -> current commerce, 0032 -> 0033 analytics, 0045 -> 0046 cart reliability, 0046 -> 0047 customer launch, 0055 -> current delivery-provider, and 0104 -> 0105 delivery-agreement upgrades are valid.",
 );

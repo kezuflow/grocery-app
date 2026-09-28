@@ -1,6 +1,10 @@
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
-import { deliveryRetryReadySql, returnedDeliveryInspectionSql } from "./delivery-retry-readiness";
+import {
+  deliveryRetryReadySql,
+  returnedDeliveryInspectionSql,
+  undispatchedDeliveryAgreementReadySql,
+} from "./delivery-retry-readiness";
 import {
   dispatchUnavailableMessage,
   firstDispatchEligibility,
@@ -109,6 +113,7 @@ export async function listDeliveryDispatch(
               dispatch.handed_over_at,dispatch.final_payable_minor,COALESCE(dispatch.delivery_currency,o.currency) AS delivery_currency,
               o.status AS order_status,f.status AS fulfillment_status,d.promised_at,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${deliveryRetryReadySql}) AS retry_ready,
+              EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${undispatchedDeliveryAgreementReadySql}) AS undispatched_agreement_ready,
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${returnedDeliveryInspectionSql}) AS return_eligible,
               (SELECT MAX(revision.return_inspected_at) FROM delivery_promise_revision revision WHERE revision.dispatch_id=dispatch.id) AS returned_goods_inspected,
               (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=d.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
@@ -137,6 +142,7 @@ export async function listDeliveryDispatch(
       delivery_currency: string | null;
       order_status: string;
       retry_ready: number;
+      undispatched_agreement_ready: number;
       return_eligible: number;
       returned_goods_inspected: number | null;
       promised_at: number | null;
@@ -167,7 +173,13 @@ export async function listDeliveryDispatch(
     }>();
   return rows.results.map((r) => ({
     courierPickup: courierPickupDecision(r),
-    canRevisePromise: Boolean(r.can_manage && r.retry_ready),
+    canRevisePromise: Boolean(
+      r.can_manage &&
+      (r.retry_ready ||
+        (r.undispatched_agreement_ready &&
+          r.pickup_deadline !== null &&
+          r.pickup_deadline <= Date.now())),
+    ),
     canInspectReturnedGoods: Boolean(r.can_manage && r.return_eligible),
     manualActions: r.can_manage
       ? manualDeliveryActions({

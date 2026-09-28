@@ -2108,6 +2108,129 @@ describe("staff-selected manual delivery", () => {
 });
 
 describe("customer-agreed delivery times", () => {
+  it("records a missed Scheduled delivery agreement before the first attempt, then permits booking", async () => {
+    const now = Date.now();
+    const committedAt = now - 2 * 86400000;
+    const deps = { ...dependencies(["delivery.read", "delivery.manage"]), now: () => now };
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(committedAt);
+    await preparePackedDelivery(delivery, "SCHEDULED", committedAt);
+    const original = await env.DB.prepare(
+      "SELECT * FROM order_fulfillment_snapshot WHERE order_id=?",
+    )
+      .bind(delivery.orderId)
+      .first();
+    const queueRequest = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      orderId: delivery.orderId,
+    };
+    const before = await listAdminDeliveryOperations(deps, queueRequest);
+    expect(before.ok && before.value.items[0]).toMatchObject({
+      canRevisePromise: true,
+      courierPickup: { allowedKinds: [] },
+    });
+
+    const request = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId: delivery.jobId,
+      expectedVersion: 1,
+      promisedAt: new Date(now + 6 * 3600000).toISOString(),
+      agreementNote: "Customer agreed to delivery today between 3 pm and 10 pm",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(
+      await reviseDeliveryPromise({ ...dependencies(["delivery.read"]), now: () => now }, request),
+    ).toMatchObject({ ok: false });
+    expect(
+      await reviseDeliveryPromise(deps, { ...request, locationId: "location-manila-central" }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await reviseDeliveryPromise(deps, { ...request, promisedAt: new Date(now).toISOString() }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await env.DB.exec(
+      "CREATE TRIGGER omit_unstarted_agreement_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.PROMISE_REVISED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await reviseDeliveryPromise(deps, request)).toMatchObject({ ok: false });
+      expect(
+        await env.DB.prepare("SELECT version FROM delivery_job WHERE id=?")
+          .bind(delivery.jobId)
+          .first(),
+      ).toMatchObject({ version: 1 });
+      expect(
+        await env.DB.prepare("SELECT id FROM delivery_promise_revision WHERE delivery_job_id=?")
+          .bind(delivery.jobId)
+          .first(),
+      ).toBeNull();
+    } finally {
+      await env.DB.exec("DROP TRIGGER omit_unstarted_agreement_audit");
+    }
+
+    const requests = [request, { ...request, idempotencyKey: crypto.randomUUID() }];
+    const outcomes = await Promise.all(requests.map((input) => reviseDeliveryPromise(deps, input)));
+    expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
+    const winner = outcomes.findIndex((outcome) => outcome.ok);
+    const winningRequest = requests[winner];
+    const winningResult = outcomes[winner];
+    if (!winningRequest || !winningResult?.ok) throw new Error("Missing agreement winner");
+    expect(await reviseDeliveryPromise(deps, winningRequest)).toEqual(winningResult);
+    expect(
+      await reviseDeliveryPromise(deps, {
+        ...request,
+        expectedVersion: winningResult.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(
+      await env.DB.prepare("SELECT * FROM order_fulfillment_snapshot WHERE order_id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual(original);
+    expect(
+      await env.DB.prepare(
+        "SELECT dispatch_id,promised_at,agreement_note FROM delivery_promise_revision WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toMatchObject({
+      dispatch_id: null,
+      promised_at: Date.parse(request.promisedAt),
+      agreement_note: request.agreementNote,
+    });
+    expect(
+      await env.DB.prepare("SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toBeNull();
+    const after = await listAdminDeliveryOperations(deps, queueRequest);
+    expect(after.ok && after.value.items[0]).toMatchObject({
+      canRevisePromise: false,
+      courierPickup: { allowedKinds: ["IMMEDIATE", "SCHEDULED"] },
+    });
+    const booking = await requestExternalDelivery(
+      {
+        ...deps,
+        provider: createMockDeliveryProvider(() => now),
+        configuredServiceType: "MOTORCYCLE",
+      },
+      {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        jobId: delivery.jobId,
+        expectedVersion: winningResult.value.version,
+        providerCode: "lalamove",
+        pickup: { kind: "SCHEDULED", pickupAt: new Date(now + 600000).toISOString() },
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    expect(booking).toMatchObject({ ok: true });
+  });
+
   it.each(["INSTANT", "SCHEDULED"] as const)(
     "preserves the paid %s promise and atomically enables a later retry",
     async (mode) => {
