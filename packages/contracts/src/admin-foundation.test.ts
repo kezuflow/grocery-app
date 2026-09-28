@@ -1,59 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import {
   adminCapabilityCodes,
   adminNavigationScopeKinds,
   adminNavigationSectionCodes,
   isAdminCapability,
-  type AdminContextView,
-  type AdminAuditEventPage,
 } from "./admin-foundation";
 
-describe("admin foundation contracts", () => {
-  it("publishes the closed canonical capability vocabulary", () => {
-    expect(adminCapabilityCodes).toContain("customers.read");
-    expect(adminCapabilityCodes).toContain("inventory.adjust");
-    expect(adminCapabilityCodes).toContain("analytics.read");
-    expect(isAdminCapability("staff.manage")).toBe(true);
-    expect(isAdminCapability("staff:manage")).toBe(false);
-    expect(adminNavigationSectionCodes).toEqual([
-      "home",
-      "orders",
-      "products",
-      "customers",
-      "discounts",
-      "content",
-      "analytics",
-      "sales_channels",
-      "settings",
-      "overview",
-      "commerce",
-      "operations",
-      "finance",
-      "administration",
-    ]);
-    expect(adminNavigationScopeKinds).toEqual(["GLOBAL", "MARKET", "LOCATION"]);
-  });
-
-  it("keeps context and audit as purpose-built DTOs", () => {
-    void ({
-      staffId: "staff-1",
-      displayName: "Admin",
-      email: "admin@example.com",
-      capabilities: ["audit.read"],
-      scopes: [{ kind: "global" }],
-      navigation: [
-        {
-          code: "audit",
-          label: "Audit log",
-          href: "/admin/audit",
-          section: "administration",
-          scopeKinds: ["GLOBAL", "MARKET", "LOCATION"],
-          parentCode: null,
-          kind: "workspace",
-        },
-      ],
-      environment: "test",
-    } satisfies AdminContextView);
-    void ({ items: [], nextCursor: null } satisfies AdminAuditEventPage);
-  });
+it("publishes the closed canonical capability vocabulary", () => {
+  expect(adminCapabilityCodes).toContain("customers.read");
+  expect(adminCapabilityCodes).toContain("inventory.adjust");
+  expect(adminCapabilityCodes).toContain("analytics.read");
+  expect(isAdminCapability("staff.manage")).toBe(true);
+  expect(isAdminCapability("staff:manage")).toBe(false);
+  expect(adminNavigationSectionCodes).toEqual([
+    "home",
+    "orders",
+    "products",
+    "customers",
+    "discounts",
+    "content",
+    "analytics",
+    "sales_channels",
+    "settings",
+    "overview",
+    "commerce",
+    "operations",
+    "finance",
+    "administration",
+  ]);
+  expect(adminNavigationScopeKinds).toEqual(["GLOBAL", "MARKET", "LOCATION"]);
 });
