@@ -2,12 +2,46 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { CustomerNotificationsView, RpcResult } from "@freshmarkets/contracts";
+import type {
+  CustomerNotificationType,
+  CustomerNotificationsView,
+  RpcResult,
+} from "@freshmarkets/contracts";
 import { authClient } from "../../../lib/auth/auth-client";
 import { NotificationPanel, notificationRowClassName } from "../../notification-panel";
 import { playInAppNotificationSound } from "@/lib/notifications/in-app-sound";
 
 const READ_STORAGE_PREFIX = "freshmarkets:notification-read:";
+
+const descriptions: Record<CustomerNotificationType, string> = {
+  ORDER_CONFIRMED: "Your order is confirmed. You can follow its progress here.",
+  PAYMENT_ACTION_REQUIRED: "Your payment needs an action before it can continue.",
+  PAYMENT_FAILED: "Your payment did not go through. Review your next step.",
+  SCHEDULED_CUTOFF_REMINDER: "The cutoff for your scheduled order is approaching.",
+  OUT_FOR_DELIVERY: "Your order is on its way to you.",
+  DELIVERED: "Your order has arrived.",
+  DELIVERY_FAILED: "We couldn't complete delivery. Check your order for updates.",
+  ORDER_CANCELLATION_REQUESTED: "We received your cancellation request.",
+  ORDER_REFUND_PROGRESSING: "Your refund is being processed.",
+  ORDER_REFUND_COMPLETED: "Your refund has been completed.",
+  ORDER_CANCELLATION_COMPLETED: "Your order cancellation is complete.",
+  ORDER_REFUND_EXCEPTION: "Your refund needs help from our support team.",
+};
+
+export function notificationAge(occurredAt: string, now: number): string {
+  const elapsed = Math.max(0, now - Date.parse(occurredAt));
+  if (!Number.isFinite(elapsed) || elapsed < 60_000) return "Just now";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const months = Math.floor(days / 30);
+  if (days < 365) return `${months} month${months === 1 ? "" : "s"} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
 
 function notificationIdentity(item: CustomerNotificationsView["items"][number]) {
   return JSON.stringify([item.type, item.reference, item.occurredAt, item.href]);
@@ -222,19 +256,34 @@ function CustomerNotificationContents({
       )}
       {current.value.items.length ? (
         <ul className="divide-y divide-[var(--fm-border)]">
-          {current.value.items.map((notice, index) => (
-            <li key={`${notice.type}:${notice.occurredAt}:${index}`}>
-              <Link
-                href={notice.href}
-                prefetch={false}
-                onClick={close}
-                className={notificationRowClassName}
-                aria-label={`${notice.label}, ${notice.reference}`}
-              >
-                <span className="block break-words font-semibold">{notice.label}</span>
-              </Link>
-            </li>
-          ))}
+          {current.value.items.map((notice, index) => {
+            const description = descriptions[notice.type];
+            const age = notificationAge(notice.occurredAt, Date.now());
+            return (
+              <li key={`${notice.type}:${notice.occurredAt}:${index}`}>
+                <Link
+                  href={notice.href}
+                  prefetch={false}
+                  onClick={close}
+                  className={notificationRowClassName}
+                  aria-label={`${notice.label}. ${description} ${age}. ${notice.reference}`}
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 break-words font-semibold">{notice.label}</span>
+                    <time
+                      dateTime={notice.occurredAt}
+                      className="shrink-0 whitespace-nowrap text-xs font-normal text-[var(--fm-text-muted)]"
+                    >
+                      {age}
+                    </time>
+                  </span>
+                  <span className="mt-1 block break-words text-[var(--fm-text-muted)]">
+                    {description}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <div className="p-4 text-sm" role="status">

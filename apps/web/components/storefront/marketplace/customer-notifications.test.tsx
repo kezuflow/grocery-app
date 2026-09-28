@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CustomerNotifications } from "./customer-notifications";
+import { CustomerNotifications, notificationAge } from "./customer-notifications";
 
 const session = vi.hoisted(() => ({
   data: null as null | { user: { id: string } },
@@ -122,7 +122,14 @@ it("shows the unread count on the bell and clears it when the panel is opened", 
   expect(document.querySelector('[aria-label="Open notifications"]')).not.toBeNull();
   expect(localStorage.getItem("freshmarkets:notification-read:shopper")).not.toBeNull();
 });
-it("renders title-only safe destinations, retries failures, and closes after selection", async () => {
+it("formats recent and older notification ages", () => {
+  const now = Date.parse("2026-09-28T12:00:00.000Z");
+  expect(notificationAge("2026-09-28T11:55:00.000Z", now)).toBe("5 min ago");
+  expect(notificationAge("2026-09-27T12:00:00.000Z", now)).toBe("1 day ago");
+  expect(notificationAge("2026-09-18T12:00:00.000Z", now)).toBe("10 days ago");
+  expect(notificationAge("2026-09-28T12:01:00.000Z", now)).toBe("Just now");
+});
+it("renders safe destinations with descriptions and time, retries failures, and closes after selection", async () => {
   session.data = { user: { id: "shopper" } };
   fetchMock.mockRejectedValueOnce(new Error("network"));
   await open();
@@ -142,7 +149,8 @@ it("renders title-only safe destinations, retries failures, and closes after sel
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[role="alert"] button')?.click(),
   );
-  expect(document.querySelector("time")).toBeNull();
+  expect(document.querySelector("time")?.getAttribute("dateTime")).toBe("2026-09-13T00:00:00.000Z");
+  expect(document.body.textContent).toContain("Your refund needs help from our support team.");
   expect(document.querySelector('[aria-label="Close notifications"]')).toBeNull();
   expect(document.body.textContent).not.toContain("Recent order and payment updates");
   expect(document.body.textContent).not.toContain("FM-1");

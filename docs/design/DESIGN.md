@@ -24,8 +24,10 @@ unchanged until separately authorized.
 Storefront places its bell immediately left of Cart; Admin replaces its Overview anchor with a
 compact panel while retaining Recent notifications. Both use the established shadcn Popover,
 their separate token/font scopes, 44px controls, a viewport-clamped width and bounded scrolling.
-Customer rows show only a short wrapping status title linked to the existing safe destination;
-Order context remains in the accessible link name. The customer panel has no subtitle or X button,
+Customer rows show a short wrapping status title, one fact-safe descriptive line and a compact
+relative time linked to the existing safe destination; Order context remains in the accessible link name.
+This supersedes the 2026-09-13 title-only simplification following the owner's 2026-09-28 request.
+The customer panel has no subtitle or X button,
 and its empty state is one short line (owner simplification 2026-09-13). Admin rows retain context,
 explicit date/time and action details. Admin panel and Overview share
 the same scoped data/list representation and reporting timezone. The storefront bell uses the same
@@ -51,7 +53,7 @@ Shopify's [alert panel](https://mobbin.com/screens/668a7524-57c0-476a-8ce1-6f9cb
 Admin anchored list, while Faire's [action-required row](https://mobbin.com/screens/2af5769e-ba38-4609-a166-ca1221de2d2c)
 supports explanatory next steps. Fiverr's [Order notifications](https://mobbin.com/flows/bf5a190c-6a58-492e-aedf-55f2e9a59e19)
 uses day grouping/relative times; the bounded Admin list uses explicit dates without redundant
-group headings, while customer rows follow the owner title-only presentation. Reference read-state workflows and proprietary assets/wording are excluded.
+group headings, while customer rows use the later owner-approved title, description and relative-time presentation. Reference read-state workflows and proprietary assets/wording are excluded.
 Static images cannot verify focus, keyboard, outside dismissal, breakpoints or reduced motion;
 those require executed FreshMarkets interaction/browser evidence.
 

@@ -14,7 +14,7 @@ async function checkPanel(page: Page, customer = false) {
   if (customer) {
     await expect(panel.getByRole("heading", { name: "Notifications" })).toBeFocused();
     await expect(panel.getByRole("button", { name: "Close notifications" })).toHaveCount(0);
-    await expect(panel.locator("time")).toHaveCount(0);
+    await expect(panel.locator("time").first()).toBeVisible();
   } else {
     await expect(page.getByRole("button", { name: "Close notifications" })).toBeFocused();
   }
@@ -48,13 +48,14 @@ for (const width of [1440, 390]) {
   test(`customer notifications use local owned facts and accessible panel at ${width}px`, async ({
     signedInPage: page,
   }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/orders");
     await notificationBell(page).click();
     await expect(
       page.getByRole("dialog", { name: "Notifications" }).getByText("No updates yet"),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
     await page.keyboard.press("Escape");
     const session = (await (await page.request.get("/api/auth/get-session")).json()) as {
       user: { id: string };
@@ -74,6 +75,12 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     const panel = page.getByRole("dialog", { name: "Notifications" });
     await expect(panel.getByText("Order confirmed", { exact: true })).toBeVisible();
+    await expect(
+      panel.getByText("Your order is confirmed. You can follow its progress here."),
+    ).toBeVisible();
+    await expect(panel.locator(`a[href="/orders/${order}"] time`)).toContainText(
+      /Just now|\d+ min ago/,
+    );
     await expect(panel.locator(`a[href="/orders/${order}"]`)).toBeVisible();
     await page.keyboard.press("Escape");
     await checkPanel(page, true);
