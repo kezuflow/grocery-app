@@ -70,13 +70,26 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
           compact && "px-3",
         )}
       >
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--fm-success-soft)] text-[var(--fm-storefront-accent)]">
+            {side === "CUSTOMER" ? (
+              <img
+                src="/images/freshmarkets-support-avatar.webp"
+                alt=""
+                width={40}
+                height={40}
+                className="size-full rounded-full object-cover"
+              />
+            ) : (
+              <UserRound className="size-5" aria-hidden="true" />
+            )}
+            <span
+              role="status"
+              aria-label={`${other} ${chat.connected && chat.otherPresent ? "available" : "unavailable"}${chat.connected ? "" : "; live updates reconnecting"}`}
+              className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[var(--fm-card)] ${chat.connected && chat.otherPresent ? "bg-[var(--fm-storefront-accent)]" : "bg-[#9ca3af]"}`}
+            />
+          </span>
           <CardTitle>{compact ? <h2>Order messages</h2> : <h1>Order messages</h1>}</CardTitle>
-          <span
-            role="status"
-            aria-label={`${other} ${chat.connected && chat.otherPresent ? "available" : "unavailable"}${chat.connected ? "" : "; live updates reconnecting"}`}
-            className={`inline-block size-3 rounded-full ${chat.connected && chat.otherPresent ? "bg-[var(--fm-storefront-accent)]" : "bg-[#9ca3af]"}`}
-          />
         </div>
         <div className="flex items-center gap-2">
           <Badge className="border-[var(--fm-storefront-accent)] text-[var(--fm-storefront-accent)]">
