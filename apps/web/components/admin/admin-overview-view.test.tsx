@@ -40,6 +40,7 @@ describe("AdminOverviewViewContent", () => {
     expect(html).toContain(">0<");
     expect(html).toContain("Global payments.read access is required.");
     expect(html).toContain("Fulfillment by status");
+    expect(html).toContain('href="/admin/jobs"');
     expect(html).not.toContain('href="/admin/payments"');
     expect(html).not.toContain("₱");
   });

@@ -250,6 +250,20 @@ export function AdminOverviewViewContent({
         </CardContent>
       </Card>
 
+      {operationsAvailable ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Scheduled jobs</CardTitle>
+            <CardDescription>Inspect recent runs and failures across the platform.</CardDescription>
+            <CardAction>
+              <Link href="/admin/jobs" className="text-sm font-medium text-primary hover:underline">
+                View runs
+              </Link>
+            </CardAction>
+          </CardHeader>
+        </Card>
+      ) : null}
+
       <Card className="min-w-0 gap-0 border-border py-0 shadow-none">
         <CardHeader className="border-b border-border px-4 py-4 sm:px-5">
           <CardTitle>Recent material operations</CardTitle>

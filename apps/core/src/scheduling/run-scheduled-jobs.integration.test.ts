@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { startPromotionalTrial } from "../membership/application/start-promotional-trial";
 import { SCHEDULED_CRON_EXPRESSIONS, getJobsForCron } from "./job-registry";
-import { runRegisteredJobs, runScheduledJobs } from "./run-scheduled-jobs";
+import {
+  assertScheduledJobsSucceeded,
+  runRegisteredJobs,
+  runScheduledJobs,
+} from "./run-scheduled-jobs";
 import { providerActionExpiryJob } from "./jobs/provider-action-expiry";
 import type { ScheduledJob, ScheduledJobOutcome } from "./types";
 
@@ -94,6 +98,12 @@ describe("scheduled job registry", () => {
     expect(everyMinute).toContain("membership.scheduled-cancellations");
     expect(everyMinute).toContain("payments.provider-action-expiry");
     expect(everyMinute).toContain("commerce.cycle-cutoff");
+    expect(everyMinute.indexOf("commerce.cycle-cutoff")).toBeLessThan(
+      everyMinute.indexOf("delivery.instant-booking"),
+    );
+    expect(everyMinute.indexOf("payments.provider-action-expiry")).toBeLessThan(
+      everyMinute.indexOf("delivery.instant-booking"),
+    );
     const quarterHour = getJobsForCron("*/15 * * * *").map((job) => job.name);
     expect(quarterHour).toContain("commerce.cycle-closeout");
     expect(quarterHour).toContain("payments.provider-inbox-redrive");
@@ -138,6 +148,39 @@ describe("runRegisteredJobs", () => {
     });
     expect(rows[0].affected_count).toBeNull();
     expect(rows[1]).toMatchObject({ job_name: "iso.after", status: "SUCCEEDED" });
+    expect(() => assertScheduledJobsSucceeded(outcomes)).toThrow("SCHEDULED_JOBS_FAILED");
+  });
+
+  it("accepts successful and skipped scheduled outcomes", () => {
+    expect(() =>
+      assertScheduledJobsSucceeded([{ status: "SUCCEEDED" }, { status: "SKIPPED" }]),
+    ).not.toThrow();
+  });
+
+  it("runs later jobs but fails the invocation when run observations cannot be stored", async () => {
+    const ran: string[] = [];
+    const database = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "prepare")
+          return (query: string) => {
+            if (query.startsWith("INSERT INTO scheduled_job_run"))
+              throw new Error("Simulated observation storage failure");
+            return target.prepare(query);
+          };
+        return Reflect.get(target, property, target);
+      },
+    });
+    const jobs: ScheduledJob[] = ["first", "second"].map((name) => ({
+      name: `recording.${name}`,
+      async run() {
+        ran.push(name);
+        return { status: "SUCCEEDED" };
+      },
+    }));
+    await expect(runRegisteredJobs(database, "* * * * *", NOW, jobs)).rejects.toThrow(
+      "SCHEDULED_JOB_RUN_RECORDING_FAILED",
+    );
+    expect(ran).toEqual(["first", "second"]);
   });
 
   it("records per-job wall-clock duration and never persists raw failure text", async () => {

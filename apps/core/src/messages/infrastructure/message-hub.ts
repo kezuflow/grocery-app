@@ -107,8 +107,13 @@ export class MessageHub extends DurableObject<Env> {
   }
 
   private broadcast(message: string, audience?: SocketAttachment["role"]): void {
+    const now = Date.now();
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (!attachment || attachment.expiresAt <= now) {
+        this.close(socket);
+        continue;
+      }
       if (audience && attachment?.role !== audience) continue;
       try {
         socket.send(message);

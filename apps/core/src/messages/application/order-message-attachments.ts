@@ -28,7 +28,7 @@ type Upload = {
   status: "PENDING" | "UNKNOWN" | "STORED" | "ATTACHED" | "DELETE_PENDING" | "DELETED";
 };
 
-const accepted = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+const accepted = ["image/jpeg", "image/png", "image/webp"] as const;
 type Mime = (typeof accepted)[number];
 
 function signatureMatches(bytes: Uint8Array, mimeType: Mime): boolean {
@@ -38,13 +38,11 @@ function signatureMatches(bytes: Uint8Array, mimeType: Mime): boolean {
     return (
       bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, i) => bytes[i] === value)
     );
-  if (mimeType === "image/webp")
-    return (
-      bytes.length >= 12 &&
-      new TextDecoder().decode(bytes.subarray(0, 4)) === "RIFF" &&
-      new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
-    );
-  return bytes.length >= 5 && new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-";
+  return (
+    bytes.length >= 12 &&
+    new TextDecoder().decode(bytes.subarray(0, 4)) === "RIFF" &&
+    new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
+  );
 }
 
 function safeFileName(fileName: string): string | null {
@@ -103,7 +101,7 @@ export async function stageOrderMessageAttachment(
   )
     return fail(
       "VALIDATION_FAILED",
-      "Attach a JPEG, PNG, WebP or PDF up to 5 MiB",
+      "Attach a JPEG, PNG or WebP image up to 5 MiB",
       request.requestId,
     );
   const actor = await resolveMessageActor(context, request, kind, true);

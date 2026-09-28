@@ -26,9 +26,9 @@ async function recordJobRun(
   startedAt: number,
   finishedAt: number,
   outcome: ScheduledJobOutcome,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await database
+    const recorded = await database
       .prepare(
         "INSERT INTO scheduled_job_run (id, job_name, cron_expression, status, affected_count, error_code, detail, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
@@ -44,12 +44,20 @@ async function recordJobRun(
         finishedAt,
       )
       .run();
+    if (recorded.meta.changes !== 1) throw new Error("SCHEDULED_JOB_RUN_RECORDING_FAILED");
+    return true;
   } catch {
-    // Observability must never mask the job's own outcome.
     log("error", "scheduling.job_run.record_failed", {
       job: jobName,
+      cronExpression,
     });
+    return false;
   }
+}
+
+export function assertScheduledJobsSucceeded(outcomes: readonly ScheduledJobOutcome[]): void {
+  if (outcomes.some((outcome) => outcome.status === "FAILED"))
+    throw new Error("SCHEDULED_JOBS_FAILED");
 }
 
 /**
@@ -74,6 +82,7 @@ export async function runRegisteredJobs(
   clock: () => number = Date.now,
 ): Promise<ScheduledJobOutcome[]> {
   const outcomes: ScheduledJobOutcome[] = [];
+  let recordingFailed = false;
   for (const job of jobs) {
     const startedAt = clock();
     let outcome: ScheduledJobOutcome;
@@ -92,9 +101,17 @@ export async function runRegisteredJobs(
       outcome = { status: "FAILED", errorCode: "SCHEDULED_JOB_ERROR" };
     }
     const finishedAt = Math.max(startedAt, clock());
-    await recordJobRun(database, job.name, cronExpression, startedAt, finishedAt, outcome);
+    if (!(await recordJobRun(database, job.name, cronExpression, startedAt, finishedAt, outcome)))
+      recordingFailed = true;
+    if (outcome.status === "FAILED")
+      log("error", "scheduling.job.failed", {
+        job: job.name,
+        cronExpression,
+        errorCode: outcome.errorCode ?? "SCHEDULED_JOB_ERROR",
+      });
     outcomes.push(outcome);
   }
+  if (recordingFailed) throw new Error("SCHEDULED_JOB_RUN_RECORDING_FAILED");
   return outcomes;
 }
 

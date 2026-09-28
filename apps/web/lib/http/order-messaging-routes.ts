@@ -135,7 +135,7 @@ export async function stageAttachment(request: Request, side: MessageSide, order
     .catch(() => null);
   const file = form?.get("file");
   if (!file || typeof file === "string" || file.size < 1 || file.size > 5 * 1024 * 1024)
-    return invalid(request, "Choose an image or PDF up to 5 MiB");
+    return invalid(request, "Choose a JPEG, PNG or WebP image up to 5 MiB");
   const input = {
     ...meta(request),
     orderId,

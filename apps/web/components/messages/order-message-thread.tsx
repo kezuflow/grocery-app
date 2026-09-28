@@ -335,8 +335,8 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                 type="file"
                 className="sr-only"
                 multiple
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                aria-label="Attach images or PDFs"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="Attach images"
                 onChange={(event) => {
                   if (event.currentTarget.files) chat.addFiles(event.currentTarget.files);
                   event.currentTarget.value = "";

@@ -105,7 +105,7 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/WZkAAAAASUVORK5CYII=",
     "base64",
   );
-  await signedInPage.getByLabel("Attach images or PDFs").setInputFiles({
+  await signedInPage.getByLabel("Attach images").setInputFiles({
     name: "proof.png",
     mimeType: "image/png",
     buffer: png,

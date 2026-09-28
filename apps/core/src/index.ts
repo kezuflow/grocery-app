@@ -123,7 +123,8 @@ import { idempotencyKeySchema, z as validationSchema } from "@freshmarkets/valid
 import { scheduledWeekCompletionBodySchema } from "@freshmarkets/validation";
 import { buildProviderRegistry } from "./payments/infrastructure/providers/runtime-providers";
 import { configuredInstantDeliveryPartners } from "./delivery/infrastructure/runtime-delivery-provider";
-import { runScheduledJobs } from "./scheduling/run-scheduled-jobs";
+import { assertScheduledJobsSucceeded, runScheduledJobs } from "./scheduling/run-scheduled-jobs";
+import type { ScheduledJobOutcome } from "./scheduling/types";
 import {
   consumeNotificationBatch,
   type NotificationQueueMessage,
@@ -3614,11 +3615,19 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
    * policy lives here.
    */
   async scheduled(controller: { readonly cron: string }): Promise<void> {
-    await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
+    let outcomes: ScheduledJobOutcome[] = [];
+    let runFailure: unknown = null;
+    try {
+      outcomes = await runScheduledJobs(this.env, controller.cron, systemClock.now().getTime());
+    } catch (error) {
+      runFailure = error;
+    }
     if (controller.cron === "* * * * *") {
       await publishOperationalRevisions(this.env.DB, this.env.OPERATIONAL_HUB);
       await publishMessageRevisions(this.env.DB, this.env.MESSAGE_HUB);
     }
+    if (runFailure !== null) throw runFailure;
+    assertScheduledJobsSucceeded(outcomes);
   }
 
   /** Queue delivery is per-message isolated; domain state remains D1-owned. */
@@ -3634,8 +3643,8 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
 
   /**
    * Recent scheduled-job runs for operational visibility. Scheduler telemetry
-   * is platform-wide (not location-scoped); any operational manage capability
-   * grants visibility, mirroring the operations board's capability set.
+   * is platform-wide (not location-scoped); operational read or manage
+   * capability grants visibility, mirroring the operations board.
    */
   async adminScheduledJobRuns(
     input: import("@freshmarkets/contracts").AdminScheduledJobRunsRequest,
@@ -3644,8 +3653,11 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     if (!session) return fail("UNAUTHENTICATED", "Authentication is required", input.requestId);
     const OPERATIONAL_CAPABILITIES = [
       "inventory.adjust",
+      "procurement.read",
       "procurement.manage",
+      "fulfillment.read",
       "fulfillment.manage",
+      "delivery.read",
       "delivery.manage",
     ] as const satisfies readonly import("@freshmarkets/contracts").Capability[];
     let authorized = false;

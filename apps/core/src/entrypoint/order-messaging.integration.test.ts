@@ -161,6 +161,23 @@ it("commits one customer message and acknowledgement with exact replay, private 
   ).toMatchObject({ n: 1 });
 
   const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+  const pdfKey = crypto.randomUUID();
+  expect(
+    await rpc.stageCustomerOrderMessageAttachment({
+      requestId: "pdf-rejected",
+      headers,
+      orderId,
+      bytes: new TextEncoder().encode("%PDF-1.7"),
+      mimeType: "application/pdf",
+      fileName: "document.pdf",
+      idempotencyKey: pdfKey,
+    }),
+  ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  expect(
+    await env.DB.prepare("SELECT id FROM order_message_upload WHERE idempotency_key=?")
+      .bind(pdfKey)
+      .first(),
+  ).toBeNull();
   const staged = await rpc.stageCustomerOrderMessageAttachment({
     requestId: "upload",
     headers,

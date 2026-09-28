@@ -27,12 +27,12 @@ const EVERY_FIFTEEN_MINUTES = "*/15 * * * *";
 const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
   [EVERY_MINUTE]: [
     checkoutHoldExpiryJob,
+    deliveryCycleCutoffJob,
+    providerActionExpiryJob,
     instantDeliveryBookingJob,
     orderCancellationRefundsJob,
     refundReconciliationJob,
     membershipScheduledCancellationsJob,
-    providerActionExpiryJob,
-    deliveryCycleCutoffJob,
     notificationDeliveryJob,
   ],
   [EVERY_FIFTEEN_MINUTES]: [
