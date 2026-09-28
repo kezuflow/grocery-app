@@ -94,6 +94,7 @@
       "preview_bucket_name": "freshmarkets-product-media-dev",
     },
   ],
+  "images": { "binding": "IMAGES" },
   "d1_databases": [
     {
       "binding": "DB",
@@ -162,6 +163,7 @@
           "bucket_name": "freshmarkets-product-media-staging",
         },
       ],
+      "images": { "binding": "IMAGES" },
       "d1_databases": [
         {
           "binding": "DB",
@@ -232,6 +234,7 @@
           "bucket_name": "freshmarkets-product-media-production",
         },
       ],
+      "images": { "binding": "IMAGES" },
       "d1_databases": [
         {
           "binding": "DB",

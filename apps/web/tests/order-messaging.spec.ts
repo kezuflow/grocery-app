@@ -102,7 +102,7 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   expect(messageGaps.every((gap) => gap >= 0 && gap <= 16)).toBe(true);
 
   const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/WZkAAAAASUVORK5CYII=",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==",
     "base64",
   );
   await signedInPage.getByLabel("Attach images").setInputFiles({
@@ -114,13 +114,17 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await signedInPage.getByRole("textbox", { name: "Message" }).fill("Photo attached.");
   await signedInPage.getByRole("button", { name: "Send message" }).click();
   await expect(adminPage.getByText("Photo attached.")).toBeVisible();
-  const attachment = adminPage.getByRole("link", { name: "Open proof.png" });
+  const attachment = adminPage.getByRole("link", { name: "Open proof.webp" });
   await expect(attachment).toBeVisible();
   const href = await attachment.getAttribute("href");
   expect(href).toBeTruthy();
   const download = await adminPage.request.get(href ?? "");
   expect(download.ok()).toBe(true);
-  expect(Buffer.from(await download.body())).toEqual(png);
+  expect(download.headers()["content-type"]).toBe("image/webp");
+  const processed = Buffer.from(await download.body());
+  expect(processed.toString("ascii", 0, 4)).toBe("RIFF");
+  expect(processed.toString("ascii", 8, 12)).toBe("WEBP");
+  expect(processed).not.toEqual(png);
 
   await signedInPage.goto("/orders");
   await signedInPage.getByRole("button", { name: "Open order chat" }).click();

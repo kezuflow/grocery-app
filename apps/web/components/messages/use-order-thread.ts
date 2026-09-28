@@ -7,13 +7,15 @@ import {
   playInAppNotificationSound,
   setNotificationSoundMuted,
 } from "@/lib/notifications/in-app-sound";
+import { prepareMessageImage } from "./prepare-message-image";
 
 type Side = "CUSTOMER" | "ADMIN";
 export type DraftAttachment = {
   key: string;
   file: File;
+  uploadFile: File | null;
   id: string | null;
-  status: "uploading" | "done" | "error";
+  status: "preparing" | "uploading" | "done" | "error";
   error: string | null;
 };
 
@@ -204,14 +206,16 @@ export function useOrderThread(side: Side, orderId: string) {
   };
 
   const upload = async (entry: DraftAttachment) => {
+    if (!entry.uploadFile) return;
     const form = new FormData();
-    form.set("file", entry.file);
+    form.set("file", entry.uploadFile);
     try {
       const response = await fetch(`${base}/${encodeURIComponent(orderId)}/attachments`, {
         method: "POST",
         headers: { "idempotency-key": entry.key },
         body: form,
       });
+      if (response.status === 413) throw new Error("Photo exceeds the 18 MB upload limit");
       const result = (await response.json()) as RpcResult<{ id: string }>;
       if (!result.ok) throw new Error(errorMessage(result));
       setAttachments((current) =>
@@ -236,18 +240,42 @@ export function useOrderThread(side: Side, orderId: string) {
     }
   };
 
+  const prepareAndUpload = async (entry: DraftAttachment) => {
+    try {
+      const uploadFile = await prepareMessageImage(entry.file);
+      const prepared = { ...entry, uploadFile, status: "uploading" as const };
+      setAttachments((current) =>
+        current.map((item) => (item.key === entry.key ? prepared : item)),
+      );
+      await upload(prepared);
+    } catch (reason) {
+      setAttachments((current) =>
+        current.map((item) =>
+          item.key === entry.key
+            ? {
+                ...item,
+                status: "error",
+                error: reason instanceof Error ? reason.message : "Photo preparation failed",
+              }
+            : item,
+        ),
+      );
+    }
+  };
+
   const addFiles = (files: FileList | File[]) => {
     const remaining = Math.max(0, 3 - attachments.length);
     for (const file of Array.from(files).slice(0, remaining)) {
       const entry: DraftAttachment = {
         key: crypto.randomUUID(),
         file,
+        uploadFile: null,
         id: null,
-        status: "uploading",
+        status: "preparing",
         error: null,
       };
       setAttachments((current) => [...current, entry]);
-      void upload(entry);
+      void prepareAndUpload(entry);
     }
   };
 
@@ -307,10 +335,13 @@ export function useOrderThread(side: Side, orderId: string) {
       if (entry) {
         setAttachments((current) =>
           current.map((item) =>
-            item.key === key ? { ...item, status: "uploading", error: null } : item,
+            item.key === key
+              ? { ...item, status: entry.uploadFile ? "uploading" : "preparing", error: null }
+              : item,
           ),
         );
-        void upload(entry);
+        if (entry.uploadFile) void upload(entry);
+        else void prepareAndUpload(entry);
       }
     },
     sending,

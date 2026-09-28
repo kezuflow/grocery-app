@@ -5,6 +5,13 @@ import { createCoreRpcContext } from "./context";
 import { createMessagesRpc } from "./messages-rpc";
 import { expireOrderMessages } from "../messages/application/expire-order-messages";
 
+const png = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==",
+  ),
+  (character) => character.charCodeAt(0),
+);
+
 async function customerSession() {
   const email = `message-${crypto.randomUUID()}@example.com`;
   const signup = await SELF.fetch("https://core.example.invalid/api/auth/sign-up/email", {
@@ -160,7 +167,6 @@ it("commits one customer message and acknowledgement with exact replay, private 
       .first<{ n: number }>(),
   ).toMatchObject({ n: 1 });
 
-  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
   const pdfKey = crypto.randomUUID();
   expect(
     await rpc.stageCustomerOrderMessageAttachment({
@@ -178,7 +184,24 @@ it("commits one customer message and acknowledgement with exact replay, private 
       .bind(pdfKey)
       .first(),
   ).toBeNull();
-  const staged = await rpc.stageCustomerOrderMessageAttachment({
+  const invalidKey = crypto.randomUUID();
+  expect(
+    await rpc.stageCustomerOrderMessageAttachment({
+      requestId: "corrupt-image",
+      headers,
+      orderId,
+      bytes: Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]),
+      mimeType: "image/png",
+      fileName: "corrupt.png",
+      idempotencyKey: invalidKey,
+    }),
+  ).toMatchObject({ ok: false });
+  expect(
+    await env.DB.prepare("SELECT id FROM order_message_upload WHERE idempotency_key=?")
+      .bind(invalidKey)
+      .first(),
+  ).toBeNull();
+  const uploadRequest = {
     requestId: "upload",
     headers,
     orderId,
@@ -186,9 +209,57 @@ it("commits one customer message and acknowledgement with exact replay, private 
     mimeType: "image/png",
     fileName: "proof.png",
     idempotencyKey: crypto.randomUUID(),
+  };
+  const staged = await rpc.stageCustomerOrderMessageAttachment(uploadRequest);
+  if (!staged.ok) throw new Error(staged.error.message);
+  expect(staged).toMatchObject({
+    ok: true,
+    value: { fileName: "proof.webp", mimeType: "image/webp" },
   });
-  expect(staged).toMatchObject({ ok: true, value: { fileName: "proof.png" } });
   if (!staged.ok) return;
+  expect(
+    await rpc.stageCustomerOrderMessageAttachment({ ...uploadRequest, requestId: "upload-replay" }),
+  ).toMatchObject({ ok: true, value: { id: staged.value.id } });
+  const changed = png.slice();
+  changed[changed.length - 1] ^= 1;
+  expect(
+    await rpc.stageCustomerOrderMessageAttachment({ ...uploadRequest, bytes: changed }),
+  ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  const storedUpload = await env.DB.prepare(`SELECT object_key AS objectKey,
+    mime_type AS storedMime,byte_size AS storedSize,content_digest AS storedDigest,
+    input_mime_type AS inputMime,input_byte_size AS inputSize,input_digest AS inputDigest
+    FROM order_message_upload WHERE id=?`)
+    .bind(staged.value.id)
+    .first<{
+      objectKey: string;
+      storedMime: string;
+      storedSize: number;
+      storedDigest: string;
+      inputMime: string;
+      inputSize: number;
+      inputDigest: string;
+    }>();
+  expect(storedUpload).toMatchObject({
+    storedMime: "image/webp",
+    inputMime: "image/png",
+    inputSize: png.byteLength,
+  });
+  expect(storedUpload?.storedDigest).not.toBe(storedUpload?.inputDigest);
+  const storedObject = await env.PRODUCT_MEDIA.head(storedUpload?.objectKey ?? "missing");
+  expect(storedObject?.size).toBe(storedUpload?.storedSize);
+  expect(storedObject?.httpMetadata?.contentType).toBe("image/webp");
+  await env.DB.prepare("UPDATE order_message_upload SET status='UNKNOWN' WHERE id=?")
+    .bind(staged.value.id)
+    .run();
+  expect(await rpc.stageCustomerOrderMessageAttachment(uploadRequest)).toMatchObject({
+    ok: true,
+    value: { id: staged.value.id },
+  });
+  expect(
+    await env.DB.prepare("SELECT status FROM order_message_upload WHERE id=?")
+      .bind(staged.value.id)
+      .first(),
+  ).toMatchObject({ status: "STORED" });
   expect(
     await rpc.readCustomerOrderMessageAttachment({
       requestId: "private",
@@ -214,9 +285,50 @@ it("commits one customer message and acknowledgement with exact replay, private 
   });
   expect(content).toMatchObject({
     ok: true,
-    value: { fileName: "proof.png", mimeType: "image/png" },
+    value: { fileName: "proof.webp", mimeType: "image/webp" },
   });
-  if (content.ok) expect([...content.value.bytes]).toEqual([...png]);
+  if (content.ok)
+    expect(new TextDecoder().decode(content.value.bytes.subarray(8, 12))).toBe("WEBP");
+
+  const legacyPdf = new TextEncoder().encode("%PDF-1.7 legacy attachment");
+  const legacyId = crypto.randomUUID();
+  const legacyKey = `messages/${orderId}/${legacyId}`;
+  const userId = await env.DB.prepare("SELECT auth_user_id AS id FROM customer WHERE id=?")
+    .bind(customerId)
+    .first<{ id: string }>();
+  if (!userId || !sent.ok) throw new Error("Legacy fixture setup failed");
+  await env.DB.prepare(`INSERT INTO order_message_upload
+    (id,order_id,actor_kind,actor_user_id,idempotency_key,message_id,object_key,
+     file_name,mime_type,byte_size,content_digest,status,created_at,updated_at)
+    VALUES (?,?,'CUSTOMER',?,?,?,?,?,'application/pdf',?,'legacy-digest','ATTACHED',?,?)`)
+    .bind(
+      legacyId,
+      orderId,
+      userId.id,
+      crypto.randomUUID(),
+      sent.value.messageId,
+      legacyKey,
+      "old-document.pdf",
+      legacyPdf.byteLength,
+      Date.now(),
+      Date.now(),
+    )
+    .run();
+  await env.PRODUCT_MEDIA.put(legacyKey, legacyPdf, {
+    httpMetadata: { contentType: "application/pdf" },
+    customMetadata: { contentDigest: "legacy-digest" },
+  });
+  expect(
+    await rpc.readCustomerOrderMessageAttachment({
+      requestId: "legacy-download",
+      headers,
+      orderId,
+      attachmentId: legacyId,
+    }),
+  ).toMatchObject({
+    ok: true,
+    value: { fileName: "old-document.pdf", mimeType: "application/pdf" },
+  });
 
   const base = Date.now();
   const future = base + 15 * 24 * 60 * 60 * 1000;
@@ -432,11 +544,12 @@ it("requires Orders capability and current location scope for staff messages", a
     requestId: "local-upload",
     headers,
     orderId,
-    bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]),
+    bytes: png,
     mimeType: "image/png",
     fileName: "location-proof.png",
     idempotencyKey: crypto.randomUUID(),
   });
+  if (!staged.ok) throw new Error(staged.error.message);
   expect(staged).toMatchObject({ ok: true });
   if (!staged.ok) throw new Error("Location upload failed");
   expect(

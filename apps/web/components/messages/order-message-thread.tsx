@@ -291,7 +291,7 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                   <Attachment
                     key={entry.key}
                     state={
-                      entry.status === "uploading"
+                      entry.status === "preparing" || entry.status === "uploading"
                         ? "uploading"
                         : entry.status === "error"
                           ? "error"
@@ -305,7 +305,12 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                     <AttachmentContent>
                       <AttachmentTitle>{entry.file.name}</AttachmentTitle>
                       <AttachmentDescription>
-                        {entry.error ?? (entry.status === "uploading" ? "Uploading…" : "Ready")}
+                        {entry.error ??
+                          (entry.status === "preparing"
+                            ? "Preparing photo…"
+                            : entry.status === "uploading"
+                              ? "Uploading…"
+                              : "Ready")}
                       </AttachmentDescription>
                     </AttachmentContent>
                     <AttachmentActions>
@@ -335,21 +340,24 @@ export function OrderMessageThread({ side, orderId, canSend = true, compact = fa
                 type="file"
                 className="sr-only"
                 multiple
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                 aria-label="Attach images"
                 onChange={(event) => {
                   if (event.currentTarget.files) chat.addFiles(event.currentTarget.files);
                   event.currentTarget.value = "";
                 }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={chat.attachments.length >= 3}
-                onClick={() => fileInput.current?.click()}
-              >
-                <Paperclip aria-hidden="true" /> Attach files
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={chat.attachments.length >= 3}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Paperclip aria-hidden="true" /> Attach photos
+                </Button>
+                <span className="text-xs text-muted-foreground">Up to 3 photos, 18 MB each</span>
+              </div>
               <Button
                 type="button"
                 disabled={

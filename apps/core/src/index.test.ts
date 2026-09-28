@@ -10,6 +10,7 @@ describe("Core Worker foundation", () => {
       OPERATIONAL_HUB: {} as Env["OPERATIONAL_HUB"],
       MESSAGE_HUB: {} as Env["MESSAGE_HUB"],
       PRODUCT_MEDIA: {} as R2Bucket,
+      IMAGES: {} as ImagesBinding,
       ENVIRONMENT: "development",
       INITIAL_GLOBAL_ADMIN_EMAIL: "",
       BETTER_AUTH_URL: "http://localhost:3000",

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { idempotencyKeySchema, z } from "@freshmarkets/validation";
 import type { RpcResult } from "@freshmarkets/contracts";
+import { orderMessageImageMaxInputBytes } from "@freshmarkets/contracts";
 import { coreClient } from "@/lib/core-client/core";
 import { requestHeaders } from "@/lib/core-client/request";
 import { readBoundedBytes, readBoundedJson } from "@/lib/http/bounded-body";
@@ -124,7 +125,7 @@ export async function stageAttachment(request: Request, side: MessageSide, order
   const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key"));
   if (!key.success) return invalid(request, "An upload identity is required");
   const bytes = await readBoundedBytes(request, {
-    maxBytes: 5 * 1024 * 1024 + 16_384,
+    maxBytes: orderMessageImageMaxInputBytes + 16_384,
     contentTypes: ["multipart/form-data"],
   });
   if (!bytes.ok) return invalid(request, bytes.error.message, bytes.error.status);
@@ -134,14 +135,22 @@ export async function stageAttachment(request: Request, side: MessageSide, order
     .formData()
     .catch(() => null);
   const file = form?.get("file");
-  if (!file || typeof file === "string" || file.size < 1 || file.size > 5 * 1024 * 1024)
-    return invalid(request, "Choose a JPEG, PNG or WebP image up to 5 MiB");
+  if (
+    !file ||
+    typeof file === "string" ||
+    file.size < 1 ||
+    file.size > orderMessageImageMaxInputBytes
+  )
+    return invalid(request, "Choose a JPEG, PNG, WebP or HEIC image up to 18 MB");
+  const mimeType =
+    file.type ||
+    (/\.heic$/i.test(file.name) ? "image/heic" : /\.heif$/i.test(file.name) ? "image/heif" : "");
   const input = {
     ...meta(request),
     orderId,
     idempotencyKey: key.data,
     fileName: file.name,
-    mimeType: file.type,
+    mimeType,
     bytes: new Uint8Array(await file.arrayBuffer()),
   };
   const client = coreClient(env.CORE);

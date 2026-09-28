@@ -1,6 +1,9 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
 
+export const orderMessageImageMaxInputBytes = 18_000_000;
+export const orderMessageImageMaxStoredBytes = 5 * 1024 * 1024;
+
 export type OrderMessageAttachmentView = Readonly<{
   id: string;
   fileName: string;

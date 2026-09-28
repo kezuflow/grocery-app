@@ -7,6 +7,7 @@ import type {
   OrderMessagesPage,
   RpcResult,
 } from "@freshmarkets/contracts";
+import { messageAttachmentFileName } from "./order-message-attachments";
 import type { MessageContext } from "./shared";
 import { fail, messageExpiry, readMessageOrder, resolveMessageActor } from "./shared";
 
@@ -38,6 +39,7 @@ type AttachmentRow = {
   fileName: string;
   mimeType: OrderMessageAttachmentView["mimeType"];
   byteSize: number;
+  inputDigest: string | null;
 };
 
 async function toConversation(
@@ -222,7 +224,8 @@ export async function getOrderMessages(
   const attachments = ids.length
     ? await database
         .prepare(`SELECT id,message_id AS messageId,file_name AS fileName,
-          mime_type AS mimeType,byte_size AS byteSize FROM order_message_upload
+          mime_type AS mimeType,byte_size AS byteSize,input_digest AS inputDigest
+          FROM order_message_upload
           WHERE message_id IN (${ids.map(() => "?").join(",")}) AND status='ATTACHED'
           ORDER BY created_at,id`)
         .bind(...ids)
@@ -236,7 +239,12 @@ export async function getOrderMessages(
     body: row.body,
     attachments: attachments.results
       .filter((attachment) => attachment.messageId === row.id)
-      .map(({ id, fileName, mimeType, byteSize }) => ({ id, fileName, mimeType, byteSize })),
+      .map(({ id, fileName, mimeType, byteSize, inputDigest }) => ({
+        id,
+        fileName: messageAttachmentFileName(fileName, inputDigest !== null),
+        mimeType,
+        byteSize,
+      })),
     createdAt: new Date(row.createdAt).toISOString(),
   }));
   return {

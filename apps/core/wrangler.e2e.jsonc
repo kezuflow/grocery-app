@@ -36,6 +36,7 @@
       "preview_bucket_name": "freshmarkets-product-media-e2e",
     },
   ],
+  "images": { "binding": "IMAGES" },
   "d1_databases": [
     {
       "binding": "DB",

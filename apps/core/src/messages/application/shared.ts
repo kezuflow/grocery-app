@@ -6,7 +6,7 @@ import { iamSchema } from "../../iam/schema";
 import type { ResolvedCustomer } from "../../customer/principal";
 
 export type MessageContext = {
-  env: Pick<Env, "DB" | "PRODUCT_MEDIA">;
+  env: Pick<Env, "DB" | "PRODUCT_MEDIA" | "IMAGES">;
   auth: FinanceAdministrationDeps["auth"];
   access: {
     now(): number;
