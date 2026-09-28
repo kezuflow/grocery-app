@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Order thread heading — MSG-1.HEADING-5 (2026-09-28)
+
+Active plan: `docs/product/ORDER_MESSAGING_PLAN.md`, **Phase 3 — Storefront, Admin and sound**. The owner supplied a Customer thread screenshot and requested that its green outlined Order ID badge replace the generic “Order messages” heading, using ordinary heading text. Acceptance: the thread heading reads `Order <display number>` without the separate badge, while the avatar, presence and header controls remain. Started on synchronized `main` at `1eaacf1d`; concurrent customer-notification source/test/design edits were present and are outside this slice.
+
+The shared thread heading now uses the existing conversation display number (falling back to the Order ID before load), and the badge was removed. The existing browser assertion expects the Order heading. `DESIGN.md` records the presentation rule. On the `1eaacf1d` working tree plus this slice, `pnpm --filter @freshmarkets/web typecheck`, focused Oxlint, focused Oxfmt and `git diff --check` passed. The focused `E2E_START_STACK=1 E2E_STATE_NAME=e2e-order-heading-20260928 pnpm --filter @freshmarkets/web exec playwright test tests/order-messaging.spec.ts` run did not reach the page: its local webServer exceeded the configured 180-second startup timeout. The three-file source/test/spec slice was committed to `main` as `3292d7cd`; concurrent customer-notification edits were preserved. No browser, provider or production acceptance is claimed. Completion level: **one of one heading changes locally source-verified and committed; browser verification outstanding**. Next action: rerun the focused Order messaging browser journey in a healthy disposable stack before claiming browser acceptance.
+
 ## Customer Messages staff label — MSG-1.COPY-4 (2026-09-28)
 
 Active plan: `docs/product/ORDER_MESSAGING_PLAN.md`, **Phase 3 — Storefront, Admin and sound**. The owner requested that the sender text in `/account/messages/` change from “FreshMarkets staff” to “freshmarkets staff”. Acceptance: staff messages show the requested lowercase label in the customer thread and its avatar accessibility name. Work began on clean synchronized `main` at `bf784c8f`; no other working-tree changes were present.
