@@ -78,19 +78,9 @@
   object-position: center;
 }
 
-.fm-announcement-mascot {
-  position: absolute;
-  z-index: 1;
-  right: 24px;
-  top: -42px;
-  width: 82px;
-  height: auto;
-  animation: fm-announcement-float 3s var(--fm-ease-in-out) infinite alternate;
-}
-
 .fm-announcement-content {
   position: relative;
-  padding: 52px 26px 26px;
+  padding: 26px;
 }
 
 .fm-announcement-content h2 {
@@ -144,28 +134,6 @@
 
 @media (max-width: 400px) {
   .fm-announcement-content {
-    padding: 48px 20px 20px;
-  }
-
-  .fm-announcement-mascot {
-    right: 18px;
-    top: -36px;
-    width: 72px;
-  }
-}
-
-@keyframes fm-announcement-float {
-  from {
-    transform: translateY(0);
-  }
-
-  to {
-    transform: translateY(-8px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fm-announcement-mascot {
-    animation: none;
+    padding: 20px;
   }
 }

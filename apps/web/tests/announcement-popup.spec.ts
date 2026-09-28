@@ -23,7 +23,7 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await expect
     .poll(() => scene.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
-  await expect(dialog.locator("img.fm-announcement-mascot")).toBeVisible();
+  await expect(dialog.locator('img[src="/announcements/grass-mascot.png"]')).toHaveCount(0);
   const closeBounds = await dialog
     .getByRole("button", { name: "Close welcome announcement" })
     .boundingBox();

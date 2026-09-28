@@ -94,14 +94,6 @@ export function AnnouncementPopup() {
           />
         </div>
         <div className="fm-announcement-content">
-          <img
-            src="/announcements/grass-mascot.png"
-            alt=""
-            aria-hidden="true"
-            width={1254}
-            height={1254}
-            className="fm-announcement-mascot"
-          />
           <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
             {page.title}
           </h2>
