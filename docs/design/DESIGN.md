@@ -8,9 +8,10 @@ Show the destination pin and a motorcycle marker for the provider's last reporte
 with explicit waiting, unavailable and finished text. Do not imply a road route, live
 movement between updates or an arrival estimate. Keep manual delivery in the existing status
 presentation without a map.
-Keep the last reported motorcycle position and its timestamp through a refresh failure. Replace
-it on a new provider location; clear it when the driver is invalidated or delivery finishes. The
-map does not show a delayed countdown or imply that a stationary marker is live movement.
+Keep the last reported motorcycle position through a refresh failure, without displaying its
+report time. Replace it on a new provider location; clear it when the driver is invalidated or
+delivery finishes. The map does not show a delayed countdown or imply that a stationary marker
+is live movement.
 The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
 This adapts the status-plus-map hierarchy from Mobbin's
 [GrabFood progress](https://mobbin.com/screens/f35fb2cc-a9f1-42ee-b8e2-889f5ab93b22) and

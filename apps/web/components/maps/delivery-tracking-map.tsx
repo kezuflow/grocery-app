@@ -99,9 +99,6 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
           : snapshot
             ? description(snapshot)
             : "Delivery tracking could not be loaded."}
-        {rider
-          ? ` Reported ${new Date(rider.updatedAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}.`
-          : ""}
       </p>
       {error ? (
         <button type="button" className="text-sm underline" onClick={() => void load()}>

@@ -103,9 +103,10 @@ correction supersedes the earlier same-day no-automatic-booking supplement and c
 Owner-approved delivery tracking, 2026-09-29: Admin Delivery shows a map for an active Lalamove
 attempt, including the assigned rider before pickup when the provider makes a position available.
 The Customer Order detail shows it only while that Order is Out for delivery. The first version
-shows verified rider and destination positions with the last provider update time; it does not
-draw a road route or estimate arrival. Manual deliveries have no map. Provider location is
-temporary tracking evidence, never an Order or delivery-status authority.
+shows verified rider and destination positions without a report timestamp, road route or arrival
+estimate. Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
+do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
+location is temporary tracking evidence, never an Order or delivery-status authority.
 
 Owner supplement, 2026-09-21: while the QR Ph provider step is open, checkout automatically checks
 the authenticated customer's owning Payment completion. A signed provider success first displays

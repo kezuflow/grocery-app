@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("delivery tracking map", () => {
-  it("shows verified rider and destination pins with an update time", async () => {
+  it("shows verified rider and destination pins without a report time", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -37,7 +37,7 @@ describe("delivery tracking map", () => {
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: {
               coordinate: { latitude: 10.32, longitude: 123.91 },
-              updatedAt: new Date().toISOString(),
+              updatedAt: "2026-09-29T00:00:00.000Z",
             },
             nextRefreshMilliseconds: 30_000,
           },
@@ -50,7 +50,9 @@ describe("delivery tracking map", () => {
     await act(async () => {
       root.render(<DeliveryTrackingMap endpoint="/tracking" />);
     });
-    expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Rider's last reported location.",
+    );
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
     expect(fetch).toHaveBeenCalledWith("/tracking", expect.objectContaining({ cache: "no-store" }));
     act(() => root.unmount());
