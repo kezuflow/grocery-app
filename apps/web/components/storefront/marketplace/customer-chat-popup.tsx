@@ -67,7 +67,10 @@ function CustomerChatPopupContents({
       open={open}
       onOpenChange={(value) => {
         setOpen(value);
-        if (value) void inbox.refresh();
+        if (value) {
+          setMuted(notificationSoundMuted());
+          void inbox.refresh();
+        }
         if (!value) setSelectedOrderId(null);
       }}
     >
@@ -102,7 +105,10 @@ function CustomerChatPopupContents({
             <button
               type="button"
               aria-label="Back to conversations"
-              onClick={() => setSelectedOrderId("")}
+              onClick={() => {
+                setSelectedOrderId("");
+                setMuted(notificationSoundMuted());
+              }}
               className="rounded-full p-1 hover:bg-[var(--fm-hover)]"
             >
               <ArrowLeft className="size-5" aria-hidden="true" />

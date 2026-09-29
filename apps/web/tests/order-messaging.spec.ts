@@ -250,6 +250,21 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await expect(
     signedInPage.getByRole("button", { name: "Open order chat", exact: true }),
   ).toBeVisible();
+  await signedInPage
+    .getByRole("dialog", { name: "Order chat" })
+    .getByRole("button", { name: "Mute notification sound" })
+    .click();
+  await signedInPage.getByRole("button", { name: "Back to conversations" }).click();
+  await expect(
+    signedInPage
+      .getByRole("dialog", { name: "Order chat" })
+      .getByRole("button", { name: "Turn notification sound on" }),
+  ).toBeVisible();
+  await signedInPage
+    .getByRole("dialog", { name: "Order chat" })
+    .getByRole("button", { name: "Turn notification sound on" })
+    .click();
+  await conversation.click();
   await expect(
     signedInPage.getByRole("dialog", { name: "Order chat" }).getByText("We are checking it now."),
   ).toBeVisible();
