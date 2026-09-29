@@ -9,7 +9,14 @@ import type {
 } from "@freshmarkets/contracts";
 import { messageAttachmentFileName } from "./order-message-attachments";
 import type { MessageContext } from "./shared";
-import { fail, messageExpiry, readMessageOrder, resolveMessageActor } from "./shared";
+import {
+  ACTIVE_MESSAGE_HOLD_SQL,
+  MESSAGE_TTL_MS,
+  fail,
+  messageExpiry,
+  readMessageOrder,
+  resolveMessageActor,
+} from "./shared";
 
 type ConversationRow = {
   orderId: string;
@@ -42,6 +49,19 @@ type AttachmentRow = {
   inputDigest: string | null;
 };
 
+function incomingSenderSql(kind: "CUSTOMER" | "ADMIN", alias = "m"): string {
+  return kind === "CUSTOMER"
+    ? `${alias}.sender_kind IN ('ADMIN','AUTOMATION')`
+    : `${alias}.sender_kind='CUSTOMER'`;
+}
+
+const CLOSED_AT_SQL = `CASE o.status
+  WHEN 'DELIVERED' THEN (SELECT MAX(d.delivered_at) FROM delivery_job d
+    WHERE d.order_id=o.id AND d.status='DELIVERED')
+  WHEN 'CANCELED' THEN (SELECT MAX(x.updated_at) FROM order_cancellation x
+    WHERE x.order_id=o.id AND x.status='COMPLETED')
+  ELSE NULL END`;
+
 async function toConversation(
   database: D1Database,
   row: ConversationRow,
@@ -59,21 +79,31 @@ async function toConversation(
   });
   const expired = expiry !== null && expiry <= now;
   const readSequence = kind === "CUSTOMER" ? row.customerReadSequence : row.adminReadSequence;
-  const unread = expired
+  const incoming = expired
     ? null
     : await database
-        .prepare(`SELECT COUNT(*) AS count FROM order_message m
-          JOIN order_message_content content ON content.message_id=m.id
-          WHERE m.order_id=? AND m.sequence>? AND m.sender_kind<>?`)
-        .bind(row.orderId, readSequence, kind)
-        .first<{ count: number }>();
+        .prepare(`SELECT
+          (SELECT COUNT(*) FROM order_message m
+            JOIN order_message_content content ON content.message_id=m.id
+            WHERE m.order_id=? AND m.sequence>? AND ${incomingSenderSql(kind)})
+            AS unreadCount,
+          (SELECT json_group_array(sequence) FROM (
+            SELECT m.sequence FROM order_message m
+            JOIN order_message_content content ON content.message_id=m.id
+            WHERE m.order_id=? AND ${incomingSenderSql(kind)}
+            ORDER BY m.sequence DESC LIMIT 50)) AS recentSequences`)
+        .bind(row.orderId, readSequence, row.orderId)
+        .first<{ unreadCount: number; recentSequences: string }>();
   return {
     orderId: row.orderId,
     orderNumber: row.orderNumber,
     latestMessageAt: expired ? null : new Date(row.latestMessageAt).toISOString(),
     latestMessagePreview: expired ? null : row.latestMessagePreview,
-    unreadCount: expired ? 0 : (unread?.count ?? 0),
+    unreadCount: incoming?.unreadCount ?? 0,
     lastSequence: row.lastSequence,
+    recentIncomingSequences: incoming
+      ? (JSON.parse(incoming.recentSequences) as number[]).reverse()
+      : [],
     expiresAt: expiry === null ? null : new Date(expiry).toISOString(),
   };
 }
@@ -85,10 +115,7 @@ const CONVERSATION_SELECT = `SELECT c.order_id AS orderId,o.order_number AS orde
   (SELECT content.body FROM order_message m JOIN order_message_content content
     ON content.message_id=m.id WHERE m.order_id=c.order_id ORDER BY m.sequence DESC LIMIT 1)
     AS latestMessagePreview,
-  CASE o.status
-    WHEN 'DELIVERED' THEN (SELECT MAX(d.delivered_at) FROM delivery_job d WHERE d.order_id=o.id AND d.status='DELIVERED')
-    WHEN 'CANCELED' THEN (SELECT MAX(x.updated_at) FROM order_cancellation x WHERE x.order_id=o.id AND x.status='COMPLETED')
-    ELSE NULL END AS closedAt
+  ${CLOSED_AT_SQL} AS closedAt
   FROM order_conversation c JOIN grocery_order o ON o.id=c.order_id`;
 
 function decodeCursor(cursor: string | undefined): { at: number; id: string } | null {
@@ -157,24 +184,25 @@ export async function listOrderConversations(
   const items = await Promise.all(
     page.map((row) => toConversation(context.env.DB, row, kind, now)),
   );
-  const unreadRows = await context.env.DB.prepare(`${CONVERSATION_SELECT}
-    WHERE ${scopeConditions.join(" AND ")} AND EXISTS (
-      SELECT 1 FROM order_message m
-      JOIN order_message_content content ON content.message_id=m.id
-      WHERE m.order_id=c.order_id
-        AND m.sequence>${kind === "CUSTOMER" ? "c.customer_read_sequence" : "c.admin_read_sequence"}
-        AND m.sender_kind<>?)`)
-    .bind(...scopeBinds, kind)
-    .all<ConversationRow>();
-  const unreadConversations = await Promise.all(
-    unreadRows.results.map((row) => toConversation(context.env.DB, row, kind, now)),
-  );
+  const cutoff = now - MESSAGE_TTL_MS;
+  const unread = await context.env.DB.prepare(`SELECT COUNT(*) AS count
+    FROM order_message m
+    JOIN order_message_content content ON content.message_id=m.id
+    JOIN order_conversation c ON c.order_id=m.order_id
+    JOIN grocery_order o ON o.id=c.order_id
+    WHERE ${scopeConditions.join(" AND ")}
+      AND m.sequence>${kind === "CUSTOMER" ? "c.customer_read_sequence" : "c.admin_read_sequence"}
+      AND ${incomingSenderSql(kind)}
+      AND ((${CLOSED_AT_SQL}) IS NULL OR c.last_message_at>?
+        OR (${CLOSED_AT_SQL})>? OR (${ACTIVE_MESSAGE_HOLD_SQL}))`)
+    .bind(...scopeBinds, cutoff, cutoff)
+    .first<{ count: number }>();
   const last = page.at(-1);
   return {
     ok: true,
     value: {
       items,
-      totalUnreadCount: unreadConversations.reduce((count, row) => count + row.unreadCount, 0),
+      totalUnreadCount: unread?.count ?? 0,
       nextCursor:
         rows.results.length > limit && last
           ? btoa(JSON.stringify({ at: last.latestMessageAt, id: last.orderId }))
@@ -209,6 +237,7 @@ export async function getOrderMessages(
           latestMessagePreview: null,
           unreadCount: 0,
           lastSequence: 0,
+          recentIncomingSequences: [],
           expiresAt: null,
         },
         items: [],

@@ -66,6 +66,7 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   ).toBeVisible();
 
   await adminPage.goto("/admin/messages");
+  await expect(adminPage.getByText("1 unread", { exact: true })).toBeVisible();
   await adminPage.getByRole("link", { name: new RegExp(orderId) }).click();
   await expect(adminPage.getByText("Where is my Order?")).toBeVisible();
   await expect(signedInPage.getByRole("status", { name: "FreshMarkets team available" })).toHaveCSS(

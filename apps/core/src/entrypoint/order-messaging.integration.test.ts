@@ -163,6 +163,28 @@ it("commits one customer message and acknowledgement with exact replay, private 
       items: [{ senderKind: "CUSTOMER", body: "Where is my Order?" }, { senderKind: "AUTOMATION" }],
     },
   });
+  const staff = await staffSession();
+  expect(
+    await rpc.listAdminOrderConversations({
+      requestId: "admin-unread-after-acknowledgement",
+      headers: { cookie: staff.cookie },
+    }),
+  ).toMatchObject({
+    ok: true,
+    value: {
+      items: [{ unreadCount: 1, recentIncomingSequences: [1] }],
+      totalUnreadCount: 1,
+    },
+  });
+  expect(
+    await rpc.listCustomerOrderConversations({ requestId: "customer-acknowledgement", headers }),
+  ).toMatchObject({
+    ok: true,
+    value: {
+      items: [{ unreadCount: 1, recentIncomingSequences: [2] }],
+      totalUnreadCount: 1,
+    },
+  });
   expect(
     await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM audit_event WHERE action='ORDER.MESSAGE_SENT' AND aggregate_id=?",
@@ -386,12 +408,28 @@ it("commits one customer message and acknowledgement with exact replay, private 
     (order_id,reason,actor_user_id,created_at) VALUES (?,?,?,?)`)
     .bind(orderId, "Test hold", user.id, base)
     .run();
+  const futureRpc = createMessagesRpc(
+    createCoreRpcContext(env, { now: () => new Date(future) }),
+    () => undefined,
+  );
+  expect(
+    await futureRpc.listCustomerOrderConversations({
+      requestId: "held-unread",
+      headers,
+    }),
+  ).toMatchObject({ ok: true, value: { totalUnreadCount: 1 } });
   expect(await expireOrderMessages(env.DB, env.PRODUCT_MEDIA, future)).toBe(0);
   await env.DB.prepare(
     "UPDATE order_message_hold SET released_at=?,released_by_user_id=? WHERE order_id=?",
   )
     .bind(base, user.id, orderId)
     .run();
+  expect(
+    await futureRpc.listCustomerOrderConversations({
+      requestId: "expired-unread",
+      headers,
+    }),
+  ).toMatchObject({ ok: true, value: { totalUnreadCount: 0 } });
   expect(await expireOrderMessages(env.DB, env.PRODUCT_MEDIA, future)).toBeGreaterThan(0);
   expect(
     await env.DB.prepare("SELECT COUNT(*) AS n FROM order_message_content WHERE message_id=?")

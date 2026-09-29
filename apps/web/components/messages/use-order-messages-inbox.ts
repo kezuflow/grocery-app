@@ -7,6 +7,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { playInAppNotificationSound } from "@/lib/notifications/in-app-sound";
+import { newOrderMessageSoundIdentities } from "@/lib/notifications/order-message-sound";
 
 export const ORDER_MESSAGES_READ_EVENT = "fm:order-messages-read";
 
@@ -23,7 +24,8 @@ export function useOrderMessagesInbox(
   const [connected, setConnected] = useState(false);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const initialized = useRef(false);
-  const known = useRef(new Map<string, { sequence: number; unread: number }>());
+  const known = useRef(new Map<string, number>());
+  const latestObservedAt = useRef(0);
   const latestRequest = useRef(0);
 
   const refresh = useCallback(
@@ -39,28 +41,37 @@ export function useOrderMessagesInbox(
         if (request !== null && request !== latestRequest.current) return;
         if (!result.ok) throw new Error(result.error.message);
         if (!cursor) {
-          if (initialized.current) {
-            const incoming = result.value.items.find((item) => {
-              const previous = known.current.get(item.orderId);
-              return (
-                item.unreadCount > (previous?.unread ?? 0) &&
-                item.lastSequence > (previous?.sequence ?? 0)
-              );
-            });
-            if (incoming)
-              void playInAppNotificationSound(
-                `message:${incoming.orderId}:${incoming.lastSequence}`,
+          const previouslyObservedAt = latestObservedAt.current;
+          for (const item of result.value.items) {
+            const previous = known.current.get(item.orderId);
+            const latestIncoming = item.recentIncomingSequences.at(-1) ?? 0;
+            if (initialized.current && latestIncoming > (previous ?? 0)) {
+              const newlyActive =
+                previous !== undefined ||
+                (item.latestMessageAt !== null &&
+                  Date.parse(item.latestMessageAt) >= previouslyObservedAt);
+              if (newlyActive) {
+                const identities = newOrderMessageSoundIdentities(
+                  item.orderId,
+                  item.recentIncomingSequences,
+                  previous ?? Math.max(0, latestIncoming - 1),
+                );
+                for (const identity of identities) void playInAppNotificationSound(identity);
+              }
+            }
+            known.current.set(item.orderId, Math.max(previous ?? 0, latestIncoming));
+            if (item.latestMessageAt)
+              latestObservedAt.current = Math.max(
+                latestObservedAt.current,
+                Date.parse(item.latestMessageAt),
               );
           }
-          for (const item of result.value.items)
-            known.current.set(item.orderId, {
-              sequence: item.lastSequence,
-              unread: item.unreadCount,
-            });
           initialized.current = true;
           setItems(result.value.items);
           setTotalUnreadCount(result.value.totalUnreadCount);
         } else {
+          for (const item of result.value.items)
+            known.current.set(item.orderId, item.recentIncomingSequences.at(-1) ?? 0);
           setItems((current) => [...current, ...result.value.items]);
         }
         setNextCursor(result.value.nextCursor);
@@ -114,7 +125,8 @@ export function useOrderMessagesInbox(
         }
       };
       next.onclose = () => {
-        if (socket === next) socket = null;
+        if (socket !== next) return;
+        socket = null;
         setConnected(false);
         if (!stopped && document.visibilityState === "visible") {
           retry = window.setTimeout(open, delay);
@@ -133,7 +145,11 @@ export function useOrderMessagesInbox(
         setConnected(false);
       }
     };
+    const focus = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("focus", focus);
     open();
     fallback = window.setInterval(() => {
       if (document.visibilityState === "visible" && !socket) void refresh();
@@ -141,6 +157,7 @@ export function useOrderMessagesInbox(
     return () => {
       stopped = true;
       document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("focus", focus);
       if (retry) window.clearTimeout(retry);
       if (fallback) window.clearInterval(fallback);
       socket?.close();

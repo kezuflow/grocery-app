@@ -28,6 +28,7 @@ export type OrderConversationView = Readonly<{
   latestMessagePreview: string | null;
   unreadCount: number;
   lastSequence: number;
+  recentIncomingSequences: readonly number[];
   expiresAt: string | null;
 }>;
 

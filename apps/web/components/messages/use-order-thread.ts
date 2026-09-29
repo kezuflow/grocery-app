@@ -9,6 +9,10 @@ import {
 } from "@/lib/notifications/in-app-sound";
 import { prepareMessageImage } from "./prepare-message-image";
 import { ORDER_MESSAGES_READ_EVENT } from "./use-order-messages-inbox";
+import {
+  isIncomingOrderMessage,
+  orderMessageSoundIdentity,
+} from "@/lib/notifications/order-message-sound";
 
 type Side = "CUSTOMER" | "ADMIN";
 export type DraftAttachment = {
@@ -39,6 +43,7 @@ export function useOrderThread(side: Side, orderId: string) {
   const [muted, setMuted] = useState(false);
   const socket = useRef<WebSocket | null>(null);
   const initialized = useRef(false);
+  const latestRequest = useRef(0);
   const known = useRef(new Set<string>());
   const sendKey = useRef<string | null>(null);
   const sendingRef = useRef(false);
@@ -50,18 +55,20 @@ export function useOrderThread(side: Side, orderId: string) {
 
   const refresh = useCallback(
     async (initial = false) => {
+      const request = ++latestRequest.current;
       try {
         const response = await fetch(`${base}/${encodeURIComponent(orderId)}`, {
           cache: "no-store",
         });
         const result = (await response.json()) as RpcResult<OrderMessagesPage>;
+        if (request !== latestRequest.current) return;
         if (!result.ok) throw new Error(errorMessage(result));
         if (!initial && initialized.current) {
           const incoming = result.value.items.filter(
-            (item) => !known.current.has(item.id) && item.senderKind !== side,
+            (item) => !known.current.has(item.id) && isIncomingOrderMessage(side, item.senderKind),
           );
-          if (incoming.length)
-            void playInAppNotificationSound(`message:${orderId}:${incoming.at(-1)?.sequence}`);
+          for (const item of incoming)
+            void playInAppNotificationSound(orderMessageSoundIdentity(orderId, item.sequence));
         }
         for (const item of result.value.items) known.current.add(item.id);
         initialized.current = true;
@@ -78,9 +85,10 @@ export function useOrderThread(side: Side, orderId: string) {
             })
             .catch(() => setError("Could not mark messages as read"));
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Messages are unavailable");
+        if (request === latestRequest.current)
+          setError(reason instanceof Error ? reason.message : "Messages are unavailable");
       } finally {
-        setLoading(false);
+        if (request === latestRequest.current) setLoading(false);
       }
     },
     [base, orderId, side],
@@ -92,6 +100,9 @@ export function useOrderThread(side: Side, orderId: string) {
     setLoading(true);
     setPage(null);
     void refresh(true);
+    return () => {
+      latestRequest.current++;
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -148,7 +159,8 @@ export function useOrderThread(side: Side, orderId: string) {
       };
       next.onclose = () => {
         if (heartbeat) window.clearInterval(heartbeat);
-        if (socket.current === next) socket.current = null;
+        if (socket.current !== next) return;
+        socket.current = null;
         setConnected(false);
         setOtherPresent(false);
         setOtherTyping(false);
@@ -165,7 +177,11 @@ export function useOrderThread(side: Side, orderId: string) {
         open();
       } else close();
     };
+    const focus = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("focus", focus);
     open();
     fallback = window.setInterval(() => {
       if (document.visibilityState === "visible" && !socket.current) void refresh();
@@ -173,6 +189,7 @@ export function useOrderThread(side: Side, orderId: string) {
     return () => {
       stopped = true;
       document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("focus", focus);
       if (reconnect) window.clearTimeout(reconnect);
       if (fallback) window.clearInterval(fallback);
       close();
