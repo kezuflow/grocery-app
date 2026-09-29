@@ -212,13 +212,44 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
   await expect(signedInPage.getByRole("button", { name: "Remove discard.png" })).toHaveCount(0);
 
   await signedInPage.goto("/orders");
+  await expect(
+    signedInPage.getByRole("button", { name: "Open order chat", exact: true }),
+  ).toBeVisible();
+  await signedInPage.evaluate(() => {
+    const observed = window as typeof window & { messageSounds?: number };
+    observed.messageSounds = 0;
+    const original = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function () {
+      observed.messageSounds = (observed.messageSounds ?? 0) + 1;
+      return original.call(this);
+    };
+  });
+  await signedInPage.getByRole("button", { name: "Open order chat", exact: true }).click();
+  await signedInPage.getByRole("button", { name: "Close chat" }).click();
+  await adminPage.getByRole("textbox", { name: "Message" }).fill("A new chat update.");
+  await adminPage.getByRole("button", { name: "Send message" }).click();
+  await expect(
+    signedInPage.getByRole("button", { name: "Open order chat, 1 unread message" }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      signedInPage.evaluate(
+        () => (window as typeof window & { messageSounds?: number }).messageSounds ?? 0,
+      ),
+    )
+    .toBe(1);
   await signedInPage.getByRole("button", { name: "Open order chat" }).click();
   await expect(signedInPage.getByRole("dialog", { name: "Order chat" })).toBeVisible();
-  await signedInPage
+  const conversation = signedInPage
     .getByRole("dialog", { name: "Order chat" })
     .getByRole("button", { name: /^Order / })
-    .first()
-    .click();
+    .first();
+  await expect(conversation).toHaveCSS("border-radius", "12px");
+  await expect(conversation).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await conversation.click();
+  await expect(
+    signedInPage.getByRole("button", { name: "Open order chat", exact: true }),
+  ).toBeVisible();
   await expect(
     signedInPage.getByRole("dialog", { name: "Order chat" }).getByText("We are checking it now."),
   ).toBeVisible();

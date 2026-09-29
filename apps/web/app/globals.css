@@ -153,6 +153,11 @@ body {
   --fm-focus: var(--fm-storefront-accent);
 }
 
+.fm-order-messages .fm-conversation-row {
+  border-radius: 12px;
+  background: #fff;
+}
+
 .fm-order-messages [data-slot="bubble"][data-variant="default"] [data-slot="bubble-content"] {
   background: var(--fm-storefront-accent);
   color: #ffffff;

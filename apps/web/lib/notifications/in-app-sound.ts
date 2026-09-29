@@ -3,7 +3,28 @@
 const MUTE_KEY = "freshmarkets:notification-sound-muted";
 const LAST_KEY = "freshmarkets:notification-sound-last";
 let channel: BroadcastChannel | null = null;
-let heard = new Set<string>();
+const heard = new Set<string>();
+let interacted = false;
+let audioContext: AudioContext | null = null;
+
+function resumeAudio(): void {
+  if (typeof AudioContext === "undefined") return;
+  try {
+    audioContext ??= new AudioContext();
+    if (audioContext.state !== "running") void audioContext.resume().catch(() => {});
+  } catch {
+    /* An unavailable audio device must not affect the notification. */
+  }
+}
+
+if (typeof document !== "undefined") {
+  const activate = () => {
+    interacted = true;
+    if (!notificationSoundMuted()) resumeAudio();
+  };
+  document.addEventListener("pointerdown", activate, { once: true, capture: true });
+  document.addEventListener("keydown", activate, { once: true, capture: true });
+}
 
 function soundChannel(): BroadcastChannel | null {
   if (channel || typeof BroadcastChannel === "undefined") return channel;
@@ -28,6 +49,7 @@ export function setNotificationSoundMuted(muted: boolean): void {
   } catch {
     /* This tab still updates its control. */
   }
+  if (!muted) resumeAudio();
 }
 
 /** A short cue only for a new event in a visible, previously interacted-with tab. */
@@ -37,7 +59,7 @@ export async function playInAppNotificationSound(identity: string): Promise<void
     document.visibilityState !== "visible" ||
     notificationSoundMuted() ||
     heard.has(identity) ||
-    !navigator.userActivation?.hasBeenActive
+    !(navigator.userActivation?.hasBeenActive || interacted)
   )
     return;
   try {
@@ -49,7 +71,11 @@ export async function playInAppNotificationSound(identity: string): Promise<void
   heard.add(identity);
   soundChannel()?.postMessage(identity);
   try {
-    const audio = new AudioContext();
+    resumeAudio();
+    const audio = audioContext;
+    if (!audio) return;
+    if (audio.state !== "running") await audio.resume();
+    if (audio.state !== "running") return;
     const oscillator = audio.createOscillator();
     const gain = audio.createGain();
     oscillator.type = "sine";
@@ -61,7 +87,6 @@ export async function playInAppNotificationSound(identity: string): Promise<void
     oscillator.connect(gain).connect(audio.destination);
     oscillator.start();
     oscillator.stop(audio.currentTime + 0.19);
-    window.setTimeout(() => void audio.close(), 350);
   } catch {
     /* Autoplay policy or device settings may prevent sound. */
   }

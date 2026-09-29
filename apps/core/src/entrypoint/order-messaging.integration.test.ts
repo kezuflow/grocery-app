@@ -596,6 +596,45 @@ it("returns permanent validation and account-quota errors without storing origin
   }
 });
 
+it("counts customer unread messages across inbox pages and clears them after a read", async () => {
+  const customer = await customerSession();
+  const firstOrderId = await committedOrder(customer.customerId);
+  const secondOrderId = await committedOrder(customer.customerId);
+  const staff = await staffSession();
+  await env.DB.prepare(`INSERT INTO role_permission(role_id,permission_id)
+    SELECT ?,id FROM permission WHERE code='orders.manage'`)
+    .bind(staff.roleId)
+    .run();
+  const rpc = createMessagesRpc(createCoreRpcContext(env), () => undefined);
+  for (const orderId of [firstOrderId, secondOrderId]) {
+    expect(
+      await rpc.sendAdminOrderMessage({
+        requestId: `send-${orderId}`,
+        headers: { cookie: staff.cookie },
+        orderId,
+        body: "A new update",
+        attachmentIds: [],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+  }
+  const headers = { cookie: customer.cookie };
+  expect(
+    await rpc.listCustomerOrderConversations({ requestId: "first-page", headers, limit: 1 }),
+  ).toMatchObject({ ok: true, value: { items: [{ unreadCount: 1 }], totalUnreadCount: 2 } });
+  expect(
+    await rpc.markCustomerOrderConversationRead({
+      requestId: "mark-read",
+      headers,
+      orderId: firstOrderId,
+      throughSequence: 1,
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await rpc.listCustomerOrderConversations({ requestId: "after-read", headers, limit: 1 }),
+  ).toMatchObject({ ok: true, value: { totalUnreadCount: 1 } });
+});
+
 it("requires Orders capability and current location scope for staff messages", async () => {
   const customer = await customerSession();
   const orderId = await committedOrder(customer.customerId);

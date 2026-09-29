@@ -8,6 +8,7 @@ import {
   setNotificationSoundMuted,
 } from "@/lib/notifications/in-app-sound";
 import { prepareMessageImage } from "./prepare-message-image";
+import { ORDER_MESSAGES_READ_EVENT } from "./use-order-messages-inbox";
 
 type Side = "CUSTOMER" | "ADMIN";
 export type DraftAttachment = {
@@ -59,7 +60,8 @@ export function useOrderThread(side: Side, orderId: string) {
           const incoming = result.value.items.filter(
             (item) => !known.current.has(item.id) && item.senderKind !== side,
           );
-          if (incoming.length) void playInAppNotificationSound(`message:${incoming.at(-1)?.id}`);
+          if (incoming.length)
+            void playInAppNotificationSound(`message:${orderId}:${incoming.at(-1)?.sequence}`);
         }
         for (const item of result.value.items) known.current.add(item.id);
         initialized.current = true;
@@ -70,7 +72,11 @@ export function useOrderThread(side: Side, orderId: string) {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ throughSequence: result.value.conversation.lastSequence }),
-          });
+          })
+            .then((response) => {
+              if (response.ok) window.dispatchEvent(new Event(ORDER_MESSAGES_READ_EVENT));
+            })
+            .catch(() => setError("Could not mark messages as read"));
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Messages are unavailable");
       } finally {

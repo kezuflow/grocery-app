@@ -34,6 +34,7 @@ export type OrderConversationView = Readonly<{
 export type OrderConversationsPage = Readonly<{
   items: readonly OrderConversationView[];
   nextCursor: string | null;
+  totalUnreadCount: number;
 }>;
 
 export type OrderMessagesPage = Readonly<{

@@ -141,6 +141,8 @@ export async function listOrderConversations(
       binds.push(actor.value.staffId);
     }
   }
+  const scopeConditions = [...conditions];
+  const scopeBinds = [...binds];
   if (cursor) {
     conditions.push("(c.last_message_at<? OR (c.last_message_at=? AND c.order_id<?))");
     binds.push(cursor.at, cursor.at, cursor.id);
@@ -155,11 +157,24 @@ export async function listOrderConversations(
   const items = await Promise.all(
     page.map((row) => toConversation(context.env.DB, row, kind, now)),
   );
+  const unreadRows = await context.env.DB.prepare(`${CONVERSATION_SELECT}
+    WHERE ${scopeConditions.join(" AND ")} AND EXISTS (
+      SELECT 1 FROM order_message m
+      JOIN order_message_content content ON content.message_id=m.id
+      WHERE m.order_id=c.order_id
+        AND m.sequence>${kind === "CUSTOMER" ? "c.customer_read_sequence" : "c.admin_read_sequence"}
+        AND m.sender_kind<>?)`)
+    .bind(...scopeBinds, kind)
+    .all<ConversationRow>();
+  const unreadConversations = await Promise.all(
+    unreadRows.results.map((row) => toConversation(context.env.DB, row, kind, now)),
+  );
   const last = page.at(-1);
   return {
     ok: true,
     value: {
       items,
+      totalUnreadCount: unreadConversations.reduce((count, row) => count + row.unreadCount, 0),
       nextCursor:
         rows.results.length > limit && last
           ? btoa(JSON.stringify({ at: last.latestMessageAt, id: last.orderId }))

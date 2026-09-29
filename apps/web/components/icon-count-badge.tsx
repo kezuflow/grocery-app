@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
-export function IconCountBadge({ count }: { count: number }) {
+export function IconCountBadge({ count, className }: { count: number; className?: string }) {
   const [retainedCount, setRetainedCount] = useState(count);
   const [settled, setSettled] = useState(true);
   const previousCount = useRef(count);
@@ -31,7 +32,10 @@ export function IconCountBadge({ count }: { count: number }) {
     <span
       aria-hidden="true"
       data-visible={count > 0}
-      className="fm-count-badge absolute -top-2.5 -right-2.5 flex min-w-4 items-center justify-center rounded-full bg-[var(--fm-storefront-accent)] px-1 py-0.5 text-[10px] font-semibold leading-none text-white"
+      className={cn(
+        "fm-count-badge absolute -top-2.5 -right-2.5 flex min-w-4 items-center justify-center rounded-full bg-[var(--fm-storefront-accent)] px-1 py-0.5 text-[10px] font-semibold leading-none text-white",
+        className,
+      )}
     >
       <span className="fm-count-badge-value" data-settled={settled}>
         {displayedCount}
