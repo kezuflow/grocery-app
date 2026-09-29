@@ -336,11 +336,11 @@ export function ProductQuickView({
                           key={product.id}
                           type="button"
                           onClick={() => onNavigate(product.slug)}
-                          className="w-24 shrink-0 rounded-[var(--fm-radius-surface)] p-1 text-left hover:bg-[var(--fm-hover)]"
+                          className="group w-24 shrink-0 p-1 text-left focus-visible:outline-none"
                         >
                           <div
                             aria-hidden="true"
-                            className="overflow-hidden rounded-[var(--fm-radius-surface)] bg-[var(--fm-surface-soft)]"
+                            className="overflow-hidden rounded-[var(--fm-radius-surface)] border-2 border-transparent bg-[var(--fm-surface-soft)] transition-colors group-hover:border-[var(--fm-primary-dark)] group-focus-visible:border-[var(--fm-focus)]"
                           >
                             <ProductMedia
                               media={product.media}

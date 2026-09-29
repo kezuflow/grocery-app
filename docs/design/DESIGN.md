@@ -339,6 +339,8 @@ Storefront CSS variables retain the sourced baseline: background `#FFFFFF`, soft
 
 Owner correction, 2026-09-23: use dark green with white text for ordinary primary storefront actions, the existing outlined treatment for secondary actions, and a white inverse action on dark promotional surfaces. Keep lime as a brand accent rather than a competing primary button color. Product quick view has a fully rounded 12px frame with its own scrolling content, a compact square media tile that does not stretch with long details, consistently framed gallery/recommendation images, and a visible bottom action row.
 
+Owner correction, 2026-09-29: same-category recommendations in product quick view highlight the square image frame on hover and keyboard focus. The whole card must not show a vertical pill background.
+
 Owner follow-up, 2026-09-23: the supplied Search-button reference supersedes the dark-green fill for filled primary Storefront actions only. Match its sampled `#00B14F` fill and white label, with a darker green hover; keep the dark brand token, Admin, secondary/outlined, destructive, icon-only and inverse-on-dark treatments separate. Exact white on `#00B14F` is about 2.84:1 contrast, below normal text guidance; this is an explicit visual-match choice, not a claim of accessible text contrast.
 
 Owner follow-up, 2026-09-24: apply that same exact `#00B14F` to Storefront green text accents, success/status copy, links and text-style actions, including product availability. Keep dark-green brand lettering, text on lime/inverse surfaces, warnings, errors and Admin colors distinct. Small `#00B14F` text on white or pale green also has insufficient normal-text contrast; the requested visual match does not establish accessibility acceptance.
