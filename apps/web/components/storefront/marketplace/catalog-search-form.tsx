@@ -51,7 +51,7 @@ export function CatalogSearchForm({
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Search fresh groceries"
-          className="min-w-0 flex-1 bg-transparent text-sm text-[var(--fm-text)] outline-none placeholder:text-[var(--fm-text-muted)]"
+          className="min-w-0 flex-1 bg-transparent text-sm text-[var(--fm-text)] outline-none placeholder:text-[var(--fm-text-muted)] focus-visible:outline-none!"
         />
       </div>
     </form>
