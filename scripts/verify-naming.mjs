@@ -57,9 +57,14 @@ const violations = [];
 export function isAppRouteGroupDirectory(relativePath) {
   const normalized = relativePath.split(sep).join("/");
   return (
-    normalized.startsWith("apps/web/app/") &&
+    (normalized.startsWith("apps/web/app/") || normalized.startsWith("mobile/app/")) &&
     /^\([a-z0-9]+(?:-[a-z0-9]+)*\)$/.test(normalized.slice(normalized.lastIndexOf("/") + 1))
   );
+}
+
+export function isMobileExpoRouteFile(relativePath) {
+  const normalized = relativePath.split(sep).join("/");
+  return normalized.startsWith("mobile/app/") && normalized.endsWith("/_layout.tsx");
 }
 
 export function isDocumentationPathCompliant(relativePath) {
@@ -122,7 +127,7 @@ async function walk(directory) {
       normalized.endsWith(".css") ||
       normalized.endsWith(".jsonc")
     ) {
-      if (!sourceFilePattern.test(normalized))
+      if (!sourceFilePattern.test(normalized) && !isMobileExpoRouteFile(display(path)))
         fail(path, "source files must use lowercase kebab-case, with optional .test/.spec");
     }
   }

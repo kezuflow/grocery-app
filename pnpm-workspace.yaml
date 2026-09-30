@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - mobile
   - packages/*
 
 overrides:

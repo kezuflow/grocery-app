@@ -1,5 +1,7 @@
 # FreshMarkets Product Rules
 
+Owner mobile direction, 2026-09-30: [MOBILE_APP_PLAN.md](MOBILE_APP_PLAN.md) defines the phased native app plan. Phase 1 is authorized for an Expo shell and anonymous catalog reads. Later mobile work includes saved favorites, order-related recommendations and private order-level post-delivery feedback; exact feedback fields and handling are unresolved. The mobile app follows Core's active Scheduled or Instant mode and does not introduce rider chat, drop-off photos, or a new selected-slot workflow. ETA remains conditional on verified provider support.
+
 Owner correction, 2026-09-27: **Finish packing order** is a positive confirmation
 that every paid item in that Scheduled Order has been physically packed and checked
 accurately. An Order that cannot be confirmed stays unconfirmed; the ordinary

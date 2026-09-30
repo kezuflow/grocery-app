@@ -1,5 +1,9 @@
 # Web to Core Application Contracts
 
+## Mobile catalog HTTP adapter (MOB-1)
+
+`apps/mobile-api` exposes anonymous `GET /v1/catalog/home` and `GET /v1/catalog/search?q=<text>&category=<slug>`. It returns the existing Core `RpcResult<MarketplaceHomeView>` or `RpcResult<MarketplaceSearchView>` JSON envelope, forwards a valid `x-request-id` or creates one, and sends `Cache-Control: no-store`. Search text is limited to 120 characters and category slug to 80; unexpected query keys are rejected. The adapter does not accept caller-provided `locationId` or a browsing token in Phase 1. Core remains the catalog and location-policy authority. `GET /health` is adapter liveness only, not Core/D1 readiness. CORS wildcard applies only to this anonymous surface; authenticated mobile endpoints need their own session and origin policy.
+
 Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
 
 ## Contract Principles

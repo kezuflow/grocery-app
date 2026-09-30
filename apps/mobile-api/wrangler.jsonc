@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "freshmarkets-mobile-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-04",
+  "services": [
+    {
+      "binding": "CORE",
+      "service": "freshmarkets-core",
+      "entrypoint": "CoreEntrypoint",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 },
+  },
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "services": [
+        {
+          "binding": "CORE",
+          "service": "freshmarkets-core-staging",
+          "entrypoint": "CoreEntrypoint",
+        },
+      ],
+    },
+    "production": {
+      "workers_dev": true,
+      "services": [
+        {
+          "binding": "CORE",
+          "service": "freshmarkets-core-production",
+          "entrypoint": "CoreEntrypoint",
+        },
+      ],
+    },
+  },
+}

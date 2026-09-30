@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import { applyMembershipPaymentReaction } from "./apply-payment-reaction";
 import { startPromotionalTrial } from "./start-promotional-trial";
 import { beginPaidEnrollment } from "./get-membership-experience";
+import { calendarDayOfMonth } from "../domain/billing-calendar";
+import { createMembershipRepository } from "../infrastructure/d1/membership-repository";
 
 let customerCounter = 0;
 async function subscriptionWithPendingReaction(state: "PENDING" | "TRIALING" = "PENDING"): Promise<{
@@ -186,10 +188,12 @@ describe("membership payment reaction", () => {
     const day = 86_400_000;
     const periodStart = before - 61 * day;
     const periodEnd = before - 31 * day;
+    const timeZone = await createMembershipRepository(env.DB).marketTimezone();
+    const anchorDay = calendarDayOfMonth(new Date(periodEnd).toISOString(), timeZone);
     await env.DB.prepare(
-      "UPDATE subscription SET status='ACTIVE', current_period_starts_at=?, current_period_ends_at=?, version=version+1 WHERE id=?",
+      "UPDATE subscription SET status='ACTIVE', current_period_starts_at=?, current_period_ends_at=?, nominal_billing_day=?, version=version+1 WHERE id=?",
     )
-      .bind(periodStart, periodEnd, fixture.subscriptionId)
+      .bind(periodStart, periodEnd, anchorDay, fixture.subscriptionId)
       .run();
     await env.DB.prepare("UPDATE payment_reaction SET status='PENDING' WHERE id=?")
       .bind(fixture.reactionId)

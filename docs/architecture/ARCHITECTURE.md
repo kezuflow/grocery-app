@@ -6,6 +6,8 @@ Owner image-cache update (2026-09-10): Web caches successful anonymous versioned
 
 ## System Shape
 
+Mobile extension (2026-09-30): `mobile/` is an Expo client. `apps/mobile-api` is a third deployment boundary, a public mobile presentation adapter bound to the same authoritative Core Worker. Phase 1 exposes only anonymous catalog home/search reads; later authenticated commands require a designed mobile session boundary. Mobile API never directly writes D1 or becomes another business authority. This extends the initial two-Worker deployment shape below; no deployment is authorized by the scaffold.
+
 FreshMarkets is a single monorepo with two initial Cloudflare Worker deployments:
 
 ```text
