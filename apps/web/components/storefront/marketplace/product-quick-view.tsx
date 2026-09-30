@@ -319,7 +319,7 @@ export function ProductQuickView({
                   <dl className="mt-4 space-y-1.5 border-t border-[var(--fm-border)] pt-4">
                     {presentation.details.map((detail) => (
                       <div key={detail.label} className="flex gap-2 text-xs leading-5">
-                        <dt className="shrink-0 font-semibold text-[var(--fm-storefront-accent)]">
+                        <dt className="shrink-0 font-semibold text-[var(--fm-text)]">
                           {detail.label}
                         </dt>
                         <dd className="text-[var(--fm-text-muted)]">{detail.value}</dd>

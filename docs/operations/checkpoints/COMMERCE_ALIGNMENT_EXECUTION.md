@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Product quick-view detail labels — UI-PRODUCT-DETAIL-LABEL-1 (2026-09-30)
+
+Active guidance: `docs/design/DESIGN.md`, **Products, promotions and stock**; commerce continuation: `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. The owner requested black rather than green Contents and Storage labels in the product list. Acceptance: customer-detail labels in the Storefront product quick view use the normal near-black text color, matching the full Product page, without changing their values or other presentation. Work began on clean synchronized `main`/`origin/main` at `b2ed219db540bf6acfe218f9b1f676608a9c6dea`; no unrelated partial files were present.
+
+The quick-view customer-detail label now uses `--fm-text` instead of the green `--fm-storefront-accent`. `git diff --check` passed and the focused quick-view Vitest suite passed **4/4** on the working tree. The reviewed change was committed directly to `main` and pushed to `origin/main`. No browser rendering or deployed Storefront acceptance was exercised. Completion level: **1 of 1 requested source styling changes implemented, locally checked and pushed; 0 browser or production acceptances**. Next action: verify the appearance in a Storefront browser after an authorized release.
+
 ## Chat notification audit fixes — MSG-1.CHAT-AUDIT-FIX-1 (2026-09-29)
 
 Active plan: `docs/product/ORDER_MESSAGING_PLAN.md`, **Phase 3 — Storefront, Admin and sound**, with `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. The owner requested fixes for the preceding chat notification audit and had already authorized commit, push and deployment for this chat feature. Acceptance for this slice: classify incoming messages correctly for each side, play a cue for each newly observed incoming message even when unread totals do not rise, recover on focus and out-of-order reads, keep cross-tab sound deduplication bounded, and aggregate unread totals without per-conversation queries. Work began on clean synchronized `main`/`origin/main` at audit checkpoint `09ccf6bf671818690350f41dba2ddde7269959ed`; no unrelated partial files were present.
