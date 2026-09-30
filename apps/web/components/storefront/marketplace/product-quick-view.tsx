@@ -327,50 +327,52 @@ export function ProductQuickView({
                     ))}
                   </dl>
                 ) : null}
-                {recommendations.length > 0 ? (
-                  <div className="mt-5">
-                    <p className="text-sm font-semibold">More from {presentation.categoryName}</p>
-                    <div className="fm-scrollbar-none -mx-1 mt-2 flex gap-3 overflow-x-auto px-1 pb-1">
-                      {recommendations.map((product) => (
-                        <button
-                          key={product.id}
-                          type="button"
-                          onClick={() => onNavigate(product.slug)}
-                          className="group w-24 shrink-0 p-1 text-left focus-visible:outline-none"
-                        >
-                          <div
-                            aria-hidden="true"
-                            className="overflow-hidden rounded-[var(--fm-radius-surface)] border-2 border-transparent bg-[var(--fm-surface-soft)] transition-colors group-hover:border-[var(--fm-primary-dark)] group-focus-visible:border-[var(--fm-focus)]"
+                <div className="mt-5 flex flex-col items-start gap-2">
+                  {recommendations.length > 0 ? (
+                    <div className="w-full">
+                      <p className="text-sm font-semibold">More from {presentation.categoryName}</p>
+                      <div className="fm-scrollbar-none -mx-1 mt-2 flex h-fit items-start gap-3 overflow-x-auto px-1 pb-1">
+                        {recommendations.map((product) => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => onNavigate(product.slug)}
+                            className="group w-24 shrink-0 p-1 text-left focus-visible:outline-none"
                           >
-                            <ProductMedia
-                              media={product.media}
-                              name={product.name}
-                              className="rounded-[var(--fm-radius-surface)] p-1"
-                            />
-                          </div>
-                          <span className="mt-1 block line-clamp-2 text-xs font-semibold">
-                            {product.name}
-                          </span>
-                          {product.defaultVariant?.priceMinor != null &&
-                          product.defaultVariant.currency ? (
-                            <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
-                              {formatMoney(
-                                product.defaultVariant.priceMinor,
-                                product.defaultVariant.currency,
-                              )}
+                            <div
+                              aria-hidden="true"
+                              className="overflow-hidden rounded-[var(--fm-radius-surface)] border-2 border-transparent bg-[var(--fm-surface-soft)] transition-colors group-hover:border-[var(--fm-primary-dark)] group-focus-visible:border-[var(--fm-focus)]"
+                            >
+                              <ProductMedia
+                                media={product.media}
+                                name={product.name}
+                                className="rounded-[var(--fm-radius-surface)] p-1"
+                              />
+                            </div>
+                            <span className="mt-1 block line-clamp-2 text-xs font-semibold">
+                              {product.name}
                             </span>
-                          ) : null}
-                        </button>
-                      ))}
+                            {product.defaultVariant?.priceMinor != null &&
+                            product.defaultVariant.currency ? (
+                              <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
+                                {formatMoney(
+                                  product.defaultVariant.priceMinor,
+                                  product.defaultVariant.currency,
+                                )}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-                <Link
-                  href={`/products/${presentation.slug}`}
-                  className="mt-4 inline-flex text-sm font-semibold text-[var(--fm-storefront-accent)]! underline underline-offset-4"
-                >
-                  View full details
-                </Link>
+                  ) : null}
+                  <Link
+                    href={`/products/${presentation.slug}`}
+                    className="inline-flex text-sm font-semibold text-[var(--fm-storefront-accent)]! underline underline-offset-4"
+                  >
+                    View full details
+                  </Link>
+                </div>
               </div>
             </div>
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--fm-border)] bg-white px-5 py-3 max-[379px]:flex-wrap sm:px-6">

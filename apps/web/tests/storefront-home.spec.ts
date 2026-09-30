@@ -126,6 +126,7 @@ test("search narrows results with an explicit count and empty state", async ({ p
 test("a product card opens the quick-view dialog with fixed variants", async ({ page }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Close welcome announcement" }).click();
   await page.getByRole("link", { name: "Baguio Strawberries details" }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -133,6 +134,24 @@ test("a product card opens the quick-view dialog with fixed variants", async ({ 
   await expect(dialog.getByText("Choose a fixed pack")).toBeVisible();
   await expect(dialog.getByRole("radio", { name: /500 g/ })).toBeChecked();
   await expect(dialog.getByRole("radio", { name: /1 kg/ })).not.toBeChecked();
+  const heading = dialog.getByText("More from Fruits");
+  const recommendations = heading.locator("..").getByRole("button");
+  const fullDetails = dialog.getByRole("link", { name: "View full details" });
+  const [headingBox, recommendationBoxes, linkBox] = await Promise.all([
+    heading.boundingBox(),
+    recommendations.evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { y: rect.y, bottom: rect.bottom };
+      }),
+    ),
+    fullDetails.boundingBox(),
+  ]);
+  expect(headingBox).not.toBeNull();
+  expect(recommendationBoxes.length).toBeGreaterThan(0);
+  expect(linkBox).not.toBeNull();
+  expect(recommendationBoxes[0].y - (headingBox!.y + headingBox!.height)).toBeLessThan(24);
+  expect(linkBox!.y - Math.max(...recommendationBoxes.map((box) => box.bottom))).toBeLessThan(24);
 });
 
 test("storefront actions and text accents use the reference green without recoloring browse controls", async ({
