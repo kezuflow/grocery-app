@@ -245,8 +245,11 @@ test("customer and Admin exchange Order messages with one automatic reply", asyn
     .getByRole("dialog", { name: "Order chat" })
     .getByRole("button", { name: /^Order / })
     .first();
-  await expect(conversation).toHaveCSS("border-radius", "12px");
+  await expect(conversation).toHaveCSS("border-radius", "0px");
+  await expect(conversation).toHaveCSS("border-width", "0px");
   await expect(conversation).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(signedInPage.getByText("Conversations about your Orders.")).toHaveCount(0);
+  await expect(signedInPage.getByText("Live updates connected")).toHaveCount(0);
   await conversation.click();
   await expect(
     signedInPage.getByRole("button", { name: "Open order chat", exact: true }),

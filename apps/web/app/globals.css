@@ -154,8 +154,7 @@ body {
 }
 
 .fm-order-messages .fm-conversation-row {
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 0;
 }
 
 .fm-order-messages [data-slot="bubble"][data-variant="default"] [data-slot="bubble-content"] {

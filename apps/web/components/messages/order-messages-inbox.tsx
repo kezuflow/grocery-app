@@ -33,14 +33,18 @@ export function OrderMessagesInbox({
           <CardTitle>
             {side === "ADMIN" ? <h2>Order messages</h2> : <h1>Order messages</h1>}
           </CardTitle>
-          <CardDescription>
-            {side === "ADMIN"
-              ? "Customer conversations about Orders."
-              : "Conversations about your Orders."}
-          </CardDescription>
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {connected ? "Live updates connected" : "Live updates are reconnecting"}
-          </p>
+          {embedded ? null : (
+            <>
+              <CardDescription>
+                {side === "ADMIN"
+                  ? "Customer conversations about Orders."
+                  : "Conversations about your Orders."}
+              </CardDescription>
+              <p className="text-xs text-muted-foreground" aria-live="polite">
+                {connected ? "Live updates connected" : "Live updates are reconnecting"}
+              </p>
+            </>
+          )}
         </div>
         <Button type="button" variant="outline" onClick={() => void refresh()}>
           Refresh
@@ -70,14 +74,14 @@ export function OrderMessagesInbox({
             ) : null}
           </div>
         ) : null}
-        <ul className="flex flex-col gap-2">
+        <ul className={embedded ? "flex flex-col divide-y divide-border" : "flex flex-col gap-2"}>
           {items.map((item) => (
             <li key={item.orderId}>
               {embedded && onSelectOrder ? (
                 <button
                   type="button"
                   onClick={() => onSelectOrder(item.orderId)}
-                  className="fm-conversation-row flex min-h-16 w-full items-center justify-between gap-4 border border-border bg-white p-3 text-left outline-none hover:border-[var(--fm-storefront-accent)] focus-visible:ring-2 focus-visible:ring-[var(--fm-storefront-accent)]"
+                  className="fm-conversation-row flex min-h-16 w-full items-center justify-between gap-4 bg-white p-3 text-left outline-none hover:bg-[var(--fm-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--fm-storefront-accent)]"
                 >
                   <ConversationSummary item={item} />
                 </button>
