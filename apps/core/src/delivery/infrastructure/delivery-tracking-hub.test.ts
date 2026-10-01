@@ -13,6 +13,7 @@ describe("delivery tracking provider failure", () => {
     ).toEqual({
       driverId: null,
       position: null,
+      contact: null,
       unavailable: false,
     });
   });
@@ -23,6 +24,7 @@ describe("delivery tracking provider failure", () => {
     ).toEqual({
       driverId: "driver-1",
       position: previousPosition,
+      contact: null,
       unavailable: true,
     });
   });

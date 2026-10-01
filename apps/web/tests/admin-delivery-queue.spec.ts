@@ -54,6 +54,7 @@ function deliveryItem(locationId: string, orderId: string, mode: "INSTANT" | "SC
   return {
     jobId: `job-${orderId}`,
     orderId,
+    recipient: { name: "Ana Customer", phone: "+639171234567" },
     cycleId: mode === "INSTANT" ? null : "cycle-e2e",
     locationId,
     fulfillmentMode: mode,
@@ -296,9 +297,13 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
       body: JSON.stringify({
         ok: true,
         value: {
-          availability: "WAITING",
+          availability: "LIVE",
           destination: { latitude: 10.3173, longitude: 123.9058 },
-          rider: null,
+          rider: {
+            coordinate: { latitude: 10.31, longitude: 123.9 },
+            updatedAt: new Date().toISOString(),
+          },
+          riderContact: { name: "Rider One", phone: "+639181234567" },
           nextRefreshMilliseconds: 30_000,
         },
       }),
@@ -306,7 +311,15 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
   });
   await page.goto("/admin/delivery");
   await page.getByRole("button", { name: "View map" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Waiting for the rider" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Rider's last reported" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Call rider" })).toHaveAttribute(
+    "href",
+    "tel:+639181234567",
+  );
+  await expect(page.getByRole("link", { name: "Call recipient" })).toHaveAttribute(
+    "href",
+    "tel:+639171234567",
+  );
   await page.getByRole("button", { name: "Hide map" }).click();
   await expect(page.getByRole("button", { name: "View map" })).toBeVisible();
 });

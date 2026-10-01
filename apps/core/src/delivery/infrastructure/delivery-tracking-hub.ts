@@ -2,9 +2,11 @@ import { DurableObject } from "cloudflare:workers";
 import { buildDeliveryProviderRegistry } from "./runtime-delivery-provider";
 
 type Position = { coordinate: { latitude: number; longitude: number }; updatedAt: string };
+type Contact = { name: string | null; phone: string | null };
 type TrackingResult = {
   driverId: string | null;
   position: Position | null;
+  contact: Contact | null;
   unavailable: boolean;
 };
 
@@ -15,13 +17,16 @@ export function observationAfterLocationError(
   cachedPosition: Position | null,
 ): TrackingResult {
   return errorCode === "LALAMOVE_HTTP_404"
-    ? { driverId: null, position: null, unavailable: false }
-    : { driverId, position: cachedPosition, unavailable: true };
+    ? { driverId: null, position: null, contact: null, unavailable: false }
+    : { driverId, position: cachedPosition, contact: null, unavailable: true };
 }
 
 /** One per market. Provider coordinates remain only in this object's memory. */
 export class DeliveryTrackingHub extends DurableObject<Env> {
-  private readonly positions = new Map<string, { position: Position; fetchedAt: number }>();
+  private readonly positions = new Map<
+    string,
+    { position: Position; contact: Contact; fetchedAt: number }
+  >();
   private readonly pending = new Map<string, Promise<TrackingResult>>();
 
   private async admit(): Promise<boolean> {
@@ -44,7 +49,7 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
       providerOrderId.length > 64 ||
       (savedDriverId && savedDriverId.length > 64)
     )
-      return { driverId: null, position: null, unavailable: true };
+      return { driverId: null, position: null, contact: null, unavailable: true };
     const key = `${providerOrderId}:${savedDriverId ?? "unassigned"}`;
     const inFlight = this.pending.get(key);
     if (inFlight) return inFlight;
@@ -64,29 +69,34 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
   ): Promise<TrackingResult> {
     const provider = buildDeliveryProviderRegistry(this.env).get("lalamove");
     if (!provider?.getDriverLocation)
-      return { driverId: savedDriverId, position: null, unavailable: true };
+      return { driverId: savedDriverId, position: null, contact: null, unavailable: true };
     let driverId = savedDriverId;
     if (!driverId) {
-      if (!(await this.admit())) return { driverId: null, position: null, unavailable: true };
+      if (!(await this.admit()))
+        return { driverId: null, position: null, contact: null, unavailable: true };
       const order = await provider.get(providerOrderId);
       if (!order.ok || !order.value || order.value.providerDeliveryId !== providerOrderId)
-        return { driverId: null, position: null, unavailable: true };
+        return { driverId: null, position: null, contact: null, unavailable: true };
       driverId = order.value.driverId ?? null;
-      if (!driverId) return { driverId: null, position: null, unavailable: false };
+      if (!driverId) return { driverId: null, position: null, contact: null, unavailable: false };
     }
     const key = `${providerOrderId}:${driverId}`;
     const cached = this.positions.get(key);
     const now = Date.now();
     if (cached && now - cached.fetchedAt < 30_000)
-      return { driverId, position: cached.position, unavailable: false };
+      return { driverId, position: cached.position, contact: cached.contact, unavailable: false };
     if (!(await this.admit()))
-      return { driverId, position: cached?.position ?? null, unavailable: true };
+      return { driverId, position: cached?.position ?? null, contact: null, unavailable: true };
     const observed = await provider.getDriverLocation(providerOrderId, driverId);
     if (observed.ok) {
-      this.positions.set(key, { position: observed.value, fetchedAt: now });
+      const position = {
+        coordinate: observed.value.coordinate,
+        updatedAt: observed.value.updatedAt,
+      };
+      this.positions.set(key, { position, contact: observed.value.contact, fetchedAt: now });
       for (const [otherKey, value] of this.positions)
         if (now - value.fetchedAt > 120_000) this.positions.delete(otherKey);
-      return { driverId, position: observed.value, unavailable: false };
+      return { driverId, position, contact: observed.value.contact, unavailable: false };
     }
     if (observed.error.code === "LALAMOVE_HTTP_404") this.positions.delete(key);
     // A driver can be reassigned without a new status observation reaching Core.

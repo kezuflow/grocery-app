@@ -17,6 +17,15 @@ report time. Replace it on a new provider location; clear it when the driver is 
 delivery finishes. The map does not show a delayed countdown or imply that a stationary marker
 is live movement.
 The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
+For active Lalamove tracking, place a compact rider contact area below the map. Show a Call rider
+action only for a currently verified dialable phone; otherwise explain that rider contact is not
+available and keep FreshMarkets Order messaging visible to the Customer. Admin Delivery uses the
+same verified rider call evidence and the saved recipient contact within its existing map card.
+Do not label FreshMarkets messaging as Lalamove rider chat. This adapts the contact beside
+progress in Mobbin's
+[DoorDash rider tracking](https://mobbin.com/screens/b2543cf1-7f95-4718-92d6-74af14de04d5),
+[foodpanda rider card](https://mobbin.com/screens/b5af899c-f90f-4d4f-8222-1630153eed60), and
+[sweetgreen delivery panel](https://mobbin.com/screens/be8680ba-9bc3-4adf-a1a7-ffcbc8d4fbd6).
 This adapts the status-plus-map hierarchy from Mobbin's
 [GrabFood progress](https://mobbin.com/screens/f35fb2cc-a9f1-42ee-b8e2-889f5ab93b22) and
 [DoorDash tracking](https://mobbin.com/screens/b2543cf1-7f95-4718-92d6-74af14de04d5).

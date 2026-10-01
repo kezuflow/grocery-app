@@ -13,5 +13,7 @@ export type DeliveryTrackingView = {
   availability: "NOT_SUPPORTED" | "WAITING" | "LIVE" | "DELAYED" | "UNAVAILABLE" | "FINISHED";
   destination: Coordinate | null;
   rider: { coordinate: Coordinate; updatedAt: string } | null;
+  /** Current assigned rider only; null when unavailable, invalidated, or finished. */
+  riderContact: { name: string | null; phone: string | null } | null;
   nextRefreshMilliseconds: number | null;
 };

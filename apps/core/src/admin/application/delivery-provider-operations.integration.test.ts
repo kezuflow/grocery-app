@@ -1385,7 +1385,10 @@ describe("external delivery request", () => {
     });
     expect(
       bookedQueue.ok && bookedQueue.value.items.find((item) => item.jobId === delivery.jobId),
-    ).toMatchObject({ externalDispatch: { quoteAmountMinor: 4000, quoteCurrency: "PHP" } });
+    ).toMatchObject({
+      recipient: { name: "Ana Customer", phone: "+639171234567" },
+      externalDispatch: { quoteAmountMinor: 4000, quoteCurrency: "PHP" },
+    });
     expect(create).toHaveBeenCalledOnce();
     await expect(
       env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")

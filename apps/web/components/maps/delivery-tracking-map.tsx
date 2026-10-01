@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { DeliveryTrackingView, RpcResult } from "@freshmarkets/contracts";
 import { useStorefrontRuntime } from "../storefront/storefront-runtime";
 import { GoogleMap } from "./google-map";
@@ -22,7 +23,13 @@ function description(value: DeliveryTrackingView): string {
   }
 }
 
-export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
+export function DeliveryTrackingMap({
+  endpoint,
+  renderContact,
+}: {
+  endpoint: string;
+  renderContact?: (contact: DeliveryTrackingView["riderContact"]) => ReactNode;
+}) {
   const { googleMapsBrowserApiKey, googleMapsMapId } = useStorefrontRuntime();
   const [snapshot, setSnapshot] = useState<DeliveryTrackingView | null>(null);
   const [error, setError] = useState(false);
@@ -56,7 +63,10 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
         firstView.current = { center: result.value.destination, fit };
       }
     } catch {
-      if (!request.signal.aborted) setError(true);
+      if (!request.signal.aborted) {
+        setError(true);
+        setSnapshot((previous) => (previous ? { ...previous, riderContact: null } : previous));
+      }
     } finally {
       if (!request.signal.aborted) setLoading(false);
       inFlight.current = false;
@@ -138,6 +148,9 @@ export function DeliveryTrackingMap({ endpoint }: { endpoint: string }) {
           fallback={<p className="text-sm">Map is unavailable. Delivery status is shown above.</p>}
         />
       ) : null}
+      {snapshot && !["FINISHED", "NOT_SUPPORTED"].includes(snapshot.availability)
+        ? renderContact?.(snapshot.riderContact ?? null)
+        : null}
     </div>
   );
 }

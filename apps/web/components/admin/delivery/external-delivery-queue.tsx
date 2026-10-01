@@ -14,6 +14,7 @@ import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/admin/shadcn/card";
 import { DeliveryTrackingMap } from "@/components/maps/delivery-tracking-map";
+import { RiderContact } from "./rider-contact";
 import {
   Table,
   TableBody,
@@ -288,6 +289,8 @@ export function ExternalDeliveryQueue() {
     }
   }
 
+  const trackingItem = summary?.items.find((item) => item.orderId === trackingOrderId);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -545,21 +548,19 @@ export function ExternalDeliveryQueue() {
         </ListPageSection>
       ) : null}
       {locationId &&
-      trackingOrderId &&
-      summary?.items.some(
-        (item) =>
-          item.orderId === trackingOrderId &&
-          item.externalDispatch?.provider === "lalamove" &&
-          item.externalDispatch.status === "ACTIVE",
-      ) ? (
+      trackingItem?.externalDispatch?.provider === "lalamove" &&
+      trackingItem.externalDispatch.status === "ACTIVE" ? (
         <Card>
           <CardHeader>
-            <CardTitle>Order {trackingOrderId.slice(0, 8)} delivery map</CardTitle>
+            <CardTitle>Order {trackingItem.orderId.slice(0, 8)} delivery map</CardTitle>
           </CardHeader>
           <CardContent>
             <DeliveryTrackingMap
-              key={`${locationId}:${trackingOrderId}`}
-              endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: trackingOrderId })}`}
+              key={`${locationId}:${trackingItem.orderId}`}
+              endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: trackingItem.orderId })}`}
+              renderContact={(contact) => (
+                <RiderContact contact={contact} recipient={trackingItem.recipient} />
+              )}
             />
           </CardContent>
         </Card>

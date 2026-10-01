@@ -9,6 +9,7 @@ import { ReorderAction } from "../../../../components/storefront/orders/reorder-
 import { OrderIssueForm } from "../../../../components/storefront/orders/order-issue-form";
 import { CancelOrderAction } from "../../../../components/storefront/orders/cancel-order-action";
 import { DeliveryTrackingMap } from "../../../../components/maps/delivery-tracking-map";
+import { RiderContact } from "../../../../components/storefront/orders/rider-contact";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -98,6 +99,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </h2>
             <DeliveryTrackingMap
               endpoint={`/api/commerce/orders/${encodeURIComponent(order.orderId)}/tracking`}
+              renderContact={(contact) => (
+                <RiderContact contact={contact} orderId={order.orderId} />
+              )}
             />
           </section>
         ) : null}

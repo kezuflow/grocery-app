@@ -13,13 +13,19 @@ This document is authoritative for target Web/Core and provider-ingress applicat
 `getAdminDeliveryTracking` requires current `delivery.read` authority for the requested location;
 `getCustomerDeliveryTracking` requires the owning Customer and returns no rider position before
 Out for delivery. Both return a provider-neutral `DeliveryTrackingView` with availability,
-destination, optional last reported rider coordinate/time and refresh advice. Manual attempts
+destination, optional last reported rider coordinate/time, current rider name/dialable phone when
+verified by driver details, and refresh advice. Manual attempts
 return `NOT_SUPPORTED`; terminal attempts return `FINISHED`. `LIVE` and `DELAYED` distinguish
 position freshness, and unavailable provider evidence never becomes a fabricated rider pin.
 An invalidated driver reference (provider 404) cannot reuse that driver's cached coordinate;
 the resulting `WAITING` state clears the Web marker. Other temporary refresh failures may retain
 the last reported coordinate and its timestamp until a newer observation or terminal state.
 A failed optional driver-reference persistence does not discard an otherwise valid provider position.
+Rider contact is present only for the current assigned driver while the attempt is active; it
+clears on invalidation, unavailable read, and terminal state. Core validates the provider phone
+before exposing a call action and never persists rider contact or includes it in telemetry.
+The scoped Admin Delivery queue also returns the saved delivery-stop recipient contact for
+operational calls, separate from the Customer account phone.
 The Web tracking GET routes carry the existing authentication context and request ID to Core.
 
 Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.

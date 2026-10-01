@@ -307,6 +307,28 @@ export async function listAdminOperationalActivity(
   };
 }
 
+function deliveryRecipient(snapshotJson: string): { name: string | null; phone: string | null } {
+  try {
+    const snapshot: unknown = JSON.parse(snapshotJson);
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot))
+      return { name: null, phone: null };
+    const contact = snapshot as Record<string, unknown>;
+    const rawPhone = typeof contact.phone === "string" ? contact.phone : null;
+    const phone = rawPhone?.replace(/[\s()-]/g, "") ?? null;
+    return {
+      name:
+        typeof contact.recipient === "string"
+          ? contact.recipient.slice(0, 120)
+          : typeof contact.name === "string"
+            ? contact.name.slice(0, 120)
+            : null,
+      phone: phone && /^\+?\d{7,15}$/.test(phone) ? phone : null,
+    };
+  } catch {
+    return { name: null, phone: null };
+  }
+}
+
 export async function listAdminDeliveryOperations(
   deps: OperationsAdministrationDeps,
   request: AdminDeliveryOperationsRequest,
@@ -332,6 +354,7 @@ export async function listAdminDeliveryOperations(
   const items = pageRows.map((row) => ({
     jobId: row.jobId,
     orderId: row.orderId,
+    recipient: deliveryRecipient(row.recipientContactJson ?? row.addressSnapshotJson),
     cycleId: row.cycleId,
     locationId: request.locationId,
     fulfillmentMode: row.fulfillmentMode,

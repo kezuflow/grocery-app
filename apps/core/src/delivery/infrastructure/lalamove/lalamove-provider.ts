@@ -599,7 +599,19 @@ export function createLalamoveProvider(
           nonemptyString(data?.driverId) !== driverId
         )
           return resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true });
-        return { ok: true, value: { coordinate: { latitude, longitude }, updatedAt } };
+        const rawPhone = nonemptyString(data?.phone);
+        const phone = rawPhone?.replace(/[\s()-]/g, "") ?? null;
+        return {
+          ok: true,
+          value: {
+            coordinate: { latitude, longitude },
+            updatedAt,
+            contact: {
+              name: nonemptyString(data?.name)?.slice(0, 120) ?? null,
+              phone: phone && /^\+?\d{7,15}$/.test(phone) ? phone : null,
+            },
+          },
+        };
       });
     },
     cancel(providerDeliveryId) {

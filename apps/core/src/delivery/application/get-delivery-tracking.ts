@@ -48,11 +48,13 @@ function view(
   position: Coordinate | null,
   updatedAt: string | null,
   destinationCoordinate: Coordinate | null,
+  riderContact: DeliveryTrackingView["riderContact"] = null,
 ): DeliveryTrackingView {
   return {
     availability,
     destination: destinationCoordinate,
     rider: position && updatedAt ? { coordinate: position, updatedAt } : null,
+    riderContact,
     nextRefreshMilliseconds:
       availability === "LIVE" ||
       availability === "DELAYED" ||
@@ -156,7 +158,13 @@ export async function getDeliveryTracking(
         : "WAITING";
     return {
       ok: true,
-      value: view(availability, position, position ? lastUpdate : null, pin),
+      value: view(
+        availability,
+        position,
+        position ? lastUpdate : null,
+        pin,
+        observation.unavailable || !observation.driverId ? null : (observation.contact ?? null),
+      ),
       requestId: input.requestId,
     };
   } catch {

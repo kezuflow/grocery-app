@@ -176,6 +176,8 @@ export type DeliveryOperationsSummary = {
 export type AdminDeliveryOperationView = {
   jobId: string;
   orderId: string;
+  /** Immutable delivery recipient from the paid Order, not the account phone. */
+  recipient: { name: string | null; phone: string | null };
   cycleId: string | null;
   locationId: string;
   fulfillmentMode: "INSTANT" | "SCHEDULED";

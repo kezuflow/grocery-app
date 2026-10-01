@@ -110,6 +110,15 @@ estimate. Lalamove's documented Order and Driver Details responses do not provid
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
 location is temporary tracking evidence, never an Order or delivery-status authority.
 
+Owner-approved delivery contact, 2026-10-01: during an active Lalamove delivery, the owning
+Customer and scoped Delivery staff may call the currently assigned rider only when Lalamove's
+driver-details read returns a dialable phone. The Customer uses existing Order messaging for
+FreshMarkets help; Lalamove's in-app rider chat is not represented as a FreshMarkets conversation.
+The booking continues to provide the staffed pickup contact and saved recipient contact to
+Lalamove. Scoped Delivery staff may call the saved recipient from the immutable delivery stop.
+Missing, invalidated, unavailable, or finished rider details never show a stale rider call
+action. No estimated arrival or new driver-notification API is implied by this presentation.
+
 Owner supplement, 2026-09-21: while the QR Ph provider step is open, checkout automatically checks
 the authenticated customer's owning Payment completion. A signed provider success first displays
 “Payment received” while the same durable Order reaction is unfinished; only the immutable committed

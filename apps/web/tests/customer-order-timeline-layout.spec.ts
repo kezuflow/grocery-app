@@ -101,6 +101,7 @@ async function mockOrder(
 }
 
 test("shows provider tracking only after customer handoff", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await mockOrder(page, {
     orderStatus: "OUT_FOR_DELIVERY",
     deliveryStatus: "EN_ROUTE",
@@ -118,6 +119,7 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
             coordinate: { latitude: 10.31, longitude: 123.9 },
             updatedAt: new Date().toISOString(),
           },
+          riderContact: { name: "Rider One", phone: "+639181234567" },
           nextRefreshMilliseconds: 30_000,
         },
       }),
@@ -133,6 +135,14 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
       .getByRole("region", { name: "Delivery tracking map" })
       .or(page.getByText("Map is unavailable. Delivery status is shown above.")),
   ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Call rider" })).toHaveAttribute(
+    "href",
+    "tel:+639181234567",
+  );
+  await expect(page.getByRole("link", { name: "Message us about this Order" })).toHaveAttribute(
+    "href",
+    "/account/messages/order-layout",
+  );
   await mockOrder(page, { liveTrackingAvailable: true });
   await page.reload();
   await expect(page.getByRole("heading", { name: "Track delivery" })).toHaveCount(0);

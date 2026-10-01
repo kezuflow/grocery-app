@@ -39,6 +39,7 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: "2026-09-29T00:00:00.000Z",
             },
+            riderContact: { name: "Rider One", phone: "+639171234567" },
             nextRefreshMilliseconds: 30_000,
           },
         }),
@@ -48,12 +49,20 @@ describe("delivery tracking map", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
-      root.render(<DeliveryTrackingMap endpoint="/tracking" />);
+      root.render(
+        <DeliveryTrackingMap
+          endpoint="/tracking"
+          renderContact={(contact) => (
+            <a href={contact?.phone ? `tel:${contact.phone}` : undefined}>Call rider</a>
+          )}
+        />,
+      );
     });
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "Rider's last reported location.",
     );
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.querySelector('a[href="tel:+639171234567"]')?.textContent).toBe("Call rider");
     expect(fetch).toHaveBeenCalledWith("/tracking", expect.objectContaining({ cache: "no-store" }));
     act(() => root.unmount());
   });
@@ -103,6 +112,7 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: new Date().toISOString(),
             },
+            riderContact: { name: "Former rider", phone: "+639171234567" },
             nextRefreshMilliseconds: 30_000,
           },
         }),
@@ -114,6 +124,7 @@ describe("delivery tracking map", () => {
             availability: "UNAVAILABLE",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: null,
+            riderContact: null,
             nextRefreshMilliseconds: 30_000,
           },
         }),
@@ -125,6 +136,7 @@ describe("delivery tracking map", () => {
             availability: "WAITING",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: null,
+            riderContact: null,
             nextRefreshMilliseconds: 30_000,
           },
         }),
@@ -133,12 +145,23 @@ describe("delivery tracking map", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-    await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
+    await act(async () =>
+      root.render(
+        <DeliveryTrackingMap
+          endpoint="/tracking"
+          renderContact={(contact) =>
+            contact?.phone ? <a href={`tel:${contact.phone}`}>Call rider</a> : null
+          }
+        />,
+      ),
+    );
     expect(container.textContent).toContain("rider:motorcycle");
+    expect(container.querySelector('a[href="tel:+639171234567"]')).not.toBeNull();
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("rider:motorcycle");
     expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.querySelector('a[href="tel:+639171234567"]')).toBeNull();
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Waiting for the rider's location");

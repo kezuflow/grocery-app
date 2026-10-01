@@ -24,6 +24,7 @@ type DispatchRow = {
   cycleId: string | null;
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   addressSnapshotJson: string;
+  recipientContactJson: string | null;
   externalProvider: "lalamove" | "grab-express" | null;
   externalProviderDeliveryId: string | null;
   externalDispatchId: string | null;
@@ -103,6 +104,9 @@ export async function listDeliveryDispatch(
     .prepare(
       `SELECT d.id AS job_id,d.order_id,d.status,d.address_snapshot_json,d.created_at AS sort_at,
               d.delivered_at,d.version,o.cycle_id,d.fulfillment_mode,
+              (SELECT stop.contact_snapshot_json FROM delivery_stop stop
+               WHERE stop.delivery_job_id=d.id ORDER BY stop.created_at,stop.id LIMIT 1)
+               AS recipient_contact_json,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.provider_delivery_id AS external_provider_delivery_id,
               dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
@@ -154,6 +158,7 @@ export async function listDeliveryDispatch(
       order_id: string;
       status: string;
       address_snapshot_json: string;
+      recipient_contact_json: string | null;
       delivered_at: number | null;
       version: number;
       cycle_id: string | null;
@@ -224,6 +229,7 @@ export async function listDeliveryDispatch(
     orderId: r.order_id,
     status: r.status,
     addressSnapshotJson: r.address_snapshot_json,
+    recipientContactJson: r.recipient_contact_json,
     deliveredAtIso: r.delivered_at === null ? null : new Date(r.delivered_at).toISOString(),
     version: r.version,
     cycleId: r.cycle_id,

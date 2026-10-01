@@ -39,6 +39,7 @@ describe("delivery tracking projection", () => {
         coordinate: { latitude: 10.31, longitude: 123.9 },
         updatedAt: new Date().toISOString(),
       },
+      contact: { name: "Rider One", phone: "+639171234567" },
       unavailable: false,
     }));
     const runtime = {
@@ -64,6 +65,7 @@ describe("delivery tracking projection", () => {
         availability: "LIVE",
         destination: { latitude: 10.3173, longitude: 123.9058 },
         rider: { coordinate: { latitude: 10.31, longitude: 123.9 } },
+        riderContact: { name: "Rider One", phone: "+639171234567" },
       },
     });
     expect(snapshot).toHaveBeenCalledOnce();
@@ -100,7 +102,10 @@ describe("delivery tracking projection", () => {
       .run();
     expect(
       await getDeliveryTracking(runtime, { orderId, customerId: `customer-${orderId}`, requestId }),
-    ).toMatchObject({ ok: true, value: { availability: "FINISHED", rider: null } });
+    ).toMatchObject({
+      ok: true,
+      value: { availability: "FINISHED", rider: null, riderContact: null },
+    });
     expect(snapshot).toHaveBeenCalledOnce();
   });
 
@@ -167,6 +172,9 @@ describe("delivery tracking projection", () => {
         customerId: `customer-${orderId}`,
         requestId: crypto.randomUUID(),
       }),
-    ).toMatchObject({ ok: true, value: { availability: "UNAVAILABLE", rider: null } });
+    ).toMatchObject({
+      ok: true,
+      value: { availability: "UNAVAILABLE", rider: null, riderContact: null },
+    });
   });
 });

@@ -136,6 +136,7 @@ export interface DeliveryProvider {
     DeliveryProviderResult<{
       coordinate: { latitude: number; longitude: number };
       updatedAt: string;
+      contact: { name: string | null; phone: string | null };
     }>
   >;
   cancel(providerDeliveryId: string): Promise<DeliveryProviderResult<null>>;

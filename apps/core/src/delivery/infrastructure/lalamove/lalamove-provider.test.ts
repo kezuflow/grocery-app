@@ -426,6 +426,8 @@ describe("Lalamove delivery adapter", () => {
         Response.json({
           data: {
             driverId: "driver-1",
+            name: "Rider One",
+            phone: "+63 917 123 4567",
             coordinates: { lat: "10.3173", lng: "123.9058", updatedAt: "2026-09-29T00:00:00.000Z" },
           },
         }),
@@ -458,7 +460,10 @@ describe("Lalamove delivery adapter", () => {
     });
     await expect(provider.getDriverLocation?.("order-1", "driver-1")).resolves.toMatchObject({
       ok: true,
-      value: { coordinate: { latitude: 10.3173, longitude: 123.9058 } },
+      value: {
+        coordinate: { latitude: 10.3173, longitude: 123.9058 },
+        contact: { name: "Rider One", phone: "+639171234567" },
+      },
     });
     expect(String(fetcher.mock.calls[0]?.[0])).toContain("/v3/orders/order-1/drivers/driver-1");
     expect(fetcher.mock.calls[0]?.[1]?.body).toBeUndefined();
