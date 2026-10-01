@@ -102,9 +102,12 @@ idempotent commitment reaction after cutoff within the settlement window approve
 at or after cutoff remains invalid. This
 correction supersedes the earlier same-day no-automatic-booking supplement and conflicting rules below.
 
-Owner-approved delivery tracking, 2026-09-29: Admin Delivery shows a map for an active Lalamove
-attempt, including the assigned rider before pickup when the provider makes a position available.
-The Customer Order detail shows it only while that Order is Out for delivery. The first version
+Owner-approved delivery tracking, 2026-09-29, with the 2026-10-01 presentation correction: Admin
+Delivery and Customer Order detail open the active Lalamove map through Track Delivery rather than
+loading it during the ordinary page view. The opened desktop view places map left and Order
+timeline/details right; narrow screens stack them. Admin may show the assigned rider before pickup
+when the provider makes a position available. The Customer action appears only while the Order is
+Out for delivery. The first version
 shows verified rider and destination positions without a report timestamp, road route or arrival
 estimate. Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider

@@ -12,9 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/a
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/admin/shadcn/card";
-import { DeliveryTrackingMap } from "@/components/maps/delivery-tracking-map";
-import { RiderContact } from "./rider-contact";
+import { DeliveryTrackingDialog } from "./delivery-tracking-dialog";
 import {
   Table,
   TableBody,
@@ -409,13 +407,10 @@ export function ExternalDeliveryQueue() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() =>
-                                  setTrackingOrderId((current) =>
-                                    current === item.orderId ? null : item.orderId,
-                                  )
-                                }
+                                onClick={() => setTrackingOrderId(item.orderId)}
+                                aria-haspopup="dialog"
                               >
-                                {trackingOrderId === item.orderId ? "Hide map" : "View map"}
+                                Track Delivery
                               </Button>
                             ) : null}
                           </div>
@@ -550,20 +545,17 @@ export function ExternalDeliveryQueue() {
       {locationId &&
       trackingItem?.externalDispatch?.provider === "lalamove" &&
       trackingItem.externalDispatch.status === "ACTIVE" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Order {trackingItem.orderId.slice(0, 8)} delivery map</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DeliveryTrackingMap
-              key={`${locationId}:${trackingItem.orderId}`}
-              endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: trackingItem.orderId })}`}
-              renderContact={(contact) => (
-                <RiderContact contact={contact} recipient={trackingItem.recipient} />
-              )}
-            />
-          </CardContent>
-        </Card>
+        <DeliveryTrackingDialog
+          key={`${locationId}:${trackingItem.orderId}`}
+          item={trackingItem}
+          locationId={locationId}
+          statusLabel={externalStatusLabel(trackingItem.externalDispatch)}
+          canReadOrder={
+            admin.state.phase === "ready" &&
+            admin.state.context.capabilities.includes("orders.read")
+          }
+          onClose={() => setTrackingOrderId(null)}
+        />
       ) : null}
       <AdminConfirmationDialog
         open={cancelTarget !== null}

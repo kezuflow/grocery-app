@@ -5,13 +5,17 @@ import { installAdminBootstrapFixture } from "./admin-bootstrap-fixture";
 const firstLocation = "location-delivery-a";
 const secondLocation = "location-delivery-b";
 
-async function installDeliveryScopes(page: Page, canManage = true) {
+async function installDeliveryScopes(page: Page, canManage = true, canReadOrders = false) {
   await installAdminBootstrapFixture(page, {
     context: {
       staffId: "staff-delivery-e2e",
       displayName: "Delivery operator",
       email: "delivery@example.com",
-      capabilities: canManage ? ["delivery.read", "delivery.manage"] : ["delivery.read"],
+      capabilities: [
+        "delivery.read",
+        ...(canManage ? (["delivery.manage"] as const) : []),
+        ...(canReadOrders ? (["orders.read"] as const) : []),
+      ],
       scopes: [
         { kind: "location", locationId: firstLocation },
         { kind: "location", locationId: secondLocation },
@@ -266,7 +270,8 @@ test("Read-only delivery staff cannot use provider recovery controls", async ({ 
 });
 
 test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) => {
-  await installDeliveryScopes(page, false);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installDeliveryScopes(page, false, true);
   await page.route("**/api/admin/delivery?**", (route) => {
     const item = {
       ...deliveryItem(firstLocation, "tracking-order", "INSTANT"),
@@ -288,7 +293,9 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
       }),
     });
   });
+  let trackingReads = 0;
   await page.route("**/api/admin/delivery-tracking?**", (route) => {
+    trackingReads += 1;
     const params = new URL(route.request().url()).searchParams;
     expect(params.get("locationId")).toBe(firstLocation);
     expect(params.get("orderId")).toBe("tracking-order");
@@ -309,19 +316,61 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
       }),
     });
   });
+  await page.route("**/api/admin/orders/tracking-order", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          orderId: "tracking-order",
+          orderNumber: "FM-TRACKING-1",
+          timeline: [
+            {
+              eventId: "event-tracking",
+              kind: "DELIVERY",
+              label: "Rider assigned",
+              status: "ASSIGNED",
+              occurredAt: "2026-10-01T07:00:00.000Z",
+              referenceId: null,
+            },
+          ],
+        },
+      }),
+    }),
+  );
   await page.goto("/admin/delivery");
-  await page.getByRole("button", { name: "View map" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Rider's last reported" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Call rider" })).toHaveAttribute(
+  expect(trackingReads).toBe(0);
+  await page.getByRole("button", { name: "Track Delivery" }).click();
+  const dialog = page.getByRole("dialog", { name: "Track Delivery" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("status").filter({ hasText: "Rider's last reported" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
+    "Rider assigned",
+  );
+  await expect(dialog).toContainText("Current delivery: Rider assigned");
+  await expect(dialog.getByRole("link", { name: "Call rider" })).toHaveAttribute(
     "href",
     "tel:+639181234567",
   );
-  await expect(page.getByRole("link", { name: "Call recipient" })).toHaveAttribute(
+  await expect(dialog.getByRole("link", { name: "Call recipient" })).toHaveAttribute(
     "href",
     "tel:+639171234567",
   );
-  await page.getByRole("button", { name: "Hide map" }).click();
-  await expect(page.getByRole("button", { name: "View map" })).toBeVisible();
+  const mapPane = await dialog
+    .getByRole("region", { name: "Delivery map and contacts" })
+    .boundingBox();
+  const detailsPane = await dialog
+    .getByRole("complementary", { name: "Order details and timeline" })
+    .boundingBox();
+  expect(mapPane).not.toBeNull();
+  expect(detailsPane).not.toBeNull();
+  expect(detailsPane!.x).toBeGreaterThan(mapPane!.x + mapPane!.width - 2);
+  expect(trackingReads).toBeGreaterThan(0);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Track Delivery" })).toBeVisible();
 });
 
 test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignment, and shows saved evidence at 1440px", async ({

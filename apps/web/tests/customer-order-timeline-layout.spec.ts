@@ -106,9 +106,20 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
     orderStatus: "OUT_FOR_DELIVERY",
     deliveryStatus: "EN_ROUTE",
     liveTrackingAvailable: true,
+    progress: {
+      steps: [
+        { key: "PAYMENT", state: "COMPLETE", achievedAt: "2026-09-21T00:00:00.000Z" },
+        { key: "PACKED", state: "COMPLETE", achievedAt: "2026-09-21T01:00:00.000Z" },
+        { key: "OUT_FOR_DELIVERY", state: "CURRENT", achievedAt: "2026-09-21T02:00:00.000Z" },
+        { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
+      ],
+      detail: "Your order is out for delivery.",
+    },
   });
-  await page.route("**/api/commerce/orders/order-layout/tracking", (route) =>
-    route.fulfill({
+  let trackingReads = 0;
+  await page.route("**/api/commerce/orders/order-layout/tracking", (route) => {
+    trackingReads += 1;
+    return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         ok: true,
@@ -123,29 +134,55 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
           nextRefreshMilliseconds: 30_000,
         },
       }),
-    }),
-  );
+    });
+  });
   await page.goto("/orders/order-layout");
-  await expect(page.getByRole("heading", { name: "Track delivery" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Track Delivery" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Delivery tracking map" })).toHaveCount(0);
+  expect(trackingReads).toBe(0);
+  await page.getByRole("button", { name: "Track Delivery" }).click();
+  const dialog = page.getByRole("dialog", { name: "Track delivery" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Order progress" })).toBeVisible();
   await expect(
-    page.getByRole("status").filter({ hasText: "Rider's last reported location" }),
+    dialog.getByRole("status").filter({ hasText: "Rider's last reported location" }),
   ).toContainText("Rider's last reported location");
   await expect(
-    page
+    dialog
       .getByRole("region", { name: "Delivery tracking map" })
-      .or(page.getByText("Map is unavailable. Delivery status is shown above.")),
+      .or(dialog.getByText("Map is unavailable. Delivery status is shown above.")),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Call rider" })).toHaveAttribute(
+  await expect(dialog.getByRole("link", { name: "Call rider" })).toHaveAttribute(
     "href",
     "tel:+639181234567",
   );
-  await expect(page.getByRole("link", { name: "Message us about this Order" })).toHaveAttribute(
+  await expect(dialog.getByRole("link", { name: "Message us about this Order" })).toHaveAttribute(
     "href",
     "/account/messages/order-layout",
   );
+  await expect(dialog.getByRole("link", { name: "Message us about this Order" })).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
+  expect(trackingReads).toBeGreaterThan(0);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("button", { name: "Track Delivery" }).click();
+  const desktopDialog = page.getByRole("dialog", { name: "Track delivery" });
+  const mapPane = await desktopDialog
+    .getByRole("region", { name: "Delivery map and rider contact" })
+    .boundingBox();
+  const detailsPane = await desktopDialog
+    .getByRole("complementary", { name: "Order details and progress" })
+    .boundingBox();
+  expect(mapPane).not.toBeNull();
+  expect(detailsPane).not.toBeNull();
+  expect(detailsPane!.x).toBeGreaterThan(mapPane!.x + mapPane!.width - 2);
+  await desktopDialog.getByRole("button", { name: "Close" }).click();
   await mockOrder(page, { liveTrackingAvailable: true });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Track delivery" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Track Delivery" })).toHaveCount(0);
 });
 
 test("places the four order milestones above Items across responsive widths", async ({ page }) => {

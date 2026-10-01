@@ -6,8 +6,13 @@ The Expo app uses a five-tab shopping shell: Home, Search, Cart, Orders and Acco
 
 ## Lalamove delivery tracking — owner approval 2026-09-29
 
-Admin Delivery offers View map for the active Lalamove attempt in its existing workspace. The
-Customer Order detail shows the same bounded map beneath progress only while Out for delivery.
+Admin Delivery and the Customer Order detail offer a Track Delivery button for an active Lalamove
+attempt. The map and its tracking read mount only after that button opens the tracking view;
+ordinary Order and Delivery page views do not load it. On desktop, the opened view places the map
+on the left and the Order timeline/details on the right. On narrow screens, the map comes first and
+the details follow beneath it. Admin uses its authorized Order timeline when available; a Delivery
+staff member without Orders read access sees the Delivery status without an invented timeline.
+The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
 with explicit waiting, unavailable and finished text. Do not imply a road route, live
 movement between updates or an arrival estimate. Keep manual delivery in the existing status
@@ -29,6 +34,11 @@ progress in Mobbin's
 This adapts the status-plus-map hierarchy from Mobbin's
 [GrabFood progress](https://mobbin.com/screens/f35fb2cc-a9f1-42ee-b8e2-889f5ab93b22) and
 [DoorDash tracking](https://mobbin.com/screens/b2543cf1-7f95-4718-92d6-74af14de04d5).
+The opened map/detail split adapts Mobbin's
+[DoorDash Web tracking](https://mobbin.com/screens/8db8da5b-1a54-4779-9d93-bb8c8432d505),
+[sweetgreen delivery view](https://mobbin.com/screens/ac299288-5017-462d-9543-f84d57e3648d),
+and [foodpanda mobile tracking](https://mobbin.com/screens/e9535db6-10e1-4c82-899a-f034c749d0cb)
+without adding a road route or unsupported arrival estimate.
 
 ## Payments simplification — owner decisions 2026-09-21
 

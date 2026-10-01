@@ -26,9 +26,11 @@ function description(value: DeliveryTrackingView): string {
 export function DeliveryTrackingMap({
   endpoint,
   renderContact,
+  mapClassName = "h-64 w-full overflow-hidden rounded-md sm:h-80",
 }: {
   endpoint: string;
   renderContact?: (contact: DeliveryTrackingView["riderContact"]) => ReactNode;
+  mapClassName?: string;
 }) {
   const { googleMapsBrowserApiKey, googleMapsMapId } = useStorefrontRuntime();
   const [snapshot, setSnapshot] = useState<DeliveryTrackingView | null>(null);
@@ -144,7 +146,7 @@ export function DeliveryTrackingMap({
             ],
           }}
           ariaLabel="Delivery tracking map"
-          className="h-64 w-full overflow-hidden rounded-md sm:h-80"
+          className={mapClassName}
           fallback={<p className="text-sm">Map is unavailable. Delivery status is shown above.</p>}
         />
       ) : null}

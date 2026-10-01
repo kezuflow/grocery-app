@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CustomerOrderDetailView, RpcResult } from "@freshmarkets/contracts";
 import { OrderTimeline } from "../../../../components/storefront/orders/order-timeline";
 import { ReorderAction } from "../../../../components/storefront/orders/reorder-action";
 import { OrderIssueForm } from "../../../../components/storefront/orders/order-issue-form";
 import { CancelOrderAction } from "../../../../components/storefront/orders/cancel-order-action";
-import { DeliveryTrackingMap } from "../../../../components/maps/delivery-tracking-map";
-import { RiderContact } from "../../../../components/storefront/orders/rider-contact";
+import { OrderTrackingDialog } from "../../../../components/storefront/orders/order-tracking-dialog";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -25,6 +24,15 @@ function label(value: string): string {
 }
 
 export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }) {
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const trackingButtonRef = useRef<HTMLButtonElement>(null);
+  const canTrackDelivery =
+    order.fulfillment.liveTrackingAvailable &&
+    order.status !== "DELIVERED" &&
+    ["EN_ROUTE", "ARRIVED"].includes(order.fulfillment.deliveryStatus ?? "");
+  useEffect(() => {
+    if (!canTrackDelivery) setTrackingOpen(false);
+  }, [canTrackDelivery]);
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
   const cancelAction = order.actions.find((action) => action.action === "CANCEL");
@@ -76,36 +84,29 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           {label(order.fulfillment.mode)}
         </span>
       </div>
-      <Link
-        href={`/account/messages/${encodeURIComponent(order.orderId)}`}
-        className="mt-5 inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold text-white hover:bg-[var(--fm-storefront-action-hover)]"
-      >
-        Message us about this Order
-      </Link>
+      <div className="mt-5 flex flex-wrap gap-3">
+        {canTrackDelivery ? (
+          <button
+            ref={trackingButtonRef}
+            type="button"
+            onClick={() => setTrackingOpen(true)}
+            className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] px-4 text-sm font-bold"
+          >
+            Track Delivery
+          </button>
+        ) : null}
+        <Link
+          href={`/account/messages/${encodeURIComponent(order.orderId)}`}
+          className="inline-flex min-h-11 items-center rounded-[var(--fm-radius-control)] bg-[var(--fm-storefront-action)] px-4 text-sm font-bold !text-white hover:bg-[var(--fm-storefront-action-hover)]"
+        >
+          Message us about this Order
+        </Link>
+      </div>
 
       <div className="mt-7 space-y-6">
         <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
           <OrderTimeline progress={order.progress} />
         </div>
-        {order.fulfillment.liveTrackingAvailable &&
-        order.status !== "DELIVERED" &&
-        ["EN_ROUTE", "ARRIVED"].includes(order.fulfillment.deliveryStatus ?? "") ? (
-          <section
-            className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6"
-            aria-labelledby="tracking-heading"
-          >
-            <h2 id="tracking-heading" className="mb-3 text-xl font-bold">
-              Track delivery
-            </h2>
-            <DeliveryTrackingMap
-              endpoint={`/api/commerce/orders/${encodeURIComponent(order.orderId)}/tracking`}
-              renderContact={(contact) => (
-                <RiderContact contact={contact} orderId={order.orderId} />
-              )}
-            />
-          </section>
-        ) : null}
-
         <div className="divide-y divide-[var(--fm-border)] overflow-hidden rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white">
           <section className="p-5 sm:p-6" aria-labelledby="order-items-heading">
             <h2 id="order-items-heading" className="text-xl font-bold">
@@ -318,6 +319,15 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
           </section>
         </div>
       </div>
+      {trackingOpen && canTrackDelivery ? (
+        <OrderTrackingDialog
+          order={order}
+          onClose={() => {
+            setTrackingOpen(false);
+            trackingButtonRef.current?.focus();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
