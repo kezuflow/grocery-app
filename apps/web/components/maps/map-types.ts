@@ -29,6 +29,7 @@ export type MapPolygon = Readonly<{
 export type MapLineString = Readonly<{
   id: string;
   points: ReadonlyArray<MapCoordinate>;
+  tone?: "storefront";
 }>;
 
 export type MapScene = Readonly<{

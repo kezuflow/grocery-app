@@ -56,13 +56,24 @@ export function DeliveryTrackingMap({
       const sameAttempt =
         result.value.attemptId !== null && result.value.attemptId === previous?.attemptId;
       if (previous?.attemptId !== result.value.attemptId) firstView.current = null;
+      const sameRiderPosition =
+        sameAttempt &&
+        previous?.rider?.coordinate.latitude === result.value.rider?.coordinate.latitude &&
+        previous?.rider?.coordinate.longitude === result.value.rider?.coordinate.longitude;
       const nextSnapshot: DeliveryTrackingView =
         result.value.availability === "UNAVAILABLE" &&
         !result.value.rider &&
         sameAttempt &&
         previous?.rider
-          ? { ...result.value, availability: "DELAYED", rider: previous.rider }
-          : result.value;
+          ? {
+              ...result.value,
+              availability: "DELAYED",
+              rider: previous.rider,
+              roadRoute: previous.roadRoute,
+            }
+          : sameRiderPosition && !result.value.roadRoute
+            ? { ...result.value, roadRoute: previous.roadRoute }
+            : result.value;
       lastSnapshot.current = nextSnapshot;
       setSnapshot(nextSnapshot);
       finished.current =
@@ -162,11 +173,22 @@ export function DeliveryTrackingMap({
                   ]
                 : []),
             ],
+            lineStrings:
+              rider && snapshot?.roadRoute
+                ? [{ id: "suggested-road-route", points: snapshot.roadRoute, tone: "storefront" }]
+                : undefined,
           }}
           ariaLabel="Delivery tracking map"
           className={mapClassName}
           fallback={<p className="text-sm">Map is unavailable. Delivery status is shown above.</p>}
         />
+      ) : null}
+      {rider && showMap ? (
+        <p className="text-xs text-muted-foreground">
+          {snapshot?.roadRoute
+            ? "Green line shows a suggested road route from the rider’s last reported location. The rider may take a different road."
+            : "Suggested road route is unavailable. The pins show the last reported rider location and destination."}
+        </p>
       ) : null}
       {snapshot && !["FINISHED", "NOT_SUPPORTED"].includes(snapshot.availability)
         ? renderContact?.(snapshot.riderContact ?? null)

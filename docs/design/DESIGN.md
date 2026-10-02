@@ -15,8 +15,10 @@ staff member without Orders read access sees the Delivery status without an inve
 Admin timeline refreshes while its view is open and marks the last confirmed events when a read fails.
 The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
-with explicit waiting, unavailable and finished text. Do not imply a road route, live
-movement between updates or an arrival estimate. Keep manual delivery in the existing status
+with explicit waiting, unavailable and finished text. Draw an available Google suggested road
+route in the Storefront action green from the last rider position to the destination; label it as
+suggested, and keep the pins when routing fails. Do not imply live movement between updates or an
+arrival estimate. Keep manual delivery in the existing status
 presentation without a map.
 Keep the last reported motorcycle position through a refresh failure for the same dispatch attempt,
 without displaying its report time. Replace it on a new provider location; clear it when the
@@ -39,7 +41,7 @@ The opened map/detail split adapts Mobbin's
 [DoorDash Web tracking](https://mobbin.com/screens/8db8da5b-1a54-4779-9d93-bb8c8432d505),
 [sweetgreen delivery view](https://mobbin.com/screens/ac299288-5017-462d-9543-f84d57e3648d),
 and [foodpanda mobile tracking](https://mobbin.com/screens/e9535db6-10e1-4c82-899a-f034c749d0cb)
-without adding a road route or unsupported arrival estimate.
+without an unsupported arrival estimate.
 
 ## Payments simplification — owner decisions 2026-09-21
 

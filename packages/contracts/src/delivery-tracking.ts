@@ -15,6 +15,8 @@ export type DeliveryTrackingView = {
   attemptId: string | null;
   destination: Coordinate | null;
   rider: { coordinate: Coordinate; updatedAt: string } | null;
+  /** Google suggested road from the last reported rider position, not travel history or an ETA. */
+  roadRoute: ReadonlyArray<Coordinate> | null;
   /** Current assigned rider only; null when unavailable, invalidated, or finished. */
   riderContact: { name: string | null; phone: string | null } | null;
   nextRefreshMilliseconds: number | null;

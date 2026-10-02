@@ -11,9 +11,21 @@ vi.mock("../storefront/storefront-runtime", () => ({
   }),
 }));
 vi.mock("./google-map", () => ({
-  GoogleMap: ({ scene }: { scene: { points: { id: string; kind?: string }[] } }) => (
+  GoogleMap: ({
+    scene,
+  }: {
+    scene: {
+      points: { id: string; kind?: string }[];
+      lineStrings?: {
+        id: string;
+        tone?: string;
+        points: { latitude: number; longitude: number }[];
+      }[];
+    };
+  }) => (
     <div data-testid="map">
       {scene.points.map((point) => `${point.id}:${point.kind ?? "pin"}`).join(",")}
+      {scene.lineStrings?.map((line) => `${line.id}:${line.tone}:${line.points.length}`).join(",")}
     </div>
   ),
 }));
@@ -40,6 +52,11 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: "2026-09-29T00:00:00.000Z",
             },
+            roadRoute: [
+              { latitude: 10.32, longitude: 123.91 },
+              { latitude: 10.315, longitude: 123.905 },
+              { latitude: 10.31, longitude: 123.9 },
+            ],
             riderContact: { name: "Rider One", phone: "+639171234567" },
             nextRefreshMilliseconds: 30_000,
           },
@@ -63,6 +80,8 @@ describe("delivery tracking map", () => {
       "Rider's last reported location.",
     );
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.textContent).toContain("suggested-road-route:storefront:3");
+    expect(container.textContent).toContain("Green line shows a suggested road route");
     expect(container.querySelector('a[href="tel:+639171234567"]')?.textContent).toBe("Call rider");
     expect(fetch).toHaveBeenCalledWith("/tracking", expect.objectContaining({ cache: "no-store" }));
     act(() => root.unmount());
@@ -83,6 +102,10 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: firstRead.toISOString(),
             },
+            roadRoute: [
+              { latitude: 10.32, longitude: 123.91 },
+              { latitude: 10.31, longitude: 123.9 },
+            ],
             nextRefreshMilliseconds: 30_000,
           },
         }),
@@ -97,6 +120,7 @@ describe("delivery tracking map", () => {
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Showing the last confirmed delivery view");
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.textContent).toContain("suggested-road-route:storefront:2");
     expect(container.textContent).toContain("Retry tracking");
     act(() => root.unmount());
   });
@@ -115,6 +139,10 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: new Date().toISOString(),
             },
+            roadRoute: [
+              { latitude: 10.32, longitude: 123.91 },
+              { latitude: 10.31, longitude: 123.9 },
+            ],
             riderContact: { name: "Former rider", phone: "+639171234567" },
             nextRefreshMilliseconds: 30_000,
           },
@@ -161,16 +189,19 @@ describe("delivery tracking map", () => {
       ),
     );
     expect(container.textContent).toContain("rider:motorcycle");
+    expect(container.textContent).toContain("suggested-road-route:storefront:2");
     expect(container.querySelector('a[href="tel:+639171234567"]')).not.toBeNull();
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("rider:motorcycle");
     expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.textContent).toContain("suggested-road-route:storefront:2");
     expect(container.querySelector('a[href="tel:+639171234567"]')).toBeNull();
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Waiting for the rider's location");
     expect(container.textContent).not.toContain("rider:motorcycle");
+    expect(container.textContent).not.toContain("suggested-road-route");
     act(() => root.unmount());
   });
 
@@ -188,6 +219,10 @@ describe("delivery tracking map", () => {
               coordinate: { latitude: 10.32, longitude: 123.91 },
               updatedAt: new Date().toISOString(),
             },
+            roadRoute: [
+              { latitude: 10.32, longitude: 123.91 },
+              { latitude: 10.31, longitude: 123.9 },
+            ],
             riderContact: { name: "Former rider", phone: "+639171234567" },
             nextRefreshMilliseconds: 30_000,
           },
@@ -212,11 +247,13 @@ describe("delivery tracking map", () => {
     const root = createRoot(container);
     await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
     expect(container.textContent).toContain("rider:motorcycle");
+    expect(container.textContent).toContain("suggested-road-route:storefront:2");
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Rider location is temporarily unavailable");
     expect(container.textContent).toContain("destination:pin");
     expect(container.textContent).not.toContain("rider:motorcycle");
+    expect(container.textContent).not.toContain("suggested-road-route");
     act(() => root.unmount());
   });
 

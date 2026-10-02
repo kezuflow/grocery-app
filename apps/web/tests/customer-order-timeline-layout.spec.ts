@@ -131,6 +131,11 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
             coordinate: { latitude: 10.31, longitude: 123.9 },
             updatedAt: new Date().toISOString(),
           },
+          roadRoute: [
+            { latitude: 10.31, longitude: 123.9 },
+            { latitude: 10.314, longitude: 123.903 },
+            { latitude: 10.3173, longitude: 123.9058 },
+          ],
           riderContact: { name: "Rider One", phone: "+639181234567" },
           nextRefreshMilliseconds: 30_000,
         },
@@ -144,6 +149,7 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
   await page.getByRole("button", { name: "Track Delivery" }).click();
   const dialog = page.getByRole("dialog", { name: "Track delivery" });
   await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Green line shows a suggested road route");
   await expect(dialog.getByRole("list", { name: "Order progress" })).toBeVisible();
   await expect(
     dialog.getByRole("status").filter({ hasText: "Rider's last reported location" }),

@@ -50,6 +50,7 @@ function view(
   destinationCoordinate: Coordinate | null,
   attemptId: string | null,
   riderContact: DeliveryTrackingView["riderContact"] = null,
+  roadRoute: DeliveryTrackingView["roadRoute"] = null,
 ): DeliveryTrackingView {
   return {
     availability,
@@ -57,6 +58,7 @@ function view(
     destination: destinationCoordinate,
     rider: position && updatedAt ? { coordinate: position, updatedAt } : null,
     riderContact,
+    roadRoute,
     nextRefreshMilliseconds:
       availability === "LIVE" ||
       availability === "DELAYED" ||
@@ -131,9 +133,8 @@ export async function getDeliveryTracking(
       requestId: input.requestId,
     };
   try {
-    const observation = await env.DELIVERY_TRACKING_HUB.getByName(
-      env.LALAMOVE_MARKET || "PH",
-    ).snapshot(row.provider_delivery_id, row.driver_id);
+    const hub = env.DELIVERY_TRACKING_HUB.getByName(env.LALAMOVE_MARKET || "PH");
+    const observation = await hub.snapshot(row.provider_delivery_id, row.driver_id);
     if (observation.driverId && observation.driverId !== row.driver_id && row.dispatch_id) {
       try {
         await env.DB.prepare(
@@ -174,6 +175,14 @@ export async function getDeliveryTracking(
       : observation.unavailable
         ? "UNAVAILABLE"
         : "WAITING";
+    let roadRoute: DeliveryTrackingView["roadRoute"] = null;
+    if (position && pin) {
+      try {
+        roadRoute = await hub.suggestedRoute(position, pin);
+      } catch {
+        log("warn", "delivery.tracking.route_unavailable", { requestId: input.requestId });
+      }
+    }
     return {
       ok: true,
       value: view(
@@ -183,6 +192,7 @@ export async function getDeliveryTracking(
         pin,
         row.dispatch_id,
         observation.unavailable || !observation.driverId ? null : (observation.contact ?? null),
+        roadRoute,
       ),
       requestId: input.requestId,
     };

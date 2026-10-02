@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import type { Coordinate } from "@freshmarkets/contracts";
+import { buildRoutePreviewPort } from "../../geography/infrastructure/runtime-route-preview";
 import { buildDeliveryProviderRegistry } from "./runtime-delivery-provider";
 
 type Position = { coordinate: { latitude: number; longitude: number }; updatedAt: string };
@@ -9,6 +11,7 @@ type TrackingResult = {
   contact: Contact | null;
   unavailable: boolean;
 };
+const ROUTE_CACHE_MILLISECONDS = 5 * 60_000;
 
 /** A missing driver clears the old pin; other failures can retain a last report. */
 export function observationAfterLocationError(
@@ -28,12 +31,15 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
     { position: Position; contact: Contact; fetchedAt: number }
   >();
   private readonly pending = new Map<string, Promise<TrackingResult>>();
+  private readonly routes = new Map<string, { points: Coordinate[]; fetchedAt: number }>();
+  private readonly pendingRoutes = new Map<string, Promise<Coordinate[] | null>>();
 
-  private async admit(): Promise<boolean> {
+  private async admit(
+    key = "tracking-budget",
+    limit = this.env.ENVIRONMENT === "production" ? 240 : 40,
+  ): Promise<boolean> {
     const now = Date.now();
-    const limit = this.env.ENVIRONMENT === "production" ? 240 : 40;
     return this.ctx.storage.transaction(async (storage) => {
-      const key = "tracking-budget";
       const previous = await storage.get<{ startsAt: number; count: number }>(key);
       const current =
         previous && now - previous.startsAt < 60_000 ? previous : { startsAt: now, count: 0 };
@@ -41,6 +47,48 @@ export class DeliveryTrackingHub extends DurableObject<Env> {
       await storage.put(key, { startsAt: current.startsAt, count: current.count + 1 });
       return true;
     });
+  }
+
+  /** Route coordinates are temporary Google display content, never persisted as tracking history. */
+  async suggestedRoute(origin: Coordinate, destination: Coordinate): Promise<Coordinate[] | null> {
+    if (!this.env.GOOGLE_MAPS_SERVER_KEY) return null;
+    const key = `${origin.latitude},${origin.longitude}:${destination.latitude},${destination.longitude}`;
+    const now = Date.now();
+    const cached = this.routes.get(key);
+    if (cached && now - cached.fetchedAt < ROUTE_CACHE_MILLISECONDS) return cached.points;
+    const inFlight = this.pendingRoutes.get(key);
+    if (inFlight) return inFlight;
+    const work = (async () => {
+      if (!(await this.admit("route-budget", this.env.ENVIRONMENT === "production" ? 120 : 20)))
+        return null;
+      try {
+        const route = await buildRoutePreviewPort(this.env).preview({
+          origin,
+          orderedDestinations: [destination],
+        });
+        const points = route.geometry.coordinates.map(([longitude, latitude]) => ({
+          latitude,
+          longitude,
+        }));
+        this.routes.set(key, { points, fetchedAt: Date.now() });
+        for (const [routeKey, value] of this.routes)
+          if (Date.now() - value.fetchedAt >= ROUTE_CACHE_MILLISECONDS)
+            this.routes.delete(routeKey);
+        if (this.routes.size > 256) {
+          const oldest = this.routes.keys().next().value;
+          if (oldest) this.routes.delete(oldest);
+        }
+        return points;
+      } catch {
+        return null;
+      }
+    })();
+    this.pendingRoutes.set(key, work);
+    try {
+      return await work;
+    } finally {
+      this.pendingRoutes.delete(key);
+    }
   }
 
   async snapshot(providerOrderId: string, savedDriverId: string | null): Promise<TrackingResult> {

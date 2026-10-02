@@ -219,7 +219,12 @@ function createGoogleMapsAdapter(): MapAdapter {
             new google.maps.Polyline({
               map,
               path: line.points.map(latLng),
-              strokeColor: "#f97316",
+              strokeColor:
+                line.tone === "storefront"
+                  ? getComputedStyle(options.container)
+                      .getPropertyValue("--fm-storefront-accent")
+                      .trim() || "#00b14f"
+                  : "#f97316",
               strokeOpacity: 1,
               strokeWeight: 4,
               clickable: false,

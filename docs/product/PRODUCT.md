@@ -107,9 +107,11 @@ Delivery and Customer Order detail open the active Lalamove map through Track De
 loading it during the ordinary page view. The opened desktop view places map left and Order
 timeline/details right; narrow screens stack them. Admin may show the assigned rider before pickup
 when the provider makes a position available. The Customer action appears only while the Order is
-Out for delivery. The first version
-shows verified rider and destination positions without a report timestamp, road route or arrival
-estimate. Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
+Out for delivery. The tracking view shows verified rider and destination positions without a
+report timestamp or arrival estimate. When Google Routes supplies road geometry, draw a green
+suggested route from the rider's last reported position to the destination in both opened maps.
+It is neither the path already traveled nor a promise of the rider's actual road choice.
+Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
 location is temporary tracking evidence, never an Order or delivery-status authority. Keep the
 last reported rider coordinate through a temporary read failure only for the same dispatch attempt;

@@ -42,9 +42,14 @@ describe("delivery tracking projection", () => {
       contact: { name: "Rider One", phone: "+639171234567" },
       unavailable: false,
     }));
+    const suggestedRoute = vi.fn(async () => [
+      { latitude: 10.31, longitude: 123.9 },
+      { latitude: 10.315, longitude: 123.902 },
+      { latitude: 10.3173, longitude: 123.9058 },
+    ]);
     const runtime = {
       ...env,
-      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot }) },
+      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot, suggestedRoute }) },
     } as unknown as Env;
     const requestId = crypto.randomUUID();
     expect(
@@ -54,6 +59,7 @@ describe("delivery tracking projection", () => {
       await getDeliveryTracking(runtime, { orderId, locationId: "other", requestId }),
     ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
     expect(snapshot).not.toHaveBeenCalled();
+    expect(suggestedRoute).not.toHaveBeenCalled();
     const result = await getDeliveryTracking(runtime, {
       orderId,
       customerId: `customer-${orderId}`,
@@ -67,9 +73,18 @@ describe("delivery tracking projection", () => {
         destination: { latitude: 10.3173, longitude: 123.9058 },
         rider: { coordinate: { latitude: 10.31, longitude: 123.9 } },
         riderContact: { name: "Rider One", phone: "+639171234567" },
+        roadRoute: [
+          { latitude: 10.31, longitude: 123.9 },
+          { latitude: 10.315, longitude: 123.902 },
+          { latitude: 10.3173, longitude: 123.9058 },
+        ],
       },
     });
     expect(snapshot).toHaveBeenCalledOnce();
+    expect(suggestedRoute).toHaveBeenCalledWith(
+      { latitude: 10.31, longitude: 123.9 },
+      { latitude: 10.3173, longitude: 123.9058 },
+    );
     expect(
       await env.DB.prepare("SELECT driver_id FROM delivery_provider_dispatch WHERE id=?")
         .bind(`dispatch-${orderId}`)
@@ -87,16 +102,24 @@ describe("delivery tracking projection", () => {
       },
       unavailable: true,
     }));
+    const suggestedRoute = vi.fn(async () => [
+      { latitude: 10.31, longitude: 123.9 },
+      { latitude: 10.3173, longitude: 123.9058 },
+    ]);
     const runtime = {
       ...env,
-      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot }) },
+      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot, suggestedRoute }) },
     } as unknown as Env;
     const requestId = crypto.randomUUID();
     expect(
       await getDeliveryTracking(runtime, { orderId, customerId: `customer-${orderId}`, requestId }),
     ).toMatchObject({
       ok: true,
-      value: { availability: "DELAYED", rider: { coordinate: { latitude: 10.31 } } },
+      value: {
+        availability: "DELAYED",
+        rider: { coordinate: { latitude: 10.31 } },
+        roadRoute: [{ latitude: 10.31 }, { latitude: 10.3173 }],
+      },
     });
     await env.DB.prepare("UPDATE delivery_provider_dispatch SET status='COMPLETED' WHERE id=?")
       .bind(`dispatch-${orderId}`)
@@ -108,6 +131,7 @@ describe("delivery tracking projection", () => {
       value: { availability: "FINISHED", rider: null, riderContact: null },
     });
     expect(snapshot).toHaveBeenCalledOnce();
+    expect(suggestedRoute).toHaveBeenCalledOnce();
   });
 
   it("identifies a replacement attempt even when its provider read is unavailable", async () => {
@@ -193,6 +217,9 @@ describe("delivery tracking projection", () => {
             },
             unavailable: false,
           }),
+          suggestedRoute: async () => {
+            throw new Error("Routes API unavailable");
+          },
         }),
       },
     } as unknown as Env;
@@ -203,7 +230,11 @@ describe("delivery tracking projection", () => {
     });
     expect(result).toMatchObject({
       ok: true,
-      value: { availability: "LIVE", rider: { coordinate: { latitude: 10.31 } } },
+      value: {
+        availability: "LIVE",
+        rider: { coordinate: { latitude: 10.31 } },
+        roadRoute: null,
+      },
     });
     expect(warning).toHaveBeenCalledWith(
       expect.stringContaining("delivery.tracking.driver_reference_write_failed"),
