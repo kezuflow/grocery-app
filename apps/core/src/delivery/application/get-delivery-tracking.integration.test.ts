@@ -63,6 +63,7 @@ describe("delivery tracking projection", () => {
       ok: true,
       value: {
         availability: "LIVE",
+        attemptId: `dispatch-${orderId}`,
         destination: { latitude: 10.3173, longitude: 123.9058 },
         rider: { coordinate: { latitude: 10.31, longitude: 123.9 } },
         riderContact: { name: "Rider One", phone: "+639171234567" },
@@ -107,6 +108,60 @@ describe("delivery tracking projection", () => {
       value: { availability: "FINISHED", rider: null, riderContact: null },
     });
     expect(snapshot).toHaveBeenCalledOnce();
+  });
+
+  it("identifies a replacement attempt even when its provider read is unavailable", async () => {
+    const orderId = await seed();
+    const snapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        driverId: "driver-1",
+        position: {
+          coordinate: { latitude: 10.31, longitude: 123.9 },
+          updatedAt: new Date().toISOString(),
+        },
+        unavailable: false,
+      })
+      .mockRejectedValueOnce(new Error("provider unavailable"));
+    const runtime = {
+      ...env,
+      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot }) },
+    } as unknown as Env;
+    const request = {
+      orderId,
+      customerId: `customer-${orderId}`,
+      requestId: crypto.randomUUID(),
+    };
+    expect(await getDeliveryTracking(runtime, request)).toMatchObject({
+      ok: true,
+      value: { availability: "LIVE", attemptId: `dispatch-${orderId}` },
+    });
+
+    await env.DB.prepare("UPDATE delivery_provider_dispatch SET status='FAILED' WHERE id=?")
+      .bind(`dispatch-${orderId}`)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO delivery_provider_dispatch (id,attempt_sequence,delivery_job_id,provider,
+        merchant_order_id,provider_delivery_id,request_hash,request_snapshot_json,status,
+        provider_status,attempt_count,version,created_at,updated_at)
+       VALUES (?,2,?,'lalamove',?,?,'hash-2','{}','ACTIVE','ALLOCATING',1,1,2,2)`,
+    )
+      .bind(
+        `replacement-${orderId}`,
+        `job-${orderId}`,
+        `merchant-replacement-${orderId}`,
+        `provider-replacement-${orderId}`,
+      )
+      .run();
+    expect(await getDeliveryTracking(runtime, request)).toMatchObject({
+      ok: true,
+      value: {
+        availability: "UNAVAILABLE",
+        attemptId: `replacement-${orderId}`,
+        rider: null,
+      },
+    });
+    expect(snapshot).toHaveBeenCalledTimes(2);
   });
 
   it("returns a valid rider position when the optional driver-reference write fails", async () => {

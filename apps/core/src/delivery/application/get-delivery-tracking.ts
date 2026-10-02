@@ -48,10 +48,12 @@ function view(
   position: Coordinate | null,
   updatedAt: string | null,
   destinationCoordinate: Coordinate | null,
+  attemptId: string | null,
   riderContact: DeliveryTrackingView["riderContact"] = null,
 ): DeliveryTrackingView {
   return {
     availability,
+    attemptId,
     destination: destinationCoordinate,
     rider: position && updatedAt ? { coordinate: position, updatedAt } : null,
     riderContact,
@@ -97,21 +99,37 @@ export async function getDeliveryTracking(
     };
   const pin = destination(row);
   if (row.method !== "EXTERNAL" || row.provider !== "lalamove")
-    return { ok: true, value: view("NOT_SUPPORTED", null, null, null), requestId: input.requestId };
+    return {
+      ok: true,
+      value: view("NOT_SUPPORTED", null, null, null, null),
+      requestId: input.requestId,
+    };
   if (
     ["DELIVERED", "CANCELED", "EXCEPTION"].includes(row.order_status) ||
     ["DELIVERED", "CANCELED"].includes(row.job_status ?? "") ||
     ["COMPLETED", "CANCELED", "FAILED", "RETURNED"].includes(row.dispatch_status ?? "")
   )
-    return { ok: true, value: view("FINISHED", null, null, null), requestId: input.requestId };
+    return {
+      ok: true,
+      value: view("FINISHED", null, null, null, row.dispatch_id),
+      requestId: input.requestId,
+    };
   if (
     input.customerId &&
     (row.order_status !== "OUT_FOR_DELIVERY" ||
       !["EN_ROUTE", "ARRIVED"].includes(row.job_status ?? ""))
   )
-    return { ok: true, value: view("WAITING", null, null, null), requestId: input.requestId };
+    return {
+      ok: true,
+      value: view("WAITING", null, null, null, null),
+      requestId: input.requestId,
+    };
   if (!row.provider_delivery_id)
-    return { ok: true, value: view("WAITING", null, null, pin), requestId: input.requestId };
+    return {
+      ok: true,
+      value: view("WAITING", null, null, pin, row.dispatch_id),
+      requestId: input.requestId,
+    };
   try {
     const observation = await env.DELIVERY_TRACKING_HUB.getByName(
       env.LALAMOVE_MARKET || "PH",
@@ -163,11 +181,16 @@ export async function getDeliveryTracking(
         position,
         position ? lastUpdate : null,
         pin,
+        row.dispatch_id,
         observation.unavailable || !observation.driverId ? null : (observation.contact ?? null),
       ),
       requestId: input.requestId,
     };
   } catch {
-    return { ok: true, value: view("UNAVAILABLE", null, null, pin), requestId: input.requestId };
+    return {
+      ok: true,
+      value: view("UNAVAILABLE", null, null, pin, row.dispatch_id),
+      requestId: input.requestId,
+    };
   }
 }

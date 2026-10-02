@@ -10,8 +10,9 @@ import type { MapCoordinate } from "./map-types";
 function description(value: DeliveryTrackingView): string {
   switch (value.availability) {
     case "LIVE":
-    case "DELAYED":
       return "Rider's last reported location.";
+    case "DELAYED":
+      return "Rider's last reported location. Live updates are delayed.";
     case "WAITING":
       return "Waiting for the rider's location.";
     case "UNAVAILABLE":
@@ -34,6 +35,7 @@ export function DeliveryTrackingMap({
 }) {
   const { googleMapsBrowserApiKey, googleMapsMapId } = useStorefrontRuntime();
   const [snapshot, setSnapshot] = useState<DeliveryTrackingView | null>(null);
+  const lastSnapshot = useRef<DeliveryTrackingView | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const firstView = useRef<{ center: MapCoordinate; fit: readonly MapCoordinate[] } | null>(null);
@@ -50,24 +52,36 @@ export function DeliveryTrackingMap({
       const result = (await response.json()) as RpcResult<DeliveryTrackingView>;
       if (request.signal.aborted) return;
       if (!result.ok) throw new Error("Tracking unavailable");
-      setSnapshot((previous) =>
-        result.value.availability === "UNAVAILABLE" && !result.value.rider && previous?.rider
+      const previous = lastSnapshot.current;
+      const sameAttempt =
+        result.value.attemptId !== null && result.value.attemptId === previous?.attemptId;
+      if (previous?.attemptId !== result.value.attemptId) firstView.current = null;
+      const nextSnapshot: DeliveryTrackingView =
+        result.value.availability === "UNAVAILABLE" &&
+        !result.value.rider &&
+        sameAttempt &&
+        previous?.rider
           ? { ...result.value, availability: "DELAYED", rider: previous.rider }
-          : result.value,
-      );
+          : result.value;
+      lastSnapshot.current = nextSnapshot;
+      setSnapshot(nextSnapshot);
       finished.current =
         result.value.availability === "FINISHED" || result.value.availability === "NOT_SUPPORTED";
       setError(false);
-      if (!firstView.current && result.value.destination) {
-        const fit = [result.value.destination, result.value.rider?.coordinate].filter(
+      if (!firstView.current && nextSnapshot.destination) {
+        const fit = [nextSnapshot.destination, nextSnapshot.rider?.coordinate].filter(
           (point): point is MapCoordinate => Boolean(point),
         );
-        firstView.current = { center: result.value.destination, fit };
+        firstView.current = { center: nextSnapshot.destination, fit };
       }
     } catch {
       if (!request.signal.aborted) {
         setError(true);
-        setSnapshot((previous) => (previous ? { ...previous, riderContact: null } : previous));
+        if (lastSnapshot.current) {
+          const stale = { ...lastSnapshot.current, riderContact: null };
+          lastSnapshot.current = stale;
+          setSnapshot(stale);
+        }
       }
     } finally {
       if (!request.signal.aborted) setLoading(false);
@@ -76,6 +90,7 @@ export function DeliveryTrackingMap({
   }, [endpoint]);
 
   useEffect(() => {
+    lastSnapshot.current = null;
     setSnapshot(null);
     setLoading(true);
     setError(false);
@@ -108,9 +123,11 @@ export function DeliveryTrackingMap({
       <p role="status" className="text-sm">
         {loading && !snapshot
           ? "Loading delivery tracking…"
-          : snapshot
-            ? description(snapshot)
-            : "Delivery tracking could not be loaded."}
+          : error && snapshot
+            ? "Live updates are unavailable. Showing the last confirmed delivery view."
+            : snapshot
+              ? description(snapshot)
+              : "Delivery tracking could not be loaded."}
       </p>
       {error ? (
         <button type="button" className="text-sm underline" onClick={() => void load()}>
@@ -119,6 +136,7 @@ export function DeliveryTrackingMap({
       ) : null}
       {showMap && firstView.current ? (
         <GoogleMap
+          key={snapshot?.attemptId ?? "unassigned"}
           browserApiKey={googleMapsBrowserApiKey}
           mapId={googleMapsMapId}
           initialView={{ center: firstView.current.center, zoom: 14 }}

@@ -11,6 +11,8 @@ export type CustomerDeliveryTrackingRequest = AuthenticatedRequest & { orderId: 
 /** Public-safe snapshot. Every position is a provider observation, never a prediction. */
 export type DeliveryTrackingView = {
   availability: "NOT_SUPPORTED" | "WAITING" | "LIVE" | "DELAYED" | "UNAVAILABLE" | "FINISHED";
+  /** Opaque current dispatch identity; scopes a Web-only last-known rider position. */
+  attemptId: string | null;
   destination: Coordinate | null;
   rider: { coordinate: Coordinate; updatedAt: string } | null;
   /** Current assigned rider only; null when unavailable, invalidated, or finished. */

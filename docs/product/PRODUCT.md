@@ -111,7 +111,9 @@ Out for delivery. The first version
 shows verified rider and destination positions without a report timestamp, road route or arrival
 estimate. Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
-location is temporary tracking evidence, never an Order or delivery-status authority.
+location is temporary tracking evidence, never an Order or delivery-status authority. Keep the
+last reported rider coordinate through a temporary read failure only for the same dispatch attempt;
+a replacement attempt must not inherit the former rider's position.
 
 Owner-approved delivery contact, 2026-10-01: during an active Lalamove delivery, the owning
 Customer and scoped Delivery staff may call the currently assigned rider only when Lalamove's

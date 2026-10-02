@@ -305,6 +305,7 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
         ok: true,
         value: {
           availability: "LIVE",
+          attemptId: "dispatch-tracking",
           destination: { latitude: 10.3173, longitude: 123.9058 },
           rider: {
             coordinate: { latitude: 10.31, longitude: 123.9 },
@@ -316,30 +317,39 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
       }),
     });
   });
-  await page.route("**/api/admin/orders/tracking-order", (route) =>
-    route.fulfill({
+  let timelineReads = 0;
+  let timelineLabel = "Rider assigned";
+  let timelineUnavailable = false;
+  await page.route("**/api/admin/orders/tracking-order", (route) => {
+    timelineReads += 1;
+    return route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        value: {
-          orderId: "tracking-order",
-          orderNumber: "FM-TRACKING-1",
-          timeline: [
-            {
-              eventId: "event-tracking",
-              kind: "DELIVERY",
-              label: "Rider assigned",
-              status: "ASSIGNED",
-              occurredAt: "2026-10-01T07:00:00.000Z",
-              referenceId: null,
+      body: JSON.stringify(
+        timelineUnavailable
+          ? { ok: false, error: { code: "UNAVAILABLE", message: "Order unavailable" } }
+          : {
+              ok: true,
+              value: {
+                orderId: "tracking-order",
+                orderNumber: "FM-TRACKING-1",
+                timeline: [
+                  {
+                    eventId: "event-tracking",
+                    kind: "DELIVERY",
+                    label: timelineLabel,
+                    status: "ASSIGNED",
+                    occurredAt: "2026-10-01T07:00:00.000Z",
+                    referenceId: null,
+                  },
+                ],
+              },
             },
-          ],
-        },
-      }),
-    }),
-  );
+      ),
+    });
+  });
   await page.goto("/admin/delivery");
   expect(trackingReads).toBe(0);
+  expect(timelineReads).toBe(0);
   await page.getByRole("button", { name: "Track Delivery" }).click();
   const dialog = page.getByRole("dialog", { name: "Track Delivery" });
   await expect(dialog).toBeVisible();
@@ -368,6 +378,19 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
   expect(detailsPane).not.toBeNull();
   expect(detailsPane!.x).toBeGreaterThan(mapPane!.x + mapPane!.width - 2);
   expect(trackingReads).toBeGreaterThan(0);
+  const initialTimelineReads = timelineReads;
+  timelineLabel = "Pickup confirmed";
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
+    "Pickup confirmed",
+  );
+  expect(timelineReads).toBeGreaterThan(initialTimelineReads);
+  timelineUnavailable = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(dialog.getByText("Timeline updates delayed")).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
+    "Pickup confirmed",
+  );
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Track Delivery" })).toBeVisible();

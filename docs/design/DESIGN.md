@@ -11,16 +11,17 @@ attempt. The map and its tracking read mount only after that button opens the tr
 ordinary Order and Delivery page views do not load it. On desktop, the opened view places the map
 on the left and the Order timeline/details on the right. On narrow screens, the map comes first and
 the details follow beneath it. Admin uses its authorized Order timeline when available; a Delivery
-staff member without Orders read access sees the Delivery status without an invented timeline.
+staff member without Orders read access sees the Delivery status without an invented timeline. The
+Admin timeline refreshes while its view is open and marks the last confirmed events when a read fails.
 The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
 with explicit waiting, unavailable and finished text. Do not imply a road route, live
 movement between updates or an arrival estimate. Keep manual delivery in the existing status
 presentation without a map.
-Keep the last reported motorcycle position through a refresh failure, without displaying its
-report time. Replace it on a new provider location; clear it when the driver is invalidated or
-delivery finishes. The map does not show a delayed countdown or imply that a stationary marker
-is live movement.
+Keep the last reported motorcycle position through a refresh failure for the same dispatch attempt,
+without displaying its report time. Replace it on a new provider location; clear it when the
+attempt changes, the driver is invalidated, or delivery finishes. The map does not show a delayed
+countdown or imply that a stationary marker is live movement.
 The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
 For active Lalamove tracking, place a compact rider contact area below the map. Show a Call rider
 action only for a currently verified dialable phone; otherwise explain that rider contact is not

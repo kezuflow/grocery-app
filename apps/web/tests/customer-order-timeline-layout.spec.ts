@@ -125,6 +125,7 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
         ok: true,
         value: {
           availability: "LIVE",
+          attemptId: "dispatch-layout",
           destination: { latitude: 10.3173, longitude: 123.9058 },
           rider: {
             coordinate: { latitude: 10.31, longitude: 123.9 },

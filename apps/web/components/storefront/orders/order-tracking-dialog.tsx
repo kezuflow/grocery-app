@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import type { CustomerOrderDetailView } from "@freshmarkets/contracts";
-import { DeliveryTrackingMap } from "../../maps/delivery-tracking-map";
 import { OrderTimeline } from "./order-timeline";
 import { RiderContact } from "./rider-contact";
+
+const DeliveryTrackingMap = lazy(() =>
+  import("../../maps/delivery-tracking-map").then((module) => ({
+    default: module.DeliveryTrackingMap,
+  })),
+);
 
 export function OrderTrackingDialog({
   order,
@@ -69,13 +74,24 @@ export function OrderTrackingDialog({
             className="flex min-w-0 flex-col gap-4 p-5 sm:p-6 lg:overflow-y-auto"
             aria-label="Delivery map and rider contact"
           >
-            <DeliveryTrackingMap
-              endpoint={`/api/commerce/orders/${encodeURIComponent(order.orderId)}/tracking`}
-              mapClassName="h-[min(48dvh,420px)] min-h-64 w-full overflow-hidden rounded-[var(--fm-radius-surface)] lg:h-[min(65dvh,620px)]"
-              renderContact={(contact) => (
-                <RiderContact contact={contact} orderId={order.orderId} />
-              )}
-            />
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  className="flex h-[min(48dvh,420px)] min-h-64 items-center justify-center rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] text-sm text-[var(--fm-text-muted)] lg:h-[min(65dvh,620px)]"
+                >
+                  Loading delivery map…
+                </div>
+              }
+            >
+              <DeliveryTrackingMap
+                endpoint={`/api/commerce/orders/${encodeURIComponent(order.orderId)}/tracking`}
+                mapClassName="h-[min(48dvh,420px)] min-h-64 w-full overflow-hidden rounded-[var(--fm-radius-surface)] lg:h-[min(65dvh,620px)]"
+                renderContact={(contact) => (
+                  <RiderContact contact={contact} orderId={order.orderId} />
+                )}
+              />
+            </Suspense>
           </section>
           <aside
             className="flex min-w-0 flex-col gap-6 border-t border-[var(--fm-border)] p-5 sm:p-6 lg:overflow-y-auto lg:border-t-0 lg:border-l"

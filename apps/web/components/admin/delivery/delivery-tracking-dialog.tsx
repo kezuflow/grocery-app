@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type {
   AdminDeliveryOperationView,
   AdminOrderDetail,
   RpcResult,
 } from "@freshmarkets/contracts";
-import { DeliveryTrackingMap } from "@/components/maps/delivery-tracking-map";
+import { useAdminOperationalRefresh } from "@/app/admin/admin-operational-refresh-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
 import {
@@ -21,9 +21,15 @@ import { Separator } from "@/components/admin/shadcn/separator";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { RiderContact } from "./rider-contact";
 
+const DeliveryTrackingMap = lazy(() =>
+  import("@/components/maps/delivery-tracking-map").then((module) => ({
+    default: module.DeliveryTrackingMap,
+  })),
+);
+
 type OrderDetailState =
   | { phase: "loading" }
-  | { phase: "ready"; detail: AdminOrderDetail }
+  | { phase: "ready"; detail: AdminOrderDetail; stale: boolean }
   | { phase: "unavailable" };
 
 export function DeliveryTrackingDialog({
@@ -39,12 +45,16 @@ export function DeliveryTrackingDialog({
   canReadOrder: boolean;
   onClose(): void;
 }) {
+  const refreshRevision = useAdminOperationalRefresh().revision;
   const [orderState, setOrderState] = useState<OrderDetailState>({ phase: "loading" });
 
   useEffect(() => {
     if (!canReadOrder) return;
-    const controller = new AbortController();
+    let active: AbortController | null = null;
     const load = async () => {
+      if (active || document.visibilityState !== "visible") return;
+      const controller = new AbortController();
+      active = controller;
       try {
         const response = await fetch(`/api/admin/orders/${encodeURIComponent(item.orderId)}`, {
           cache: "no-store",
@@ -54,14 +64,30 @@ export function DeliveryTrackingDialog({
         if (controller.signal.aborted) return;
         if (!result.ok || result.value.orderId !== item.orderId)
           throw new Error("Order detail unavailable");
-        setOrderState({ phase: "ready", detail: result.value });
+        setOrderState({ phase: "ready", detail: result.value, stale: false });
       } catch {
-        if (!controller.signal.aborted) setOrderState({ phase: "unavailable" });
+        if (!controller.signal.aborted)
+          setOrderState((current) =>
+            current.phase === "ready" ? { ...current, stale: true } : { phase: "unavailable" },
+          );
+      } finally {
+        if (active === controller) active = null;
       }
     };
     void load();
-    return () => controller.abort();
-  }, [canReadOrder, item.orderId]);
+    const timer = window.setInterval(() => void load(), 60_000);
+    const visible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", visible);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      active?.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", visible);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [canReadOrder, item.orderId, refreshRevision]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -70,20 +96,28 @@ export function DeliveryTrackingDialog({
           <DialogTitle>Track Delivery</DialogTitle>
           <DialogDescription>
             Order{" "}
-            {orderState.phase === "ready"
+            {canReadOrder && orderState.phase === "ready"
               ? orderState.detail.orderNumber || item.orderId
               : item.orderId}
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(340px,390px)] lg:overflow-hidden">
           <section className="min-w-0 lg:overflow-y-auto" aria-label="Delivery map and contacts">
-            <DeliveryTrackingMap
-              endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: item.orderId })}`}
-              mapClassName="h-[min(48dvh,420px)] min-h-64 w-full overflow-hidden rounded-md lg:h-[min(65dvh,620px)]"
-              renderContact={(contact) => (
-                <RiderContact contact={contact} recipient={item.recipient} />
-              )}
-            />
+            <Suspense
+              fallback={
+                <div role="status" aria-label="Loading delivery map">
+                  <Skeleton className="h-[min(48dvh,420px)] w-full lg:h-[min(65dvh,620px)]" />
+                </div>
+              }
+            >
+              <DeliveryTrackingMap
+                endpoint={`/api/admin/delivery-tracking?${new URLSearchParams({ locationId, orderId: item.orderId })}`}
+                mapClassName="h-[min(48dvh,420px)] min-h-64 w-full overflow-hidden rounded-md lg:h-[min(65dvh,620px)]"
+                renderContact={(contact) => (
+                  <RiderContact contact={contact} recipient={item.recipient} />
+                )}
+              />
+            </Suspense>
           </section>
           <aside
             className="flex min-w-0 flex-col gap-5 lg:overflow-y-auto"
@@ -94,6 +128,12 @@ export function DeliveryTrackingDialog({
               <h3 className="text-lg font-semibold">Order timeline</h3>
               <p className="text-sm text-muted-foreground">Current delivery: {statusLabel}</p>
             </div>
+            {canReadOrder && orderState.phase === "ready" && orderState.stale ? (
+              <Alert>
+                <AlertTitle>Timeline updates delayed</AlertTitle>
+                <AlertDescription>Showing the last confirmed Order events.</AlertDescription>
+              </Alert>
+            ) : null}
             {canReadOrder ? (
               orderState.phase === "loading" ? (
                 <div

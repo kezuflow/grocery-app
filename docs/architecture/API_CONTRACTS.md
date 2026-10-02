@@ -13,13 +13,15 @@ This document is authoritative for target Web/Core and provider-ingress applicat
 `getAdminDeliveryTracking` requires current `delivery.read` authority for the requested location;
 `getCustomerDeliveryTracking` requires the owning Customer and returns no rider position before
 Out for delivery. Both return a provider-neutral `DeliveryTrackingView` with availability,
-destination, optional last reported rider coordinate/time, current rider name/dialable phone when
-verified by driver details, and refresh advice. Manual attempts
+an opaque current `attemptId`, destination, optional last reported rider coordinate/time,
+current rider name/dialable phone when verified by driver details, and refresh advice. Manual attempts
 return `NOT_SUPPORTED`; terminal attempts return `FINISHED`. `LIVE` and `DELAYED` distinguish
 position freshness, and unavailable provider evidence never becomes a fabricated rider pin.
 An invalidated driver reference (provider 404) cannot reuse that driver's cached coordinate;
 the resulting `WAITING` state clears the Web marker. Other temporary refresh failures may retain
-the last reported coordinate and its timestamp until a newer observation or terminal state.
+the last reported coordinate and its timestamp only for the same dispatch attempt, until a newer
+observation or terminal state. A replacement attempt clears the previous rider coordinate and
+resets the map view; no provider delivery ID or driver ID is exposed for this cache boundary.
 A failed optional driver-reference persistence does not discard an otherwise valid provider position.
 Rider contact is present only for the current assigned driver while the attempt is active; it
 clears on invalidation, unavailable read, and terminal state. Core validates the provider phone

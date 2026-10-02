@@ -34,6 +34,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "LIVE",
+            attemptId: "attempt-1",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: {
               coordinate: { latitude: 10.32, longitude: 123.91 },
@@ -76,6 +77,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "LIVE",
+            attemptId: "attempt-1",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: {
               coordinate: { latitude: 10.32, longitude: 123.91 },
@@ -93,7 +95,7 @@ describe("delivery tracking map", () => {
     await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
 
     await act(async () => window.dispatchEvent(new Event("focus")));
-    expect(container.textContent).toContain("Rider's last reported location");
+    expect(container.textContent).toContain("Showing the last confirmed delivery view");
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
     expect(container.textContent).toContain("Retry tracking");
     act(() => root.unmount());
@@ -107,6 +109,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "LIVE",
+            attemptId: "attempt-1",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: {
               coordinate: { latitude: 10.32, longitude: 123.91 },
@@ -122,6 +125,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "UNAVAILABLE",
+            attemptId: "attempt-1",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: null,
             riderContact: null,
@@ -134,6 +138,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "WAITING",
+            attemptId: "attempt-1",
             destination: { latitude: 10.31, longitude: 123.9 },
             rider: null,
             riderContact: null,
@@ -169,6 +174,52 @@ describe("delivery tracking map", () => {
     act(() => root.unmount());
   });
 
+  it("does not reuse a previous attempt's rider after a replacement provider read fails", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "LIVE",
+            attemptId: "attempt-1",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: {
+              coordinate: { latitude: 10.32, longitude: 123.91 },
+              updatedAt: new Date().toISOString(),
+            },
+            riderContact: { name: "Former rider", phone: "+639171234567" },
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          value: {
+            availability: "UNAVAILABLE",
+            attemptId: "attempt-2",
+            destination: { latitude: 10.31, longitude: 123.9 },
+            rider: null,
+            riderContact: null,
+            nextRefreshMilliseconds: 30_000,
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetcher);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<DeliveryTrackingMap endpoint="/tracking" />));
+    expect(container.textContent).toContain("rider:motorcycle");
+
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container.textContent).toContain("Rider location is temporarily unavailable");
+    expect(container.textContent).toContain("destination:pin");
+    expect(container.textContent).not.toContain("rider:motorcycle");
+    act(() => root.unmount());
+  });
+
   it("does not render a map for a manual delivery", async () => {
     vi.stubGlobal(
       "fetch",
@@ -177,6 +228,7 @@ describe("delivery tracking map", () => {
           ok: true,
           value: {
             availability: "NOT_SUPPORTED",
+            attemptId: null,
             destination: null,
             rider: null,
             nextRefreshMilliseconds: null,
