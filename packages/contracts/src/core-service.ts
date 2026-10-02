@@ -8,6 +8,7 @@ import type { InventoryTransfersService } from "./inventory-transfers";
 import type { PromotionMediaService } from "./promotion-media";
 import type { RpcResult } from "./common";
 import type { CustomerProfileService } from "./customer-profile";
+import type { CustomerEngagementService } from "./customer-engagement";
 import type {
   AddressReverseRequest,
   AddressSearchCandidate,
@@ -92,6 +93,7 @@ export interface ImplementedCoreService
     InitialAdministratorService,
     AdminCustomerService,
     CustomerProfileService,
+    CustomerEngagementService,
     AdminPrivacyService,
     AdminPromotionsService,
     PromotionMediaService,
@@ -341,6 +343,11 @@ export const coreServiceMethodNames = [
   "getSubscriptionEligibility",
   "listDeliveryCycles",
   "getCart",
+  "listSavedProducts",
+  "listPopularWithCart",
+  "setSavedProduct",
+  "getOrderFeedback",
+  "submitOrderFeedback",
   "getCheckoutBootstrap",
   "selectCartLocation",
   "mergeGuestCart",

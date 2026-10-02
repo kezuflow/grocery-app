@@ -5,6 +5,7 @@ export * from "./customer-profile";
 export * from "./admin-foundation";
 export * from "./admin-locations";
 export * from "./location-operating-schedule";
+export * from "./customer-engagement";
 export * from "./location-fulfillment-readiness";
 export * from "./admin-serviceability";
 export * from "./admin-staff-access";

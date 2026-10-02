@@ -2,7 +2,7 @@
 
 ## Native Mobile direction — owner approval 2026-09-30
 
-The Expo app uses a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy may adapt the Foodpanda Mobbin references linked in [the mobile plan](../product/MOBILE_APP_PLAN.md), using FreshMarkets branding, original components and copy. Phase 1 presents live anonymous catalog data and honest unavailable/pending states. It does not display prices without location context or imply checkout and order actions already work.
+The Expo app uses a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy may adapt the Foodpanda Mobbin references linked in [the mobile plan](../product/MOBILE_APP_PLAN.md), using FreshMarkets branding, original components and copy. The expanded customer journey uses rounded category/product cards, a clear delivery-address entry, full product detail, sign-in, private favorites, cart, quote-backed checkout, order progress and private post-delivery review. Show location-specific prices only with Core-confirmed browsing context; show order recommendations only when supported by real order data. Display unavailable, pending, empty and failure states honestly.
 
 ## Lalamove delivery tracking — owner approval 2026-09-29
 

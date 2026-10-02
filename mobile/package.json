@@ -11,12 +11,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/expo": "1.7.1",
     "@freshmarkets/contracts": "workspace:*",
+    "better-auth": "1.7.1",
     "expo": "~57.0.26",
     "expo-constants": "~57.0.20",
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.11",
+    "expo-location": "~57.0.20",
+    "expo-network": "~57.0.2",
     "expo-router": "~57.0.24",
+    "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",

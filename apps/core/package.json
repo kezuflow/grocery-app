@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.1",
+    "@better-auth/expo": "1.7.1",
     "@freshmarkets/config": "workspace:*",
     "@freshmarkets/contracts": "workspace:*",
     "@freshmarkets/domain-shared": "workspace:*",

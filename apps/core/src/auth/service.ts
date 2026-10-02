@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
+import { expo } from "@better-auth/expo";
 import type { Auth } from "better-auth";
 import {
   createRuntimeAuthEmailDelivery,
@@ -96,7 +97,14 @@ export function createAuth(
           },
         }
       : {},
-    trustedOrigins: [...runtime.auth.trustedOrigins],
+    trustedOrigins: [
+      ...runtime.auth.trustedOrigins,
+      "freshmarkets://",
+      ...(runtime.deployed
+        ? []
+        : ["http://[::1]:8081", "http://localhost:8081", "http://127.0.0.1:8081"]),
+    ],
+    plugins: [expo()],
     advanced: {
       // The public Web Worker forwards Cloudflare's edge-set single client IP,
       // never a caller-controlled X-Forwarded-For chain.

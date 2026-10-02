@@ -1,16 +1,32 @@
-import { Image, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import type { CatalogProduct } from "@freshmarkets/contracts";
 import { palette } from "@/constants/palette";
 
-const marketplaceOrigin = process.env.EXPO_PUBLIC_MARKETPLACE_ORIGIN;
+const marketplaceOrigin = process.env.EXPO_PUBLIC_MARKETPLACE_ORIGIN ?? "https://freshmarkets.ph";
 
-export function ProductCard({ product }: { product: CatalogProduct }) {
+export function ProductCard({ product, width }: { product: CatalogProduct; width?: number }) {
+  const router = useRouter();
   const imageUrl =
     product.media?.src && marketplaceOrigin
       ? new URL(product.media.src, marketplaceOrigin).toString()
       : null;
+  const priced = product.variants.find(
+    (variant) => variant.priceMinor !== null && variant.currency,
+  );
+  const price =
+    priced && priced.currency
+      ? new Intl.NumberFormat("en-PH", { style: "currency", currency: priced.currency }).format(
+          (priced.sale?.priceMinor ?? priced.priceMinor!) / 100,
+        )
+      : null;
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View ${product.name}`}
+      onPress={() => router.push({ pathname: "/product/[slug]", params: { slug: product.slug } })}
+      style={({ pressed }) => [styles.card, width ? { width } : null, pressed && styles.pressed]}
+    >
       {imageUrl ? (
         <Image
           source={{ uri: imageUrl }}
@@ -28,8 +44,10 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       <Text style={styles.name} numberOfLines={2}>
         {product.name}
       </Text>
-      <Text style={styles.note}>Choose a location for prices</Text>
-    </View>
+      <Text style={[styles.note, price && styles.price]}>
+        {price ?? "Choose a location for prices"}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -42,6 +60,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 10,
   },
+  pressed: { opacity: 0.72 },
   image: {
     width: "100%",
     height: 122,
@@ -61,4 +80,5 @@ const styles = StyleSheet.create({
   },
   name: { color: palette.ink, fontSize: 15, fontWeight: "700", minHeight: 40, marginTop: 5 },
   note: { color: palette.muted, fontSize: 11, marginTop: 8 },
+  price: { color: palette.green, fontSize: 15, fontWeight: "800" },
 });

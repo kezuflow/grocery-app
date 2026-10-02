@@ -3,6 +3,13 @@
   "name": "freshmarkets-mobile-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-04",
+  "ratelimits": [
+    {
+      "name": "ADDRESS_LOOKUP_RATE",
+      "namespace_id": "210202601",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
   "services": [
     {
       "binding": "CORE",
@@ -18,6 +25,13 @@
   "env": {
     "staging": {
       "workers_dev": true,
+      "ratelimits": [
+        {
+          "name": "ADDRESS_LOOKUP_RATE",
+          "namespace_id": "210202602",
+          "simple": { "limit": 30, "period": 60 }
+        }
+      ],
       "services": [
         {
           "binding": "CORE",
@@ -28,6 +42,17 @@
     },
     "production": {
       "workers_dev": true,
+      "ratelimits": [
+        {
+          "name": "ADDRESS_LOOKUP_RATE",
+          "namespace_id": "210202603",
+          "simple": { "limit": 30, "period": 60 }
+        }
+      ],
+      "vars": {
+        "AUTH_PUBLIC_ORIGIN": "https://freshmarkets.ph",
+        "PAYMENT_RETURN_URL": "https://freshmarkets.ph/orders?payment=return"
+      },
       "services": [
         {
           "binding": "CORE",

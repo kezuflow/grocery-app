@@ -305,6 +305,7 @@ import { getAdminSkuPrices as getAdminSkuPricesQuery } from "./admin/application
 import { createCheckoutRpc } from "./entrypoint/checkout-rpc";
 import { createPaymentsRpc } from "./entrypoint/payments-rpc";
 import { createOrdersRpc } from "./entrypoint/orders-rpc";
+import { createCustomerEngagementRpc } from "./entrypoint/customer-engagement-rpc";
 import { createMessagesRpc } from "./entrypoint/messages-rpc";
 import { createInventoryTransfersRpc } from "./entrypoint/inventory-transfers-rpc";
 import { createOperationsRpc } from "./entrypoint/operations-rpc";
@@ -1057,6 +1058,7 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
   private readonly checkoutRpc = createCheckoutRpc(this.rpcContext);
   private readonly paymentsRpc = createPaymentsRpc(this.rpcContext);
   private readonly ordersRpc = createOrdersRpc(this.rpcContext);
+  private readonly customerEngagementRpc = createCustomerEngagementRpc(this.rpcContext);
   private readonly messagesRpc = createMessagesRpc(this.rpcContext, () =>
     this.scheduleMessagePublication(),
   );
@@ -3393,6 +3395,21 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
 
   async getCart(input: AuthenticatedRequest) {
     return this.checkoutRpc.getCart(input);
+  }
+  async listSavedProducts(input: AuthenticatedRequest) {
+    return this.customerEngagementRpc.listSavedProducts(input);
+  }
+  async listPopularWithCart(input: AuthenticatedRequest) {
+    return this.customerEngagementRpc.listPopularWithCart(input);
+  }
+  async setSavedProduct(input: import("@freshmarkets/contracts").SetSavedProductRequest) {
+    return this.customerEngagementRpc.setSavedProduct(input);
+  }
+  async getOrderFeedback(input: import("@freshmarkets/contracts").OrderFeedbackRequest) {
+    return this.customerEngagementRpc.getOrderFeedback(input);
+  }
+  async submitOrderFeedback(input: import("@freshmarkets/contracts").SubmitOrderFeedbackRequest) {
+    return this.customerEngagementRpc.submitOrderFeedback(input);
   }
   async selectCartLocation(input: import("@freshmarkets/contracts").SelectCartLocationRequest) {
     return this.checkoutRpc.selectCartLocation(input);
