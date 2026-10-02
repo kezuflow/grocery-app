@@ -37,6 +37,7 @@ export function DeliveryTrackingMap({
   const [snapshot, setSnapshot] = useState<DeliveryTrackingView | null>(null);
   const lastSnapshot = useRef<DeliveryTrackingView | null>(null);
   const [error, setError] = useState(false);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const firstView = useRef<{ center: MapCoordinate; fit: readonly MapCoordinate[] } | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -55,7 +56,10 @@ export function DeliveryTrackingMap({
       const previous = lastSnapshot.current;
       const sameAttempt =
         result.value.attemptId !== null && result.value.attemptId === previous?.attemptId;
-      if (previous?.attemptId !== result.value.attemptId) firstView.current = null;
+      if (previous?.attemptId !== result.value.attemptId) {
+        firstView.current = null;
+        setMapUnavailable(false);
+      }
       const sameRiderPosition =
         sameAttempt &&
         previous?.rider?.coordinate.latitude === result.value.rider?.coordinate.latitude &&
@@ -105,6 +109,7 @@ export function DeliveryTrackingMap({
     setSnapshot(null);
     setLoading(true);
     setError(false);
+    setMapUnavailable(false);
     firstView.current = null;
     finished.current = false;
     void load();
@@ -181,9 +186,10 @@ export function DeliveryTrackingMap({
           ariaLabel="Delivery tracking map"
           className={mapClassName}
           fallback={<p className="text-sm">Map is unavailable. Delivery status is shown above.</p>}
+          onUnavailable={() => setMapUnavailable(true)}
         />
       ) : null}
-      {rider && showMap ? (
+      {rider && showMap && !mapUnavailable ? (
         <p className="text-xs text-muted-foreground">
           {snapshot?.roadRoute
             ? "Green line shows a suggested road route from the rider’s last reported location. The rider may take a different road."

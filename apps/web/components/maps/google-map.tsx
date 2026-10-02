@@ -21,10 +21,33 @@ import type {
 
 const GOOGLE_MAPS_VERSION = "weekly";
 const GOOGLE_MAPS_CONFIGURATION_STATE = "__freshmarketsGoogleMapsBrowserOptions";
+const GOOGLE_MAPS_AUTH_FAILURE_CALLBACKS = "__freshmarketsMapsAuthFailureCallbacks";
 
 type GoogleMapsRuntime = typeof globalThis & {
   [GOOGLE_MAPS_CONFIGURATION_STATE]?: Readonly<{ browserApiKey: string; mapId: string }>;
+  [GOOGLE_MAPS_AUTH_FAILURE_CALLBACKS]?: Set<() => void>;
+  gm_authFailure?: () => void;
 };
+
+function subscribeToMapsAuthFailure(callback: () => void): () => void {
+  const runtime = globalThis as GoogleMapsRuntime;
+  let callbacks = runtime[GOOGLE_MAPS_AUTH_FAILURE_CALLBACKS];
+  if (!callbacks) {
+    const subscribers = new Set<() => void>();
+    const previous = runtime.gm_authFailure;
+    runtime.gm_authFailure = () => {
+      try {
+        previous?.();
+      } finally {
+        for (const listener of subscribers) listener();
+      }
+    };
+    runtime[GOOGLE_MAPS_AUTH_FAILURE_CALLBACKS] = subscribers;
+    callbacks = subscribers;
+  }
+  callbacks.add(callback);
+  return () => callbacks.delete(callback);
+}
 
 function configureGoogleMaps(browserApiKey: string, mapId: string): void {
   // Persist through Vite HMR. Re-running setOptions warns with the full browser
@@ -419,6 +442,7 @@ export type GoogleMapProps = Readonly<{
   ariaLabel?: string;
   className?: string;
   fallback?: ReactNode;
+  onUnavailable?: () => void;
   onPinMove?: (position: MapCoordinate) => void;
   onMapClick?: (position: MapCoordinate) => void;
   onPointActivate?: (pointId: string) => void;
@@ -436,6 +460,7 @@ export function GoogleMap({
   ariaLabel = "Map",
   className,
   fallback,
+  onUnavailable,
   onPinMove,
   onMapClick,
   onPointActivate,
@@ -451,6 +476,7 @@ export function GoogleMap({
   const pointActivateRef = useRef(onPointActivate);
   const areaSelectRef = useRef(onAreaSelect);
   const areaCancelRef = useRef(onAreaSelectionCancel);
+  const unavailableRef = useRef(onUnavailable);
   const [error, setError] = useState<"configuration" | "load" | null>(null);
   sceneRef.current = scene;
   pinMoveRef.current = onPinMove;
@@ -458,11 +484,13 @@ export function GoogleMap({
   pointActivateRef.current = onPointActivate;
   areaSelectRef.current = onAreaSelect;
   areaCancelRef.current = onAreaSelectionCancel;
+  unavailableRef.current = onUnavailable;
 
   const failLoadedController = (controller: MapController): void => {
     if (controllerRef.current === controller) controllerRef.current = undefined;
     disposeController(controller);
     setError("load");
+    unavailableRef.current?.();
   };
 
   useEffect(() => {
@@ -472,12 +500,24 @@ export function GoogleMap({
     const configuredMapId = mapId?.trim();
     if (!container || !key || !configuredMapId) {
       setError("configuration");
+      unavailableRef.current?.();
       return;
     }
 
     let disposed = false;
     let failed = false;
     let ownedController: MapController | undefined;
+    const fail = () => {
+      if (disposed || failed || generationRef.current !== generation) return;
+      failed = true;
+      if (ownedController && controllerRef.current === ownedController) {
+        disposeController(ownedController);
+        controllerRef.current = undefined;
+      }
+      setError("load");
+      unavailableRef.current?.();
+    };
+    const unsubscribeAuthFailure = subscribeToMapsAuthFailure(fail);
     const initialScene = sceneRef.current;
     setError(null);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -496,15 +536,7 @@ export function GoogleMap({
         onAreaSelect: (firstCorner, secondCorner) =>
           areaSelectRef.current?.(firstCorner, secondCorner),
         onAreaSelectionCancel: () => areaCancelRef.current?.(),
-        onLoadError: () => {
-          if (disposed || generationRef.current !== generation) return;
-          failed = true;
-          if (ownedController && controllerRef.current === ownedController) {
-            disposeController(ownedController);
-            controllerRef.current = undefined;
-          }
-          setError("load");
-        },
+        onLoadError: fail,
       })
       .then((controller) => {
         ownedController = controller;
@@ -520,12 +552,11 @@ export function GoogleMap({
             failLoadedController(controller);
           }
       })
-      .catch(() => {
-        if (!disposed && generationRef.current === generation) setError("load");
-      });
+      .catch(fail);
 
     return () => {
       disposed = true;
+      unsubscribeAuthFailure();
       if (ownedController && controllerRef.current === ownedController)
         controllerRef.current = undefined;
       if (ownedController) disposeController(ownedController);
@@ -551,7 +582,15 @@ export function GoogleMap({
 
   if (error)
     return (
-      <div role="alert" className={className}>
+      <div
+        role="alert"
+        className={[
+          className,
+          "flex flex-col items-center justify-center gap-1 bg-muted/40 p-4 text-center",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <p>
           {error === "configuration"
             ? "Google Maps configuration is unavailable."

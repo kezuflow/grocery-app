@@ -182,6 +182,25 @@ describe("GoogleMap", () => {
     act(() => root.unmount());
   });
 
+  it("replaces a map when Google reports an authentication failure", async () => {
+    const adapter = new FakeMapAdapter();
+    const onUnavailable = vi.fn();
+    const { container, root } = mountMap({
+      adapter,
+      fallback: <span>Map unavailable</span>,
+      onUnavailable,
+    });
+    await flushEffects();
+    await act(async () => {
+      (window as Window & { gm_authFailure?: () => void }).gm_authFailure?.();
+    });
+    expect(container.textContent).toContain("Google Maps could not be loaded.");
+    expect(container.textContent).toContain("Map unavailable");
+    expect(adapter.controllers[0]?.destroyed).toBe(true);
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
+
   it("can leave a map when provider marker cleanup throws", async () => {
     const controller = {
       updateScene: vi.fn(),

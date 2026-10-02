@@ -149,7 +149,6 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
   await page.getByRole("button", { name: "Track Delivery" }).click();
   const dialog = page.getByRole("dialog", { name: "Track delivery" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Green line shows a suggested road route");
   await expect(dialog.getByRole("list", { name: "Order progress" })).toBeVisible();
   await expect(
     dialog.getByRole("status").filter({ hasText: "Rider's last reported location" }),
@@ -159,6 +158,13 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
       .getByRole("region", { name: "Delivery tracking map" })
       .or(dialog.getByText("Map is unavailable. Delivery status is shown above.")),
   ).toBeVisible();
+  await page.evaluate(() =>
+    (window as Window & { gm_authFailure?: () => void }).gm_authFailure?.(),
+  );
+  await expect(
+    dialog.getByText("Map is unavailable. Delivery status is shown above."),
+  ).toBeVisible();
+  await expect(dialog).not.toContainText("Green line shows a suggested road route");
   await expect(dialog.getByRole("link", { name: "Call rider" })).toHaveAttribute(
     "href",
     "tel:+639181234567",

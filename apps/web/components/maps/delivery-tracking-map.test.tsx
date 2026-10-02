@@ -13,6 +13,7 @@ vi.mock("../storefront/storefront-runtime", () => ({
 vi.mock("./google-map", () => ({
   GoogleMap: ({
     scene,
+    onUnavailable,
   }: {
     scene: {
       points: { id: string; kind?: string }[];
@@ -22,10 +23,14 @@ vi.mock("./google-map", () => ({
         points: { latitude: number; longitude: number }[];
       }[];
     };
+    onUnavailable?: () => void;
   }) => (
     <div data-testid="map">
       {scene.points.map((point) => `${point.id}:${point.kind ?? "pin"}`).join(",")}
       {scene.lineStrings?.map((line) => `${line.id}:${line.tone}:${line.points.length}`).join(",")}
+      <button type="button" onClick={onUnavailable}>
+        Simulate map failure
+      </button>
     </div>
   ),
 }));
@@ -82,6 +87,8 @@ describe("delivery tracking map", () => {
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
     expect(container.textContent).toContain("suggested-road-route:storefront:3");
     expect(container.textContent).toContain("Green line shows a suggested road route");
+    act(() => (container.querySelector("button") as HTMLButtonElement | null)?.click());
+    expect(container.textContent).not.toContain("Green line shows a suggested road route");
     expect(container.querySelector('a[href="tel:+639171234567"]')?.textContent).toBe("Call rider");
     expect(fetch).toHaveBeenCalledWith("/tracking", expect.objectContaining({ cache: "no-store" }));
     act(() => root.unmount());

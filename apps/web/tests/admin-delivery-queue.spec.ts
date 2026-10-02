@@ -358,7 +358,18 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
   await page.getByRole("button", { name: "Track Delivery" }).click();
   const dialog = page.getByRole("dialog", { name: "Track Delivery" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Green line shows a suggested road route");
+  await expect(
+    dialog
+      .getByRole("region", { name: "Delivery tracking map" })
+      .or(dialog.getByText("Map is unavailable. Delivery status is shown above.")),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    (window as Window & { gm_authFailure?: () => void }).gm_authFailure?.(),
+  );
+  await expect(
+    dialog.getByText("Map is unavailable. Delivery status is shown above."),
+  ).toBeVisible();
+  await expect(dialog).not.toContainText("Green line shows a suggested road route");
   await expect(
     dialog.getByRole("status").filter({ hasText: "Rider's last reported" }),
   ).toBeVisible();
