@@ -87,7 +87,7 @@ describe("delivery tracking map", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "Rider's last reported location.",
     );
-    expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.textContent).toContain("destination:delivery-destination,rider:motorcycle");
     expect(container.textContent).toContain("suggested-road-route:storefront:6");
     expect(container.querySelector('[data-testid="map"]')?.getAttribute("data-route")).toBe(
       JSON.stringify([
@@ -139,7 +139,7 @@ describe("delivery tracking map", () => {
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Showing the last confirmed delivery view");
-    expect(container.textContent).toContain("destination:pin,rider:motorcycle");
+    expect(container.textContent).toContain("destination:delivery-destination,rider:motorcycle");
     expect(container.textContent).toContain("suggested-road-route:storefront:2");
     expect(container.textContent).toContain("Retry tracking");
     act(() => root.unmount());
@@ -271,7 +271,7 @@ describe("delivery tracking map", () => {
 
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.textContent).toContain("Rider location is temporarily unavailable");
-    expect(container.textContent).toContain("destination:pin");
+    expect(container.textContent).toContain("destination:delivery-destination");
     expect(container.textContent).not.toContain("rider:motorcycle");
     expect(container.textContent).not.toContain("suggested-road-route");
     act(() => root.unmount());

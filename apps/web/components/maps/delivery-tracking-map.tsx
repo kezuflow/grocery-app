@@ -165,6 +165,7 @@ export function DeliveryTrackingMap({
                 position: destination,
                 label: "Delivery destination",
                 tone: "available",
+                kind: "delivery-destination",
               },
               ...(rider
                 ? [

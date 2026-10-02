@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeMapAdapter } from "./fake-map-adapter";
 import { GoogleMap, motorcycleMarkerContent } from "./google-map";
+import { createStaticLocationPinMarkerContent, LOCATION_PIN_RED } from "./location-pin-marker";
 import type { MapAdapter, MapAdapterInitialization, MapController } from "./map-types";
 
 const center = { longitude: 123.8854, latitude: 10.3157 };
@@ -63,12 +64,18 @@ afterEach(() => {
 });
 
 describe("GoogleMap", () => {
-  it("renders an accessible motorcycle marker for the rider", () => {
-    const marker = motorcycleMarkerContent("Rider's last reported location", "#23658a");
-    expect(marker.getAttribute("aria-label")).toBe("Rider's last reported location");
-    expect(marker.querySelectorAll("svg circle")).toHaveLength(2);
-    expect(marker.querySelector("svg path")).not.toBeNull();
-    expect(marker.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  it("uses the same pin silhouette for the red destination and green motorcycle", () => {
+    const destination = createStaticLocationPinMarkerContent("Delivery destination");
+    const rider = motorcycleMarkerContent("Rider's last reported location", "#00b14f");
+    expect(destination.getAttribute("aria-label")).toBe("Delivery destination");
+    expect(destination.dataset.mapPointPin).toBe("destination");
+    expect(destination.querySelector("svg path")?.getAttribute("fill")).toBe(LOCATION_PIN_RED);
+    expect(destination.querySelector("[data-map-pin-glyph]")).toBeNull();
+    expect(rider.getAttribute("aria-label")).toBe("Rider's last reported location");
+    expect(rider.dataset.mapPointPin).toBe("motorcycle");
+    expect(rider.querySelector("svg path")?.getAttribute("fill")).toBe("#00b14f");
+    expect(rider.querySelectorAll('[data-map-pin-glyph="motorcycle"] circle')).toHaveLength(2);
+    expect(rider.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("passes browser-safe configuration and scene data to the adapter", async () => {

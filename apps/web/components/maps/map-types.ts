@@ -13,7 +13,7 @@ export type MapPoint = Readonly<{
   position: MapCoordinate;
   label?: string;
   tone?: "available" | "retry" | "assigned" | "blocked";
-  kind?: "motorcycle";
+  kind?: "delivery-destination" | "motorcycle";
 }>;
 
 export type MapDraggablePin = Readonly<{

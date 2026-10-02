@@ -18,8 +18,10 @@ uses the same Core-confirmed milestone states and achieved times as Storefront, 
 role that cannot read Order detail; its event timeline remains beneath the strip.
 The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
-with explicit waiting, unavailable and finished text. Draw an available Google suggested road
-route in the Storefront action green from the last rider position to the destination; label it as
+with explicit waiting, unavailable and finished text. Use the existing red address-pin silhouette
+for the destination and the same pin silhouette in Storefront action green with a motorcycle glyph
+for the rider. Draw an available Google suggested road route in the Storefront action green from
+the last rider position to the destination; label it as
 suggested, and keep the pins when routing fails. Do not imply live movement between updates or an
 arrival estimate. Keep manual delivery in the existing status
 presentation without a map.
