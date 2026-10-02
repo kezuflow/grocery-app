@@ -131,11 +131,7 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
             coordinate: { latitude: 10.31, longitude: 123.9 },
             updatedAt: new Date().toISOString(),
           },
-          roadRoute: [
-            { latitude: 10.31, longitude: 123.9 },
-            { latitude: 10.314, longitude: 123.903 },
-            { latitude: 10.3173, longitude: 123.9058 },
-          ],
+          roadRoute: null,
           riderContact: { name: "Rider One", phone: "+639181234567" },
           nextRefreshMilliseconds: 30_000,
         },

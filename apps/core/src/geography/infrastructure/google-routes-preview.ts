@@ -10,7 +10,7 @@ import {
 } from "./provider-telemetry";
 
 const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
-const DEFAULT_TIMEOUT_MILLISECONDS = 5_000;
+const DEFAULT_TIMEOUT_MILLISECONDS = 8_000;
 const MINIMUM_COORDINATES = 2;
 const MAXIMUM_COORDINATES = 25;
 const FIELD_MASK = [
@@ -50,7 +50,7 @@ export class GoogleRoutesPreview implements RoutePreviewPort {
         travelMode: "DRIVE",
         computeAlternativeRoutes: false,
         polylineEncoding: "GEO_JSON_LINESTRING",
-        polylineQuality: "OVERVIEW",
+        polylineQuality: "HIGH_QUALITY",
       });
       if (!Array.isArray(payload.routes)) throw new RoutePreviewError("ROUTE_INVALID_RESPONSE");
       if (payload.routes.length === 0) throw new RoutePreviewError("ROUTE_NOT_FOUND");

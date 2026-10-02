@@ -25,7 +25,7 @@ vi.mock("./google-map", () => ({
     };
     onUnavailable?: () => void;
   }) => (
-    <div data-testid="map">
+    <div data-testid="map" data-route={JSON.stringify(scene.lineStrings?.[0]?.points ?? null)}>
       {scene.points.map((point) => `${point.id}:${point.kind ?? "pin"}`).join(",")}
       {scene.lineStrings?.map((line) => `${line.id}:${line.tone}:${line.points.length}`).join(",")}
       <button type="button" onClick={onUnavailable}>
@@ -59,7 +59,10 @@ describe("delivery tracking map", () => {
             },
             roadRoute: [
               { latitude: 10.32, longitude: 123.91 },
-              { latitude: 10.315, longitude: 123.905 },
+              { latitude: 10.32, longitude: 123.907 },
+              { latitude: 10.317, longitude: 123.907 },
+              { latitude: 10.317, longitude: 123.904 },
+              { latitude: 10.31, longitude: 123.904 },
               { latitude: 10.31, longitude: 123.9 },
             ],
             riderContact: { name: "Rider One", phone: "+639171234567" },
@@ -85,7 +88,17 @@ describe("delivery tracking map", () => {
       "Rider's last reported location.",
     );
     expect(container.textContent).toContain("destination:pin,rider:motorcycle");
-    expect(container.textContent).toContain("suggested-road-route:storefront:3");
+    expect(container.textContent).toContain("suggested-road-route:storefront:6");
+    expect(container.querySelector('[data-testid="map"]')?.getAttribute("data-route")).toBe(
+      JSON.stringify([
+        { latitude: 10.32, longitude: 123.91 },
+        { latitude: 10.32, longitude: 123.907 },
+        { latitude: 10.317, longitude: 123.907 },
+        { latitude: 10.317, longitude: 123.904 },
+        { latitude: 10.31, longitude: 123.904 },
+        { latitude: 10.31, longitude: 123.9 },
+      ]),
+    );
     expect(container.textContent).toContain("Green line shows a suggested road route");
     act(() => (container.querySelector("button") as HTMLButtonElement | null)?.click());
     expect(container.textContent).not.toContain("Green line shows a suggested road route");

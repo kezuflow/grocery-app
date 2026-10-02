@@ -30,7 +30,7 @@ The scoped Admin Delivery queue also returns the saved delivery-stop recipient c
 operational calls, separate from the Customer account phone.
 The Web tracking GET routes carry the existing authentication context and request ID to Core.
 For an authorized active Lalamove attempt with valid rider and destination coordinates, Core may
-return `roadRoute` as Google Routes overview geometry. It is `null` when unconfigured, limited,
+return `roadRoute` as Google Routes high-quality road geometry. It is `null` when unconfigured, limited,
 unavailable or inapplicable; a route failure does not erase the observed rider or destination.
 The route is a suggested `DRIVE` road path from the last reported point, not travel history, ETA,
 or delivery-status evidence. The Core key makes the provider call only after the tracking view is

@@ -19,7 +19,11 @@ const response = {
           type: "LineString",
           coordinates: [
             [123.8854, 10.3157],
+            [123.8854, 10.3172],
+            [123.8871, 10.3172],
+            [123.8871, 10.32],
             [123.9, 10.32],
+            [123.9, 10.326],
             [123.91, 10.33],
           ],
         },
@@ -56,6 +60,7 @@ describe("Google Routes preview", () => {
     expect(JSON.parse(String(requestedInit?.body))).toMatchObject({
       travelMode: "DRIVE",
       polylineEncoding: "GEO_JSON_LINESTRING",
+      polylineQuality: "HIGH_QUALITY",
       intermediates: [{ location: { latLng: input.orderedDestinations[0] } }],
     });
   });
