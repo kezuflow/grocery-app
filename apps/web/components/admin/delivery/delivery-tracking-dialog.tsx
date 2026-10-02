@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/shadcn/dialog";
 import { Separator } from "@/components/admin/shadcn/separator";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { AdminOrderProgress } from "./admin-order-progress";
 import { RiderContact } from "./rider-contact";
 
 const DeliveryTrackingMap = lazy(() =>
@@ -101,7 +102,7 @@ export function DeliveryTrackingDialog({
               : item.orderId}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(340px,390px)] lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(400px,480px)] lg:overflow-hidden">
           <section className="min-w-0 lg:overflow-y-auto" aria-label="Delivery map and contacts">
             <Suspense
               fallback={
@@ -124,6 +125,9 @@ export function DeliveryTrackingDialog({
             aria-label="Order details and timeline"
           >
             <Separator className="lg:hidden" />
+            {canReadOrder && orderState.phase === "ready" && orderState.detail.progress ? (
+              <AdminOrderProgress progress={orderState.detail.progress} />
+            ) : null}
             <div className="flex flex-col gap-1">
               <h3 className="text-lg font-semibold">Order timeline</h3>
               <p className="text-sm text-muted-foreground">Current delivery: {statusLabel}</p>
@@ -131,7 +135,9 @@ export function DeliveryTrackingDialog({
             {canReadOrder && orderState.phase === "ready" && orderState.stale ? (
               <Alert>
                 <AlertTitle>Timeline updates delayed</AlertTitle>
-                <AlertDescription>Showing the last confirmed Order events.</AlertDescription>
+                <AlertDescription>
+                  Showing the last confirmed Order progress and events.
+                </AlertDescription>
               </Alert>
             ) : null}
             {canReadOrder ? (

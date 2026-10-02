@@ -69,7 +69,7 @@ export function OrderTrackingDialog({
             Close
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,390px)] lg:overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(400px,480px)] lg:overflow-hidden">
           <section
             className="flex min-w-0 flex-col gap-4 p-5 sm:p-6 lg:overflow-y-auto"
             aria-label="Delivery map and rider contact"
@@ -97,11 +97,12 @@ export function OrderTrackingDialog({
             className="flex min-w-0 flex-col gap-6 border-t border-[var(--fm-border)] p-5 sm:p-6 lg:overflow-y-auto lg:border-t-0 lg:border-l"
             aria-label="Order details and progress"
           >
-            <OrderTimeline
-              progress={order.progress}
-              orientation="vertical"
-              headingId="tracking-order-timeline-heading"
-            />
+            <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] p-4">
+              <OrderTimeline
+                progress={order.progress}
+                headingId="tracking-order-timeline-heading"
+              />
+            </div>
             <section
               className="border-t border-[var(--fm-border)] pt-5"
               aria-labelledby="tracking-delivery-details-heading"

@@ -111,6 +111,9 @@ Out for delivery. The tracking view shows verified rider and destination positio
 report timestamp or arrival estimate. When Google Routes supplies road geometry, draw a green
 suggested route from the rider's last reported position to the destination in both opened maps.
 It is neither the path already traveled nor a promise of the rider's actual road choice.
+The opened view also shows the four-stage Order progress strip (Payment successful, Packed, Out
+for delivery, Delivered) from Core-confirmed states and achievement times. Admin displays it only
+with authorized Order detail access and retains the separate event timeline.
 Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
 location is temporary tracking evidence, never an Order or delivery-status authority. Keep the

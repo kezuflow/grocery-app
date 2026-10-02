@@ -333,6 +333,23 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
               value: {
                 orderId: "tracking-order",
                 orderNumber: "FM-TRACKING-1",
+                progress: {
+                  steps: [
+                    {
+                      key: "PAYMENT",
+                      state: "COMPLETE",
+                      achievedAt: "2026-10-01T05:00:00.000Z",
+                    },
+                    {
+                      key: "PACKED",
+                      state: "COMPLETE",
+                      achievedAt: "2026-10-01T06:00:00.000Z",
+                    },
+                    { key: "OUT_FOR_DELIVERY", state: "CURRENT", achievedAt: null },
+                    { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
+                  ],
+                  detail: "Your order is packed. A rider has been assigned.",
+                },
                 timeline: [
                   {
                     eventId: "event-tracking",
@@ -372,6 +389,11 @@ test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) =>
   await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
     "Rider assigned",
   );
+  const progress = dialog.getByRole("list", { name: "Order progress" });
+  await expect(progress).toBeVisible();
+  await expect(progress.locator("[data-progress-state]")).toHaveCount(4);
+  await expect(progress.locator('[aria-current="step"]')).toContainText("Out for delivery");
+  await expect(progress.locator("time")).toHaveCount(2);
   await expect(dialog).toContainText("Current delivery: Rider assigned");
   await expect(dialog.getByRole("link", { name: "Call rider" })).toHaveAttribute(
     "href",

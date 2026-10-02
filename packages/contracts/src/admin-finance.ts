@@ -1,6 +1,7 @@
 import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
 import type { OrderCancellationView } from "./orders";
+import type { CustomerOrderProgressView } from "./orders";
 
 export const orderIssueCategories = [
   "MISSING_ITEM",
@@ -153,6 +154,8 @@ export type AdminTimelineEntry = {
 };
 
 export type AdminOrderDetail = AdminOrderSummary & {
+  /** Omitted by older Core revisions during a paired Worker rollout. */
+  progress?: CustomerOrderProgressView | null;
   allowedActions: ReadonlyArray<"CANCEL">;
   customer: AdminOrderCustomerView;
   financial: AdminOrderFinancialView;

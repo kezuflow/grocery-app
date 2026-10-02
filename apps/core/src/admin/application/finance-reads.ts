@@ -36,6 +36,7 @@ import {
   orderLifecycleStates,
   type OrderLifecycleState,
 } from "../../orders/domain/order-state-machine";
+import { buildOrderProgress } from "../../orders/application/build-order-progress";
 import {
   boundListLimit,
   decodeStaffCursor,
@@ -447,6 +448,29 @@ export async function getAdminOrder(
       updatedAt: number;
     }>();
 
+  const progressEvidence = await deps.db
+    .prepare(
+      `SELECT checkout.status AS checkoutPaymentStatus,
+              checkout.updated_at AS checkoutPaymentUpdatedAt,
+              (SELECT MAX(a.occurred_at) FROM audit_event a
+               WHERE a.aggregate_type='fulfillment_record' AND a.aggregate_id=o.id
+                 AND a.action='OPERATIONS.FULFILLMENT_ADVANCED'
+                 AND CASE WHEN json_valid(a.after_json) THEN json_extract(a.after_json,'$.status') END='PACKED') AS packedAt,
+              (SELECT dispatch.handed_over_at FROM delivery_provider_dispatch dispatch
+               JOIN delivery_job job ON job.id=dispatch.delivery_job_id
+               WHERE job.order_id=o.id ORDER BY dispatch.attempt_sequence DESC LIMIT 1) AS handedOverAt
+       FROM grocery_order o
+       LEFT JOIN payment_attempt checkout ON checkout.id=o.payment_id
+       WHERE o.id=?`,
+    )
+    .bind(request.orderId)
+    .first<{
+      checkoutPaymentStatus: string | null;
+      checkoutPaymentUpdatedAt: number | null;
+      packedAt: number | null;
+      handedOverAt: number | null;
+    }>();
+
   const financeExceptions = await deps.db
     .prepare(
       `SELECT id, kind, status, last_error_code AS details, created_at AS createdAt,
@@ -488,6 +512,19 @@ export async function getAdminOrder(
 
   const detail: AdminOrderDetail = {
     ...toOrderSummary(row),
+    progress:
+      progressEvidence && row.hasPaymentReaction && row.status !== "PENDING_PAYMENT"
+        ? buildOrderProgress({
+            status: row.status,
+            committedAt: row.committedAt,
+            ...progressEvidence,
+            fulfillmentStatus: fulfillment?.status ?? null,
+            fulfillmentUpdatedAt: fulfillment?.updatedAt ?? null,
+            deliveryStatus: delivery?.status ?? null,
+            deliveryUpdatedAt: delivery?.updatedAt ?? null,
+            deliveredAt: delivery?.deliveredAt ?? null,
+          })
+        : null,
     allowedActions: access.value.capabilities.includes("orders.manage")
       ? allowedOrderActions(row, Date.now())
       : [],

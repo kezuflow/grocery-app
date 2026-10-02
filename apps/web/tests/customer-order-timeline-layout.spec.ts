@@ -146,6 +146,7 @@ test("shows provider tracking only after customer handoff", async ({ page }) => 
   const dialog = page.getByRole("dialog", { name: "Track delivery" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("list", { name: "Order progress" })).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Order progress" })).toHaveClass(/grid-cols-4/);
   await expect(
     dialog.getByRole("status").filter({ hasText: "Rider's last reported location" }),
   ).toContainText("Rider's last reported location");

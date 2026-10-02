@@ -36,6 +36,11 @@ The route is a suggested `DRIVE` road path from the last reported point, not tra
 or delivery-status evidence. The Core key makes the provider call only after the tracking view is
 opened; the Web map displays this geometry on Google Maps in the Storefront accent green.
 
+Authorized `getAdminOrder` detail adds an optional `progress` projection of the same four
+Core-authored Customer Order milestones, states, achieved times and detail. The field may be absent
+during a paired Worker rollout; Web shows no progress strip when it is absent or the caller lacks
+Orders read access. The detailed Admin event timeline remains a separate projection.
+
 Domain-oriented commands in this document are the contract. Removed broad compatibility RPCs must not be reintroduced as a second business implementation.
 
 Core owns implementation and authorization. Web owns presentation adapters. Contract changes follow the pre-launch interface policy in `ENGINEERING.md`. Update all consumers coherently and remove unused compatibility paths when safe; use additive evolution where retained deployments or temporary Web/Core version skew actually require it.

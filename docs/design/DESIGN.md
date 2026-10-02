@@ -13,6 +13,9 @@ on the left and the Order timeline/details on the right. On narrow screens, the 
 the details follow beneath it. Admin uses its authorized Order timeline when available; a Delivery
 staff member without Orders read access sees the Delivery status without an invented timeline. The
 Admin timeline refreshes while its view is open and marks the last confirmed events when a read fails.
+The opened view places the four-step horizontal Order progress strip in the details column. Admin
+uses the same Core-confirmed milestone states and achieved times as Storefront, with no strip for a
+role that cannot read Order detail; its event timeline remains beneath the strip.
 The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
 with explicit waiting, unavailable and finished text. Draw an available Google suggested road

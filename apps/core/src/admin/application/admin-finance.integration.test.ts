@@ -216,6 +216,16 @@ describe("finance administration", () => {
       addressLines: ["Ayala Center Cebu", "Luz", "Cebu City", "Central Visayas", "6000"],
     });
     expect(detail.value.allowedActions).toEqual(["CANCEL"]);
+    expect(detail.value.progress?.steps.map((step) => step.state)).toEqual([
+      "COMPLETE",
+      "CURRENT",
+      "UPCOMING",
+      "UPCOMING",
+    ]);
+    expect(detail.value.progress?.steps[0]?.achievedAt).not.toBeNull();
+    expect(detail.value.progress?.steps.slice(1).every((step) => step.achievedAt === null)).toBe(
+      true,
+    );
 
     await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?")
       .bind(orderId)
@@ -459,6 +469,39 @@ describe("finance administration", () => {
       expect.objectContaining({ source: "FINANCE", kind: "TRANSIENT_FAILURE" }),
     ]);
     expect(detail.value.timeline.length).toBeGreaterThanOrEqual(5);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE fulfillment_record SET status='PACKED', updated_at=? WHERE order_id=?",
+      ).bind(now + 1_000, orderId),
+      env.DB.prepare("UPDATE delivery_job SET status='EN_ROUTE', updated_at=? WHERE id=?").bind(
+        now + 2_000,
+        deliveryJobId,
+      ),
+      env.DB.prepare("UPDATE grocery_order SET status='OUT_FOR_DELIVERY' WHERE id=?").bind(orderId),
+    ]);
+    const enRoute = await core.getAdminOrder({
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId,
+    });
+    expect(enRoute).toMatchObject({
+      ok: true,
+      value: {
+        progress: {
+          steps: [
+            { key: "PAYMENT", state: "COMPLETE" },
+            { key: "PACKED", state: "COMPLETE", achievedAt: new Date(now + 1_000).toISOString() },
+            {
+              key: "OUT_FOR_DELIVERY",
+              state: "COMPLETE",
+              achievedAt: new Date(now + 2_000).toISOString(),
+            },
+            { key: "DELIVERED", state: "CURRENT", achievedAt: null },
+          ],
+        },
+      },
+    });
   });
 
   it("composes payment overview and detail without leaking provider identifiers or payload hashes", async () => {
