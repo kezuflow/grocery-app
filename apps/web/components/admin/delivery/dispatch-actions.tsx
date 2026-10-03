@@ -2,6 +2,7 @@
 
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
@@ -98,10 +99,13 @@ export function DispatchActions({
         />
       ) : null}
       {!canBook &&
-      !item.externalDispatch &&
-      !item.manualDelivery &&
+      !canAssign &&
+      ["UNASSIGNED", "RETRY_SCHEDULED", "FAILED"].includes(item.status) &&
       item.courierPickup.unavailableReason ? (
-        <p className="text-sm text-muted-foreground">{item.courierPickup.unavailableReason}</p>
+        <Alert>
+          <AlertTitle>Lalamove pickup unavailable</AlertTitle>
+          <AlertDescription>{item.courierPickup.unavailableReason}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );

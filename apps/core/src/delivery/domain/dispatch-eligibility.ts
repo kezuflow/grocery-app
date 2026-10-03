@@ -56,7 +56,7 @@ export function dispatchUnavailableMessage(eligibility: DispatchEligibility): st
     case "FULFILLMENT_NOT_PACKED":
       return "Finish packing the paid order before choosing a delivery method.";
     case "DELIVERY_WINDOW_UNAVAILABLE":
-      return "The committed delivery promise is unavailable or has passed.";
+      return "The current delivery deadline is unavailable or has passed.";
     case "DELIVERY_EXECUTION_UNRESOLVED":
       return "Resolve the current or uncertain delivery attempt before starting another.";
     default:
