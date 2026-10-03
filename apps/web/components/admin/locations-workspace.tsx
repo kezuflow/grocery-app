@@ -23,6 +23,7 @@ import { PageHeader, ListPageSection } from "./admin-shell";
 import { useAdminCommandIntent } from "./admin-command-state";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { Button } from "@/components/admin/shadcn/button";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
 import { Input } from "@/components/admin/shadcn/input";
 import { Label } from "@/components/admin/shadcn/label";
 import {
@@ -198,8 +199,16 @@ export function LocationsWorkspace({
       latitude: draft.latitude.trim() ? Number(draft.latitude) : NaN,
       longitude: draft.longitude.trim() ? Number(draft.longitude) : NaN,
     });
-    if (!parsed.success || !reason.trim()) {
-      setNotice("Set the pickup pin and complete the address, capabilities and reason.");
+    if (!reason.trim()) {
+      setNotice("Enter a reason for this change before saving.");
+      return;
+    }
+    if (!parsed.success) {
+      setNotice("Check the location name, pickup address, pin coordinates and capabilities.");
+      return;
+    }
+    if (!editing && (!draft.marketId || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(draft.code.trim()))) {
+      setNotice("Choose a market and enter a valid location code before saving.");
       return;
     }
     void submit(
@@ -243,7 +252,7 @@ export function LocationsWorkspace({
           </Link>
         </div>
       )}
-      {notice && (
+      {notice && editing === undefined && (
         <p role="status" className="mb-4 text-sm">
           {notice}
         </p>
@@ -364,6 +373,7 @@ export function LocationsWorkspace({
           {editing !== undefined && (
             <ListPageSection title={editing ? `Review ${editing.name}` : "New location"}>
               <form
+                noValidate
                 className="space-y-5 p-5"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -606,6 +616,11 @@ export function LocationsWorkspace({
                   Save these details to continue setup. Activation and dispatch readiness are
                   separate actions on the final review step.
                 </p>
+                {notice && (
+                  <Alert variant={notice === "Location saved." ? "default" : "destructive"}>
+                    <AlertDescription>{notice}</AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="submit" disabled={intent.pending || !result.value.canManage}>
                     {pendingPayload

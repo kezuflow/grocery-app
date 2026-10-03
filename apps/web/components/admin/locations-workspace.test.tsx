@@ -233,6 +233,50 @@ describe("location workspace", () => {
       "Test street",
     );
   });
+  it("shows a rejected pin save beside the form action", async () => {
+    fetchMock.mockImplementation(async (url, options) => {
+      if (String(url).includes("address-reverse")) throw new Error("offline");
+      if (options?.method === "POST")
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            requestId: "test",
+            error: {
+              code: "CONFLICT",
+              message:
+                "Resolve current deliveries or started payments before changing the pickup origin",
+              requestId: "test",
+            },
+          }),
+        );
+      return response(view);
+    });
+    await act(async () =>
+      root.render(
+        <LocationsWorkspace
+          detailLocationId="warehouse"
+          initial={{ ok: true, requestId: "test", value: view }}
+        />,
+      ),
+    );
+    await act(async () => button("Move test pin").click());
+    const reason = container.querySelector<HTMLInputElement>("#location-reason")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        reason,
+        "Move pickup entrance",
+      );
+      reason.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const alert = container.querySelector("form [role=alert]");
+    expect(alert?.textContent).toContain("Resolve current deliveries or started payments");
+    expect(alert?.nextElementSibling?.textContent).toContain("Save details");
+  });
   it("keeps temporary provider provenance when an operator moves the search-result pin", async () => {
     const writes: RequestInit[] = [];
     fetchMock.mockImplementation(async (url, options) => {

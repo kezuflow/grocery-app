@@ -42,6 +42,17 @@ test("desktop location draft keeps its URL target across scope changes", async (
   await expect(name).toHaveValue(savedName);
 });
 
+test("location pin save explains a missing reason beside the action", async ({
+  adminPage: page,
+}) => {
+  await page.goto("/admin/locations/location-cebu-central");
+  await page.getByLabel("Pickup pin latitude").fill("10.321");
+  await page.getByRole("button", { name: "Save and continue", exact: true }).click();
+  const form = page.locator("form");
+  await expect(form.getByRole("alert")).toContainText("Enter a reason for this change");
+  await expect(page).toHaveURL(/\/admin\/locations\/location-cebu-central$/);
+});
+
 test("desktop location setup saves each step and explicitly enables dispatch", async ({
   adminPage: page,
 }) => {
