@@ -261,6 +261,7 @@ describe("Lalamove delivery adapter", () => {
       providerRequestId: "rate-limit-1",
       error: {
         code: "LALAMOVE_HTTP_429",
+        providerErrorCode: "ERR_RATE_LIMIT",
         retryable: true,
         outcomeUnknown: false,
         retryAfterMilliseconds: 3_000,
@@ -341,6 +342,72 @@ describe("Lalamove delivery adapter", () => {
     ])
       expect(serializedRequests).not.toContain(excludedOption);
   });
+
+  it.each([
+    { id: "ERR_INSUFFICIENT_CREDIT", httpStatus: 402 },
+    { id: "ERR_PHONE_NUMBER_INVALID", httpStatus: 422 },
+    { id: "+639171234567", httpStatus: 422 },
+  ])(
+    "preserves only safe error IDs in diagnostics for a rejected create: $id",
+    async ({ id, httpStatus }) => {
+      const events: DeliveryProviderTelemetryEvent[] = [];
+      const provider = createLalamoveProvider({
+        apiKey: "key-1",
+        apiSecret: "secret-1",
+        market: "PH",
+        language: "en_PH",
+        environment: "sandbox",
+        fetcher: vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(quotationResponse())
+          .mockResolvedValueOnce(
+            Response.json(
+              {
+                errors: [
+                  {
+                    id,
+                    message: request.recipient.name,
+                    detail: request.destination.formattedAddress,
+                  },
+                ],
+                meta: { requestId: "provider-request-1" },
+              },
+              { status: httpStatus },
+            ),
+          ),
+        telemetry: { clock: () => 0, sink: (event) => events.push(event) },
+      });
+      const providerErrorCode = id.startsWith("ERR_") ? { providerErrorCode: id } : {};
+      expect(await provider.create(request)).toEqual({
+        ok: false,
+        providerRequestId: "provider-request-1",
+        error: {
+          code: `LALAMOVE_HTTP_${httpStatus}`,
+          retryable: false,
+          outcomeUnknown: false,
+          ...providerErrorCode,
+        },
+      });
+      expect(events).toEqual([
+        {
+          operation: "LALAMOVE_CREATE",
+          result: "FAILURE",
+          durationMilliseconds: 0,
+          errorCode: `LALAMOVE_HTTP_${httpStatus}`,
+          providerRequestId: "provider-request-1",
+          ...providerErrorCode,
+        },
+      ]);
+      const diagnostics = JSON.stringify(events);
+      for (const privateValue of [
+        request.recipient.name,
+        request.destination.formattedAddress,
+        request.recipient.phoneE164,
+        "secret-1",
+      ])
+        expect(diagnostics).not.toContain(privateValue);
+    },
+  );
 
   it("marks an interrupted order create as unknown and emits customer-data-free telemetry", async () => {
     const events: DeliveryProviderTelemetryEvent[] = [];

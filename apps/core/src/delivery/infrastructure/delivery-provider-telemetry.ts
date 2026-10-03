@@ -16,6 +16,7 @@ export type DeliveryProviderTelemetryEvent = Readonly<{
   result: "SUCCESS" | "FAILURE";
   durationMilliseconds: number;
   errorCode?: string;
+  providerErrorCode?: string;
   providerRequestId?: string;
 }>;
 

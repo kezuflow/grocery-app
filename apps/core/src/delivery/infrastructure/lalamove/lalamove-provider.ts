@@ -414,12 +414,20 @@ export function createLalamoveProvider(
     const requestId =
       providerRequestId(response) ?? nonemptyString(object(object(payload)?.meta)?.requestId);
     if (!response.ok) {
+      const errors = object(payload)?.errors;
+      const providerErrorCode = Array.isArray(errors)
+        ? errors
+            .slice(0, 10)
+            .map((entry) => object(entry)?.id)
+            .find((id): id is string => typeof id === "string" && /^ERR_[A-Z0-9_]{1,64}$/.test(id))
+        : undefined;
       const retryable =
         response.status === 408 || response.status === 429 || response.status >= 500;
       return {
         ok: false,
         error: {
           code: `LALAMOVE_HTTP_${response.status}`,
+          ...(providerErrorCode ? { providerErrorCode } : {}),
           retryable,
           outcomeUnknown: mutationSent && retryable,
           ...(response.status === 429
@@ -470,7 +478,14 @@ export function createLalamoveProvider(
     emitDeliveryProviderTelemetry(telemetry, startedAt, {
       operation,
       result: result.ok ? "SUCCESS" : "FAILURE",
-      ...(!result.ok ? { errorCode: result.error.code } : {}),
+      ...(!result.ok
+        ? {
+            errorCode: result.error.code,
+            ...(result.error.providerErrorCode
+              ? { providerErrorCode: result.error.providerErrorCode }
+              : {}),
+          }
+        : {}),
       ...(result.providerRequestId ? { providerRequestId: result.providerRequestId } : {}),
     });
     return result;

@@ -291,7 +291,9 @@ Do not rely on Cache Components, complete PPR semantics, cache profiles/tags, ro
 - Trace checkout attempts, provider payment references, webhook event IDs, order commitment, refunds, queue jobs, and reconciliation outcomes.
 - Geocoding logs may include operation, duration, result category, and stable error code, but never address text, contact data, coordinates, provider payloads, or temporary candidate contents.
 - Delivery-provider diagnostics may include the operation, duration, stable result/error code,
-  FreshMarkets dispatch identity, and the provider request ID returned in response headers. The
+  FreshMarkets dispatch identity, and the provider request ID returned in response headers or the
+  documented response metadata. Lalamove also retains the first bounded `ERR_` identifier from
+  its error envelope as `providerErrorCode`, without provider messages or details. The
   actual provider request still contains the recipient name, phone, complete destination,
   coordinates, and supported instructions needed to perform delivery; none of those values,
   authentication tokens, request/response bodies, tracking URLs, or pickup PINs belong in

@@ -52,6 +52,8 @@ export type CreateDeliveryRequest = DeliveryProviderRequest &
 
 export type DeliveryProviderError = Readonly<{
   code: string;
+  /** Bounded provider error identifier; never its message, details or raw payload. */
+  providerErrorCode?: string;
   retryable: boolean;
   /** Provider-declared backoff for rate limiting, when available. */
   retryAfterMilliseconds?: number;

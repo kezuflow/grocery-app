@@ -1,7 +1,13 @@
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { locationManager } from "../../test-location-fixtures";
 import { seedTestCycle } from "../../test-commerce-fixtures";
+import { createAuth, type AuthEnvironment } from "../../auth/service";
+import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
+import {
+  requestExternalDelivery,
+  upsertLocationDeliveryProfile,
+} from "./delivery-provider-operations";
 
 const core = exports.default;
 const locationId = "location-cebu-central";
@@ -43,6 +49,114 @@ async function fixture() {
 }
 
 describe("Scheduled purchase and per-order packing", () => {
+  it("books a courier after current Scheduled packing without a legacy goods ledger", async () => {
+    const { manager, cycleId, orderId } = await fixture();
+    const now = Date.now();
+    const jobId = crypto.randomUUID();
+    const address = JSON.stringify({
+      address_components_json: JSON.stringify({
+        addressLine1: "25 Test Street",
+        city: "Cebu City",
+        countryCode: "PH",
+      }),
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('delivery.read','delivery.manage')",
+      ).bind(manager.id),
+      env.DB.prepare("UPDATE order_item SET shipping_weight_grams=500 WHERE order_id=?").bind(
+        orderId,
+      ),
+      env.DB.prepare(
+        "INSERT INTO order_fulfillment_snapshot(order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,fulfillment_mode,sourcing_modes_json,created_at) VALUES (?,?,?,'zone-cebu-city-core',?,?,'SCHEDULED','[]',?)",
+      ).bind(orderId, locationId, cycleId, now - 120_000, now + 3_600_000, now),
+      env.DB.prepare(
+        "INSERT INTO delivery_job(id,order_id,cycle_id,fulfillment_mode,location_id,zone_id,status,context_resolution_status,address_snapshot_json,version,created_at,updated_at) VALUES (?,?,?,'SCHEDULED',?,'zone-cebu-city-core','UNASSIGNED','RESOLVED',?,1,?,?)",
+      ).bind(jobId, orderId, cycleId, locationId, address, now, now),
+      env.DB.prepare(
+        "INSERT INTO delivery_stop(id,delivery_job_id,latitude,longitude,address_snapshot_json,contact_snapshot_json,status,version,created_at,updated_at) VALUES (?,?,10.33,123.91,?,?,'UNASSIGNED',1,?,?)",
+      ).bind(
+        crypto.randomUUID(),
+        jobId,
+        address,
+        JSON.stringify({ recipient: "Test recipient", phone: "+639171234567" }),
+        now,
+        now,
+      ),
+    ]);
+    const base = { headers: manager.headers, requestId: crypto.randomUUID(), locationId };
+    expect(
+      await core.completeAdminScheduledWeek({
+        ...base,
+        cycleId,
+        expectedVersion: 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await core.advanceAdminFulfillment({
+        ...base,
+        orderId,
+        action: "COMPLETE_SCHEDULED_PACKING",
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { status: "PACKED" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) n FROM cycle_goods_movement WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ n: 0 });
+    const deps = { auth: createAuth(env as Env & AuthEnvironment), db: env.DB };
+    const profile = await env.DB.prepare(
+      "SELECT version FROM fulfillment_location_delivery_profile WHERE location_id=?",
+    )
+      .bind(locationId)
+      .first<{ version: number }>();
+    expect(
+      await upsertLocationDeliveryProfile(deps, {
+        ...base,
+        senderName: "Test sender",
+        phoneE164: "+639171110000",
+        formattedAddress: "1 Test Road, Cebu City",
+        addressLine1: "1 Test Road",
+        city: "Cebu City",
+        countryCode: "PH",
+        expectedVersion: profile?.version ?? 0,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
+    const booking = {
+      ...base,
+      jobId,
+      expectedVersion: 1,
+      providerCode: "lalamove" as const,
+      pickup: { kind: "IMMEDIATE" as const },
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const bookingDeps = { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now };
+    const booked = await requestExternalDelivery(bookingDeps, booking);
+    expect(booked, JSON.stringify(booked)).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+    expect(await requestExternalDelivery(bookingDeps, booking)).toEqual(booked);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(jobId)
+        .first(),
+    ).toEqual({ n: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM idempotency_records WHERE scope='admin.delivery.externalDispatch' AND idempotency_key=?",
+      )
+        .bind(booking.idempotencyKey)
+        .first(),
+    ).toEqual({ status: "SUCCEEDED" });
+  });
+
   it("uses the editable procurement time to gate purchase, then packs one paid Order", async () => {
     const { manager, cycleId, orderId } = await fixture();
     const otherOrderId = crypto.randomUUID();

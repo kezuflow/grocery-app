@@ -1,6 +1,5 @@
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
-import { scheduledDeliveryGoodsReadySql } from "../../fulfillment/application/scheduled-delivery-readiness";
 import { deliveryRetryReadySql } from "./delivery-retry-readiness";
 
 type DispatchStatus =
@@ -216,7 +215,6 @@ export async function requestProviderDelivery(
              ELSE COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) END
              FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)>?
            AND (job.fulfillment_mode!='INSTANT' OR ? IS NULL)
-           AND (job.fulfillment_mode!='SCHEDULED' OR ${scheduledDeliveryGoodsReadySql})
            AND (? IS NULL OR (?>? AND ?<=(SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
              FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
        ) AND (? IS NULL OR EXISTS (
