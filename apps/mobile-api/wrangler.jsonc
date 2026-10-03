@@ -7,8 +7,8 @@
     {
       "name": "ADDRESS_LOOKUP_RATE",
       "namespace_id": "210202601",
-      "simple": { "limit": 30, "period": 60 }
-    }
+      "simple": { "limit": 30, "period": 60 },
+    },
   ],
   "services": [
     {
@@ -29,8 +29,8 @@
         {
           "name": "ADDRESS_LOOKUP_RATE",
           "namespace_id": "210202602",
-          "simple": { "limit": 30, "period": 60 }
-        }
+          "simple": { "limit": 30, "period": 60 },
+        },
       ],
       "services": [
         {
@@ -46,12 +46,12 @@
         {
           "name": "ADDRESS_LOOKUP_RATE",
           "namespace_id": "210202603",
-          "simple": { "limit": 30, "period": 60 }
-        }
+          "simple": { "limit": 30, "period": 60 },
+        },
       ],
       "vars": {
         "AUTH_PUBLIC_ORIGIN": "https://freshmarkets.ph",
-        "PAYMENT_RETURN_URL": "https://freshmarkets.ph/orders?payment=return"
+        "PAYMENT_RETURN_URL": "https://freshmarkets.ph/orders?payment=return",
       },
       "services": [
         {
