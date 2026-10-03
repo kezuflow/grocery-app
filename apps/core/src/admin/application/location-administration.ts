@@ -408,12 +408,17 @@ async function execute(
       current.longitude !== next.longitude ||
       JSON.stringify(current.address) !== JSON.stringify(next.address))
   ) {
-    // Origin changes must not silently relocate a delivery or a payment already underway.
+    // Origin changes must not silently relocate a delivery or a payment that can still commit.
+    // Scheduled attempts past Procurement starts can only enter financial recovery/refund,
+    // never a new Order, so they no longer reserve the old pickup origin.
     const originInUse = `EXISTS (SELECT 1 FROM delivery_job WHERE location_id=? AND status NOT IN ('DELIVERED','CANCELED'))
       OR EXISTS (SELECT 1 FROM checkout_quote quote JOIN payment_intent payment
         ON payment.subject_type='checkout_quote' AND payment.subject_id=quote.id
         AND payment.purpose='GROCERY_CHECKOUT' AND payment.status NOT IN ('FAILED','CANCELED')
-        WHERE quote.status='ACTIVE' AND json_extract(quote.cycle_snapshot_json,'$.locationId')=?)`;
+        WHERE quote.status='ACTIVE' AND json_extract(quote.cycle_snapshot_json,'$.locationId')=?
+        AND NOT (quote.fulfillment_mode='SCHEDULED' AND EXISTS (
+          SELECT 1 FROM delivery_cycle_schedule schedule WHERE schedule.cycle_id=quote.delivery_cycle_id
+          AND schedule.procurement_at<=CAST(unixepoch('subsec')*1000 AS INTEGER))))`;
     if (
       await deps.db
         .prepare(`SELECT 1 blocked WHERE ${originInUse}`)

@@ -354,6 +354,83 @@ describe("Global location setup", () => {
         .first(),
     ).toEqual({ latitude: request.latitude, version: 2 });
   });
+  it("releases the origin after a Scheduled payment can no longer commit an Order", async () => {
+    const manager = await staff();
+    const request = {
+      ...createRequest(manager.headers),
+      purpose: "CUSTOMER_FULFILLMENT" as const,
+      capabilities: ["PICKING", "PACKING", "DISPATCH"] as const,
+    };
+    const created = await core.createAdminLocation(request);
+    if (!created.ok) throw new Error("Create failed");
+    const id = crypto.randomUUID();
+    const cycleId = `settled-${id}`;
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO customer(id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
+      ).bind(id, `auth-${id}`, now, now),
+      env.DB.prepare(
+        "INSERT INTO customer_address(id,customer_id,label,recipient,phone,address_json,latitude,longitude,status,version,created_at,updated_at) VALUES (?,?,'Home','Customer','+639171234567','{}',10.3,123.9,'active',1,?,?)",
+      ).bind(id, id, now, now),
+      env.DB.prepare(
+        "INSERT INTO delivery_cycle(id,market_id,name,order_opens_at,cutoff_at,delivery_date,status,capacity,allocated,version) VALUES (?,'market-metro-cebu','Settled test',?,?,?,'OPEN',0,0,1)",
+      ).bind(cycleId, now - 3_600_000, now - 120_000, now + 86_400_000),
+      env.DB.prepare(
+        "INSERT INTO delivery_cycle_schedule(cycle_id,timezone,procurement_at,preparation_at,pickup_at,created_at,updated_at) VALUES (?,'Asia/Manila',?,?,?,?,?)",
+      ).bind(cycleId, now + 60_000, now + 3_600_000, now + 7_200_000, now, now),
+      env.DB.prepare(`INSERT INTO checkout_quote
+        (id,attempt_id,customer_id,cart_id,address_id,delivery_cycle_id,fulfillment_mode,currency,subtotal_minor,total_minor,lines_json,cycle_snapshot_json,status,version,expires_at,idempotency_key,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,'SCHEDULED','PHP',100,100,'[]',?,'ACTIVE',1,?,?,?,?)`).bind(
+        id,
+        id,
+        id,
+        `cart-${id}`,
+        id,
+        cycleId,
+        JSON.stringify({ locationId: created.value.locationId }),
+        now + 60_000,
+        id,
+        now,
+        now,
+      ),
+      env.DB.prepare(`INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at)
+        VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','REQUIRES_ACTION',?,1,?,?)`).bind(
+        id,
+        id,
+        id,
+        id,
+        now - 180_000,
+        now,
+      ),
+    ]);
+    const move = {
+      ...request,
+      latitude: 10.4,
+      locationId: created.value.locationId,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect((await core.updateAdminLocation(move)).ok).toBe(false);
+    await noEffects(move.idempotencyKey);
+    // Simulate reaching Procurement starts without changing the unresolved Payment.
+    await env.DB.prepare("UPDATE delivery_cycle_schedule SET procurement_at=? WHERE cycle_id=?")
+      .bind(now - 60_000, cycleId)
+      .run();
+    const updated = await core.updateAdminLocation(move);
+    expect(updated).toMatchObject({ ok: true, value: { latitude: 10.4, version: 2 } });
+    expect(await core.updateAdminLocation(move)).toEqual(updated);
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(id).first(),
+    ).toEqual({
+      status: "REQUIRES_ACTION",
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM checkout_quote WHERE id=?").bind(id).first(),
+    ).toEqual({
+      status: "ACTIVE",
+    });
+  });
   it("creates, edits, activates and deactivates with exact replay, audit and scoped visibility", async () => {
     const manager = await staff();
     const request = createRequest(manager.headers);
