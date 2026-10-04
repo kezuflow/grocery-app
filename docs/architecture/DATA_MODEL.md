@@ -1,10 +1,10 @@
 # Conceptual D1 Data Model
 
-Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
+Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../product/PRODUCT.md#source-provenance).
 
 ## Purpose and Conventions
 
-This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `PRODUCT.md` and lifecycle vocabulary from `STATE_MACHINES.md`. This is a conceptual model, not a frozen implementation. FreshMarkets is pre-launch: better schema designs and migration-baseline revisions are permitted under `ENGINEERING.md`, with repositories, contracts, seeds, generators, and tests updated together. Existing tables or migration numbers are not a reason to preserve a worse model.
+This document is authoritative for the implementation-ready conceptual relational model and persistence ownership; business meaning comes from `PRODUCT.md` and lifecycle vocabulary from `STATE_MACHINES.md`. Applied [migrations](../../apps/core/migrations/) and schema generators define exact columns/indexes; this guide owns persistence meaning, integrity and retained evidence. This is a conceptual model, not a frozen implementation. FreshMarkets is pre-launch: better schema designs and migration-baseline revisions are permitted under `ENGINEERING.md`, with repositories, contracts, seeds, generators, and tests updated together. Existing tables or migration numbers are not a reason to preserve a worse model.
 
 Conventions:
 
@@ -415,7 +415,7 @@ Critical batches include:
 
 Use conditional updates against expected state/version and verify affected-row counts for client/application/admin lifecycle commands. Duplicate idempotency keys with different request hashes are conflicts; identical replay returns the original result. Provider events use durable `(provider, provider_event_id)` deduplication and handler-side conditional updates; concurrent aggregate changes cause safe retry/reconciliation, never an invented webhook version.
 
-## Customer launch Completion Migration
+## Retained launch evidence
 
 Migration `0047_customer_mvp_completion.sql` is historical implementation evidence. It added controlled Promotion rules/segments and Quote/commit claims; Order numbers and issue-line links; complete additive-amendment financial/version fields; durable notification outbox/attempt tables; and `order_invoice_readiness`. Forward migrations `0056`-`0059` add separate singleton selling-state/mode authority, provider quotation and courier-cost evidence, exact Scheduled demand/procurement fields, refund reconciliation fields, Queue publication/lease/dead-letter evidence, and deterministic missing historical Order numbers. Existing committed snapshots and compatibility fleet/mock rows remain intact.
 
@@ -429,7 +429,7 @@ Follow [ENGINEERING.md](ENGINEERING.md#pre-launch-schema-and-interface-policy) a
 
 Rebuild or squash a disposable pre-launch baseline when useful; preserve upgrade paths only for retained supported deployments. Validate initialization from empty, referential integrity, meaningful constraints, realistic multi-record fixtures, and Worker/D1 commands. A zero-row conditional write is not a failed SQL statement: every dependent effect must remain guarded, and a rejected command must leave business state unchanged. A schema revision must update the migration verifiers instead of removing checks that expose real integrity failures.
 
-## Commerce Alignment Storage Additions
+## Commerce persistence ownership
 
 - `inventory_transfer`: source warehouse, destination, state/version, creator, dispatch instant and command identity. Immutable lines identify pool and dispatched quantity.
 - `inventory_transfer_line`: immutable transfer/pool identity, product-name and GRAM/PIECE unit snapshots, positive planned/dispatched quantity, and cumulative accepted, lost and verified-returned quantities constrained to the line total. Current observed damaged and missing quantities classify only the remaining outstanding amount. Pool identity is unique within a transfer. The root pins source/destination and creation evidence; dispatch time is immutable once recorded. Root version protects competing lifecycle commands. Drafts do not reserve or deduct stock.
@@ -446,9 +446,9 @@ Rebuild or squash a disposable pre-launch baseline when useful; preserve upgrade
 
 These are target ownership/constraint requirements, not an assertion that migrations have landed. Physical names must follow the repository conventions. Use the current chain as the supported starting baseline; verify forward changes and clean creation without resetting retained environments.
 
-## Application schema hardening (0069)
+## Schema integrity and retained upgrades
 
-Migration `0070_price_capabilities.sql` adds `prices.read` and `prices.manage` permission definitions. It adds no role grants and changes no existing price or permission evidence. Staff & Access assigns the dedicated capabilities explicitly; Global scope remains a separate Core requirement. The migration verifier checks the 0069 rebuild's complete row preservation separately from these additive definitions, then checks unchanged prior permissions, role grants and prices across 0070.
+Migration `0070_price_capabilities.sql` adds `prices.read` and `prices.manage` permission definitions. It adds no role grants and changes no existing price or permission evidence. Staff & Access assigns the dedicated capabilities explicitly; current write scope follows PRODUCT's fulfillment-location Product-preview rule, rather than the historical Global-only editor. The migration verifier checks the 0069 rebuild's complete row preservation separately from these additive definitions, then checks unchanged prior permissions, role grants and prices across 0070.
 
 Owner policy-placement follow-up: Quote claims are unique per `(checkout_quote_id, promotion_id, price_component)`, and Order applications per Order/amendment/promotion/component plus unique redemption identity. This permits representing distinct benefits without duplicating an effect. Core enforces distinct selected-item sales, one grocery benefit on full-price eligible lines and one delivery benefit, including guarded payment commitment. Global/customer/grant usage count triggers are removed; transactional Core checks protect each redemption, including system grants and the retained trial path. Changes to usage counting must preserve atomicity and replay.
 

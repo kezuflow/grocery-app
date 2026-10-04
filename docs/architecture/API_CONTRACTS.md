@@ -8,7 +8,7 @@ The mobile adapter proxies `/api/auth/*` to Core Better Auth with the Expo plugi
 
 `GET /v1/favorites` and `POST /v1/favorites` list or set the current customer's saved active products. `GET /v1/cart/popular` returns at most eight active products with an available SKU at the cart location, co-purchased with current active-cart products across at least two paid orders from two customers; an empty array means no supported rail. `GET /v1/orders/:id/feedback` and `POST /v1/orders/:id/feedback` read and submit one private rating (1–5) with nullable comment (at most 1,000 characters). Core checks order ownership and both order and delivery job Delivered at submission; an exact replay returns the saved value and a changed submission conflicts. These responses are private and never publish reviews on products.
 
-Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../operations/GUIDANCE_REBUILD_AUDIT.md).
+Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../product/PRODUCT.md#source-provenance).
 
 ## Contract Principles
 
@@ -57,45 +57,7 @@ Otherwise eligible nonempty Instant and Scheduled carts have no general spending
 
 ## Common Envelope and Context
 
-Conceptual RPC inputs include:
-
-```ts
-type RequestMeta = {
-  requestId: string;
-  idempotencyKey?: string;
-  locale?: string;
-  timezone?: string;
-};
-
-type PageRequest = {
-  cursor?: string;
-  limit?: number;
-};
-
-type AppErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "VALIDATION_FAILED"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "STALE_VERSION"
-  | "ADDRESS_NOT_SERVICEABLE"
-  | "SELLING_PAUSED"
-  | "FULFILLMENT_MODE_UNAVAILABLE"
-  | "CYCLE_CLOSED"
-  | "INVENTORY_HOLD_EXPIRED"
-  | "DELIVERY_QUOTE_UNAVAILABLE"
-  | "DELIVERY_QUOTE_EXPIRED"
-  | "PRICE_CHANGED"
-  | "ITEM_UNAVAILABLE"
-  | "PROMOTION_INELIGIBLE"
-  | "PROMOTION_STACKING_CONFLICT"
-  | "PAYMENT_REQUIRED"
-  | "PAYMENT_FAILED"
-  | "ILLEGAL_TRANSITION"
-  | "IDEMPOTENCY_CONFLICT"
-  | "INTERNAL_ERROR";
-```
+Exact RPC inputs, DTOs and error vocabulary are defined in [contracts](../../packages/contracts/src/index.ts) and the typed method manifest; this guide preserves semantics, not a second type inventory.
 
 Core derives authentication/session context from the forwarded browser request/session, not from a client-supplied user ID. Administrative scope is resolved in Core from application role assignments.
 
@@ -132,20 +94,7 @@ Client/application/admin lifecycle commands require a stable idempotency key and
 
 Browser auth endpoints are public Web routes that faithfully proxy to Core's Better Auth handler. This is an HTTP-response-preserving boundary rather than ordinary JSON RPC because redirects, multiple `Set-Cookie` headers, callback URL, host/origin, and CSRF semantics must survive.
 
-Core also exposes typed session/application context methods such as:
-
-```ts
-auth.getSessionContext(): Promise<{
-  authenticated: boolean;
-  authUser?: { id: string; email: string; emailVerified: boolean };
-  customer?: { id: string; status: string };
-  staff?: {
-    id: string;
-    capabilities: string[];
-    scopes: Array<{ marketId?: string; locationId?: string }>;
-  };
-}>;
-```
+Core exposes typed session/application context reads through the shared contract manifest.
 
 The DTO intentionally excludes Better Auth session tokens and password/account internals. Auth-specific operations—Google sign-in, email/password registration/login, verification, reset, logout—are handled by Better Auth through the proxy path.
 
@@ -162,14 +111,6 @@ Published banner media accepts an optional `width` of 480, 960 or 1440. Unsuppor
 85 through Images. Variant-specific ETags and public cache keys separate it from the original.
 Transformation failure returns 503/no-store and is not cached as a successful image.
 
-- `marketplace.getHome({ marketHint?, addressId? }) -> MarketplaceHomeView`
-- `catalog.search({ query, categoryId?, cursor?, limit? }) -> ProductSearchPage`
-- `catalog.searchMarketplace(...) -> { page, categories, categoriesAvailable }`
-- `marketplace.getStorefrontHome(...) -> { marketplace, banners, bannersAvailable }`
-- `catalog.getProduct({ slug, locationId? }) -> MarketplaceProductView`
-- `catalog.listCategories({ parentId? }) -> CategoryNavigationView`
-- `checkout.listFulfillmentOptions({ addressId, addressVersion, cartId, cartVersion }) -> FulfillmentOptionView[]`
-
 `MarketplaceProductView` includes customer display data and persisted fixed variants with `skuId`, display/packaging label (`500 g`, `1 pack`), optional `Pack`/`Bunch` merchandising label, integer sell quantity, controlled sell-unit code/display (`G`/`KG`/`PC`), exact integer base-unit consumption, Core-resolved media (`src` + `alt`) with ordered customer-facing product details, an approximate assembled-pack contents note, the exact resolved-location quoteable price, availability messaging, and global fulfillment context. Staff packing instructions never appear in any public DTO. It does not expose inventory ledger quantities unless a deliberate customer-facing availability field is defined. Sellable sizes are returned from database configuration, not a hard-coded union. Before location resolution the target permits general catalog browsing without fabricated local price/stock. The first-visit location flow is PRODUCT GD-D21; no Market/global fallback is allowed.
 
 `catalog.search` applies query/category/activity/local-activation/exact-location-price predicates database-side before keyset pagination over `(category sort order, product name, product id)`; results are bounded (`limit` 1–50) and `nextCursor` is an opaque token whose malformed values return `VALIDATION_FAILED`. The complete launch catalog is reachable through cursors without truncation. `marketplace.getHome` returns active categories plus bounded category rails (default 8 items per rail, capped at 12) built from one windowed scan and the same eligibility rules as search, never materializing the full catalog into one response. Location-scoped browsing requires a resolved delivery area; checkout revalidates the confirmed customer address rather than treating a remembered browse location as authority.
@@ -181,11 +122,6 @@ Initial home and search reads use the composite storefront methods so category/b
 `FulfillmentOptionView` exposes an opaque option ID, mode, FreshMarkets promise/window and Lalamove-priced delivery amount. Scheduled exposes its configured selectable window/cadence; Instant exposes its current promise. The approved target exposes available verified courier choices without a hub selector; the opaque option binds the selected provider/service and its accepted quotation. A single available provider needs no extra selection step. Internal quotation/provider evidence remains opaque.
 
 ## Serviceability
-
-- `geography.searchAddressCandidates({ requestId, query, proximity? }) -> AddressSearchCandidate[]`
-- `geography.reverseAddressCandidate({ requestId, coordinate }) -> AddressSearchCandidate`
-- `geography.confirmBrowsingLocation({ requestId, coordinate }) -> ConfirmedBrowsingLocation`
-- `serviceability.resolveCoordinates({ latitude, longitude, addressComponents? }) -> ServiceabilityResult`
 
 `AddressSearchCandidate` is provider-neutral and contains an opaque session candidate key,
 display address, coordinate, structured address components, and nullable accuracy. Search
@@ -200,10 +136,6 @@ The anonymous browsing confirmation uses `GeocoderPort.reversePermanent` through
 `ServiceabilityResult` returns the matching active Global service area and the nearest eligible fulfillment pin. `serviceable` is true only when both exist. Outside the active-area union emits `OUTSIDE_SERVICE_AREA`; an inside-area coordinate with no capable pin emits `NO_ELIGIBLE_LOCATION`. Delivery-zone fields remain null compatibility data. Customers do not select a location; Core selects the nearest active, capable fulfillment-center pin by exact Haversine distance with stable location-ID tie-break and re-resolves current area/readiness at checkout. Product stock cannot select, replace or split the owning location. Lalamove's current quotation—not this result—decides route-specific delivery availability and fee before payment.
 
 Saved-address commands are customer-boundary operations:
-
-- `addresses.listMine({ headers }) -> CustomerAddressView[]`
-- `addresses.create({ label, recipient, phone, components, componentsSource, latitude, longitude, confirmationSource, instructions, addressJson? }) -> CustomerAddressView`
-- `addresses.update({ addressId, expectedVersion, changed address fields }) -> CustomerAddressView`
 
 `AddressComponents` contains `addressLine1`, nullable `addressLine2`, nullable `barangay`,
 `city`, nullable `region`, nullable `postalCode`, and `countryCode`. `confirmationSource` is
@@ -275,10 +207,6 @@ the same command after an unknown transport outcome and accepts only a following
 into shared cache; a genuine stale-version rejection refreshes instead of clearing newer state. The
 guest path performs one local clear and refuses to erase an unresolved sign-in transfer.
 
-- `cart.get() -> CartView`
-- `cart.setItem({ cartId, skuId, quantity, expectedVersion, idempotencyKey }) -> CartView`
-- `cart.clearCart({ cartId, expectedVersion, idempotencyKey }) -> ClearCartResult`
-
 Cart `quantity` is an integer count of the configured SKU, never kilograms/liters or a floating requested weight; zero removes the line. Every mutation is idempotent and compare-and-swaps the customer-owned active cart version. Identical replay returns the already-applied cart, key reuse with another payload returns `IDEMPOTENCY_CONFLICT`, and stale aggregate state returns `CART_VERSION_CONFLICT`. `CartView` reports each line as `AVAILABLE`, `UNAVAILABLE`, or `PRICE_UNAVAILABLE`, with Core-authored `NOT_SOLD_AT_LOCATION`, `INSUFFICIENT_QUANTITY`, or `PRICE_UNAVAILABLE` detail and the current available quantity when relevant; unavailable prices are nullable and are never projected as zero. `checkoutBlocked` plus stable blocking reasons prevents checkout while retaining removable stale lines. Cart activity alone promises no inventory hold/reservation or provider quotation.
 
 ## Checkout Eligibility and Quote
@@ -286,7 +214,6 @@ Cart `quantity` is an integer count of the configured SKU, never kilograms/liter
 - Checkout admission uses `listFulfillmentOptions` followed by authoritative `createQuote`. The retired Scheduled-only `checkout.evaluate` compatibility read and its Web route are no longer exposed.
 - `checkout.getCheckoutBootstrap() -> { addresses, profile }` authenticates once and supplies the bounded customer data needed by initial checkout without two Web/Core calls.
 - `checkout.createQuote({ cartId, cartVersion, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutQuoteView`; the opaque option binds address/cart versions, mode, internal routing, Lalamove quotation and the Instant promise or Scheduled cycle/window. Web never submits a provider code, location, or cycle as fulfillment authority. Customer promotion entry, Web transport and Core RPC accept at most five trimmed codes of up to 80 characters each, matching the Admin authoring length bound; codes normalize to uppercase before evaluation.
-- `checkout.refreshQuote({ checkoutAttemptId }) -> CheckoutQuoteView`
 
 Fulfillment-option discovery reports mode, internal eligibility, delivery promise/window and configured partner identity without calling the courier; its fee preview is null and Web labels it as calculated on review. Selecting an option creates the authoritative Quote and obtains the provider fee. The resulting view reports each eligibility dimension, explicit financial components, price/availability changes, resolved serviceability, selected `INSTANT`/`SCHEDULED` option, delivery promise, Instant hold status or Scheduled window/cutoff status, provider quotation status, applied/rejected Promotions by price component, and available alternatives. Sensitive location/provider-selection rules remain internal.
 
@@ -299,12 +226,6 @@ The authoritative service validates selling `OPEN`; authenticated Customer; cart
 Fulfillment-option reads require a Maps-confirmed active Customer address inside an active Global service area, an assignable nearest fulfillment-center pin, and an owned nonempty active cart at the submitted versions. Exactly the one current global `INSTANT` or `SCHEDULED` mode is returned, with controlled location, schedule, courier-quotation and fee availability. Customer checkout presents the returned current-mode options: Instant rows expose their immediate promise, while Scheduled rows expose the eligible cycle delivery range and cutoff. Configured courier code/display/service fields may accompany either mode, while the opaque option ID remains command authority. Web may retain provider-code/service-type intent across a refreshed Instant read, but must submit the new matching opaque ID; Scheduled selection follows the current eligible cycle/window returned by Core. The option ID is re-resolved by Core at Quote creation; address/cart/global-mode/service-area/location/readiness/cycle/cutoff or provider-quotation changes fail closed. An identical Quote idempotency replay returns the original immutable Quote even when current routing later changes, while the same key with another option is `IDEMPOTENCY_CONFLICT`.
 
 ## Checkout, Payment, and Order Commitment
-
-- `checkout.createAttempt({ cartId, addressId, fulfillmentOptionId, promotionCodes?, idempotencyKey }) -> CheckoutAttemptView`
-- `checkout.createPayment({ checkoutAttemptId, expectedQuoteVersion, expectedPriceAcceptanceVersion, expectedCurrency, expectedMerchandiseSubtotalMinor, expectedItemDiscountMinor, expectedOrderDiscountMinor, expectedDeliverySubtotalMinor, expectedDeliveryFeeMinor, expectedDeliveryDiscountMinor, expectedTaxMinor, expectedTotalMinor, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
-- `checkout.getAttempt({ checkoutAttemptId }) -> CheckoutAttemptView`
-- `checkout.getPaymentCompletion({ paymentIntentId }) -> { paymentIntentId, state, orderId }`
-- `checkout.recoverCommitment({ checkoutAttemptId }) -> OrderCommitmentResult`
 
 `paymentMethod` is a provider-neutral token chosen on the checkout review surface before payment
 creation. Core validates and persists it with the Payment Intent, includes it in idempotency identity,
@@ -392,10 +313,6 @@ For `INSTANT`, attempt creation/refresh atomically creates or replaces an expiri
 
 ## Customer Orders and Amendments
 
-- `orders.listMine(page) -> CustomerOrderPage`
-- `orders.getMine({ orderId }) -> CustomerOrderDetail`
-- `orders.cancelMine({ orderId, expectedVersion, reason, idempotencyKey }) -> OrderCancellationView`
-
 Cancellation writes return the frozen acceptance receipt, not the latest refund progress. Core saves current customer ownership or Global staff authority, Order state/version, Scheduled cutoff, the exact paid set, refund exclusion, operational release, audit and the receipt in the same transaction. Matching replay returns that receipt after later progress; changed actor/customer/reason/resolution/version conflicts. Retained successful keys without original snapshots report already applied and direct the caller to current progress. Unapplied retained claims can recover through the guarded command. Customer and Admin Web preserve the complete submitted intent after an unknown response and validate the response before replacing its key.
 
 `cancelAdminOrder` returns `AdminOrderCancellationResult { orderId, state, cancellation }`; the cancellation is null only for direct unpaid cancellation. `getAdminOrder` supplies current detail separately. An accepted paid cancellation reserves its refund-member amounts against unrelated Refund commands. Its recovery job considers at most ten due cancellations per run, permits at most five submissions per member separated by a minute, and reconciles an existing Refund identity instead of resubmitting it. An interrupted `REQUESTED` Refund is unknown-outcome evidence, not proof that no external refund occurred. Exhaustion or unknown outcomes remain exceptions for provider reconciliation. Historical/new acceptance receipts never assert provider success.
@@ -403,14 +320,6 @@ Cancellation writes return the frozen acceptance receipt, not the latest refund 
 Cancellation preview and admission subtract prior canonical successful Refunds from each original/addition payment. Fully refunded payments remain in the guarded paid set but create no new refund member. Pending, uncertain or unfinished Refund recovery blocks admission. A historical Service Fee combined with a prior refund requires financial review when its component allocation is unknown; no allocation is inferred. A zero remaining refund completes cancellation, operational release, audit and its frozen receipt atomically without provider submission. The registered recovery path also completes retained accepted zero-refund cancellations in a legal Order state.
 
 Refund observations wake the Orders projection; their supplied status is not financial authority. The projection reads the current canonical Refund, verifies payment identity, exact amount and currency, and atomically advances the member, cancellation and Order. An unlinked member recovers only through its stable cancellation-refund key. Completion requires canonical success for every member. Refund ingress marks its inbox applied only after projection succeeds, including the already-observed Refund path; a failed projection remains retryable. Payment reconciliation also attempts saved-refund projection when the Payment needs no state change. Late submission responses never overwrite canonical member success or completed cancellation.
-
-- `orders.getProvisionalTransactionSummary({ orderId }) -> ProvisionalTransactionSummaryView`
-- `orders.reorder({ orderId, expectedCartVersion, idempotencyKey }) -> ReorderResultView`
-- `orders.listIssues({ orderId }) -> CustomerOrderIssueView[]`
-- `orders.submitIssue({ orderId, category, description, affectedOrderItemIds?, idempotencyKey }) -> CustomerOrderIssueView`
-- `orders.getAmendmentEligibility({ orderId }) -> AmendmentEligibilityView`
-- `orders.createAmendmentDraft({ orderId, items, idempotencyKey }) -> AmendmentDraftView`
-- `orders.payAmendment({ amendmentId, paymentMethod, returnUrl, idempotencyKey }) -> PaymentActionView`
 
 `CustomerOrderDetail` is ownership-scoped and purpose-built from immutable Order snapshots. It contains the public order number and committed instant, exact line/SKU/unit/base-consumption/shipping-weight snapshots, an explicit financial source (`CHECKOUT_QUOTE` or `ORDER_TOTAL_ONLY` with unavailable components represented as null), provider-neutral payment/refund summaries, fulfillment mode and promise, normalized external-delivery progress, additive amendment summaries, customer-safe issue summaries, invoice availability, a deterministic timeline, a four-step Core-derived progress projection, and Core-derived action availability. Progress is always `PAYMENT` → `PACKED` → `OUT_FOR_DELIVERY` → `DELIVERED`, with each step `COMPLETE`, `CURRENT`, or `UPCOMING`, a nullable achieved timestamp, and safe current detail. Payment is complete only for committed Orders; its timestamp uses the successful checkout attempt when trustworthy, otherwise the committed instant. Packed requires Fulfillment `PACKED` or a later completed fulfillment state; its time comes from the `PACKED` audit transition, with current `PACKED` record time as fallback. Out for delivery requires the Order and Delivery Job to be in dispatch states; its time comes from the latest dispatch handover, with current `EN_ROUTE` job time as fallback. Delivered requires matching Order and Delivery Job completion and uses `delivered_at`. Unknown milestone time stays null. The customer timeline omits the initial Fulfillment `NOT_STARTED` and Delivery Job `UNASSIGNED` records because their timestamps mark setup rather than actual preparation or dispatch. Core supplies the exact current cancellation-refund preview, including any documented retained provider cost; Web never recalculates it. Historical Orders may expose their immutable historical Service Fee through a versioned financial-history projection. The active view excludes provider payloads/internal identifiers, reconciliation or Audit JSON, staff identity/internal notes, inventory/procurement data, and live-driver coordinates. A non-owned Order returns `NOT_FOUND`.
 
@@ -437,28 +346,6 @@ Customer cancellation accepts no actor or cause authority from Web. Core resolve
 locate an older Order without paging through unrelated results. Admin Web retains its separate
 current-page filter and refreshes the open list and preview while visible; every write still uses
 fresh Core-derived legal actions and expected versions.
-
-- `admin.context.get() -> AdminContextView`
-- `admin.scopes.list() -> AdminScopeOptionView[]`
-- `admin.bootstrap.get({ selectedScope?, timezone }) -> AdminBootstrapView`
-- `admin.overview.get({ selectedScope, timezone }) -> AdminOverviewView`
-- `admin.audit.list(filters, page) -> AdminAuditEventPage`
-- `admin.audit.get({ auditEventId }) -> AdminAuditEventView`
-- `admin.staff.list(filters, page) -> AdminStaffPage`
-- `admin.staff.get({ staffId }) -> AdminStaffDetail`
-- `admin.staff.invite({ email, displayName, idempotencyKey }) -> AdminStaffDetail`
-- `admin.staff.update({ staffId, displayName, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
-- `admin.staff.changeAccess({ staffId, action: "ACTIVATE" | "SUSPEND", reason, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
-- `admin.staff.setRoles({ staffId, roleIds, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
-- `admin.staff.setScopes({ staffId, scopes, expectedVersion, idempotencyKey }) -> AdminStaffDetail`
-- `admin.staff.revokeSessions({ staffId, reason, idempotencyKey }) -> SessionRevocationResult`
-- `admin.roles.list(page) -> AdminRolePage`
-- `admin.roles.get({ roleId }) -> AdminRoleDetail`
-- `admin.roles.create({ code, name, description, capabilityCodes, idempotencyKey }) -> AdminRoleDetail`
-- `admin.roles.update({ roleId, name, description, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
-- `admin.roles.setCapabilities({ roleId, capabilityCodes, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
-- `admin.roles.archive({ roleId, reason, expectedVersion, idempotencyKey }) -> AdminRoleDetail`
-- `admin.capabilities.list() -> CapabilityDefinitionView[]`
 
 Admin context derives the active Staff principal, canonical capability vocabulary, and global/market/location scopes from the Better Auth session plus Application IAM. For the current Admin experience it returns Global plus reachable operational locations as selector choices; internal Market scope remains an authorization and domain concern rather than a user-facing selector level. Web never manufactures a capability or infers authorization from navigation visibility.
 
@@ -595,16 +482,10 @@ That transaction repair initially covered fixed/percentage merchandise discounts
 
 ## Admin Orders and Payments
 
-- `admin.orders.list(filters, page) -> AdminOrderListPage`
-- `admin.orders.get({ orderId }) -> AdminOrderDetail`
-- `admin.orders.cancel({ orderId, reason, resolution, expectedVersion, idempotencyKey }) -> AdminOrderDetail`
 - `admin.orders.recordExceptionResolution(...)`
-- `admin.payments.list(filters, page) -> AdminPaymentPage`
-- `admin.payments.listAttention(page) -> AdminPaymentAttentionPage`
-- `admin.payments.get({ paymentIntentId }) -> AdminPaymentDetail`
+
   **2026-09-09 owner clarification:** post-delivery exception refunds require authorized staff review and confirmation in the FreshMarkets dashboard. Core executes the refund through PayMongo and verifies the provider result; staff cannot enter a financial success flag. Retain the staff submission contract below. Automatic eligible customer cancellation continues through Orders and Payments without staff approval.
 
-- `admin.payments.refund({ paymentIntentId, amountMinor, expectedVersion, reason, idempotencyKey }) -> AdminRefundView`
   `recheckAdminRefund({ refundId, expectedVersion, reason, idempotencyKey })` returns an immutable `AdminRefundRecheckResult { refundId, state: QUEUED, version, acceptedAt }`. Payments checks current Global `refunds.manage`, current Refund version/state and absence of an active recovery lease with the durable queue intent, required audit and original result. It resets bounded lookup attempts for the existing Refund; it never submits a replacement refund. Identical replay returns the queued acceptance after later progress. The payment detail supplies each Refund's version and purpose-built recovery progress (attempts, next check, controlled error code and current recheck availability). Web freezes unknown recheck requests and explicitly retries the saved body/key.
 
 The registered Payments recovery job considers at most five due Refunds per run. It claims a five-minute lease, performs read-only provider lookup, validates the captured payment reference, Refund reference, application key where binding an unknown reference, exact amount/currency and observation instant, and applies financial state, reference binding, payment-total projection and immutable audit together. Unknown, absent, mismatched, ambiguous or truncated lookup evidence keeps the amount reserved. Five attempts with bounded exponential backoff lead to operator review. Successful financial observation starts a separately bounded projection-recovery stage; its durable due intent is cleared only after Order cancellation projection succeeds. A linked recovery case resolves only on canonical success and completed projection; definitive failed refunds remain visible for review. No provider POST is issued by recovery.
@@ -625,40 +506,6 @@ Operational command/read contracts publish the canonical Fulfillment history (`N
 
 ## Admin Customers, Catalog, Promotions, and Fulfillment Configuration
 
-- `admin.customers.list(filters, page) -> AdminCustomerSummaryPage`
-- `admin.customers.get({ customerId }) -> AdminCustomerDetail`
-- `admin.customers.invite({ email, idempotencyKey }) -> AdminCustomerDetail`
-- `admin.customers.update({ customerId, changedApplicationFields, expectedVersion, idempotencyKey }) -> AdminCustomerDetail`
-- `admin.customers.changeAccess({ customerId, action: "DISABLE" | "RESTORE", reason, expectedVersion, idempotencyKey }) -> AdminCustomerDetail`
-- `admin.customers.revokeSessions({ customerId, reason, idempotencyKey }) -> SessionRevocationResult`
-- `admin.customers.requestClosure({ customerId, reason, idempotencyKey }) -> PrivacyRequestView`
-- `admin.privacy.listRequests(filters, page) -> PrivacyRequestPage`
-- `admin.privacy.applyAction({ requestId, action, reason, expectedVersion, idempotencyKey }) -> PrivacyRequestView`
-- `admin.catalog.listUnits({ dimension?, status? }) -> UnitDefinitionView[]`
-- `admin.catalog.createUnit({ code, displayName, dimension, canonicalBaseCode, conversionNumerator, conversionDenominator, idempotencyKey }) -> UnitDefinitionView`
-- `admin.catalog.createSku({ productId, code, displayName, merchandisingLabel?, sellQuantity, sellUnitId, inventoryQuantityBase, status, sortOrder, idempotencyKey }) -> SellableSkuView`
-- `admin.catalog.updateSku({ skuId, expectedVersion, changed fields, idempotencyKey }) -> SellableSkuView`
-- `admin.catalog.setPrice({ skuId, marketId, locationId, amountMinor, currency, validFrom, expectedVersion?, idempotencyKey }) -> SkuPriceView`
-- `admin.catalog.uploadProductMedia({ productId, bytes, mimeType, altText, isPrimary, sortOrder, expectedProductVersion, idempotencyKey }) -> AdminProductMediaView`
-- `admin.catalog.updateProductMedia({ productId, mediaId, altText, isPrimary, sortOrder, expectedProductVersion, idempotencyKey }) -> AdminProductMediaView`
-- `admin.catalog.removeProductMedia({ productId, mediaId, expectedProductVersion, idempotencyKey }) -> AdminProductMediaView`
-- `admin.promotions.list(filters, page) -> PromotionPage`
-- `admin.promotions.get({ promotionId }) -> PromotionDetail`
-- `admin.promotions.create({ definition, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.update({ promotionId, expectedVersion, definition, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.activate({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.deactivate({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.archive({ promotionId, expectedVersion, idempotencyKey }) -> PromotionDetail`
-- `admin.promotions.preview({ promotionId, customerId?, cartSnapshot? }) -> PromotionPreviewView`
-- `admin.promotions.getAudience({ promotionId, segmentQuery? }) -> PromotionAudienceView`
-- `admin.promotions.setAudience({ promotionId, rules, expectedVersion, idempotencyKey }) -> PromotionAudience`
-- `admin.promotions.listRedemptions({ promotionId, cursor? }) -> PromotionRedemptionPage`
-- `admin.promotions.grant({ promotionId, customerId, idempotencyKey }) -> PromotionGrantView`
-- `admin.fulfillment.getGlobalCommerceConfiguration({}) -> GlobalCommerceConfigurationView`
-- `admin.fulfillment.pauseSelling({ expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-- `admin.fulfillment.activateGlobalMode({ fulfillmentMode, cadence?, expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-- `admin.fulfillment.openSelling({ expectedVersion, reason, idempotencyKey }) -> GlobalCommerceConfigurationView`
-
 The commerce-configuration commands are Global-scope only. A mode switch requires selling `PAUSED`; reopening returns controlled readiness blockers until committed work is protected and active locations are ready. Location operational promises, exact prices, Instant stock readiness, and provider pickup/profile readiness are configured separately and never select another customer mode or define Scheduled capacity.
 
 `AdminCustomerSummary` contains only authorized Customer/profile display data plus location, Order count, last Order, lifetime-spend/AOV fields only when their canonical metric definitions are approved, and creation date. Detail composes scoped addresses, Orders, Promotion/redemption, Payments summary, delivery, support-visible, and audit read models. Better Auth rows are not the Customer contract. Customer "delete" is represented by the privacy/account-closure lifecycle: access may be disabled and eligible application fields may later be anonymized, but required Order, Payment, Refund, redemption, inventory-ledger, and Audit history is never hard-deleted by a generic Customer command.
@@ -667,19 +514,11 @@ Unit and SKU commands accept integer quantities only and validate dimension comp
 
 ## Admin Customer Issues
 
-- `admin.orderIssues.list(filters, page) -> OrderIssuePage`
-- `admin.orderIssues.get({ issueId }) -> OrderIssueDetail`
-- `admin.orderIssues.applyAction({ issueId, action, reason?, expectedVersion, idempotencyKey }) -> OrderIssueDetail`
-
 The Order Issue queue projects the committed Order number, immutable recipient label and phone, customer email, category, report summary, owner, status, creation instant, and Core-derived legal next actions. Order-issue actions control intake/triage state only; they never implicitly authorize a Refund or Credit.
 
 The existing Problems action endpoint accepts only CLAIM and RESOLVE. SUBMITTED permits CLAIM; CLAIMED and retained INVESTIGATING/ESCALATED permit RESOLVE. The Being handled filter includes all three stored in-progress states. Display New / Being handled / Resolved without altering retained status history. Global orders.manage is revalidated in the guarded report/audit/receipt batch. New success receipts store the frozen result; legacy receipts containing only a report reference retain their older read semantics. A still-processing original action returns `CONFLICT` with `error.details.outcome = RECONCILIATION_PENDING`; other conflicts are not classified by message prose. Rejected or lost-claim commands leave no report, audit or success effects. A short internal resolution note does not issue a refund or change delivery. Customer submission replay reconstructs the original SUBMITTED response from retained submission facts, even after handling. Unknown browser submissions retain the exact body and key.
 
 ## Inventory
-
-- `admin.inventory.list({ locationId, query?, availability?, cursor? }) -> InventoryAvailabilityPage`
-- `admin.inventory.getLedger({ locationId, inventoryPoolId, cursor? }) -> InventoryLedgerPage`
-- `admin.inventory.adjust({ locationId, inventoryPoolId, operation: "ADD" | "REMOVE", quantityBase, reason, expectedVersion, idempotencyKey }) -> InventoryAvailabilityView`
 
 Adjustments require capability, location scope, exact base-unit quantity, reason, and audit. There is no generic `setStock` contract.
 
@@ -695,20 +534,10 @@ The current `startAdminReceiving` transport accepts requirement ID and expected 
 
 Retained receiving read models include product/cycle names, base-unit label, Core-derived `START`/`RECORD`/`COMPLETE` actions and `legacyAcceptedBase`. The historical Web workbench selects a named receipt and uses its version; unknown responses retain the exact body, path and key until recovery. Earlier accepted Scheduled goods remain cycle/destination allocations, rejected goods remain unavailable, and historical packing consumes the paid Order's exact pool demand without physical stock writes. These records and commands preserve old work and explicit stock operations; they are not prerequisites for the current week-level Purchase complete and per-Order Finish packing flow.
 
-- `admin.procurement.getRequirements({ cycleId, destinationLocationId }) -> ProcurementRequirementView`
-- `admin.procurement.aggregateDemand({ cycleId, idempotencyKey }) -> ProcurementRunView`
-- `admin.procurement.approveRequirement({ runId, expectedVersion, ... }) -> ProcurementRunView`
-- `admin.procurement.placePurchaseOrder(...) -> PurchaseOrderView`
-- `admin.receiving.start({ purchaseOrderId, idempotencyKey }) -> ReceivingSessionView`
-- `admin.receiving.recordLine({ sessionId, skuId, acceptedBase, rejectedBase, reason?, expectedVersion, idempotencyKey }) -> ReceivingSessionView`
-- `admin.receiving.complete({ sessionId, expectedVersion, idempotencyKey }) -> ReceivingSessionView`
-- `admin.procurement.resolveException(...) -> ProcurementRunView`
-
 ## Fulfillment
 
 Fulfillment lifecycle commands persist the original result and audit in the same guarded transaction as the Order lock, fulfillment state and any Instant reservation consumption. Both operational RPC adapters pass a trusted authenticated actor; Core rechecks current capability and Global/market/location scope inside that batch. Duplicate commands return the original fulfillment status/version even after subsequent advances. Rejected new commands create neither a success result nor a stranded processing claim. Supported historical pre-transaction claims recover only through the original request identity and current aggregate guards.
 
-- `admin.fulfillment.getWorkQueue({ fulfillmentMode?, cycleId?, locationId, state?, cursor? }) -> FulfillmentQueueView`
 - `admin.fulfillment.startPicking({ taskId, expectedVersion, idempotencyKey })`
 - `admin.fulfillment.recordPicked(...)`
 - `admin.fulfillment.recordShortage(...)`
@@ -747,10 +576,10 @@ Instant first dispatch is system work triggered only after an authorized `START_
 
 The frozen new-dispatch matrix is:
 
-| Mode      | Lalamove                                                                                                                                                                                                                                    | Manual                                                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Instant   | Core automatically requests `IMMEDIATE` when staff starts packing, using the accepted provider/service snapshot. Explicit post-pack Lalamove remains a recovery control if no automatic attempt exists, and definite closure permits retry. | Available after packing only when the automatic/provider attempt is definitely closed; the system records `STAFF_SELECTED_MANUAL`, with an optional note. |
-| Scheduled | Staff requests an allowed `IMMEDIATE` or `SCHEDULED` pickup after packing within the committed deadline/window.                                                                                                                             | Staff assigns a named person and phone after packing under the same shared gate and evidence rules.                                                       |
+| Mode | Lalamove | Manual |
+| --- | --- | --- |
+| Instant | Core automatically requests `IMMEDIATE` when staff starts packing, using the accepted provider/service snapshot. Explicit post-pack Lalamove remains a recovery control if no automatic attempt exists, and definite closure permits retry. | Available after packing only when the automatic/provider attempt is definitely closed; the system records `STAFF_SELECTED_MANUAL`, with an optional note. |
+| Scheduled | Staff requests an allowed `IMMEDIATE` or `SCHEDULED` pickup after packing within the committed deadline/window. | Staff assigns a named person and phone after packing under the same shared gate and evidence rules. |
 
 The reachable call-site map is: payment admission and trusted admission time in `create-payment.ts` and `apply-checkout-payment-reaction.ts`; preparation through `advance-fulfillment.ts`; automatic Instant invocation from both Worker and operations RPC entry points plus the minute recovery registry; external dispatch through `book-order-delivery.ts` then `request-provider-delivery.ts`; Manual dispatch/custody through `manage-manual-delivery.ts`; queue decisions through `list-delivery-dispatch.ts`; and retained provider webhook, refresh, inbox and cancellation recovery through their existing Delivery application handlers. FDP-3's location-operational projection remains authorized by `fulfillment.read` and excludes payment/refund administration and customer financial authority.
 
@@ -814,10 +643,6 @@ silently switch the external order identity.
 
 ## Analytics Queries
 
-- `admin.analytics.listMetricDefinitions({ category?, status? }) -> MetricDefinitionView[]`
-- `admin.analytics.getOverview({ window, scope?, dimensions?, productSearch?, productCursor? }) -> AnalyticsOverviewView`
-- `admin.analytics.getMetric({ metricCode, definitionVersion?, window, timezone, dimensions? }) -> MetricSeriesView`
-
 Analytics contracts return definition code/version, formula description, source watermark/freshness, currency/base-unit dimensions, and null/unavailable reason when a required accounting definition or source fact is missing. Published reports follow PRODUCT's approved report definitions, including first-purchase new customers, unique purchasing customers and repeat purchases. They never expose a metric under an unapproved formula, mix currencies or quantity dimensions silently, or provide mutation methods for source context state. `analytics.read` is required.
 
 Metric-definition lifecycle filters use `APPROVED|BLOCKED|SUPERSEDED`; default lists include only current approved reports. Unversioned reads resolve the latest definition, while an explicitly requested superseded version returns a typed unavailable result. Historical blocked and retired definitions remain readable without restoring them to the current release. Overview dimensions apply only to metrics declaring that dimension and never remove unrelated metrics. `MetricDefinitionView.valueUnit` identifies counts, currency minor units or selling units. Monetary figures require one selected currency; Product quantities require one `skuId`, so different selling options are never silently summed.
@@ -843,7 +668,7 @@ Exactly one definition version per metric code is current and approved; replaced
 - Test every Admin/Analytics query for capability/scope enforcement, no Better Auth/raw-row Customer leakage, definition-version consistency, and read-only source ownership.
 - During deployment, maintain compatibility for any interval in which Web and Core versions may differ.
 
-## 2026-09-07 Setup and Operations Contract Requirements
+## Setup and operations semantics
 
 The Global commerce control retains the complete original pause/mode-switch/reopen request and idempotency key after an unconfirmed response. Fields and replacement commands remain disabled through scope changes; explicit retry uses the original request. Runtime response validation distinguishes a Core result from a transport/parse failure, and stale reads cannot overwrite an in-flight command's reviewed state.
 
@@ -906,7 +731,7 @@ Staff role creation and invitation creation recheck current active Staff identit
 
 ### Initial administrator setup
 
-`getInitialAdministratorSetup` is an authenticated Core query with `UNAVAILABLE`, `VERIFY_EMAIL`, `READY` (expected version zero), or the caller's `COMPLETED` receipt. It never exposes the configured email or another account's setup identity. `completeInitialAdministratorSetup` accepts only an idempotency key and expected version zero; identity comes from Better Auth. Core requires the configured verified email, no prior setup, no Global staff scope and no existing Staff identity for the caller. Current identity, all explicit grants, immutable setup evidence, audit and command receipt are one guarded transaction. Identical completed replay remains available after setup configuration is removed. Web exposes this documented one-time workflow at `/setup`; see [setup operations](../operations/INITIAL_ADMINISTRATOR_SETUP.md).
+`getInitialAdministratorSetup` is an authenticated Core query with `UNAVAILABLE`, `VERIFY_EMAIL`, `READY` (expected version zero), or the caller's `COMPLETED` receipt. It never exposes the configured email or another account's setup identity. `completeInitialAdministratorSetup` accepts only an idempotency key and expected version zero; identity comes from Better Auth. Core requires the configured verified email, no prior setup, no Global staff scope and no existing Staff identity for the caller. Current identity, all explicit grants, immutable setup evidence, audit and command receipt are one guarded transaction. Identical completed replay remains available after setup configuration is removed. Web exposes this documented one-time workflow at `/setup`; see [setup operations](../operations/DEPLOYMENT_RUNBOOK.md#initial-administrator).
 
 Migration 0100 retains the immutable receipt for the separately owner-authorized production ownership correction. The one-time Core command required the exact retained initial-administrator identity, exactly one active Global Staff principal, a distinct verified target with a Better Auth account and no Staff identity, and an active initial role containing `staff.manage`. Target provisioning, the exact role/Global grant move, source suspension and grant removal, session/account removal, email tombstoning, audit and idempotency evidence committed together. The temporary bearer-gated HTTP transport and its secret were removed after completion; this is historical correction evidence, not a supported staff-recovery API.
 
@@ -954,7 +779,7 @@ Catalog variants keep their regular `priceMinor` and may include Core's current 
 
 Local implementation and acceptance are tracked in the active checkpoint; these contracts do not imply provider or deployment acceptance.
 
-## Product decision contract gaps
+## Product decision boundaries
 
 PRODUCT GD-D01–21 and its approved owner supplements define the current target. The focused sections in this specification describe customer identity/contact ownership, actual counted-size receiving, item-sale allocation and quantity restoration, five-image CRUD/gallery, and the fixed order-level 20,000 g courier parcel. Legacy preference-only DTOs, FIRST_ORDER/NEW_CUSTOMER stored names, whole-subtotal previews and generic Product-pool quantities do not override those contracts. Percentage and fixed discounts per selling unit are approved; overlapping active product sales for the same option/location are rejected. No packaging allowance or size/fit inputs are required.
 

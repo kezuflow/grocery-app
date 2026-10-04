@@ -113,15 +113,15 @@ This lifecycle policy supersedes blanket append-only or indefinite-compatibility
 
 Run focused checks while iterating. At implementation-phase completion, run the repository aggregate gate and any relevant checks it does not contain. Do not rerun an unchanged full suite repeatedly after it passes without a new concern.
 
-| Change                                                         | Required evidence                                                                                                                                                                                                                            |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Markdown only                                                  | Review factual claims and local links, `git diff --check`, `pnpm naming:check`; validate documented command names against manifests. No application tests merely to prove prose.                                                             |
-| Small presentation/copy change                                 | Relevant lint/type checks and visual/accessibility verification; existing focused UI tests when behavior changes. Do not create tests that only mirror copy or CSS implementation.                                                           |
-| Domain rule or defect                                          | Focused regression showing the failing behavior, legal/illegal boundary cases, affected workspace tests and type/lint checks.                                                                                                                |
-| Auth, authorization, financial, inventory, or lifecycle change | Core Worker/D1 integration tests for scope, state guards, replay, failure atomicity, and races, plus relevant contract/Web flows.                                                                                                            |
-| Shared contract or runtime configuration                       | Contracts/Core/Web typechecks, affected tests, architecture/readiness checks, both builds; binding freshness and vinext compatibility checks when affected.                                                                                  |
-| Schema or migration change                                     | Fresh database creation, constraints/foreign keys, representative fixtures and Worker/D1 operations; upgrade tests for every retained supported baseline. Apply the pre-launch policy instead of inventing unnecessary legacy compatibility. |
-| Provider integration                                           | Adapter fixtures plus webhook authentication, replay, timeout/unknown-outcome and reconciliation tests; separately recorded sandbox acceptance for actual account capabilities.                                                              |
+| Change | Required evidence |
+| --- | --- |
+| Markdown only | Review factual claims and local links, `git diff --check`, `pnpm naming:check`; validate documented command names against manifests. No application tests merely to prove prose. |
+| Small presentation/copy change | Relevant lint/type checks and visual/accessibility verification; existing focused UI tests when behavior changes. Do not create tests that only mirror copy or CSS implementation. |
+| Domain rule or defect | Focused regression showing the failing behavior, legal/illegal boundary cases, affected workspace tests and type/lint checks. |
+| Auth, authorization, financial, inventory, or lifecycle change | Core Worker/D1 integration tests for scope, state guards, replay, failure atomicity, and races, plus relevant contract/Web flows. |
+| Shared contract or runtime configuration | Contracts/Core/Web typechecks, affected tests, architecture/readiness checks, both builds; binding freshness and vinext compatibility checks when affected. |
+| Schema or migration change | Fresh database creation, constraints/foreign keys, representative fixtures and Worker/D1 operations; upgrade tests for every retained supported baseline. Apply the pre-launch policy instead of inventing unnecessary legacy compatibility. |
+| Provider integration | Adapter fixtures plus webhook authentication, replay, timeout/unknown-outcome and reconciliation tests; separately recorded sandbox acceptance for actual account capabilities. |
 
 Tests should fail when the intended observable behavior is broken, not when harmless implementation details change. Prefer a small useful test over coverage percentages or assertions that restate the implementation.
 
@@ -131,24 +131,24 @@ For agent instructions or verification-tool changes, check the changed documenta
 
 Run from the repository root using the Node and pnpm versions declared in `package.json`.
 
-| Command                                        | What it establishes                                                                                                                                                                                      |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm naming:check`                            | Repository path/package/migration naming conventions.                                                                                                                                                    |
-| `pnpm terminology:check`                       | Configured product terminology scan; not business correctness.                                                                                                                                           |
-| `pnpm architecture:check`                      | The dependency and transport/contract boundaries implemented by the static verifier; not every architectural invariant.                                                                                  |
-| `pnpm readiness:check`                         | Configured source-level security/readiness guards; not external account activation.                                                                                                                      |
-| `pnpm migration:check`                         | SQLite schema application and selected migration/invariant scenarios from the current verifier scripts.                                                                                                  |
-| `pnpm catalog:check`                           | Generated catalog artifact matches its maintained source.                                                                                                                                                |
-| `pnpm format:check`                            | Formatter checks for the paths declared by the root script; it does not currently cover all repository Markdown.                                                                                         |
-| `pnpm lint`                                    | Configured Oxlint checks in apps/packages.                                                                                                                                                               |
-| `pnpm typecheck`                               | Workspace TypeScript checks.                                                                                                                                                                             |
-| `pnpm test`                                    | Workspace Vitest suites. Core's configured suite runs with the Cloudflare Workers pool and D1 migrations.                                                                                                |
-| `pnpm harness:test`                            | Node test suites under `scripts/*.test.mjs`, including architecture/security diagnostics, Git source discovery, naming, and readiness-tool regressions. These are distinct from workspace Vitest suites. |
-| `pnpm --filter @freshmarkets/web check:vinext` | Installed vinext compatibility scan.                                                                                                                                                                     |
-| `pnpm --filter @freshmarkets/core build`       | Wrangler deployment dry run; no production deployment.                                                                                                                                                   |
-| `pnpm --filter @freshmarkets/web build`        | Web production build; not a browser journey or deployment.                                                                                                                                               |
-| `pnpm --filter @freshmarkets/web test:e2e`     | Playwright execution against the configured local/managed stack.                                                                                                                                         |
-| `pnpm check`                                   | Root aggregate gate, including formatting, conventions, migrations, HEAD commit-message validation, architecture, readiness, lint, types, Vitest, and builds.                                            |
+| Command | What it establishes |
+| --- | --- |
+| `pnpm naming:check` | Repository path/package/migration naming conventions. |
+| `pnpm terminology:check` | Configured product terminology scan; not business correctness. |
+| `pnpm architecture:check` | The dependency and transport/contract boundaries implemented by the static verifier; not every architectural invariant. |
+| `pnpm readiness:check` | Configured source-level security/readiness guards; not external account activation. |
+| `pnpm migration:check` | SQLite schema application and selected migration/invariant scenarios from the current verifier scripts. |
+| `pnpm catalog:check` | Generated catalog artifact matches its maintained source. |
+| `pnpm format:check` | Formatter checks for the paths declared by the root script; it does not currently cover all repository Markdown. |
+| `pnpm lint` | Configured Oxlint checks in apps/packages. |
+| `pnpm typecheck` | Workspace TypeScript checks. |
+| `pnpm test` | Workspace Vitest suites. Core's configured suite runs with the Cloudflare Workers pool and D1 migrations. |
+| `pnpm harness:test` | Node test suites under `scripts/*.test.mjs`, including architecture/security diagnostics, Git source discovery, naming, and readiness-tool regressions. These are distinct from workspace Vitest suites. |
+| `pnpm --filter @freshmarkets/web check:vinext` | Installed vinext compatibility scan. |
+| `pnpm --filter @freshmarkets/core build` | Wrangler deployment dry run; no production deployment. |
+| `pnpm --filter @freshmarkets/web build` | Web production build; not a browser journey or deployment. |
+| `pnpm --filter @freshmarkets/web test:e2e` | Playwright execution against the configured local/managed stack. |
+| `pnpm check` | Root aggregate gate, including formatting, conventions, migrations, HEAD commit-message validation, architecture, readiness, lint, types, Vitest, and builds. |
 
 `pnpm check` also runs `harness:test`. It does not include `catalog:check`, `check:vinext`, binding freshness, provider sandbox acceptance, or Playwright. Add the relevant checks rather than treating the aggregate as universal proof. `pnpm commit:check` validates the existing HEAD; it does not validate uncommitted content or a future commit message.
 
@@ -254,3 +254,25 @@ This is a single-developer repository. All work lands on `main` directly.
 ## What hooks do not prove
 
 The hooks do not run the full type, lint, test, or build suites. Run the checks appropriate to the change before declaring it complete. Do not bypass hooks to conceal a failure or widen allow-lists to accommodate a new violation. Report existing unrelated failures separately from regressions. Schema migration strategy follows the pre-launch/retained-deployment policy in [ENGINEERING.md](ENGINEERING.md), independently of Git commit history.
+
+## Commerce acceptance coverage
+
+This is the enduring acceptance coverage formerly routed through the commerce execution plan. The checkpoint owns stable CA task IDs, evidence, unfinished slices and the next action. Current PRODUCT rules override historical examples. Deleting a plan never closes a phase, changes authorization or drops parent criteria when a task splits.
+
+Dependency order: CA-0 canonical/schema reconciliation -> CA-1 commerce correctness -> CA-2 setup/access -> CA-3 catalog/media/promotions/prices -> CA-4 warehouse transfers -> CA-5 Scheduled operations -> CA-6 delivery/customer alignment -> CA-7 complete journeys and activation evidence. Earlier acceptance remains open when a later slice passes; completed source slices are not restarted from old reports.
+
+Required coverage by subject (former plan A–I, audit defects and phase exit criteria):
+
+- Setup/geography: ordinary authorized location, exact confirmed pin, Global-area union, hours/readiness and cycle commands; current address finalization, nearest capable whole-order assignment, stale/configuration guards and no stock rerouting/splitting. Bootstrap boundaries are verified, not invented production coverage.
+- Catalog/media: Global identity/category/selling-option CRUD, local activation and currently authorized exact-location pricing; no zero/fallback price. Publish R2 images without rebuilding; replacement/removal/deactivation, wrong ownership, disguised/oversized bytes and storage failure recovery. Paid terms remain immutable.
+- Warehouse: opening receipt/correction and central-to-site dispatch/partial receipt/loss/inspected return. Assert conservation of source, transit, destination, held/reserved and non-sellable quantities, wrong-site rejection, competing checkout/transfer and exact retry. Reference example: 100,000 g central, two accepted 20,000 g transfers -> 60,000/20,000/20,000 g. No automatic branch transfers or guessed counts.
+- Identity: normal sign-in/registration, configured OAuth, email verification/reset, cookies/logout, disabled principal, initial Global setup and invitation expiry/wrong-identity/replay. Local capability/scope cannot grant another site's or Global access. Deferred customer closure, irreversible anonymization and accounting inputs stay separate; existing staff closure retains history.
+- Commerce: anonymous browse/sign-in carryover -> exact Cart -> confirmed address -> active-mode/provider-priced Quote -> explicit accepted payment terms -> verified capture -> atomic commitment -> immutable history. Test stale price/version, holds disappearing, duplicates, complete-line allocations, promotion claims/limits and multiple pools/effect identities. Started payments survive pause/quote expiry; a financial observation survives failed commitment. Retained additions recover, but new paid additions are unavailable.
+- Scheduled: editable exclusive cutoff/Procurement starts, existing issued QR, demand freeze, late-capture full refund, exact scoped paid quantities excluding accepted cancellation, one Purchase complete action and per-Order physical Finish packing confirmation. No routine receiving/picking, inferred stock netting/capacity, phantom Instant stock or indefinite purchasing wait. Retained receipts/allocations/surplus remain independently truthful.
+- Preparation/delivery: Instant cancellation lock at acceptance, pick/check -> automatic booking at Start packing -> packed consumption; Scheduled purchase -> packing -> explicit courier/Manual. Packed custody, provider search/assignment/pickup/completion, same normalized webhook/refresh/reconciliation, rematch/old events, no-rider recovery, missed-delivery responsibility and agreed promise changes remain distinct. First-choice Instant Manual, early handover, wrong scope and unknown-outcome replacement reject without partial effects.
+- Notifications/support/reports: domain-to-outbox-to-Queue-to-received-email, bounded publication/send retry, duplicates, DLQ and unknown sends; Order-level Problems with separate refund approval; message authorization, attachment/expiry/hold races, reconnect/sound; versioned scoped report definitions reconciled to financial/quantity/date facts. Missing permission/data/cost is unavailable, not zero. Invoice readiness never asserts official issuance.
+- Runtime/release: clean schema plus supported retained upgrade, both Worker bindings, R2/provider/auth/email, browser keyboard/responsive/unknown-command states and environment readiness. A passing local fake/dry-run or read-only production page is not actual provider or full-journey acceptance. No application data reset, provider transaction, message or deployment is authorized by the documentation route.
+
+Final journeys require reproducible administrator/catalog/provider setup through ordinary commands: Instant stock-backed checkout-to-delivery; Scheduled Lalamove from paid demand freeze through purchase/packing/pickup/delivery; Scheduled ordinary Manual and guarded Instant Manual recovery; exception/replay/concurrency/media/refund/notification recovery; direct-Core capability/location denial. The one-site Scheduled launch needs no separate daily warehouse, but approved multi-location transfer acceptance remains. Retain financial success, immutable receipts and complete write-set evidence through every failure path. Execute the relevant checks above and record actual provider and deployment acceptance separately.
+
+Do not overlap Core suites with managed browser stacks. Fix source for the browser run and record tested revision/process/session state. Historical disposable-directory permissions are not universal reset authority; establish the exact current environment before resetting any test state. Personal settings, delegation and external-effect authorization come from the current owner request, never retired plan prompts.

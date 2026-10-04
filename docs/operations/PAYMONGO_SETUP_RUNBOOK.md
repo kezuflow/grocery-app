@@ -45,9 +45,8 @@ and can then be exposed through a temporary HTTPS tunnel.
 
 The repository also defines isolated `staging` Worker environments. Staging deploys Web and Core
 as `freshmarkets-web-staging` and `freshmarkets-core-staging`; Web binds to Core and Core owns the
-staging D1 database, product-media bucket, scheduled jobs, and PayMongo webhook. Web is served from
-the `freshmarkets.ph` Custom Domain while the Core `workers.dev` URL remains the PayMongo test
-webhook endpoint. Do not reuse unrelated Workers, Pages projects, databases, buckets, tunnels, or
+staging D1 database, product-media bucket, scheduled jobs, and PayMongo webhook. Web staging uses its separate `workers.dev` hostname; `freshmarkets.ph` belongs to production.
+The staging Core `workers.dev` URL remains the PayMongo test webhook endpoint. Do not reuse unrelated Workers, Pages projects, databases, buckets, tunnels, or
 custom domains from the account.
 
 Set `PAYMENT_PROVIDER=paymongo` in the deployed Core environment. Add the server credentials
@@ -135,3 +134,18 @@ The adapter retains card/3DS continuation and reconciliation for historical paym
 only against an existing authorized historical/test fixture; they are not new-checkout activation
 requirements and do not authorize enabling Card. Preserve their signed observations, refunds,
 idempotency and unknown-outcome recovery. A local test adapter is not actual QR Ph or card acceptance.
+
+## Four clocks and Scheduled recovery
+
+Keep the four independent clocks visible in operational diagnosis:
+
+| Clock | Meaning |
+| --- | --- |
+| Order cutoff | Exclusive published boundary for new cycle checkout/payment admission and QR creation/renewal. Early closure stops admission without backdating this value. |
+| Issued QR expiry | At most 30 minutes for each code issued before admission closes; expiry does not establish whether money was received. |
+| SDK action expiry | Existing 60 minutes from payment setup, independent of QR expiry and financial finality. |
+| Procurement starts | Editable saved cycle deadline for committing verified paid demand; default 1:00 AM after the exclusive midnight cutoff. The default hour is a buffer, not a confirmation guarantee. |
+
+An already-issued unexpired QR survives recovery even when generation is unavailable. Core rechecks current cycle and ownership before generation/renewal. Verified payment success is retained independently of Order reaction success. Web shows Payment received while commitment is unfinished and Payment successful only with the immutable committed Order. At Procurement starts, freeze confirmed demand; later captured uncommitted Scheduled money enters durable, verified full-refund recovery without a new Order. Unknown/unpaid attempts do not become refunds. SDK/QR timeout never manufactures failure or cancels financial recovery.
+
+Admin Payments contains captured payments/refunds and genuine Needs attention cases. Ordinary unpaid/expired attempts and healthy confirmation waits do not create staff work. Group issues by Payment; verified resolution removes them with cleanup/audit evidence. Exhausted/unknown financial work follows its existing scoped recheck and reconciliation commands. No period for deleting financial records is authorized. See [PRODUCT](../product/PRODUCT.md#payments-and-refunds) and [state transitions](../architecture/STATE_MACHINES.md).

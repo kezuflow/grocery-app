@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 
-const agentsRoot = new URL("../.agents/skills/", import.meta.url);
-const hermesRoot = new URL("../.hermes/skills/", import.meta.url);
+const agentsRoot = new URL("../.agents/skills/shadcn-admin/", import.meta.url);
+const hermesRoot = new URL("../.hermes/skills/shadcn-admin/", import.meta.url);
 
 async function files(root, directory = "") {
   const entries = await readdir(new URL(directory, root), { withFileTypes: true });
@@ -15,9 +15,26 @@ async function files(root, directory = "") {
 }
 
 const agentsFiles = await files(agentsRoot);
+for (const required of [
+  "SKILL.md",
+  "agents/openai.yml",
+  "cli.md",
+  "customization.md",
+  "mcp.md",
+  "registry.md",
+  "rules/base-vs-radix.md",
+  "rules/chat.md",
+  "rules/composition.md",
+  "rules/forms.md",
+  "rules/icons.md",
+  "rules/styling.md",
+]) {
+  if (!agentsFiles.includes(required))
+    throw new Error(`Required Admin skill file missing: ${required}`);
+}
 const hermesFiles = await files(hermesRoot);
 if (JSON.stringify(agentsFiles) !== JSON.stringify(hermesFiles)) {
-  throw new Error("The .agents and .hermes skill file lists differ");
+  throw new Error("The required Admin skill source and Hermes mirror file lists differ");
 }
 for (const path of agentsFiles) {
   const [agentsContent, hermesContent] = await Promise.all([
@@ -28,4 +45,4 @@ for (const path of agentsFiles) {
     throw new Error(`Skill mirror differs: ${path}`);
   }
 }
-console.log(`Skill mirrors verified: ${agentsFiles.length} identical files.`);
+console.log(`Admin skill mirrors verified: ${agentsFiles.length} identical files.`);
