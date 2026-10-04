@@ -1,7 +1,9 @@
 # FreshMarkets Product Completeness Audit
 
-Reconciled 2026-08-27. This is descriptive audit evidence; `PRODUCT_SCOPE.md` and the canonical
-architecture set remain authoritative.
+Status: **historical audit at 2026-08-27, not a current task list or implementation matrix**.
+Later fixes and decisions supersede these findings. [PRODUCT.md](PRODUCT.md) owns current meaning;
+the [active checkpoint](../operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) owns current work.
+Former progress-ledger paths and PRODUCT_SCOPE references below are historical.
 
 ## Classification rule
 
@@ -10,7 +12,7 @@ Schemas, plans, mock-only seams, self-review, and skipped browser tests are not 
 completion. `LOCAL SLICE` means focused automated evidence exists but production or full journey
 acceptance does not.
 
-## Current matrix
+## Historical matrix (2026-08-27)
 
 | Capability | State | Current evidence / gap |
 |---|---|---|

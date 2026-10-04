@@ -1,12 +1,15 @@
 # Address maps and external dispatch
 
 This runbook covers customer address confirmation and external-provider delivery operations.
-FreshMarkets has no active internal Rider, batch, route-planning, or live-driver-map workflow.
+FreshMarkets has no internal Rider, batch or route-planning workflow. Approved Order messaging and
+external Lalamove tracking remain available; they do not introduce third-party rider chat or an internal fleet.
 
 ## Address incidents
 
-FreshMarkets does not operate customer service-area polygons or geofences. Configure the exact map
-pin and courier pickup profile on every customer-fulfillment location.
+Core requires the confirmed pin to lie inside the union of active Global service-area polygons.
+Global owns that area; locations do not own separate polygons. Configure the exact map pin and
+courier pickup profile on every customer-fulfillment location. Inside the Global area, Core assigns
+the nearest eligible location using its exact pin and stable ID tie-break, without stock rerouting.
 Google Maps Platform must have Maps JavaScript API, Places API (New), Geocoding API, and Routes API enabled for the
 deployment project. Use two different API keys:
 
@@ -55,10 +58,12 @@ target environment. A successful local-key check does not prove deployed-key act
 ## External dispatch
 
 1. Open the location-scoped Delivery queue.
-2. Confirm the store pickup profile, committed destination, phone, promise/window, provider, and
-   total shipping grams.
-3. For Instant, book only the provider/service snapshotted from the customer option. For Scheduled,
-   choose an enabled provider and an immediate or supported future pickup within the window.
+2. Confirm the store pickup profile, committed destination, phone, promise/window and provider.
+   Quotes/bookings use the fixed 20,000 g Motorcycle envelope; staff must pack within actual provider limits.
+3. Instant first booking runs automatically at Start packing using the accepted provider/service.
+   Scheduled uses week Purchase complete -> per-Order Finish packing -> staff Lalamove or Manual choice.
+   Manual is ordinary for Scheduled and available for Instant recovery only after definite closure
+   of a previous courier attempt and completed packing. Active/unknown outcomes block replacement.
 4. Use a stable idempotency key and current job version. Retry an ambiguous create only with the
    exact same command and key.
 5. Use provider refresh when a webhook is delayed. Never infer success from browser state.

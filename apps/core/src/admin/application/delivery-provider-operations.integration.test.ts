@@ -1,3 +1,4 @@
+import { seedRetainedScheduledPicking } from "../../test-commerce-fixtures";
 import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
 import { reviseDeliveryPromise } from "../../delivery/application/revise-delivery-promise";
 import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
@@ -307,20 +308,7 @@ async function receiveScheduledTestGoods(delivery: { orderId: string }, now: num
       requestId: crypto.randomUUID(),
     }),
   ).toMatchObject({ ok: true });
-  expect(
-    await advanceFulfillment(
-      env.DB,
-      {
-        headers: {},
-        requestId: crypto.randomUUID(),
-        orderId: delivery.orderId,
-        action: "START_PICKING",
-        expectedVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-      },
-      { authorize: async () => true },
-    ),
-  ).toMatchObject({ ok: true });
+  await seedRetainedScheduledPicking(env.DB, delivery.orderId);
 }
 
 async function preparePackedDelivery(
@@ -862,9 +850,13 @@ describe("external delivery request", () => {
       await bookAutomaticInstantDeliveries(env.DB, providers, now, instant.orderId),
     ).toMatchObject({ attempted: 0 });
     for (const delivery of [instant, scheduled]) {
+      // Retained Scheduled preparation may continue, but cannot start through a stale caller.
+      const retainedScheduled = delivery === scheduled;
+      if (retainedScheduled) await seedRetainedScheduledPicking(env.DB, delivery.orderId);
       for (const [index, action] of (
         ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
       ).entries()) {
+        if (retainedScheduled && action === "START_PICKING") continue;
         expect(
           (
             await advanceFulfillment(

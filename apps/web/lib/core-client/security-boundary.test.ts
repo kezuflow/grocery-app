@@ -51,7 +51,7 @@ describe("Core client request boundary", () => {
     expect(JSON.stringify(headers)).not.toContain("password");
   });
 
-  it("matches the runbook to the implemented CSP and pin-based delivery model", async () => {
+  it("matches the runbook to CSP, the Global-area gate and nearest-location pins", async () => {
     const runbookUrl = new URL("../../../../docs/runbooks/MAPS_AND_DISPATCH.md", import.meta.url);
     const runbook = existsSync(runbookUrl) ? readFileSync(runbookUrl, "utf8") : "";
     const configuredHeaders = await nextConfig.headers?.();
@@ -78,8 +78,10 @@ describe("Core client request boundary", () => {
     );
     expect(polygonReleaseScripts).toEqual([]);
     expect(runbook).toContain(
-      "FreshMarkets does not operate customer service-area polygons or geofences.",
+      "Core requires the confirmed pin to lie inside the union of active Global service-area polygons.",
     );
+    expect(runbook).toContain("locations do not own separate polygons");
+    expect(runbook).toContain("Places API (New), Geocoding API and Routes");
     expect(runbook).toContain("worker-src 'self' blob:");
     expect(runbook).toContain("wrangler versions secret put GOOGLE_MAPS_SERVER_KEY");
   });

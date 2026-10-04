@@ -1,3 +1,4 @@
+import { seedRetainedScheduledPicking } from "../../test-commerce-fixtures";
 import { buildCancellationRefundSet } from "./build-cancellation-refund-set";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { reconcileRefunds } from "../../payments/application/reconcile-refunds";
@@ -129,8 +130,9 @@ describe("explicit cancellation and refund orchestration", () => {
     )
       .bind(crypto.randomUUID(), fixture.orderId, now)
       .run();
+    await seedRetainedScheduledPicking(env.DB, fixture.orderId);
     for (const [index, action] of (
-      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "RECORD_SHORTAGE"] as const
+      ["MARK_READY_TO_PACK", "START_PACKING", "RECORD_SHORTAGE"] as const
     ).entries()) {
       const result = await advanceFulfillment(
         env.DB,
@@ -138,7 +140,7 @@ describe("explicit cancellation and refund orchestration", () => {
           orderId: fixture.orderId,
           action,
           headers: {},
-          expectedVersion: index + 1,
+          expectedVersion: index + 2,
           idempotencyKey: `packing-lock-${fixture.orderId}-${action}`,
           requestId: crypto.randomUUID(),
         },
@@ -183,20 +185,7 @@ describe("explicit cancellation and refund orchestration", () => {
           fixture.orderId,
         ),
       ]);
-      expect(
-        await advanceFulfillment(
-          env.DB,
-          {
-            orderId: fixture.orderId,
-            action: "START_PICKING",
-            headers: {},
-            expectedVersion: 1,
-            idempotencyKey: `accept-${fixture.orderId}`,
-            requestId: crypto.randomUUID(),
-          },
-          { authorize: async () => true },
-        ),
-      ).toMatchObject({ ok: true, value: { status: "PICKING" } });
+      await seedRetainedScheduledPicking(env.DB, fixture.orderId);
       const request = { ...command(fixture.orderId), expectedVersion: 2 };
       const submitted: number[] = [];
       const result = await cancelOrder(env.DB, request, {

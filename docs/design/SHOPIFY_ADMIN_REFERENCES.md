@@ -1,8 +1,8 @@
 # Shopify admin reference ledger
 
 **Task:** SAUI — Freshmarkets admin redesign
-**Status:** Execution reference ledger; inspect relevant images and intermediate states when a decision remains unclear.
-**Visual target:** the supplied Shopify Spring ’26 admin screenshot, not an arbitrary later redesign or a mixture of unrelated products.
+**Status:** Historical SAUI reference ledger, with navigation reconciled to later approved features. The owner's 2026-09-27 stock shadcn Admin reset in [DESIGN.md](DESIGN.md) supersedes its older visual target. Use references only for behavior/presentation details consistent with the current guide.
+**Historical visual target:** the supplied Shopify Spring ’26 screenshot. Current visual baseline is stock shadcn in the configured Radix/new-york setup as routed by DESIGN and the project-local shadcn-admin skill.
 
 ## Approved appearance baseline
 
@@ -26,7 +26,7 @@ Representative preview images were inspected in the preceding conversation; a re
 | M08 | [Creating a discount — flow](https://mobbin.com/flows/97e8b9c0-d21c-4ee5-976d-1266f9aab926)        | Grouped rules form plus plain-language summary                                                        | Existing targets, limits, amounts, dates and eligibility; same-route editor where no detail route exists  |
 | M09 | [Finance overview](https://mobbin.com/screens/8e44cfcf-3e62-4891-a722-ab16c2f0bbd0)                | Restrained financial cards and section hierarchy                                                      | Existing Payments/Needs attention functionality; not Shopify Balance, credit or payout-account features   |
 | M10 | [Analytics](https://mobbin.com/screens/7483aa3e-31eb-470c-bbe2-477a81106422)                       | Compact date controls and metric/chart card hierarchy                                                 | Existing aggregates/time series only; never invent trends or interpret unavailable as zero                |
-| M11 | [Point of Sale settings](https://mobbin.com/screens/fb60bc7a-4d41-48ee-9db2-8cafc9303462)          | POS positioned within sales-channel hierarchy                                                         | Navigation reference only: Freshmarkets POS remains disabled, with no new route                           |
+| M11 | [Point of Sale settings](https://mobbin.com/screens/fb60bc7a-4d41-48ee-9db2-8cafc9303462)          | POS positioned within sales-channel hierarchy                                                         | Navigation reference only: current Picking & packing prepares paid online Orders; the former POS URL is an alias, not walk-in sales                           |
 
 ## Precise MCP queries when evidence is insufficient
 

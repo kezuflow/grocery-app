@@ -1,3 +1,4 @@
+import { seedRetainedScheduledPicking } from "../../test-commerce-fixtures";
 import { describe, it, expect } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
@@ -92,19 +93,19 @@ async function fixture() {
         ),
       ]);
     }
-    if (prepare)
-      for (const [index, action] of (
-        ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING"] as const
-      ).entries())
+    if (prepare) {
+      await seedRetainedScheduledPicking(env.DB, id);
+      for (const [index, action] of (["MARK_READY_TO_PACK", "START_PACKING"] as const).entries())
         expect(
           await core.advanceAdminFulfillment({
             ...common,
             orderId: id,
             action,
-            expectedVersion: index + 1,
+            expectedVersion: index + 2,
             idempotencyKey: crypto.randomUUID(),
           }),
         ).toMatchObject({ ok: true });
+    }
     return {
       ...common,
       orderId: id,

@@ -1,5 +1,7 @@
 # Payments Simplification Execution Plan
 
+Status: **PS-01–PS-06 source/local work completed; payment-window/refund clauses superseded by PRODUCT's 2026-09-26/27 Scheduled correction.** The original model note is historical, not current session settings.
+
 Prepared 21 September 2026 for **Sol 5.6, Medium reasoning**. Parent task:
 `PAYMENTS-SIMPLIFY-1`. The owner subsequently authorized PS-01 through PS-06, which are implemented
 and locally verified as recorded in the active checkpoint. This remains distinct from deployment,
@@ -27,14 +29,17 @@ The following decisions include the owner's corrections after the initial conver
 4. Relevant diagnostics remain in a collapsed Technical details section. No separate reconciliation
    destination, overview dashboard, workload graph or generic recovery console.
 5. Verified resolution automatically removes an issue from staff work. No manual Close case or
-   acknowledgment chore. Choosing to refund still requires the existing staff decision.
-6. Keep the current **one-hour FreshMarkets payment continuation** and **up-to-30-minute QR code**.
-   Existing in-window QR replacement remains. The owner asked whether the window was 24 hours; that
-   was corrected, not authorization to change it. Add no duration setting.
+   acknowledgment chore. Problem-related refunds require staff approval; verified late-captured uncommitted Scheduled money follows the later automatic full-refund exception.
+6. Current Scheduled clocks supersede the original one-hour continuation criterion: Order cutoff ends
+   normal QR generation/renewal; an issued QR keeps its individual expiry of at most 30 minutes;
+   verified admitted commitment ends at saved editable Procurement starts. SDK actions currently
+   have a separate 60-minute lifetime; extending them is unresolved, not inferred from settlement.
+   No 24-hour change was approved.
 7. Window expiry does not cancel the PayMongo intent or prove permanent nonpayment. Never force a
    canonical terminal state from a timer. Later valid payment confirmation must still be processed.
 8. Preserve the required local evidence. No new deletion/retention period, data purge, schema reset,
-   new provider integration, PayMongo-dashboard sync/import, or automatic refund policy in this slice.
+   new provider integration or PayMongo-dashboard sync/import. The later approved Scheduled late-capture
+   full-refund exception supersedes this slice's old exclusion; unknown/unpaid funds are never refunded as captured.
 
 ### What PROCESSING means
 
@@ -356,8 +361,8 @@ must use the harness's documented configuration. Do not substitute production pr
 | Case | Required proof |
 | --- | --- |
 | Active waiting then expired unpaid | No staff work; final provider check concludes internally; canonical state remains compatible with later confirmation |
-| One-hour boundary and QR renewal | Existing up-to-30-minute QR replacement works within the original one-hour continuation; no 24-hour change or automatic new payment |
-| Late/duplicate paid event | Captured money remains visible; one Order/addition and one set of business effects; no second charge |
+| Current Scheduled clocks and QR recovery | Fresh and resumed actions retain cutoff; no generation/renewal at or after cutoff; issued QR stays usable to its own expiry; saved Procurement starts governs settlement/late-capture refunds. SDK action currently lasts 60 minutes; extending it remains unresolved. No automatic new payment. |
+| Late/duplicate paid event | Before saved Procurement starts, one exactly-once admitted Order/retained addition. At/after the freeze, captured uncommitted Scheduled money stays visible and uses durable full-refund recovery with no new Order/demand or second charge. |
 | Expired plus provider unavailable / missing reference | No fabricated failure/nonpayment; one genuine unresolved issue after bounded recovery |
 | Copied/legacy records of unknown provider mode | Never infer mode or resolution from age/customer name; no production cleanup assertion without provider evidence |
 | Eight raw cases for six payment identities | At most six linked attention rows; count/list agree, with separate unmatched-event groups where present |

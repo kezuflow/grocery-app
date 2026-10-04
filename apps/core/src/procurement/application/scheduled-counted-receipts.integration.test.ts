@@ -1,3 +1,4 @@
+import { seedRetainedScheduledPicking } from "../../test-commerce-fixtures";
 import { describe, it, expect } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import type { RpcResult } from "@freshmarkets/contracts";
@@ -191,8 +192,9 @@ describe("weighed Scheduled size receipt", () => {
     expect(
       await core.recordScheduledCountedReceipt({ ...fx.request, receivedWeightGrams: 3400 }),
     ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    await seedRetainedScheduledPicking(env.DB, fx.id);
     for (const [index, action] of (
-      ["START_PICKING", "MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
+      ["MARK_READY_TO_PACK", "START_PACKING", "MARK_PACKED"] as const
     ).entries())
       expect(
         await core.advanceAdminFulfillment({
@@ -200,7 +202,7 @@ describe("weighed Scheduled size receipt", () => {
           locationId,
           orderId: fx.id,
           action,
-          expectedVersion: index + 1,
+          expectedVersion: index + 2,
           idempotencyKey: crypto.randomUUID(),
         }),
       ).toMatchObject({ ok: true });

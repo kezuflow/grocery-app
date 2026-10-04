@@ -139,3 +139,18 @@ The following is evidence from the GD-1 commit, not a description of current par
 Working-tree verification passed using `verify-guidance.py` in the checkpoint's preservation-artifact directory: 27 archived originals match their SHA-256 values; all 16 unfinished application files match; the protected discussion and encoding-damaged status match their saved bytes; config remains locally deleted. Active Markdown links/anchors, the 113 section-review hashes/destinations, all 21 decision rows, eight phase rows, five journeys and pre-existing CA IDs passed. Documented root/workspace command names were checked against manifests. The first command scan mistook prose about pnpm versions/monorepo for commands; the checker was corrected to inspect command syntax and workspace scripts without changing valid documentation.
 
 Final `verify-guidance.py --staged` passed: all 27 staged archive originals retain their source bytes, 16 application files and protected records match, 33 active documents have 148 valid local links/anchors, and section/decision/task/phase/journey/command checks pass. `pnpm naming:check`, `pnpm harness:test` (26/26), `git diff --check` and `git diff --cached --check` passed. The staged diff contains intended guidance/archive files only. Archive-local `.gitattributes` disables text normalization so captured CRLF bytes remain identical in Git; it changes no application settings. The current CA-4.2 migration/contracts/Core/Web/tests remain uncommitted and outside the GD-1 documentation commit. Its 38 focused Core tests and static/migration checks are inherited evidence; browser startup failed before execution and aggregate acceptance remains open. No application suite was run solely to validate guidance.
+
+## Rules/code audit remediation provenance — 2026-10-04
+
+`CA-7.RULES-AUDIT-1` reconciles the owner-supplied audit F01–F13 against `c835d988`.
+Current Scheduled purchase/packing, mode-specific dispatch/Manual, Global-area geography, fixed
+Motorcycle parcel, retired additions and bounded messaging/tracking/station exceptions are recorded
+in their existing owning guides; no new commerce-policy authority is created. Operational examples
+now name the intended environment/APIs/current checkout channel. SDK action lifetime remains a
+separate unresolved extension question, not a changed provider setting.
+
+The protected discussion, historical migration chain and encoding-damaged IMPLEMENTATION_STATUS
+are unchanged. The old active checkpoint is preserved in full in [history through 2026-10-04](checkpoints/COMMERCE_ALIGNMENT_EXECUTION_HISTORY_20261004.md).
+The completed dispatch plan now points to its [preserved original](../archive/FULFILLMENT_DISPATCH_ALIGNMENT_PLAN_20260922.md)
+and current mode-specific criteria. The [archive index](../archive/INDEX.md) routes these sources.
+Actual execution/checks and unfinished provider/release acceptance remain in [the active checkpoint](checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md).

@@ -1,7 +1,7 @@
 # Freshmarkets Shopify-style admin — long-running implementation plan
 
 **Task ID:** SAUI
-**Status:** Owner-approved design direction; implementation in progress under SAUI checkpoint.
+**Status:** Historical execution plan with navigation criteria reconciled to later owner decisions. The 2026-09-27 Admin-wide stock shadcn reset in [DESIGN.md](DESIGN.md) supersedes its older visual baseline. Current work/status lives only in the commerce checkpoint; this plan does not restart SAUI slices.
 **Prepared:** 24 September 2026
 **Repository:** `kezuflow/grocery-app`
 **Recommended lead:** GPT-5.6 Sol / High
@@ -19,7 +19,7 @@ The approved direction is:
 - Use Shopify-like navigation grouping: Home, Orders, Products, Customers, Discounts, Content, Finance, Analytics; Sales channels and Apps; Settings pinned below.
 - Prefer existing full record/edit routes for substantial Orders and Customers work. Product list selection still exposes the authoritative scoped Product preview and its approved inline Global/category/location-price controls; a full route handles longer edits. Where a separate editor route does not exist, use an editor state inside the existing workspace. The design does not require new paths.
 - Use shared resource-picker, focused-edit, confirmation, dispatch, and notification patterns. Do not put every task in a drawer.
-- POS and Messaging are visible, explicitly disabled future entries, with no navigation or fake implementation.
+- Preserve approved Picking & packing and active Order Messages destinations and current scope/capabilities. The former POS URL is a compatibility alias; walk-in POS/payment stays excluded. Later PRODUCT/DESIGN decisions supersede disabled-placeholder criteria.
 - Preserve the existing calendar-led Scheduled cycles workflow and existing operational workflows, restyling them to fit the new admin.
 
 ### Evidence and revision boundary
@@ -49,7 +49,7 @@ The current commerce-alignment task has a separate checkpoint and a no-subagent 
 
 Freeze a route manifest at Phase 0. No new, renamed, or deleted application page routes, API routes, route aliases, or redirect destinations. Existing routes may render redesigned components. New non-route components, scoped styles, tests, and task documentation are allowed.
 
-Existing query-state/deep-link behavior remains compatible. Pure presentation state may live in component state or compatible URL query state, but it must not pretend a new query field is supported by the server. No new endpoints for global search, filters, saved views, bulk actions, drafts, POS, or messaging.
+Existing query-state/deep-link behavior remains compatible. Pure presentation state may live in component state or compatible URL query state, but it must not pretend a new query field is supported by the server. This presentation plan adds no endpoints; preserve approved Picking & packing and messaging routes. Unsupported search, saved views, bulk actions, drafts and walk-in POS stay excluded.
 
 Core remains the authority for authentication, authorization, scope, legal actions, financial facts, stock, scheduling, and provider operations. Do not change database schemas, migrations, financial calculations, stock conversions, cancellation policy, booking timing, or provider adapters as an incidental UI improvement. Discoveries requiring those changes go into a separately bounded blocker/decision entry.
 
@@ -181,9 +181,9 @@ Finance
 Analytics
 Sales channels
   Online Store (existing storefront link)
-  Point of Sale — Coming soon; disabled
+  Picking & packing — paid-order preparation; former POS URL is an alias
 Apps
-  Messaging — Coming soon; disabled
+  Messages — existing scoped Order messaging
 Settings (pinned; authorized administrative destinations only)
 ```
 
@@ -208,7 +208,7 @@ Keep operational exceptions and all other currently authorized destinations reac
 | Settings / configuration | `/admin/settings`, `/admin/settings/fulfillment-mode`, `/admin/settings/scheduled-cycles` and existing descendants |
 | Administrative records | `/admin/locations`, `/admin/locations/service-areas`, `/admin/staff`, `/admin/staff/roles`, `/admin/audit` and existing descendants |
 | Online Store | Existing storefront `/` link; no new admin channel route |
-| POS / Messaging | No destination; no `href="#"`, click navigation, or fake endpoint |
+| Picking & packing / Messages | Existing approved destinations and current access; no walk-in POS or fake endpoint |
 
 This is a planning map, not the complete executable manifest. Phase 0 must enumerate every actual route, compatibility redirect, and deep-link contract.
 
@@ -263,7 +263,7 @@ After Phase 3, read-only research/review for a later family can run ahead. Writi
 **Slices**
 
 - **02.1 Shell geometry:** full-width dark header with Freshmarkets identity; sidebar underneath; stable workspace; expanded desktop default; mobile navigation sheet. Preserve explicit user appearance choices unless a newly approved rule requires otherwise. Neutralize admin accents without touching storefront tokens.
-- **02.2 Navigation:** implement the approved groups from authorized destinations, single ordering owner, correct active descendant states, keyboard interaction, independent sidebar scrolling, and pinned Settings. Keep restricted children reachable. Add only non-interactive POS/Messaging placeholders.
+- **02.2 Navigation:** implement the approved groups from authorized destinations, single ordering owner, correct active descendant states, keyboard interaction, independent sidebar scrolling, and pinned Settings. Keep restricted children reachable. Preserve approved Picking & packing/Messages navigation and scoped access.
 - **02.3 Header scope:** move the existing selector beside the bell, preserve Global and authorized fulfillment locations, use stable width/truncation, retain label accessibility and current scope authority. Preserve the existing admin notification panel behavior; do not add decorative notification animation.
 - **02.4 Scope transition safety:** handle dirty-form confirmation, pending/unknown-command locks, query/selection reset, scope-keyed data, and old-response rejection. Never render location A's data beneath a newly selected location B label. On a destination that is invalid in the new scope, navigate only to an authorized existing destination with clear feedback or keep the verified denied/selection state.
 
@@ -451,7 +451,7 @@ Cover representative existing capabilities and states, not only the happy path:
 
 | Area | Required observations |
 |---|---|
-| Navigation | Global/local and restricted users; receiving-only/child-only access; unavailable parent destinations; direct URLs; disabled POS/Messaging |
+| Navigation | Global/local and restricted users; receiving-only/child-only access; unavailable parent destinations; direct URLs; current Picking & packing/Messages access |
 | Scope | A→B data separation; fast switching/out-of-order reads; list selections cleared; dirty editor guard; pending/unknown command remains bound to A |
 | Orders | Index/detail/back; supported filters/cursors; payment/preparation/delivery separation; cancellation/recovery where already supported |
 | Products | Global versus location; media; variants and exact units; view-only users; pending/conflicting/unknown saves |

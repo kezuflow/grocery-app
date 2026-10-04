@@ -156,6 +156,14 @@ export async function advanceFulfillment(
       command.requestId,
     );
   const scheduledPack = command.action === "COMPLETE_SCHEDULED_PACKING";
+  // Successful historical commands replay above. Only already-started retained
+  // preparation may continue through the legacy goods-consumption workflow.
+  if (order.fulfillment_mode === "SCHEDULED" && command.action === "START_PICKING")
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Scheduled orders use Purchase complete and Finish packing order",
+      command.requestId,
+    );
   if (
     scheduledPack &&
     (order.fulfillment_mode !== "SCHEDULED" ||

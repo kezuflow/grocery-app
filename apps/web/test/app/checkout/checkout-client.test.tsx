@@ -771,12 +771,15 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
 
     expect(quoteCalls).toBe(1);
-    expect(container.textContent).toContain("Scheduled delivery");
+    expect(container.querySelector('[aria-label="Scheduled delivery cutoff"]')).not.toBeNull();
     expect(container.textContent).toContain("Order cutoff");
     expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove.");
     expect(container.textContent).toContain("₱30.00");
-    expect(container.textContent).toContain("Scheduled delivery cutoff: Friday, 11:59 PM.");
-    expect(container.textContent).toContain("following Saturday or Sunday");
+    expect(container.textContent).toContain(
+      "Scheduled ordering closes Sep 19, 2026, 8:00 AM (Philippine time).",
+    );
+    expect(container.textContent).not.toContain("following Saturday");
+    expect(container.textContent).toContain("choose another available delivery week");
     expect(container.textContent).not.toContain("Instant checkout is unavailable");
   });
 

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { locationManager } from "../../test-location-fixtures";
 import { seedTestCycle } from "../../test-commerce-fixtures";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
+import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
+import { requestHash } from "../../idempotency";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 import {
   requestExternalDelivery,
@@ -49,6 +51,74 @@ async function fixture() {
 }
 
 describe("Scheduled purchase and per-order packing", () => {
+  it("rejects a stale Scheduled Start picking caller without entering the legacy workflow", async () => {
+    const { manager, orderId } = await fixture();
+    const idempotencyKey = crypto.randomUUID();
+    expect(
+      await core.advanceAdminFulfillment({
+        headers: manager.headers,
+        requestId: crypto.randomUUID(),
+        locationId,
+        orderId,
+        action: "START_PICKING",
+        expectedVersion: 1,
+        idempotencyKey,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM fulfillment_record WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ status: "NOT_STARTED", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED", version: 1 });
+    for (const table of ["idempotency_records", "audit_event"]) {
+      expect(
+        await env.DB.prepare(`SELECT COUNT(*) n FROM ${table} WHERE idempotency_key=?`)
+          .bind(idempotencyKey)
+          .first(),
+      ).toEqual({ n: 0 });
+    }
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) n FROM cycle_goods_movement WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+
+  it("replays a successful historical Scheduled Start picking receipt before the new-entry rejection", async () => {
+    const { orderId } = await fixture();
+    const command = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      orderId,
+      action: "START_PICKING" as const,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const hash = await requestHash({ orderId, action: command.action, expectedVersion: 1 });
+    await env.DB.prepare(
+      "INSERT INTO idempotency_records(scope,idempotency_key,request_hash,status,result_type,result_reference,created_at,updated_at) VALUES ('fulfillment.advance',?,?,'SUCCEEDED','fulfillment',?,1,1)",
+    )
+      .bind(command.idempotencyKey, hash, orderId)
+      .run();
+    const replay = await advanceFulfillment(env.DB, command, { authorize: async () => true });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: { id: orderId, status: "PICKING", version: 2 },
+    });
+    expect(
+      await advanceFulfillment(env.DB, command, { authorize: async () => false }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM fulfillment_record WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ status: "NOT_STARTED", version: 1 });
+  });
   it("books a courier after current Scheduled packing without a legacy goods ledger", async () => {
     const { manager, cycleId, orderId } = await fixture();
     const now = Date.now();

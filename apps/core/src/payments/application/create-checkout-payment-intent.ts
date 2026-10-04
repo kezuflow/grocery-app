@@ -12,6 +12,7 @@ import { createPaymentRepository } from "../infrastructure/d1/payment-repository
 import { revalidateCheckoutQuote } from "../../checkout/application/revalidate-checkout-quote";
 import { requireSellingOpen } from "../../commerce/application/global-commerce-configuration";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
+import { scheduledQrGenerationEndsAt } from "../domain/qr-generation";
 
 function failure(code: AppErrorCode, message: string, requestId: string) {
   return { ok: false as const, error: { code, message, requestId } };
@@ -57,16 +58,10 @@ export async function createCheckoutPaymentIntent(
   const existing = await paymentRepository.findIntentByIdempotencyKey(command.idempotencyKey);
   const repository = createCheckoutRepository(database);
   const quote = await repository.findQuoteById(command.checkoutAttemptId);
-  const qrGenerationEndsAt = (() => {
-    if (
-      quote?.fulfillmentMode !== "SCHEDULED" ||
-      !quote.cycleSnapshot ||
-      typeof quote.cycleSnapshot !== "object"
-    )
-      return null;
-    const value = (quote.cycleSnapshot as Record<string, unknown>).cutoffAt;
-    return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
-  })();
+  const qrGenerationEndsAt =
+    quote?.fulfillmentMode === "SCHEDULED"
+      ? scheduledQrGenerationEndsAt(quote.cycleSnapshot)
+      : null;
   if (existing) {
     if (
       existing.purpose !== "GROCERY_CHECKOUT" ||

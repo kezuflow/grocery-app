@@ -67,6 +67,7 @@ const incompleteResultSchema = z.discriminatedUnion("ok", [
             redirectUrl: z.string().nullable(),
             clientToken: z.string().nullable(),
             expiresAt: z.string().nullable(),
+            qrGenerationEndsAt: z.iso.datetime({ offset: true }).nullable().optional(),
           }),
         }),
       ),
@@ -183,7 +184,29 @@ export default function OrdersPage() {
 
   function continuePayment(item: CustomerIncompleteCheckoutView) {
     if (item.action.actionType === "NONE") return;
-    sessionStorage.setItem("freshmarkets.checkoutPaymentAction", JSON.stringify(item.action));
+    const storageKey = "freshmarkets.checkoutPaymentAction";
+    let savedQr: { qrCode?: string; qrCodeExpiresAt?: string } = {};
+    try {
+      const stored = z
+        .object({
+          paymentIntentId: z.string(),
+          clientToken: z.string().nullable(),
+          qrCode: z.string(),
+          qrCodeExpiresAt: z.iso.datetime({ offset: true }),
+        })
+        .safeParse(JSON.parse(sessionStorage.getItem(storageKey) ?? "null"));
+      if (
+        stored.success &&
+        stored.data.paymentIntentId === item.paymentIntentId &&
+        stored.data.clientToken === item.action.clientToken &&
+        Date.parse(stored.data.qrCodeExpiresAt) > Date.now()
+      ) {
+        savedQr = { qrCode: stored.data.qrCode, qrCodeExpiresAt: stored.data.qrCodeExpiresAt };
+      }
+    } catch {
+      // Only the authenticated action is required; an unusable browser hint is discarded.
+    }
+    sessionStorage.setItem(storageKey, JSON.stringify({ ...item.action, ...savedQr }));
     if (item.action.actionType === "REDIRECT" && item.action.redirectUrl) {
       window.location.assign(item.action.redirectUrl);
       return;

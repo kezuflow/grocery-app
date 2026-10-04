@@ -51,8 +51,8 @@ directly from Core through the Service Binding (`coreClient(env.CORE)`); it does
   `/api/catalog` with live announcements while the server renders only the first page.
 - `lib/storefront/cart-client.ts` wraps `/api/commerce/cart` with a cart-change broadcast
   (`fm:cart-changed`) and a toast channel (`fm:storefront-toast`). Cart mutations require an
-  authenticated customer; anonymous add-to-cart shows a sign-in affordance instead of
-  redirecting. Pre-auth add-to-cart needs a Core anonymous-cart capability and is future work.
+  authenticated customer in Core; guests use a browser-local Cart and explicitly merge it into
+  Core after sign-in. Guest prices/availability remain provisional and never authorize payment.
 - `components/storefront/marketplace/` holds the marketplace surface pieces (hero, promo
   banners, add-to-cart stepper, cart indicator, toast announcer, quick-view provider/dialog).
 - `tests/storefront-home.spec.ts` covers anonymous browse, server-side filtering, the quick-view

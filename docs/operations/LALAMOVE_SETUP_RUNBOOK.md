@@ -47,8 +47,10 @@ The repository's local `MOTORCYCLE` value is only a development starting point a
 if the authenticated city response differs. The PH integration deliberately omits the optional
 Lalamove `item` object even if sandbox capability discovery happens to expose it.
 
-Core declares market, language and service type as blank configuration variables and the two
-credentials as required secret bindings in both default and staging configuration. Wrangler filters
+Core's default development configuration leaves market/language/service variables blank; staging
+and production currently declare `PH`, `en_PH` and `MOTORCYCLE`. The configured service key still
+requires target-environment capability verification. The two credentials are required secret bindings.
+Wrangler filters
 `.dev.vars` when `secrets.required` is present: undeclared names are discarded even when the file
 contains them. If checkout throws `LALAMOVE_SERVICE_TYPE_REQUIRED`, verify these declarations as
 well as the ignored local values, then restart the development stack after a binding change.
@@ -123,20 +125,32 @@ Fund the Lalamove production wallet and obtain production credentials. Store the
 interactive secret command from `apps/core`:
 
 ```powershell
+pnpm exec wrangler secret put LALAMOVE_API_KEY --config wrangler.jsonc --env production
+pnpm exec wrangler secret put LALAMOVE_API_SECRET --config wrangler.jsonc --env production
+```
+
+These commands target `freshmarkets-core-production`; Cloudflare documents that [`secret put` deploys a new Worker version](https://developers.cloudflare.com/workers/configuration/secrets/). [Environment bindings are configured separately](https://developers.cloudflare.com/workers/wrangler/environments/).
+For sandbox staging, use separate sandbox credentials and the explicitly separate commands:
+
+```powershell
 pnpm exec wrangler secret put LALAMOVE_API_KEY --config wrangler.jsonc --env staging
 pnpm exec wrangler secret put LALAMOVE_API_SECRET --config wrangler.jsonc --env staging
 ```
 
-Use the actual deployment environment name. Enable `lalamove` in that environment's ordered
+Those commands target `freshmarkets-core-staging`. Documentation maintenance does not authorize
+running either set, uploading secrets or releasing configuration. Enable `lalamove` in that environment's ordered
 `DELIVERY_PROVIDERS` only after all acceptance evidence above passes. Production and sandbox keys
 must never be mixed.
 
 ## 7. Dispatch and incident recovery
 
 Admin Delivery is an external-courier queue. It creates one provider delivery per customer Order;
-there is no active Rider, batch, route-planning, or live-driver-map path. Instant must retain the
-customer-selected provider/service snapshot. Scheduled permits an immediate pickup or a supported
-future pickup within the committed delivery boundary.
+there is no internal Rider, batch or route-planning path. Approved customer external-provider tracking
+and Order messaging remain separate from third-party rider chat. Instant first booking runs
+automatically at Start packing using the customer-selected provider/service, with bounded safe retries.
+Scheduled uses Purchase complete -> Finish packing -> staff Lalamove or Manual dispatch; its courier
+pickup may be immediate or supported future pickup within the committed boundary. Manual is ordinary
+for Scheduled and Instant recovery only after definite prior-attempt closure and completed packing.
 
 - On a definite provider rejection, preserve the failed dispatch and use a new reviewed operator
   intent only after the cause is corrected.

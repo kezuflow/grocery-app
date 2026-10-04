@@ -96,7 +96,10 @@ Before changing the staging public origin, update the same release's
 Register `https://freshmarkets.ph/api/auth/callback/google` as an authorized
 Google OAuth redirect URI and allow the exact production Web origins in the
 `GOOGLE_MAPS_BROWSER_KEY` HTTP-referrer restrictions before accepting traffic. Keep the separate
-`GOOGLE_MAPS_SERVER_KEY` restricted to Core's Geocoding API and Routes API calls.
+`GOOGLE_MAPS_SERVER_KEY` restricted to Core's Places API (New), Geocoding API and Routes API calls.
+Keep Web's browser/referrer-restricted Maps JavaScript key separate. After configuration changes,
+verify address search, selected-place details and pin reverse geocoding in the target environment;
+source configuration and local tests do not establish deployed key restrictions. Follow Google's [API security best practices](https://developers.google.com/maps/api-security-best-practices) when applying and verifying those restrictions.
 
 1. Build Web with `CLOUDFLARE_ENV=production`, then review the generated Worker
    configuration under `apps/web/dist/server`; do not edit generated output.

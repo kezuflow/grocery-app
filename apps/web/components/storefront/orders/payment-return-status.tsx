@@ -13,6 +13,8 @@ const completionSchema = z.discriminatedUnion("ok", [
       paymentIntentId: z.string(),
       state: z.enum(["WAITING_FOR_PAYMENT", "FINALIZING_ORDER", "COMPLETED", "FAILED", "EXPIRED"]),
       orderId: z.string().nullable(),
+      qrGenerationAllowed: z.boolean().default(false),
+      qrGenerationEndsAt: z.string().nullable().default(null),
     }),
   }),
   z.object({ ok: z.literal(false), error: z.object({ code: z.string() }) }),

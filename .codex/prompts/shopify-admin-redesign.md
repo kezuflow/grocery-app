@@ -1,5 +1,8 @@
 # On-demand SAUI execution prompt
 
+Historical SAUI execution prompt. The 2026-09-27 Admin-wide stock shadcn reset supersedes its older visual baseline; current PRODUCT/DESIGN decisions and the active checkpoint take precedence. Preserve approved Picking & packing and Order Messages routes. Do not restart completed SAUI slices or infer agent/model settings from this saved prompt.
+
+
 Implement the owner-approved Shopify-style Freshmarkets admin redesign in `kezuflow/grocery-app`.
 
 Read and execute `docs/design/SHOPIFY_ADMIN_IMPLEMENTATION_PLAN.md`. Consult `docs/design/SHOPIFY_ADMIN_REFERENCES.md` and the supplied baseline at `docs/design/references/shopify-approved-reference.png`. Maintain the sole task checkpoint at `docs/operations/checkpoints/SHOPIFY_ADMIN_EXECUTION.md`.
@@ -27,7 +30,7 @@ No new/renamed/deleted page or API routes, aliases, or redirect destinations. Pr
 
 Regroup only authorized navigation. Independently permitted children, including Receiving, cannot disappear when the user lacks the parent destination's permission. Preserve Catalog overview and any other existing authorized routes omitted from the illustrative menu. Settings grouping must not grant or accidentally remove access.
 
-POS and Messaging are disabled non-links marked Coming soon. Do not implement draft orders, Mark as paid, invoices, persistent saved views, financial accounts, segmentation, store credit or unsupported bulk actions. Do not fabricate totals, trends, payment success, or booking success.
+Preserve approved Picking & packing and active Order Messages destinations with current permissions. The old POS URL is an alias; walk-in sales/payment remain excluded. Later PRODUCT/DESIGN decisions supersede disabled-placeholder instructions. Do not implement draft orders, Mark as paid, invoices, persistent saved views, financial accounts, segmentation, store credit or unsupported bulk actions. Do not fabricate totals, trends, payment success, or booking success.
 
 Core supplies legal actions. The delivery chooser is not universal: preserve the currently authorized mode-specific automatic/manual booking timing and existing unknown-outcome/recovery behavior. Preserve current calendar-led Scheduled cycles, exact stock/price units, financial restrictions, and operational prerequisites. Supersede only the old admin visual rules in the current DESIGN.md; do not copy this plan over the entire guide.
 

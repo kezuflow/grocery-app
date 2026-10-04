@@ -5,7 +5,7 @@ has been completed against the owner-approved PayMongo account.
 
 ## Account capabilities
 
-The implemented browser flow accepts one-time card payments. Confirm card acceptance, refunds,
+New checkout accepts **QR Ph only**; Card is disabled. Confirm QR Ph acceptance, method-specific refunds,
 account activation and sufficient payout balance with the owner-approved account. Membership,
 subscription enrollment and recurring billing are retired and are not acceptance prerequisites.
 Do not enable additional payment methods merely because an account exposes them.
@@ -108,10 +108,14 @@ the test webhook secret: live notifications use the `li` signature and the produ
 
 Complete all cases in test mode, then repeat a controlled live smoke test:
 
-1. One-time order card payment, 3DS return, signed success, and exactly-once order commitment.
-2. Full and partial refund with signed refund observation and settlement reconciliation.
-3. Eligible Instant-before-acceptance and Scheduled-before-cutoff customer cancellation, including
-   every committed paid addition, initiates coordinated refunds without staff approval.
+1. QR Ph creation, its individual expiry of at most 30 minutes, normal renewal before Order cutoff,
+   no creation/renewal at or after cutoff or after early closure, and recovery of an already-issued
+   unexpired code. Verify signed success and exactly-once Order commitment before saved Procurement starts.
+2. Actual method-supported full/partial refund with signed refund observation and reconciliation;
+   confirm QR Ph account capabilities explicitly rather than inheriting card limits. Verified captured,
+   uncommitted Scheduled money after the freeze must use durable full-refund recovery without a new Order.
+3. Eligible Instant-before-acceptance and Scheduled-before-cutoff-and-packing customer cancellation,
+   including retained committed paid additions, initiates coordinated refunds without staff approval.
 4. Global `refunds.manage` staff confirms an approved post-delivery full/partial amount and reason
    in FreshMarkets; Core submits the refund and retains immutable audit. Missing capability,
    stale version, active cancellation and insufficient refundable balance are rejected.
@@ -124,3 +128,10 @@ Complete all cases in test mode, then repeat a controlled live smoke test:
 If any provider outcome is ambiguous, keep the local aggregate pending and resolve the visible
 reconciliation case. Never create a second charge under a new idempotency key merely because the
 first response was lost.
+
+### Retained card compatibility
+
+The adapter retains card/3DS continuation and reconciliation for historical payments. Validate these
+only against an existing authorized historical/test fixture; they are not new-checkout activation
+requirements and do not authorize enabling Card. Preserve their signed observations, refunds,
+idempotency and unknown-outcome recovery. A local test adapter is not actual QR Ph or card acceptance.

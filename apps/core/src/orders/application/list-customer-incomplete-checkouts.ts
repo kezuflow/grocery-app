@@ -4,6 +4,7 @@ import type {
   RpcResult,
 } from "@freshmarkets/contracts";
 import { z } from "@freshmarkets/validation";
+import { scheduledQrGenerationEndsAt } from "../../payments/domain/qr-generation";
 
 const PAGE_SIZE = 25;
 const cursorSchema = z.object({
@@ -37,7 +38,7 @@ export async function listCustomerIncompleteCheckouts(
   }
   const rows = await database
     .prepare(`SELECT p.id payment_intent_id,p.subject_id checkout_attempt_id,p.status,p.created_at,
-      p.amount_minor,p.currency,q.fulfillment_mode,q.lines_json,
+      p.amount_minor,p.currency,q.fulfillment_mode,q.lines_json,q.cycle_snapshot_json,
       p.payment_method_token,
       a.action_type,a.redirect_url,a.client_token,a.expires_at
     FROM payment_intent p
@@ -67,6 +68,7 @@ export async function listCustomerIncompleteCheckouts(
       payment_method_token: string | null;
       fulfillment_mode: "INSTANT" | "SCHEDULED";
       lines_json: string;
+      cycle_snapshot_json: string | null;
       action_type: "REDIRECT" | "SDK" | null;
       redirect_url: string | null;
       client_token: string | null;
@@ -91,6 +93,14 @@ export async function listCustomerIncompleteCheckouts(
           // The checkout remains visible even if retained display JSON cannot be decoded.
         }
         const hasAction = row.action_type !== null && row.expires_at !== null;
+        let qrGenerationEndsAt: string | null = null;
+        if (row.fulfillment_mode === "SCHEDULED" && row.cycle_snapshot_json) {
+          try {
+            qrGenerationEndsAt = scheduledQrGenerationEndsAt(JSON.parse(row.cycle_snapshot_json));
+          } catch {
+            // Core's current generation decision fails closed for invalid retained evidence.
+          }
+        }
         const action: PaymentActionView = {
           paymentIntentId: row.payment_intent_id,
           state: row.status,
@@ -101,6 +111,7 @@ export async function listCustomerIncompleteCheckouts(
           redirectUrl: hasAction ? row.redirect_url : null,
           clientToken: hasAction ? row.client_token : null,
           expiresAt: hasAction ? new Date(row.expires_at!).toISOString() : null,
+          qrGenerationEndsAt,
         };
         return {
           paymentIntentId: row.payment_intent_id,

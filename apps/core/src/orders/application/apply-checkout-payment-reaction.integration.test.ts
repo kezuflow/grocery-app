@@ -20,6 +20,8 @@ import { ProviderRegistry } from "../../payments/infrastructure/providers/provid
 import { hasUnresolvedScheduledCommitment } from "../../payments/infrastructure/d1/scheduled-commitment-readiness";
 import { getCart, setCartItem } from "../../checkout/application/cart";
 import { selectCartLocation } from "../../checkout/application/select-cart-location";
+import { listCustomerIncompleteCheckouts } from "./list-customer-incomplete-checkouts";
+import { getCheckoutPaymentCompletion } from "./get-checkout-payment-completion";
 
 const deliveryProvider = createMockDeliveryProvider();
 const quoteDependencies = {
@@ -230,6 +232,89 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it("preserves the admitted Scheduled cutoff through recovery and closes QR generation exactly at cutoff", async () => {
+    const fixture = await seededCheckout({ onHand: 0 });
+    const quote = await createQuote(fixture);
+    if (!quote.ok) throw new Error(quote.error.message);
+    const payment = await createCheckoutPaymentIntent(
+      env.DB,
+      new ProviderRegistry("test", [createMockPaymentProvider()]),
+      "mock",
+      quoteDependencies.routeDistance,
+      paymentCommandForQuote(fixture.customerId, quote.value),
+      quoteDependencies.deliveryProviders,
+    );
+    if (!payment.ok || !payment.value.qrGenerationEndsAt)
+      throw new Error("Expected Scheduled action");
+    const cutoff = Date.parse(payment.value.qrGenerationEndsAt);
+    // Keep the provider action live across the business boundary; it is a different clock.
+    await env.DB.prepare(
+      "UPDATE payment_provider_action SET expires_at=? WHERE payment_intent_id=?",
+    )
+      .bind(cutoff + 45 * 60_000, payment.value.paymentIntentId)
+      .run();
+    const query = {
+      customerId: fixture.customerId,
+      paymentIntentId: payment.value.paymentIntentId,
+      requestId: "qr-policy",
+    };
+    for (const [now, allowed] of [
+      [cutoff - 1, true],
+      [cutoff, false],
+      [cutoff + 1, false],
+    ] as const) {
+      const recovery = await listCustomerIncompleteCheckouts(
+        env.DB,
+        { customerId: fixture.customerId, requestId: "resume" },
+        now,
+      );
+      expect(recovery).toMatchObject({
+        ok: true,
+        value: {
+          items: [
+            {
+              action: {
+                paymentIntentId: payment.value.paymentIntentId,
+                qrGenerationEndsAt: payment.value.qrGenerationEndsAt,
+                actionType: payment.value.actionType,
+              },
+            },
+          ],
+        },
+      });
+      expect(await getCheckoutPaymentCompletion(env.DB, query, now)).toMatchObject({
+        ok: true,
+        value: {
+          state: "WAITING_FOR_PAYMENT",
+          qrGenerationAllowed: allowed,
+          qrGenerationEndsAt: payment.value.qrGenerationEndsAt,
+        },
+      });
+    }
+    const cycle = await env.DB.prepare("SELECT delivery_cycle_id id FROM checkout_quote WHERE id=?")
+      .bind(quote.value.quoteId)
+      .first<{ id: string }>();
+    if (!cycle) throw new Error("Missing cycle");
+    await env.DB.prepare("UPDATE delivery_cycle SET status='CUTOFF_REACHED' WHERE id=?")
+      .bind(cycle.id)
+      .run();
+    onTestFinished(async () => {
+      await env.DB.prepare("UPDATE delivery_cycle SET status='OPEN' WHERE id=?")
+        .bind(cycle.id)
+        .run();
+    });
+    expect(await getCheckoutPaymentCompletion(env.DB, query, cutoff - 1)).toMatchObject({
+      ok: true,
+      value: { qrGenerationAllowed: false, qrGenerationEndsAt: payment.value.qrGenerationEndsAt },
+    });
+    expect(
+      await getCheckoutPaymentCompletion(
+        env.DB,
+        { ...query, customerId: "other-customer" },
+        cutoff - 1,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  });
   it("commits the order during a verified successful webhook without waiting for scheduled redrive", async () => {
     const fixture = await seededCheckout({ fulfillmentMode: "INSTANT" });
     const quote = await createQuote(fixture);

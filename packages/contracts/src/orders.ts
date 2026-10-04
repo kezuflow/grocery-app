@@ -69,6 +69,9 @@ export type CheckoutPaymentCompletionView = {
   paymentIntentId: string;
   state: "WAITING_FOR_PAYMENT" | "FINALIZING_ORDER" | "COMPLETED" | "FAILED" | "EXPIRED";
   orderId: string | null;
+  /** Current Core eligibility for a new QR; an already issued code keeps its own expiry. */
+  qrGenerationAllowed: boolean;
+  qrGenerationEndsAt: string | null;
 };
 
 export type CustomerOrderLineSnapshot = {

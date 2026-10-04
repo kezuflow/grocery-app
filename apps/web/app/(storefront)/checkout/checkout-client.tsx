@@ -1287,21 +1287,33 @@ export function CheckoutClient({
             />
           </div>
         </div>
-        <aside
-          aria-label="Scheduled delivery cutoff"
-          className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--fm-border)] bg-[color:var(--fm-primary-dark)] px-4 py-3 text-white shadow-[0_-8px_24px_rgba(20,51,31,0.12)] sm:px-6 lg:px-10"
-        >
-          <div className="mx-auto flex max-w-[1440px] items-start gap-3 sm:items-center">
-            <Clock3
-              className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-lime)] sm:mt-0"
-              aria-hidden="true"
-            />
-            <p className="text-xs leading-5 sm:text-sm">
-              <strong>Scheduled delivery cutoff: Friday, 11:59 PM.</strong> Orders placed after the
-              cutoff will be scheduled for delivery the following Saturday or Sunday.
-            </p>
-          </div>
-        </aside>
+        {selectedFulfillmentOption?.mode === "SCHEDULED" && selectedFulfillmentOption.cutoffAt ? (
+          <aside
+            aria-label="Scheduled delivery cutoff"
+            className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--fm-border)] bg-[color:var(--fm-primary-dark)] px-4 py-3 text-white shadow-[0_-8px_24px_rgba(20,51,31,0.12)] sm:px-6 lg:px-10"
+          >
+            <div className="mx-auto flex max-w-[1440px] items-start gap-3 sm:items-center">
+              <Clock3
+                className="mt-0.5 size-4 shrink-0 text-[var(--fm-primary-lime)] sm:mt-0"
+                aria-hidden="true"
+              />
+              <p className="text-xs leading-5 sm:text-sm">
+                <strong>
+                  Scheduled ordering closes{" "}
+                  {new Date(selectedFulfillmentOption.cutoffAt).toLocaleString("en-PH", {
+                    timeZone: "Asia/Manila",
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}{" "}
+                  (Philippine time).
+                </strong>{" "}
+                {selectedFulfillmentOption.eligible
+                  ? "Ordering may close earlier. After closing, choose another available delivery week."
+                  : "This option is unavailable. Choose an available delivery option."}
+              </p>
+            </div>
+          </aside>
+        ) : null}
       </div>
     </>
   );

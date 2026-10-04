@@ -197,7 +197,9 @@ PICKING / READY_TO_PACK / PACKING -> SHORTED
 SHORTED -> PICKING / READY_TO_PACK / CANCELED / ESCALATED
 ```
 
-The ordinary preparation command set includes `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, and `MarkPacked`. `HANDED_OFF` and `COMPLETED` remain readable historical states but only Delivery-owned commands or verified provider observations may enter them; generic fulfillment cancellation is not exposed.
+The sequence above is ordinary Instant preparation and retained already-started Scheduled preparation only. Core rejects new Scheduled `START_PICKING` commands after exact successful replay; the current Scheduled path is `NOT_STARTED -> PACKED` through `COMPLETE_SCHEDULED_PACKING` after week Purchase complete. Legacy in-progress commands retain their explicit cycle-goods checks and conservation effects.
+
+The Instant/retained preparation command set includes `StartPicking`, `RecordPickedQuantity`, `RecordFulfillmentShortage`, `ResolveFulfillmentException`, `StartPacking`, and `MarkPacked`. `HANDED_OFF` and `COMPLETED` remain readable historical states but only Delivery-owned commands or verified provider observations may enter them; generic fulfillment cancellation is not exposed.
 
 Instant packed quantities consume reservations/stock through explicit ledger movements. Routine Scheduled packing records the physically packed Order without creating a receipt, allocation movement or location inventory change. For Instant, the staff acceptance/start-picking command requires successful payment evidence and atomically moves the Order from `COMMITTED` to `FULFILLMENT_PENDING`, closing customer cancellation. Scheduled customer cancellation closes at the first retained `START_PACKING` transition or the snapshotted cutoff, whichever occurs first; a later shortage does not reopen it. `PACKED` does not imply dispatched or delivered.
 
@@ -303,7 +305,7 @@ Issue submission is customer-owned, typed, idempotent, and version-safe; handlin
 
 The approved administrator Problems list presents New / Being handled / Resolved with contact details and a short resolution note. The active actions are CLAIM and RESOLVE; retained in-progress states remain resolvable without treating Resolved as refund or delivery success; retained escalation evidence remains truthful. The weekly view and receiving form similarly organize independently owned cycle, purchasing, receiving and fulfillment states rather than merging their authority.
 
-The existing `OrderAmendment` lifecycle applies only to additive paid additions. A customer may draft one active amendment for a committed Scheduled Order before cutoff. Its dedicated `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` before the amendment commits. Failed/expired payment fails the amendment; duplicate provider reactions replay safely.
+The retained `OrderAmendment` lifecycle describes historical additive paid additions only. New drafting and new addition payment admission reject in both modes. An already-admitted historical `ORDER_AMENDMENT` Payment must reach canonical `SUCCEEDED` within its saved settlement boundary before commitment; later captured uncommitted money uses financial recovery. Failed/expired payment fails the retained amendment; exact retries and duplicate provider reactions remain safe. Preserve historical additions and refunds.
 
 ## Warehouse Transfer
 

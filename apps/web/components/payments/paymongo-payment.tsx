@@ -16,6 +16,8 @@ const completionResponseSchema = z.discriminatedUnion("ok", [
       paymentIntentId: z.string(),
       state: z.enum(["WAITING_FOR_PAYMENT", "FINALIZING_ORDER", "COMPLETED", "FAILED", "EXPIRED"]),
       orderId: z.string().nullable(),
+      qrGenerationAllowed: z.boolean().default(false),
+      qrGenerationEndsAt: z.iso.datetime({ offset: true }).nullable().default(null),
     }),
   }),
   z.object({ ok: z.literal(false), error: z.object({ code: z.string() }) }),
@@ -324,10 +326,39 @@ export function PayMongoPayment({
         setQrRemainingSeconds(null);
       }
       try {
+        const checkGenerationEligibility = async () => {
+          if (action.qrGenerationEndsAt && Date.parse(action.qrGenerationEndsAt) <= Date.now())
+            throw new Error(
+              "Ordering has closed for this delivery week. No new QR code can be created.",
+            );
+          if (!completionStatusPath) return;
+          if (!action.paymentIntentId) throw new Error("Payment eligibility could not be checked.");
+          const response = await fetch(
+            `${completionStatusPath}?paymentIntentId=${encodeURIComponent(action.paymentIntentId)}`,
+            { cache: "no-store" },
+          );
+          const current = completionResponseSchema.safeParse(await response.json());
+          if (!response.ok || !current.success || !current.data.ok)
+            throw new Error("Payment eligibility could not be checked. Please try again.");
+          setCompletion(current.data.value);
+          if (!current.data.value.qrGenerationAllowed)
+            throw new Error(
+              "No new QR code can be created for this payment. Check its current status in Orders.",
+            );
+          if (
+            current.data.value.qrGenerationEndsAt &&
+            Date.parse(current.data.value.qrGenerationEndsAt) <= Date.now()
+          )
+            throw new Error(
+              "Ordering has closed for this delivery week. No new QR code can be created.",
+            );
+        };
+        await checkGenerationEligibility();
         const paymentMethodId = await createMethod({
           type: "qrph",
           expiry_seconds: expirySeconds,
         });
+        await checkGenerationEligibility();
         const intent = await attachMethod(paymentMethodId, false);
         const imageUrl = intent.data?.attributes?.next_action?.code?.image_url;
         if (!imageUrl) throw new Error("PayMongo did not return a QR Ph code.");
@@ -351,7 +382,7 @@ export function PayMongoPayment({
         setBusy(false);
       }
     },
-    [action, attachMethod, createMethod, publicKey, qrCode, storageKey],
+    [action, attachMethod, completionStatusPath, createMethod, publicKey, qrCode, storageKey],
   );
 
   const method = action?.paymentMethod?.value ?? "card";

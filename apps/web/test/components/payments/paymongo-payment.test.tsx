@@ -70,6 +70,120 @@ describe("PayMongoPayment", () => {
     expect(container.querySelector('a[href="/orders?payment=return"]')).not.toBeNull();
   });
 
+  it.each(["closed", "unavailable", "missing-decision"])(
+    "blocks QR generation when current Core eligibility is %s",
+    async (scenario) => {
+      sessionStorage.setItem(
+        "checkout-action",
+        JSON.stringify({
+          paymentIntentId: "payment-1",
+          paymentMethod: { kind: "TOKEN", value: "qrph" },
+          actionType: "SDK",
+          clientToken: "pi_1_client_test",
+          expiresAt: new Date(Date.now() + 40 * 60_000).toISOString(),
+          // Deliberately no stored cutoff: current Core eligibility must still protect recovery.
+        }),
+      );
+      const fetcher = vi.fn((url: string) =>
+        Promise.resolve(
+          url === "/api/checkout/payment"
+            ? Response.json({ ok: true, value: { publicKey: "pk_test_public" } })
+            : scenario === "unavailable"
+              ? Response.json({ ok: false, error: { code: "UNAVAILABLE" } }, { status: 503 })
+              : Response.json({
+                  ok: true,
+                  value: {
+                    paymentIntentId: "payment-1",
+                    state: "WAITING_FOR_PAYMENT",
+                    orderId: null,
+                    ...(scenario === "closed"
+                      ? { qrGenerationAllowed: false, qrGenerationEndsAt: null }
+                      : {}),
+                  },
+                }),
+        ),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      await act(async () =>
+        root.render(
+          <PayMongoPayment
+            storageKey="checkout-action"
+            title="Complete payment"
+            description="Secure payment"
+            returnPath="/orders"
+            donePath="/orders"
+            backPath="/orders"
+            completionStatusPath="/api/checkout/payment/status"
+          />,
+        ),
+      );
+      await flush();
+      expect(
+        fetcher.mock.calls.every(([url]) => !String(url).startsWith("https://api.paymongo.com")),
+      ).toBe(true);
+      expect(container.textContent).toContain(
+        scenario === "unavailable"
+          ? "eligibility could not be checked"
+          : "No new QR code can be created",
+      );
+    },
+  );
+
+  it("rechecks Core after method creation and does not attach when ordering closes in flight", async () => {
+    sessionStorage.setItem(
+      "checkout-action",
+      JSON.stringify({
+        paymentIntentId: "payment-1",
+        paymentMethod: { kind: "TOKEN", value: "qrph" },
+        actionType: "SDK",
+        clientToken: "pi_1_client_test",
+        expiresAt: new Date(Date.now() + 40 * 60_000).toISOString(),
+      }),
+    );
+    let closed = false;
+    const fetcher = vi.fn((url: string) => {
+      if (url === "/api/checkout/payment")
+        return Promise.resolve(Response.json({ ok: true, value: { publicKey: "pk_test_public" } }));
+      if (url.startsWith("/api/checkout/payment/status"))
+        return Promise.resolve(
+          Response.json({
+            ok: true,
+            value: {
+              paymentIntentId: "payment-1",
+              state: "WAITING_FOR_PAYMENT",
+              orderId: null,
+              qrGenerationAllowed: !closed,
+              qrGenerationEndsAt: null,
+            },
+          }),
+        );
+      if (url.endsWith("/payment_methods")) {
+        closed = true;
+        return Promise.resolve(Response.json({ data: { id: "pm_test" } }));
+      }
+      throw new Error("Unexpected provider attach");
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () =>
+      root.render(
+        <PayMongoPayment
+          storageKey="checkout-action"
+          title="Complete payment"
+          description="Secure payment"
+          returnPath="/orders"
+          donePath="/orders"
+          backPath="/orders"
+          completionStatusPath="/api/checkout/payment/status"
+        />,
+      ),
+    );
+    await flush();
+    expect(
+      fetcher.mock.calls.filter(([url]) => String(url).startsWith("https://api.paymongo.com")),
+    ).toHaveLength(1);
+    expect(container.textContent).toContain("No new QR code can be created");
+  });
+
   it("keeps a generated QR usable when browser storage cannot be written", async () => {
     sessionStorage.setItem(
       "checkout-action",
