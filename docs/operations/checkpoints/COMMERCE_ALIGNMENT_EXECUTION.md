@@ -23,13 +23,27 @@ Audit disposition at finding level:
 | F03 | Current Scheduled packing/purchase guidance reconciled; new legacy picking entry rejected, retained started work and successful receipt replay tested. |
 | F04 | Instant automatic first booking and staff/manual mode documented distinctly. |
 | F05–F07 | Maps Global area/API restrictions and environment-specific courier setup examples corrected; no operational configuration applied. |
-| F08 | Four clocks and late-refund behavior reconciled; changing the Scheduled SDK action from 60 minutes remains an owner policy decision. |
+| F08 | Four clocks and late-refund behavior reconciled; the 2026-10-04 owner release follow-up retains the 60-minute SDK action separately from settlement and confirmation. |
 | F09–F12 | QR-only new checkout, fixed parcel envelope, retired additions, approved feature/retention exceptions reconciled. |
 | F13 | Active checkpoint shortened; original checkpoint and completed dispatch-plan bytes preserved in explicitly historical files; misleading current-looking references corrected. |
 
-Counts: **12/13 findings addressed**; **1/13 (F08) has a remaining SDK-duration decision** after its documentation correction. This does not complete overall Phase 7 provider/journey acceptance.
+Initial implementation count: **12/13 findings addressed**; F08's SDK-duration decision remained open until the owner release follow-up below. This does not complete overall Phase 7 provider/journey acceptance.
 
-Implementation and local acceptance for the non-policy scope of `CA-7.RULES-AUDIT-1` are complete; overall commerce Phase 7 remains open. Next action: resolve F08's Scheduled SDK-action duration with the owner, then implement any authorized change under the same payment/provider acceptance boundaries. Deployment and actual provider acceptance require separate authorization/evidence.
+Implementation and local acceptance for `CA-7.RULES-AUDIT-1` were committed/pushed in `73012f44`. The owner release follow-up below resolves F08 and authorizes deployment; overall commerce Phase 7 remains open.
+
+## Owner release follow-up — CA-7.RULES-AUDIT-1.RELEASE (2026-10-04)
+
+Request: after the payment-timing recommendation, the owner instructed **Commit push and deploy**. Retain the existing 60-minute SDK action, 30-minute maximum issued QR and existing editable one-hour default cutoff-to-procurement gap (30 minutes QR plus approximately 30 minutes delayed-confirmation buffer). PRODUCT records the decision; no application constant or retained cycle date needs changing. **13/13 audit findings now addressed at source/guidance level**, distinct from actual-provider acceptance.
+
+Started on clean `main` at `73012f44078f91fa0e71031db89805e548dc0fd8`, equal to `origin/main`. Active plan remains `docs/product/COMMERCE_ALIGNMENT_E2E_PLAN.md`, **Phase 7 — Complete journeys and activation evidence**. Acceptance: commit/push the timing record, build the production Web artifact, verify Core/Web production targets and binding freshness, deploy the paired tested source, then confirm production health/readiness, 100% versions and read-only browser views. No provider transaction, outbound test message, credential rotation or retained-data mutation is included.
+
+Production preflight: authenticated account has one available account; latest deployments were selected by creation time (Wrangler lists oldest first). Current Core `d9f36097-6bc5-4373-9d2e-6aec62b8e2e4`, Web `15e71f51-91c0-430f-aef8-fcabfc0ae36c`, both 100%, match the recorded baseline. `wrangler d1 migrations list freshmarkets-core-production --config wrangler.jsonc --env production --remote` reports no migrations to apply. Both `wrangler types ... --check` commands and `node scripts/verify-worker-readiness.mjs` pass. Existing application acceptance above applies to unchanged source `73012f44`; this follow-up changes documentation only.
+
+Production packaging/pre-release acceptance passed: `CLOUDFLARE_ENV=production pnpm --filter @freshmarkets/web build`; generated `apps/web/dist/server/wrangler.json` is flattened to production, with the `freshmarkets.ph` Custom Domain and production Core `CoreEntrypoint` binding. `pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production --dry-run` and `pnpm --filter @freshmarkets/web exec wrangler deploy --config dist/server/wrangler.json --dry-run --strict` passed. Current remote plain-text variables match production source, required secret names exist without reading values, and resource bindings match the intended production resources. `pnpm naming:check`, `pnpm terminology:check` and `git diff --check` passed for the documentation follow-up.
+
+Pre-release Core `/health`, Core `/ready` and Web `/api/core-health` pass HTTP 200, production environment, structured JSON, valid UUID request-reference echo and runtime/database/PayMongo adapter readiness. The initial use of the local smoke helper failed its request-reference equality: it generates a non-UUID identifier, which the current production boundary correctly replaces. Read-only Node fetch assertions were rerun with `crypto.randomUUID()` and all three passed; no application check was weakened or application code changed.
+
+Next action: commit/push the timing record and deploy/verify Core then Web under the runbook.
 
 ### Executed verification commands
 

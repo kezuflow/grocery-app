@@ -33,7 +33,7 @@ The following decisions include the owner's corrections after the initial conver
 6. Current Scheduled clocks supersede the original one-hour continuation criterion: Order cutoff ends
    normal QR generation/renewal; an issued QR keeps its individual expiry of at most 30 minutes;
    verified admitted commitment ends at saved editable Procurement starts. SDK actions currently
-   have a separate 60-minute lifetime; extending them is unresolved, not inferred from settlement.
+   retain a separate 60-minute lifetime under PRODUCT's 2026-10-04 release follow-up, independent of settlement. The default cutoff-to-procurement gap remains one hour (up to 30 minutes QR plus approximately 30 minutes confirmation buffer); editable schedules and later financial recovery remain separate.
    No 24-hour change was approved.
 7. Window expiry does not cancel the PayMongo intent or prove permanent nonpayment. Never force a
    canonical terminal state from a timer. Later valid payment confirmation must still be processed.
@@ -361,7 +361,7 @@ must use the harness's documented configuration. Do not substitute production pr
 | Case | Required proof |
 | --- | --- |
 | Active waiting then expired unpaid | No staff work; final provider check concludes internally; canonical state remains compatible with later confirmation |
-| Current Scheduled clocks and QR recovery | Fresh and resumed actions retain cutoff; no generation/renewal at or after cutoff; issued QR stays usable to its own expiry; saved Procurement starts governs settlement/late-capture refunds. SDK action currently lasts 60 minutes; extending it remains unresolved. No automatic new payment. |
+| Current Scheduled clocks and QR recovery | Fresh and resumed actions retain cutoff; no generation/renewal at or after cutoff; issued QR stays usable to its own expiry; saved Procurement starts governs settlement/late-capture refunds. Retain the separate 60-minute SDK action under PRODUCT's 2026-10-04 follow-up. No automatic new payment. |
 | Late/duplicate paid event | Before saved Procurement starts, one exactly-once admitted Order/retained addition. At/after the freeze, captured uncommitted Scheduled money stays visible and uses durable full-refund recovery with no new Order/demand or second charge. |
 | Expired plus provider unavailable / missing reference | No fabricated failure/nonpayment; one genuine unresolved issue after bounded recovery |
 | Copied/legacy records of unknown provider mode | Never infer mode or resolution from age/customer name; no production cleanup assertion without provider evidence |

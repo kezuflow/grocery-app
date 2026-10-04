@@ -147,12 +147,15 @@ list with required cleanup/audit evidence. Refund decisions and financial/Order 
 Technical diagnostics are collapsed and no separate overview/reconciliation dashboard is needed.
 Retain the up-to-30-minute QR lifetime; the 2026-09-27 correction above makes the
 financial settlement/commitment end at the editable Procurement starts time. The customer SDK action
-currently has a separate 60-minute lifetime; extending it is unresolved and must not be inferred. No 24-hour change
+retains a separate 60-minute lifetime, measured from payment setup, under the 2026-10-04 release follow-up below. It is not the confirmation/settlement deadline. No 24-hour change
 was approved. Window expiry never manufactures a terminal financial outcome or blocks a later valid
 provider confirmation. No deletion/retention period or purge is authorized by this simplification.
 These decisions are implemented locally by `PAYMENTS-SIMPLIFY-1` under
 [PAYMENTS_SIMPLIFICATION_PLAN.md](PAYMENTS_SIMPLIFICATION_PLAN.md). Deployment, retained-data review
 and actual-provider acceptance remain separate; local implementation does not assert any of them.
+
+Owner release follow-up, 2026-10-04: retain the existing 60-minute SDK action and up-to-30-minute issued QR lifetime. The default one-hour gap between Order cutoff and Procurement starts allows up to 30 minutes for the last issued QR plus approximately 30 minutes for delayed confirmation. This is a default operational buffer, not a PayMongo confirmation guarantee or a fixed limit on editable schedules. No new QR may be generated/renewed after ordering closes. SDK/QR expiry never proves nonpayment or stops verified financial recovery; commitment still ends at saved Procurement starts, with later captured uncommitted Scheduled money using full-refund recovery. Existing cycle dates are not rewritten by this release.
+
 Processing remains an internal pending-confirmation distinction, not staff work or a manual payment
 step. Where already shown to the customer, label it Confirming payment. Only an exhausted or
 unrecoverable confirmation issue calls for staff attention; awaiting confirmation is neither success
