@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import type { APIResponse, Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
-import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
+import { test, expect, executeAdminE2eSql, queryAdminE2eSql } from "./admin-authenticated-fixture";
+import { completeLocalCourierDelivery } from "./signed-delivery-events";
+import { completeLocalManualDelivery } from "./manual-delivery-journey";
+import { confirmLocalRefund, cancelLocalPaidOrder } from "./signed-refund-events";
 
 async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknown> {
   const data: unknown = await response.json();
@@ -20,8 +23,17 @@ const locationId = "location-cebu-central",
 const reason = "Synthetic Scheduled customer journey";
 test.describe.configure({ timeout: 300000 });
 
-for (const width of [1440, 390]) {
-  test(`Scheduled paid order, week purchase, packing and delivery at ${width}px`, async ({
+const scheduledCases = [1440, 390].flatMap((width) =>
+  ["courier", "manual", "late-capture", "cancel"].map((dispatch) => ({ width, dispatch })),
+);
+for (const { width, dispatch } of scheduledCases) {
+  const journey =
+    dispatch === "late-capture"
+      ? "late capture and full refund without an Order"
+      : dispatch === "cancel"
+        ? "paid Order cancellation and full refund"
+        : `paid Order, week purchase, packing and ${dispatch} delivery`;
+  test(`Scheduled ${journey} at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }, testInfo) => {
@@ -94,7 +106,11 @@ for (const width of [1440, 390]) {
       .object({
         inventoryPool: z.object({
           position: z
-            .object({ onHandBase: z.number(), reservedBase: z.number(), availableBase: z.number() })
+            .object({
+              onHandBase: z.number(),
+              reservedBase: z.number(),
+              availableBase: z.number(),
+            })
             .nullable(),
         }),
         skus: z.array(
@@ -160,6 +176,22 @@ for (const width of [1440, 390]) {
       .parse(await read(admin, `/api/admin/delivery-cycles?marketId=${marketId}`));
     const destination = destinations.items.find((item) => item.locationId === locationId);
     if (!destination) throw new Error("Missing cycle destination");
+    // Close previous disposable scenarios through ordinary commands: Core offers the earliest open week.
+    const previousCycles =
+      z
+        .array(z.object({ results: z.array(z.object({ id: z.string(), version: z.number() })) }))
+        .parse(
+          queryAdminE2eSql(
+            "SELECT id,version FROM delivery_cycle WHERE status='OPEN' AND market_id='market-metro-cebu'",
+          ),
+        )[0]?.results ?? [];
+    for (const previous of previousCycles)
+      await post(admin, "/api/admin/delivery-cycles", {
+        action: "CLOSE_ORDERING",
+        cycleId: previous.id,
+        expectedVersion: previous.version,
+        reason: "Isolate disposable acceptance week",
+      });
     const cutoff = Date.now() + 5 * 60_000,
       at = (offset: number) => new Date(cutoff + offset).toISOString();
     const cycle = z.object({ cycleId: z.string(), version: z.number() }).parse(
@@ -220,6 +252,7 @@ for (const width of [1440, 390]) {
     await page.route("**/development/mock-payments/**", (route) =>
       route.fulfill({ contentType: "text/html", body: "<h1>Test payment provider</h1>" }),
     );
+    let captured: { intentId: string; reference: string; amountMinor: number } | null = null;
     async function confirmTestPayment(amountMinor: number) {
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       const url = new URL(page.url());
@@ -238,9 +271,15 @@ for (const width of [1440, 390]) {
           .update(`mock-provider-test-secret:${body}`)
           .digest("hex"),
       };
-      expect(
-        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
-      ).toMatchObject({ processingStatus: "APPLIED" });
+      const applied = await value(
+        await page.request.post("/webhooks/payments/mock", { data: body, headers }),
+      );
+      expect(applied).toMatchObject({ processingStatus: "APPLIED" });
+      captured = {
+        intentId: z.object({ paymentIntentId: z.string() }).parse(applied).paymentIntentId,
+        reference,
+        amountMinor,
+      };
       expect(
         await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
       ).toMatchObject({ processingStatus: "DUPLICATE" });
@@ -267,6 +306,7 @@ for (const width of [1440, 390]) {
           z.object({
             optionId: z.string(),
             mode: z.string(),
+            cycleId: z.string().nullable(),
             eligible: z.boolean(),
           }),
         )
@@ -279,7 +319,8 @@ for (const width of [1440, 390]) {
           }),
         );
       const scheduledOption = options.find(
-        (option) => option.mode === "SCHEDULED" && option.eligible,
+        (option) =>
+          option.mode === "SCHEDULED" && option.eligible && option.cycleId === cycle.cycleId,
       );
       if (!scheduledOption) throw new Error("Missing retained Scheduled fulfillment option");
       const quote = z
@@ -333,17 +374,40 @@ for (const width of [1440, 390]) {
       await page.goto(payment.redirectUrl);
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       expect(orders.parse(await read(page, "/api/commerce/orders")).items).toEqual(before.items);
+      if (dispatch === "late-capture") {
+        // Move only the selected disposable cycle's schedule, then let the real cron freeze demand.
+        const past = Date.now() - 2 * 60 * 60_000;
+        executeAdminE2eSql(
+          `UPDATE delivery_cycle SET cutoff_at=${past},version=version+1 WHERE id='${cycle.cycleId}'; UPDATE delivery_cycle_schedule SET procurement_at=${past + 60 * 60_000} WHERE cycle_id='${cycle.cycleId}';`,
+        );
+        expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
+      }
       await confirmTestPayment(quote.totalMinor);
       const current = orders.parse(await read(page, "/api/commerce/orders"));
       const created = current.items.filter(
         (item) => !before.items.some((old) => old.id === item.id),
       );
+      if (dispatch === "late-capture") {
+        expect(created).toHaveLength(0);
+        if (!captured) throw new Error("Missing captured-money observation");
+        await confirmLocalRefund(page, captured.intentId, captured.reference, quote.totalMinor);
+        expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
+        executeAdminE2eSql(`INSERT INTO commitment_abort(id) SELECT -39 WHERE
+            EXISTS(SELECT 1 FROM order_payment_reaction WHERE payment_intent_id='${captured.intentId}') OR
+            EXISTS(SELECT 1 FROM committed_demand WHERE delivery_cycle_id='${cycle.cycleId}');`);
+        return null;
+      }
       expect(created).toHaveLength(1);
       const order = created[0];
       if (!order) throw new Error("Missing committed Order");
       return order.id;
     }
     const orderId = await checkout(2);
+    if (dispatch === "late-capture") {
+      expect(orderId).toBeNull();
+      return;
+    }
+    if (!orderId) throw new Error("Missing committed Order");
     await page.goto(`/orders/${orderId}`);
     await expect(page.getByRole("region", { name: "Add items before cutoff" })).toHaveCount(0);
     const detail = z
@@ -359,19 +423,31 @@ for (const width of [1440, 390]) {
       error: { code: "ILLEGAL_TRANSITION" },
     });
 
+    if (dispatch === "cancel") {
+      const payment = captured as {
+        intentId: string;
+        reference: string;
+        amountMinor: number;
+      } | null;
+      if (!payment) throw new Error("Missing captured-money observation");
+      await cancelLocalPaidOrder(page, orderId, payment);
+      return;
+    }
+
     // Advance only the local E2E cycle clock; all customer and staff actions
     // above and below still use their real Web -> Core -> D1 command paths.
     const pastCutoff = Date.now() - 2 * 60 * 60_000;
     executeAdminE2eSql(
-      `UPDATE delivery_cycle SET cutoff_at=${pastCutoff},status='CUTOFF_REACHED',version=version+1 WHERE id='${cycle.cycleId}' AND status='OPEN'; UPDATE delivery_cycle_schedule SET procurement_at=${pastCutoff + 60 * 60_000} WHERE cycle_id='${cycle.cycleId}';`,
+      `UPDATE delivery_cycle SET cutoff_at=${pastCutoff},version=version+1 WHERE id='${cycle.cycleId}' AND status='OPEN'; UPDATE delivery_cycle_schedule SET procurement_at=${pastCutoff + 60 * 60_000} WHERE cycle_id='${cycle.cycleId}';`,
     );
+    expect((await admin.request.post("/__e2e/scheduled")).status()).toBe(204);
     await admin.goto("/admin/procurement");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
     await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
     await admin
       .getByRole("combobox", { name: "Delivery week", exact: true })
       .selectOption(cycle.cycleId);
-    await admin.getByRole("button", { name: "Quantities to buy", exact: true }).click();
+    await admin.getByRole("tab", { name: "Quantities to buy", exact: true }).click();
     await expect(admin.getByRole("table", { name: "Paid quantities to buy" })).toContainText(
       "1,000 g",
     );
@@ -386,6 +462,10 @@ for (const width of [1440, 390]) {
     await expect(admin.getByText("Purchase completed", { exact: false })).toBeVisible();
     await admin.goto(`/admin/fulfillment?orderId=${orderId}`);
     await admin.getByRole("button", { name: "Finish packing order", exact: true }).click();
+    await admin
+      .getByRole("alertdialog", { name: "Confirm this Order is packed accurately" })
+      .getByRole("button", { name: "Confirm packed accurately", exact: true })
+      .click();
     await expect(admin.getByText("Order packed", { exact: false })).toBeVisible();
 
     expect(
@@ -398,7 +478,11 @@ for (const width of [1440, 390]) {
       .object({
         inventoryPool: z.object({
           position: z
-            .object({ onHandBase: z.number(), reservedBase: z.number(), availableBase: z.number() })
+            .object({
+              onHandBase: z.number(),
+              reservedBase: z.number(),
+              availableBase: z.number(),
+            })
             .nullable(),
         }),
       })
@@ -415,27 +499,17 @@ for (const width of [1440, 390]) {
 
     await admin.goto("/admin/delivery");
     const row = admin.getByRole("row").filter({ hasText: orderId });
-    await row.getByRole("button", { name: "Assign manual rider", exact: true }).click();
-    await row.getByLabel("Person delivering", { exact: true }).fill("Synthetic delivery helper");
-    await row.getByLabel("Phone including country code", { exact: true }).fill("+639171110002");
-    await row.getByRole("button", { name: "Review assign manual delivery" }).click();
-    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-    await row.getByRole("button", { name: "Hand over packed order", exact: true }).click();
-    await row.getByRole("button", { name: "Review hand over packed order" }).click();
-    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-    expect(
-      z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
-        .status,
-    ).toBe("OUT_FOR_DELIVERY");
-    await row.getByRole("button", { name: "Record delivered", exact: true }).click();
-    await row.getByRole("button", { name: "Review record delivered" }).click();
-    await admin.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-    expect(
-      z.object({ status: z.string() }).parse(await read(page, `/api/commerce/orders/${orderId}`))
-        .status,
-    ).toBe("DELIVERED");
-    await page.goto(`/orders/${orderId}`);
-    await expect(page.getByRole("heading", { name: "Delivered", level: 1 })).toBeVisible();
+    if (dispatch === "manual") await completeLocalManualDelivery(admin, page, orderId);
+    else {
+      await row.getByRole("button", { name: "Request Lalamove", exact: true }).click();
+      await row.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
+      await admin
+        .getByRole("alertdialog", { name: "Confirm Lalamove booking" })
+        .getByRole("button", { name: "Confirm and book", exact: true })
+        .click();
+      await expect(row).toContainText("Finding rider");
+      await completeLocalCourierDelivery(admin, page, orderId, locationId);
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

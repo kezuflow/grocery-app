@@ -64,5 +64,7 @@ test("first administrator reviews access, recovers a lost response and opens sta
   await expect(page.getByText("Your initial administrator setup is complete.")).toBeVisible();
   await page.goto("/admin/staff");
   await expect(page.getByRole("heading", { level: 1, name: "Staff & Access" })).toBeVisible();
-  await expect(page.getByText("Initial administrator", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Initial administrator", exact: true }),
+  ).toBeVisible();
 });

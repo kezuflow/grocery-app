@@ -93,6 +93,7 @@ export async function completeLocalCourierDelivery(
       await expect(
         page.getByRole("heading", {
           name: status === "PICKED_UP" ? "Out for delivery" : "Delivered",
+          level: 1,
           exact: true,
         }),
       ).toBeVisible();
@@ -102,7 +103,7 @@ export async function completeLocalCourierDelivery(
   await admin.goto(`/admin/delivery?orderId=${encodeURIComponent(orderId)}`);
   const completedRow = admin.getByRole("row").filter({ hasText: orderId });
   await expect(completedRow).toHaveCount(1);
-  await expect(completedRow).toContainText("DELIVERED");
+  await expect(completedRow).toContainText("Delivered");
   await admin.getByRole("link", { name: "Show all delivery work", exact: true }).click();
   await expect(admin).toHaveURL(/\/admin\/delivery$/);
   // Read-only on success: fail the disposable DB assertion if either transition lost its intent.

@@ -3,6 +3,8 @@ import type { APIResponse, Page } from "@playwright/test";
 import { z } from "@freshmarkets/validation";
 import { test, expect } from "./admin-authenticated-fixture";
 import { completeLocalCourierDelivery } from "./signed-delivery-events";
+import { completeLocalManualDelivery } from "./manual-delivery-journey";
+import { cancelLocalPaidOrder } from "./signed-refund-events";
 
 async function value(response: Pick<APIResponse, "ok" | "json">): Promise<unknown> {
   const data: unknown = await response.json();
@@ -20,8 +22,11 @@ const locationId = "location-cebu-central",
   skuId = "sku-red-onion-500g";
 const reason = "Synthetic Instant booking journey";
 
-for (const width of [1440, 390]) {
-  test(`Instant checkout automatically books Lalamove when packing starts at ${width}px`, async ({
+const instantCases = [1440, 390].flatMap((width) =>
+  ["courier", "manual", "cancel"].map((recovery) => ({ width, recovery })),
+);
+for (const { width, recovery } of instantCases) {
+  test(`Instant ${recovery === "cancel" ? "paid Order cancellation and full refund" : `automatic booking and ${recovery} recovery`} at ${width}px`, async ({
     adminPage: admin,
     signedInPage: page,
   }) => {
@@ -94,7 +99,11 @@ for (const width of [1440, 390]) {
       .object({
         inventoryPool: z.object({
           position: z
-            .object({ onHandBase: z.number(), reservedBase: z.number(), availableBase: z.number() })
+            .object({
+              onHandBase: z.number(),
+              reservedBase: z.number(),
+              availableBase: z.number(),
+            })
             .nullable(),
         }),
         skus: z.array(
@@ -186,6 +195,7 @@ for (const width of [1440, 390]) {
     await page.route("**/development/mock-payments/**", (route) =>
       route.fulfill({ contentType: "text/html", body: "<h1>Test payment provider</h1>" }),
     );
+    let captured: { intentId: string; reference: string; amountMinor: number } | null = null;
     async function confirmTestPayment(amountMinor: number) {
       await expect(page).toHaveURL(/\/development\/mock-payments\//);
       const url = new URL(page.url());
@@ -204,9 +214,15 @@ for (const width of [1440, 390]) {
           .update(`mock-provider-test-secret:${body}`)
           .digest("hex"),
       };
-      expect(
-        await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
-      ).toMatchObject({ processingStatus: "APPLIED" });
+      const applied = await value(
+        await page.request.post("/webhooks/payments/mock", { data: body, headers }),
+      );
+      expect(applied).toMatchObject({ processingStatus: "APPLIED" });
+      captured = {
+        intentId: z.object({ paymentIntentId: z.string() }).parse(applied).paymentIntentId,
+        reference,
+        amountMinor,
+      };
       expect(
         await value(await page.request.post("/webhooks/payments/mock", { data: body, headers })),
       ).toMatchObject({ processingStatus: "DUPLICATE" });
@@ -280,6 +296,16 @@ for (const width of [1440, 390]) {
       error: { code: "ILLEGAL_TRANSITION" },
     });
     const orderId = await checkout(2);
+    if (recovery === "cancel") {
+      const payment = captured as {
+        intentId: string;
+        reference: string;
+        amountMinor: number;
+      } | null;
+      if (!payment) throw new Error("Missing captured-money observation");
+      await cancelLocalPaidOrder(page, orderId, payment);
+      return;
+    }
     const deliverySchema = z.object({
       items: z.array(
         z.object({
@@ -287,6 +313,7 @@ for (const width of [1440, 390]) {
           jobId: z.string(),
           status: z.string(),
           version: z.number(),
+          manualActions: z.array(z.string()),
           externalDispatch: z
             .object({
               dispatchId: z.string(),
@@ -323,7 +350,29 @@ for (const width of [1440, 390]) {
       .items.find((item) => item.orderId === orderId);
     if (!fulfillment?.operational) throw new Error("Missing operational Order");
     const orderNumber = fulfillment.operational.orderNumber;
-    expect((await delivery()).externalDispatch).toBeNull();
+    const initialDelivery = await delivery();
+    expect(initialDelivery.externalDispatch).toBeNull();
+    expect(initialDelivery.manualActions).toEqual([]);
+    const rejectManual = async () => {
+      const before = await delivery();
+      const denied = await admin.request.post("/api/admin/manual-deliveries", {
+        headers: { "idempotency-key": crypto.randomUUID() },
+        data: {
+          action: "ASSIGN",
+          locationId,
+          jobId: before.jobId,
+          expectedVersion: before.version,
+          personName: "Synthetic recovery helper",
+          phoneE164: "+639171110002",
+        },
+      });
+      expect(await denied.json()).toMatchObject({
+        ok: false,
+        error: { code: "ILLEGAL_TRANSITION" },
+      });
+      expect(await delivery()).toEqual(before);
+    };
+    await rejectManual();
     await admin.goto("/admin/fulfillment");
     await admin.getByRole("combobox", { name: "Active admin scope" }).click();
     await admin.getByRole("option", { name: "Central Cebu", exact: true }).click();
@@ -334,7 +383,7 @@ for (const width of [1440, 390]) {
     await admin.getByRole("button", { name: "Finish picking", exact: true }).click();
     expect((await delivery()).externalDispatch).toBeNull();
     await admin.getByRole("button", { name: "Start packing", exact: true }).click();
-    await expect(row).toContainText("PACKING");
+    await expect(row.getByRole("cell", { name: "Packing", exact: true })).toBeVisible();
     const booked = await delivery();
     expect(booked.externalDispatch).toMatchObject({ status: "ACTIVE" });
     expect(booked.status).toBe("UNASSIGNED");
@@ -344,18 +393,29 @@ for (const width of [1440, 390]) {
       booked.externalDispatch?.dispatchId,
     );
     await admin.getByRole("button", { name: "Finish packing", exact: true }).click();
-    await expect(row).toContainText("PACKED");
+    await expect(row.getByRole("cell", { name: "Packed", exact: true })).toBeVisible();
     expect((await delivery()).externalDispatch?.dispatchId).toBe(
       booked.externalDispatch?.dispatchId,
     );
     await admin.goto("/admin/delivery");
     const courierRow = admin.getByRole("row").filter({ hasText: orderId });
+    await expect(
+      courierRow.getByRole("button", { name: "Assign manual rider", exact: true }),
+    ).toHaveCount(0);
+    await rejectManual();
     await expect(admin.getByRole("row").filter({ hasText: orderId })).toContainText(
       "Finding rider",
     );
-    admin.once("dialog", (dialog) => dialog.accept());
     await courierRow.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(courierRow).toContainText("Booking canceled");
+    await admin
+      .getByRole("alertdialog", { name: "Cancel Lalamove delivery?" })
+      .getByRole("button", { name: "Request cancellation", exact: true })
+      .click();
+    await expect(courierRow).toContainText("Delivery canceled");
+    if (recovery === "manual") {
+      await completeLocalManualDelivery(admin, page, orderId);
+      return;
+    }
     await courierRow
       .getByRole("button", { name: "Record agreed delivery time", exact: true })
       .click();
@@ -388,6 +448,7 @@ for (const width of [1440, 390]) {
     await page.goto(`/orders/${orderId}`);
     await expect(page.getByText("Original promise", { exact: true })).toBeVisible();
     await expect(page.getByText("Agreed delivery time", { exact: true })).toBeVisible();
+    await courierRow.getByRole("button", { name: "Request Lalamove", exact: true }).click();
     await courierRow.getByRole("button", { name: "Review Lalamove booking", exact: true }).click();
     await admin.getByRole("button", { name: "Confirm and book", exact: true }).click();
     await expect(courierRow).toContainText("Finding rider");

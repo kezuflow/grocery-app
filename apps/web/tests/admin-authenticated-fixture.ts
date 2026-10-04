@@ -49,7 +49,7 @@ function sqlLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-export function executeAdminE2eSql(sql: string): void {
+function runAdminE2eSql(sql: string, json = false): string {
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const result = spawnSync(
       process.execPath,
@@ -65,6 +65,7 @@ export function executeAdminE2eSql(sql: string): void {
         `.wrangler/${e2eStateName}`,
         "--command",
         sql,
+        ...(json ? ["--json"] : []),
       ],
       {
         cwd: coreRoot,
@@ -74,7 +75,7 @@ export function executeAdminE2eSql(sql: string): void {
         shell: false,
       },
     );
-    if (result.status === 0) return;
+    if (result.status === 0) return result.stdout;
     const output = `${result.stdout}\n${result.stderr}`;
     if (!output.includes("SQLITE_BUSY") || attempt === 5) {
       throw new Error(
@@ -83,6 +84,16 @@ export function executeAdminE2eSql(sql: string): void {
     }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 100);
   }
+  throw new Error("Local fixture attempts exhausted");
+}
+
+export function executeAdminE2eSql(sql: string): void {
+  runAdminE2eSql(sql);
+}
+
+/** Read assertions against the same explicitly isolated D1 used by managed journeys. */
+export function queryAdminE2eSql(sql: string): unknown {
+  return JSON.parse(runAdminE2eSql(sql, true));
 }
 
 async function provisionAccount(
