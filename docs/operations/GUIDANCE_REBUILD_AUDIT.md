@@ -146,8 +146,8 @@ Final `verify-guidance.py --staged` passed: all 27 staged archive originals reta
 Current Scheduled purchase/packing, mode-specific dispatch/Manual, Global-area geography, fixed
 Motorcycle parcel, retired additions and bounded messaging/tracking/station exceptions are recorded
 in their existing owning guides; no new commerce-policy authority is created. Operational examples
-now name the intended environment/APIs/current checkout channel. SDK action lifetime remains a
-separate unresolved extension question, not a changed provider setting.
+now name the intended environment/APIs/current checkout channel. SDK action lifetime was a
+separate unresolved extension question at initial remediation. The owner's 2026-10-04 release follow-up retains the existing 60-minute action separately from the 30-minute QR and editable settlement boundary, as recorded in PRODUCT and the active checkpoint; no provider duration setting changed.
 
 The protected discussion, historical migration chain and encoding-damaged IMPLEMENTATION_STATUS
 are unchanged. The old active checkpoint is preserved in full in [history through 2026-10-04](checkpoints/COMMERCE_ALIGNMENT_EXECUTION_HISTORY_20261004.md).

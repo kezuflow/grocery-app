@@ -12,7 +12,7 @@ Current progress: source/guidance remediation implemented and verified locally. 
 
 Managed browser acceptance passed **7/7** with `E2E_START_STACK=1`, `E2E_AUTHENTICATED=1`, `E2E_STATE_NAME=e2e-rules-audit-20261004`. Command: `pnpm --filter @freshmarkets/web exec playwright test tests/scheduled-payment-resume.spec.ts tests/storefront-payment-return.spec.ts`. Desktop and mobile viewport tests covered saved cutoff, early closure, issued QR preservation/expiry and zero new provider requests; the payment-return scenario passed. The state directory did not exist before setup and is disposable for this task. The managed stack stopped; port 3100 has no listener. These are executed Web/Core/local-D1 checks with test integrations and intercepted PayMongo HTTP, not actual provider acceptance. No Core suites overlapped this stack. `pnpm --filter @freshmarkets/web check:vinext` passed: 16 supported, 0 partial, 0 issues.
 
-The first `pnpm check` failed on one stale Web test requiring the Maps runbook to deny service-area polygons. The assertion now requires the approved Global-area gate, separate location pins and all server APIs while retaining security checks; its focused suite passed 3/3. The final `pnpm check` passed (exit 0): Core **1,772/1,772 across 218 files**, Web **737/737 across 168 files**, shared-package **27/27 across 16 files**, harness **38/38**, formatting/conventions, migrations/integrity, architecture/security, lint, workspace types and all workspace builds. Core/mobile-api builds were Wrangler dry-runs; no deployment occurred. Vinext emitted plugin-timing/route-classification notices and generated Wrangler configuration warnings, without failure. F08 SDK-action duration question is pending owner clarification; the current 60-minute constant remains unchanged.
+The first `pnpm check` failed on one stale Web test requiring the Maps runbook to deny service-area polygons. The assertion now requires the approved Global-area gate, separate location pins and all server APIs while retaining security checks; its focused suite passed 3/3. The final `pnpm check` passed (exit 0): Core **1,772/1,772 across 218 files**, Web **737/737 across 168 files**, shared-package **27/27 across 16 files**, harness **38/38**, formatting/conventions, migrations/integrity, architecture/security, lint, workspace types and all workspace builds. Core/mobile-api builds were Wrangler dry-runs; that initial implementation request did not deploy. Vinext emitted plugin-timing/route-classification notices and generated Wrangler configuration warnings, without failure. F08's SDK-action duration was subsequently resolved by the owner release follow-up below; the 60-minute constant remains unchanged.
 
 Audit disposition at finding level:
 
@@ -43,7 +43,21 @@ Production packaging/pre-release acceptance passed: `CLOUDFLARE_ENV=production p
 
 Pre-release Core `/health`, Core `/ready` and Web `/api/core-health` pass HTTP 200, production environment, structured JSON, valid UUID request-reference echo and runtime/database/PayMongo adapter readiness. The initial use of the local smoke helper failed its request-reference equality: it generates a non-UUID identifier, which the current production boundary correctly replaces. Read-only Node fetch assertions were rerun with `crypto.randomUUID()` and all three passed; no application check was weakened or application code changed.
 
-Next action: commit/push the timing record and deploy/verify Core then Web under the runbook.
+Timing/release scope committed and pushed as `62b047da`. Production Core deployed successfully as `282c5a08-3bd6-44ca-b04c-3da67ae13b86`; its post-deploy `/ready` passed before Web deployment. Production Web deployed successfully as `4058d9d7-bdab-43bb-8aa5-082261e9ded1` using the reviewed generated artifact. Both strict deploy commands exited 0. Fresh `wrangler deployments list --json` responses, sorted by `created_on`, confirm those versions at **100% traffic**. Post-release Core `/health` and `/ready`, Web `/api/core-health` and public home all pass HTTP 200; JSON probes confirm production environment, matching UUID request references and ready runtime/database/PayMongo adapter. The read-only smoke assertions are retained locally as `.wrangler/rules-audit-production-smoke.mjs`.
+
+Fresh in-app browser verification passed: Storefront rendered category rails and actual catalog; authenticated Orders showed its filter controls and empty All view; Needs payment finished loading with **No checkouts need payment**. The temporary verification tab was closed. This is read-only deployed rendering/read acceptance; there was no real QR creation/payment/refund/courier transaction, and no missing test Order was recreated. Local synthetic recovery acceptance remains the seven executed tests above.
+
+Executed release commands (from repository root; `CLOUDFLARE_ENV=production` was set in PowerShell for Web build):
+
+```text
+pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production --strict --message "Production release 62b047da: rules audit and Scheduled payment recovery"
+pnpm --filter @freshmarkets/web exec wrangler deploy --config dist/server/wrangler.json --strict --message "Production release 62b047da: rules audit and Scheduled payment recovery"
+pnpm --filter @freshmarkets/core exec wrangler deployments list --config wrangler.jsonc --env production --json
+pnpm --filter @freshmarkets/web exec wrangler deployments list --config wrangler.jsonc --env production --json
+node .wrangler/rules-audit-production-smoke.mjs
+```
+
+`CA-7.RULES-AUDIT-1` source/guidance remediation and `CA-7.RULES-AUDIT-1.RELEASE` deployment/readiness acceptance are complete: **13/13 findings addressed**, **2/2 production Workers released**, distinct from full Phase 7 acceptance. Next action: perform owner-authorized actual Scheduled QR/payment/refund and courier journeys against an owner-controlled Order to close the existing provider acceptance gaps.
 
 ### Executed verification commands
 
@@ -64,7 +78,7 @@ The focused commands passed 46, 102, 40 and 3 tests respectively. The successful
 
 ## Current deployed baseline and open acceptance
 
-Production application revision is `aa76ca37`, release evidence revision `c835d988`. Core version `d9f36097-6bc5-4373-9d2e-6aec62b8e2e4`; Web version `15e71f51-91c0-430f-aef8-fcabfc0ae36c`; recorded at 100% traffic, production migration 0110 applied, health/readiness and two read-only browser views passed. This request does not deploy later remediation source. The earlier Scheduled courier admission fix is released; no actual post-fix booking is accepted. Mandatory Admin reason-field simplification remains a separate unimplemented request.
+Production release revision is now `62b047da` (application remediation source `73012f44`; the later commit records timing/release scope only). Core version `282c5a08-3bd6-44ca-b04c-3da67ae13b86`; Web version `4058d9d7-bdab-43bb-8aa5-082261e9ded1`; verified at 100% traffic, production migration 0110 remains current with no pending migration, health/readiness and read-only browser views passed. Previous production application `aa76ca37` and release evidence `c835d988` remain in history. Scheduled courier admission and payment-recovery fixes are released; no actual post-fix booking/payment/refund is accepted. Mandatory Admin reason-field simplification remains a separate unimplemented request.
 
 Earlier Phase 7 actual payment/refund/courier and complete-journey acceptance remains open. Mobile source has local checks but no native-device/provider/production acceptance. The owner-controlled deleted test Order cannot supply booking evidence. Counts and exact prior commands are preserved in the linked history; this shorter checkpoint does not close earlier gaps.
 
