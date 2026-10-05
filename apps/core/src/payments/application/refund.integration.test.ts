@@ -1,5 +1,9 @@
 import { requestHash } from "../../idempotency";
 import { requestStaffRefund } from "./request-staff-refund";
+import { retryStaffRefund } from "./retry-staff-refund";
+import { reconcileRefunds } from "./reconcile-refunds";
+import { synchronizeOrderCancellationForPayment } from "../../orders/application/advance-order-cancellation";
+import { resumeCancellationRefunds } from "../../orders/application/resume-cancellation-refunds";
 import { locationManager } from "../../test-location-fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { cancelOrder } from "../../orders/application/cancel-order";
@@ -11,6 +15,7 @@ import {
   createMockPaymentProvider,
   mockSignatureFor,
   setMockRefundFailure,
+  setMockRefundObservation,
 } from "../infrastructure/providers/mock-payment-provider";
 import { ProviderRegistry } from "../infrastructure/providers/provider-registry";
 import { extendPaymentRepositoryForRefunds } from "../infrastructure/d1/payment-repository";
@@ -91,6 +96,343 @@ function refundCommand(
     ...overrides,
   };
 }
+
+describe("staff retry of definitively rejected refunds", () => {
+  async function staff(scope: "global" | "location" = "global", permitted = true) {
+    const manager = await locationManager(scope);
+    if (permitted)
+      await env.DB.prepare(`INSERT INTO role_permission(role_id,permission_id)
+      SELECT ?,id FROM permission WHERE code='refunds.manage'`)
+        .bind(manager.id)
+        .run();
+    const row = await env.DB.prepare("SELECT auth_user_id FROM staff_identity WHERE id=?")
+      .bind(manager.id)
+      .first<{ auth_user_id: string }>();
+    if (!row) throw new Error("Missing staff");
+    return row.auth_user_id;
+  }
+  async function fixture(cancellation = true) {
+    const paid = await succeededIntent(),
+      now = Date.now(),
+      orderId = crypto.randomUUID();
+    if (cancellation)
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO grocery_order(id,customer_id,cycle_id,fulfillment_mode,address_snapshot_json,status,total_minor,currency,payment_id,created_at)
+        SELECT ?,customer_id,'cycle-next-cebu','SCHEDULED','{}','COMMITTED',amount_minor,currency,id,? FROM payment_attempt WHERE payment_intent_id=?`).bind(
+          orderId,
+          now,
+          paid.intentId,
+        ),
+        env.DB.prepare(`INSERT INTO order_fulfillment_snapshot(order_id,location_id,cycle_id,zone_id,cutoff_at,delivery_date,fulfillment_mode,sourcing_modes_json,created_at)
+        VALUES (?,'location-cebu-central','cycle-next-cebu','zone-cebu-city-core',?,?,'SCHEDULED','[]',?)`).bind(
+          orderId,
+          now + 86400000,
+          now + 172800000,
+          now,
+        ),
+        env.DB.prepare(
+          "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,?)",
+        ).bind(crypto.randomUUID(), paid.intentId, crypto.randomUUID(), orderId, now),
+      ]);
+    const rejectedSubmit = vi
+      .spyOn(sharedMock, "requestRefund")
+      .mockResolvedValueOnce({ ok: false, errorCode: "PROVIDER_REFUND_REJECTED" });
+    try {
+      if (cancellation) {
+        const accepted = await cancelOrder(
+          env.DB,
+          {
+            orderId,
+            expectedVersion: 1,
+            reason: "Customer request",
+            idempotencyKey: crypto.randomUUID(),
+            requestId: crypto.randomUUID(),
+          },
+          {
+            requestRefund: async (input) => {
+              const result = await requestRefund(env.DB, testRegistry(), {
+                ...input,
+                actorId: "test",
+                requestId: crypto.randomUUID(),
+              });
+              return result.ok
+                ? { ok: true, refundId: result.value.refundId, refundState: result.value.state }
+                : { ok: false };
+            },
+          },
+        );
+        expect(accepted.ok).toBe(true);
+      } else await requestRefund(env.DB, testRegistry(), refundCommand(paid.intentId));
+    } finally {
+      rejectedSubmit.mockRestore();
+    }
+    const refund = await env.DB.prepare(
+      "SELECT id,version,amount_minor FROM payment_refund WHERE payment_intent_id=? AND status='REJECTED'",
+    )
+      .bind(paid.intentId)
+      .first<{ id: string; version: number; amount_minor: number }>();
+    if (!refund) throw new Error("Missing rejected refund");
+    const command = {
+      refundId: refund.id,
+      expectedVersion: refund.version,
+      reason: "Provider account funded",
+      idempotencyKey: crypto.randomUUID(),
+      actorAuthUserId: await staff(),
+      requestId: crypto.randomUUID(),
+    };
+    return { ...paid, orderId, refund, command };
+  }
+  async function effects(f: Awaited<ReturnType<typeof fixture>>) {
+    return {
+      refunds: (
+        await env.DB.prepare(
+          "SELECT id,status,version,idempotency_key FROM payment_refund WHERE payment_intent_id=? ORDER BY id",
+        )
+          .bind(f.intentId)
+          .all()
+      ).results,
+      members: (
+        await env.DB.prepare(
+          "SELECT refund_id,status FROM order_cancellation_refund_member WHERE payment_intent_id=?",
+        )
+          .bind(f.intentId)
+          .all()
+      ).results,
+      audit: (
+        await env.DB.prepare(
+          "SELECT id FROM audit_event WHERE action='PAYMENT.REFUND_RETRIED' AND aggregate_id=?",
+        )
+          .bind(f.refund.id)
+          .all()
+      ).results,
+      receipt: (
+        await env.DB.prepare(
+          "SELECT result_reference FROM idempotency_records WHERE scope='admin.payments.refund-retry' AND idempotency_key=?",
+        )
+          .bind(f.command.idempotencyKey)
+          .all()
+      ).results,
+    };
+  }
+  it("retries the recorded amount, preserves rejection, replays once, and completes only after verified success", async () => {
+    const f = await fixture(),
+      submit = vi.spyOn(sharedMock, "requestRefund");
+    try {
+      const result = await retryStaffRefund(env.DB, testRegistry(), f.command);
+      expect(result).toMatchObject({
+        ok: true,
+        value: { amountMinor: 20000, status: "REQUESTED" },
+      });
+      if (!result.ok) throw new Error("Retry rejected");
+      expect(await retryStaffRefund(env.DB, testRegistry(), f.command)).toEqual(result);
+      expect(
+        await retryStaffRefund(env.DB, testRegistry(), { ...f.command, reason: "Changed reason" }),
+      ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(
+        await env.DB.prepare(
+          "SELECT status,provider_refund_reference FROM payment_refund WHERE id=?",
+        )
+          .bind(f.refund.id)
+          .first(),
+      ).toEqual({ status: "REJECTED", provider_refund_reference: null });
+      await synchronizeOrderCancellationForPayment(env.DB, f.intentId);
+      const cancellation = await env.DB.prepare(
+        "SELECT id FROM order_cancellation WHERE order_id=?",
+      )
+        .bind(f.orderId)
+        .first<{ id: string }>();
+      if (!cancellation) throw new Error("Missing cancellation");
+      const redrive = vi.fn();
+      await resumeCancellationRefunds(env.DB, cancellation.id, redrive);
+      expect(redrive).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT status FROM order_cancellation WHERE id=?")
+          .bind(cancellation.id)
+          .first(),
+      ).toEqual({ status: "REFUNDS_PROCESSING" });
+      expect(
+        await env.DB.prepare(
+          "SELECT refund_id,status FROM order_cancellation_refund_member WHERE payment_intent_id=?",
+        )
+          .bind(f.intentId)
+          .first(),
+      ).toEqual({ refund_id: result.value.refundId, status: "PROCESSING" });
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(f.orderId).first(),
+      ).toEqual({ status: "CANCELLATION_REQUESTED" });
+      const replacement = await env.DB.prepare(
+        "SELECT idempotency_key,provider_refund_reference FROM payment_refund WHERE id=?",
+      )
+        .bind(result.value.refundId)
+        .first<{ idempotency_key: string; provider_refund_reference: string }>();
+      if (!replacement) throw new Error("Missing replacement");
+      setMockRefundObservation(sharedMock, replacement.idempotency_key, {
+        outcome: "FOUND",
+        refund: {
+          providerReference: f.reference,
+          providerRefundReference: replacement.provider_refund_reference,
+          idempotencyKey: replacement.idempotency_key,
+          canonicalState: "SUCCEEDED",
+          amountMinor: 20000,
+          currency: "PHP",
+          observedAt: Date.now(),
+        },
+      });
+      await reconcileRefunds(env.DB, testRegistry(), Date.now() + 61000);
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(f.orderId).first(),
+      ).toEqual({ status: "CANCELED" });
+      expect(
+        await retryStaffRefund(env.DB, testRegistry(), {
+          ...f.command,
+          idempotencyKey: crypto.randomUUID(),
+          expectedVersion: f.command.expectedVersion + 1,
+        }),
+      ).toMatchObject({ ok: false });
+      expect((await effects(f)).audit).toHaveLength(1);
+    } finally {
+      submit.mockRestore();
+    }
+  });
+  it("admits only one of two competing retry decisions", async () => {
+    const f = await fixture(),
+      submit = vi.spyOn(sharedMock, "requestRefund");
+    try {
+      const results = await Promise.all([
+        retryStaffRefund(env.DB, testRegistry(), f.command),
+        retryStaffRefund(env.DB, testRegistry(), {
+          ...f.command,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ]);
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect((await effects(f)).refunds).toHaveLength(2);
+      expect((await effects(f)).audit).toHaveLength(1);
+    } finally {
+      submit.mockRestore();
+    }
+  });
+  it.each(["audit", "refund", "member", "cancellation"])(
+    "rolls back the complete retry when the %s claim is lost",
+    async (claim) => {
+      const f = await fixture(),
+        before = await effects(f),
+        submit = vi.spyOn(sharedMock, "requestRefund");
+      const trigger =
+        claim === "audit"
+          ? "BEFORE INSERT ON audit_event WHEN NEW.action='PAYMENT.REFUND_RETRIED'"
+          : claim === "refund"
+            ? "BEFORE UPDATE OF version ON payment_refund WHEN OLD.status='REJECTED'"
+            : claim === "member"
+              ? "BEFORE UPDATE OF refund_id ON order_cancellation_refund_member"
+              : "BEFORE UPDATE OF status ON order_cancellation WHEN NEW.status='REFUNDS_PROCESSING'";
+      await env.DB.exec(
+        `CREATE TRIGGER ignore_retry_claim ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect(await retryStaffRefund(env.DB, testRegistry(), f.command)).toMatchObject({
+          ok: false,
+        });
+        expect(await effects(f)).toEqual(before);
+        expect(submit).not.toHaveBeenCalled();
+      } finally {
+        await env.DB.exec("DROP TRIGGER ignore_retry_claim");
+        submit.mockRestore();
+      }
+    },
+  );
+  it("does not resubmit an unknown provider outcome after lost-response replay", async () => {
+    const f = await fixture(),
+      submit = vi
+        .spyOn(sharedMock, "requestRefund")
+        .mockRejectedValueOnce(new Error("lost provider response"));
+    try {
+      const result = await retryStaffRefund(env.DB, testRegistry(), f.command);
+      expect(result.ok).toBe(true);
+      expect(await retryStaffRefund(env.DB, testRegistry(), f.command)).toEqual(result);
+      expect(submit).toHaveBeenCalledTimes(1);
+      if (!result.ok) throw new Error("Missing admission");
+      expect(
+        await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+          .bind(result.value.refundId)
+          .first(),
+      ).toEqual({ status: "ESCALATED" });
+      expect(
+        await retryStaffRefund(env.DB, testRegistry(), {
+          ...f.command,
+          refundId: result.value.refundId,
+          expectedVersion: 2,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: false });
+    } finally {
+      submit.mockRestore();
+    }
+  });
+  it("permits retrying a replacement only if the provider definitively rejects that replacement", async () => {
+    const f = await fixture(),
+      submit = vi
+        .spyOn(sharedMock, "requestRefund")
+        .mockResolvedValueOnce({ ok: false, errorCode: "PROVIDER_REFUND_REJECTED" });
+    try {
+      const result = await retryStaffRefund(env.DB, testRegistry(), f.command);
+      if (!result.ok) throw new Error("Missing admission");
+      expect(
+        await retryStaffRefund(env.DB, testRegistry(), {
+          ...f.command,
+          refundId: result.value.refundId,
+          expectedVersion: 2,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      expect(submit).toHaveBeenCalledTimes(2);
+    } finally {
+      submit.mockRestore();
+    }
+  });
+  it("rejects stale input, wrong scope, absent permission, invalid input and disabled staff without effects", async () => {
+    const f = await fixture(),
+      before = await effects(f),
+      submit = vi.spyOn(sharedMock, "requestRefund");
+    try {
+      for (const change of [
+        { expectedVersion: 999 },
+        { reason: "" },
+        { actorAuthUserId: "unknown" },
+        { actorAuthUserId: await staff("location") },
+        { actorAuthUserId: await staff("global", false) },
+      ]) {
+        expect(
+          await retryStaffRefund(env.DB, testRegistry(), { ...f.command, ...change }),
+        ).toMatchObject({ ok: false });
+        expect(await effects(f)).toEqual(before);
+      }
+      await env.DB.prepare("UPDATE staff_identity SET status='suspended' WHERE auth_user_id=?")
+        .bind(f.command.actorAuthUserId)
+        .run();
+      expect(await retryStaffRefund(env.DB, testRegistry(), f.command)).toMatchObject({
+        ok: false,
+      });
+      expect(await effects(f)).toEqual(before);
+      expect(submit).not.toHaveBeenCalled();
+    } finally {
+      submit.mockRestore();
+    }
+  });
+  it("retains all effects when pending refunds already reserve the balance", async () => {
+    const f = await fixture(false),
+      now = Date.now();
+    await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at)
+      VALUES (?, ?, 20000, 'PHP','ESCALATED',?,1,?,?)`)
+      .bind(crypto.randomUUID(), f.intentId, crypto.randomUUID(), now, now)
+      .run();
+    const before = await effects(f);
+    expect(await retryStaffRefund(env.DB, testRegistry(), f.command)).toMatchObject({ ok: false });
+    expect(await effects(f)).toEqual(before);
+  });
+});
 
 describe("non-synthetic refunds", () => {
   it("does not resubmit a surviving REQUESTED refund identity", async () => {

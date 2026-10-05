@@ -8,6 +8,7 @@ const coreMocks = vi.hoisted(() => ({
   listAdminPaymentAttention: vi.fn(),
   getAdminPayment: vi.fn(),
   requestAdminRefund: vi.fn(),
+  retryAdminRefund: vi.fn(),
   listAdminMemberships: vi.fn(),
   getAdminMembership: vi.fn(),
   cancelAdminMembership: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("cloudflare:workers", () => ({
 import { GET as listOrders } from "@/app/api/admin/orders/route";
 import { POST as cancelOrder } from "@/app/api/admin/orders/[order-id]/cancel/route";
 import { POST as requestRefund } from "@/app/api/admin/payments/refunds/route";
+import { POST as retryRefund } from "@/app/api/admin/payments/refunds/retry/route";
 import { GET as paymentAttention } from "@/app/api/admin/payments/attention/route";
 import { GET as paymentDetail } from "@/app/api/admin/payments/[payment-intent-id]/route";
 import { GET as listIssues } from "@/app/api/admin/order-issues/route";
@@ -49,6 +51,48 @@ function jsonRequest(url: string, body: unknown): Request {
 }
 
 describe("finance BFF routes", () => {
+  it("delegates refund retry with the current version, actor headers and stable key", async () => {
+    coreMocks.retryAdminRefund.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    await retryRefund(
+      jsonRequest("https://x/refunds/retry", {
+        refundId: "rf-1",
+        expectedVersion: 2,
+        reason: "Account funded",
+      }),
+    );
+    expect(coreMocks.retryAdminRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        refundId: "rf-1",
+        expectedVersion: 2,
+        reason: "Account funded",
+        idempotencyKey: "idem-1",
+        headers: expect.objectContaining(COOKIE),
+      }),
+    );
+  });
+  it("rejects malformed refund retry inputs before calling Core", async () => {
+    for (const body of [
+      { refundId: "rf-1", reason: "Account funded" },
+      { refundId: "rf-1", expectedVersion: 2, reason: "" },
+    ]) {
+      expect((await retryRefund(jsonRequest("https://x/refunds/retry", body))).status).toBe(400);
+    }
+    expect(
+      (
+        await retryRefund(
+          new Request("https://x/refunds/retry", {
+            method: "POST",
+            body: JSON.stringify({
+              refundId: "rf-1",
+              expectedVersion: 2,
+              reason: "Account funded",
+            }),
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(coreMocks.retryAdminRefund).not.toHaveBeenCalled();
+  });
   it("delegates order list/detail/cancel with the path id and idempotency key", async () => {
     coreMocks.listAdminOrders.mockResolvedValue({ ok: true, value: { items: [] }, requestId: "r" });
     coreMocks.cancelAdminOrder.mockResolvedValue({ ok: true, value: {}, requestId: "r" });

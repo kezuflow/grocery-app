@@ -482,6 +482,8 @@ That transaction repair initially covered fixed/percentage merchandise discounts
 
 ## Admin Orders and Payments
 
+`retryAdminRefund` requires authenticated Global `refunds.manage`, refund ID, current refund version, a reason and a stable command key. Only `REJECTED` without provider refund reference or active recovery, without a prior replacement, and with the exact amount available against captured money is eligible. Core exposes optional `AdminRefundProgress.recovery.canRetry` (absent on older deployments). `POST /api/admin/payments/refunds/retry` submits the decision. Admission preserves the old refund and atomically reserves/links one new identity, audit and immutable `AdminRefundView` with `REQUESTED` status; this is acceptance, not provider success. Identical replay returns that receipt without another provider submission. Unknown outcomes retain the new identity for existing read-only provider recovery. A prior cancellation keeps its exact member amount and completes only from canonical replacement success.
+
 - `admin.orders.recordExceptionResolution(...)`
 
   **2026-09-09 owner clarification:** post-delivery exception refunds require authorized staff review and confirmation in the FreshMarkets dashboard. Core executes the refund through PayMongo and verifies the provider result; staff cannot enter a financial success flag. Retain the staff submission contract below. Automatic eligible customer cancellation continues through Orders and Payments without staff approval.

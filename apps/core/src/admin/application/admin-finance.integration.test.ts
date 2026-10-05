@@ -162,6 +162,66 @@ async function seedOrderWithPayment(options: { status?: string } = {}): Promise<
 }
 
 describe("finance administration", () => {
+  it("authorizes rejected refund retry through RPC and derives its read action from current evidence", async () => {
+    const f = await seedOrderWithPayment(),
+      now = Date.now(),
+      refundId = crypto.randomUUID();
+    await env.DB.prepare(`INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at)
+      VALUES (?, ?, 10000,'PHP','REJECTED',?,2,?,?)`)
+      .bind(refundId, f.paymentIntentId, crypto.randomUUID(), now, now)
+      .run();
+    const request = {
+      requestId: crypto.randomUUID(),
+      refundId,
+      expectedVersion: 2,
+      reason: "Provider account funded",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(await core.retryAdminRefund({ ...request, headers: {} })).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
+    for (const manager of [
+      await seedManager(["payments.read"]),
+      await seedManager(["refunds.manage"], "location"),
+    ]) {
+      expect(
+        await core.retryAdminRefund({ ...request, headers: { cookie: manager.cookie } }),
+      ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    }
+    const manager = await seedManager(),
+      headers = { cookie: manager.cookie };
+    const before = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      paymentIntentId: f.paymentIntentId,
+      headers,
+    });
+    expect(before).toMatchObject({
+      ok: true,
+      value: {
+        refunds: [
+          expect.objectContaining({
+            refundId,
+            recovery: expect.objectContaining({ canRetry: true }),
+          }),
+        ],
+      },
+    });
+    const accepted = await core.retryAdminRefund({ ...request, headers });
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: { amountMinor: 10000, status: "REQUESTED" },
+    });
+    expect(await core.retryAdminRefund({ ...request, headers })).toEqual(accepted);
+    const after = await core.getAdminPayment({
+      requestId: crypto.randomUUID(),
+      paymentIntentId: f.paymentIntentId,
+      headers,
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) throw new Error("Missing payment read");
+    expect(after.value.refunds.every((refund) => refund.recovery.canRetry === false)).toBe(true);
+  });
   it("denies unauthenticated and non-staff readers", async () => {
     expect(await core.listAdminOrders({ requestId: "r1", headers: {} })).toMatchObject({
       ok: false,

@@ -76,6 +76,8 @@ after Core durably adopts checkout payment creation, the submitted Cart leaves a
 
 ## Payments and refunds
 
+Owner follow-up, 2026-10-05: Admin may retry a definitively rejected refund after correcting the provider funding/configuration issue. Global `refunds.manage` staff confirm a reason; the retry uses the same recorded amount/currency, preserves the rejected attempt and continues the existing cancellation. Pending, unknown and successful refunds cannot be submitted again through this action. Financial success still requires verified provider evidence. This authorization does not execute a real refund or deploy the implementation.
+
 While the QR Ph provider step is open, checkout automatically checks
 the authenticated customer's owning Payment completion. A signed provider success first displays
 “Payment received” while the same durable Order reaction is unfinished; only the immutable committed

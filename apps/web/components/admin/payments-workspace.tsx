@@ -24,6 +24,7 @@ import { StatusBadge } from "./admin-shell";
 import { AdminIndexCard, AdminIndexPageCount } from "./admin-index-card";
 import { PaymentRecovery } from "./payment-recovery";
 import { RefundRecovery } from "./refund-recovery";
+import { RefundRetry } from "./refund-retry";
 import { Button } from "@/components/admin/shadcn/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
 import { Input } from "@/components/admin/shadcn/input";
@@ -1007,6 +1008,13 @@ function PaymentPanel({
               onAccepted={onRefresh}
               onInteractionState={(active) =>
                 onInteractionState(`refund:${refund.refundId}`, active)
+              }
+            />
+            <RefundRetry
+              refund={refund}
+              onAccepted={onRefresh}
+              onInteractionState={(active) =>
+                onInteractionState(`refund-retry:${refund.refundId}`, active)
               }
             />
           </div>

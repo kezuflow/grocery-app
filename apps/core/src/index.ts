@@ -288,6 +288,7 @@ import {
   cancelAdminOrder as cancelAdminOrderCommand,
   requestAdminRefund as requestAdminRefundCommand,
   recheckAdminRefund as recheckAdminRefundCommand,
+  retryAdminRefund as retryAdminRefundCommand,
   recheckAdminPayment as recheckAdminPaymentCommand,
   retryAdminProviderEvent as retryAdminProviderEventCommand,
   retryAdminPaymentReaction as retryAdminPaymentReactionCommand,
@@ -3040,6 +3041,21 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return this.withOperationalPublication(
       recheckAdminRefundCommand(
         { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+        parsed.data,
+      ),
+    );
+  }
+  async retryAdminRefund(input: import("@freshmarkets/contracts").AdminRefundRetryRequest) {
+    const parsed = refundRecheckSchema.safeParse(input);
+    if (!parsed.success)
+      return fail("VALIDATION_FAILED", validationMessage(parsed.error), input.requestId);
+    return this.withOperationalPublication(
+      retryAdminRefundCommand(
+        {
+          auth: createAuth(this.env as Env & AuthEnvironment),
+          db: this.env.DB,
+          payments: buildProviderRegistry(this.runtimeConfiguration()),
+        },
         parsed.data,
       ),
     );

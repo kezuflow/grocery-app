@@ -885,6 +885,7 @@ function settlementEvidenceGuard(
 }
 
 export type RefundBudgetClaim = {
+  replacesRejectedRefundId?: string;
   refundId: string;
   intentId: string;
   amountMinor: number;
@@ -909,7 +910,12 @@ export function refundBudgetStatement(
              AND NOT EXISTS (SELECT 1 FROM order_cancellation_refund_member member
                JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
                WHERE member.payment_intent_id=pi.id AND cancellation.status!='COMPLETED'
-                 AND ('order-cancel:'||cancellation.id||':'||pi.id!=? OR member.required_amount_minor!=?))
+                 AND (('order-cancel:'||cancellation.id||':'||pi.id!=? AND NOT EXISTS (
+                   SELECT 1 FROM payment_refund previous WHERE previous.id=? AND previous.id=member.refund_id
+                   AND previous.payment_intent_id=pi.id AND previous.status='REJECTED'
+                   AND previous.provider_refund_reference IS NULL
+                   AND previous.amount_minor=member.required_amount_minor AND previous.currency=member.currency
+                 )) OR member.required_amount_minor!=?))
              AND ? <= pi.amount_minor - COALESCE((
                SELECT SUM(pr.amount_minor) FROM payment_refund pr
                WHERE pr.payment_intent_id=pi.id
@@ -925,6 +931,7 @@ export function refundBudgetStatement(
       input.now,
       input.intentId,
       input.idempotencyKey,
+      input.replacesRejectedRefundId ?? null,
       input.amountMinor,
       input.amountMinor,
     );

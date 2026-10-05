@@ -39,8 +39,10 @@ export async function resumeCancellationRefunds(
     await synchronizeOrderCancellationForPayment(database, member.payment_intent_id);
     const key = `order-cancel:${cancellationId}:${member.payment_intent_id}`;
     const refund = await database
-      .prepare("SELECT status FROM payment_refund WHERE idempotency_key=?")
-      .bind(key)
+      .prepare(`SELECT refund.status FROM payment_refund refund
+        JOIN order_cancellation_refund_member member ON member.id=?
+        WHERE refund.id=member.refund_id OR (member.refund_id IS NULL AND refund.idempotency_key=?)`)
+      .bind(member.id, key)
       .first<{ status: string }>();
     if (refund) {
       // REQUESTED after an interrupted submit has an unknown external outcome.

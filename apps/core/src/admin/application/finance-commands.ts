@@ -8,6 +8,8 @@ import { retryPaymentReaction } from "../../payments/application/retry-payment-r
 import { retryProviderEvent } from "../../payments/application/retry-provider-event";
 import { recheckStaffPayment } from "../../payments/application/recheck-staff-payment";
 import { recheckStaffRefund } from "../../payments/application/recheck-staff-refund";
+import { retryStaffRefund } from "../../payments/application/retry-staff-refund";
+import { synchronizeOrderCancellationForPayment } from "../../orders/application/advance-order-cancellation";
 import type {
   AdminMembershipLifecycleRequest,
   AdminMembershipSummary,
@@ -496,6 +498,23 @@ export async function recheckAdminRefund(
   const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
   if (!access.ok) return access;
   return recheckStaffRefund(deps.db, { ...request, actorAuthUserId: access.value.authUserId });
+}
+
+export async function retryAdminRefund(
+  deps: FinanceAdministrationDeps,
+  request: import("@freshmarkets/contracts").AdminRefundRetryRequest,
+): Promise<RpcResult<AdminRefundView>> {
+  const access = await resolveFinanceAdministrationAccess(deps, request, "refunds.manage");
+  if (!access.ok) return access;
+  if (!deps.payments)
+    return failure("CONFIGURATION_ERROR", "Payment providers are unavailable", request.requestId);
+  const result = await retryStaffRefund(deps.db, deps.payments, {
+    ...request,
+    actorAuthUserId: access.value.authUserId,
+  });
+  if (result.ok)
+    await synchronizeOrderCancellationForPayment(deps.db, result.value.paymentIntentId);
+  return result;
 }
 
 export async function recheckAdminPayment(

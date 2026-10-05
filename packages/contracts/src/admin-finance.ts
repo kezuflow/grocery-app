@@ -325,6 +325,8 @@ export type AdminRefundProgress = AdminRefundView & {
     nextCheckAt: string | null;
     lastErrorCode: string | null;
     canRecheck: boolean;
+    /** Absent on older Core deployments. */
+    canRetry?: boolean;
   };
 };
 export type AdminRefundRecheckRequest = AuthenticatedRequest & {
@@ -333,6 +335,7 @@ export type AdminRefundRecheckRequest = AuthenticatedRequest & {
   reason: string;
   idempotencyKey: string;
 };
+export type AdminRefundRetryRequest = AdminRefundRecheckRequest;
 export type AdminRefundRecheckResult = {
   refundId: string;
   state: "QUEUED";
@@ -527,6 +530,7 @@ export type AdminPaymentsService = {
     request: AdminRefundRecheckRequest,
   ): Promise<RpcResult<AdminRefundRecheckResult>>;
   requestAdminRefund(request: AdminRefundRequest): Promise<RpcResult<AdminRefundView>>;
+  retryAdminRefund(request: AdminRefundRetryRequest): Promise<RpcResult<AdminRefundView>>;
 };
 
 export type AdminMembershipsService = {

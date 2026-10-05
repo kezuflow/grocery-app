@@ -1,5 +1,6 @@
 import { readPaymentReactionRecovery } from "../../payments/application/read-payment-reaction-recovery";
 import { readProviderEventRecovery } from "../../payments/application/read-provider-event-recovery";
+import { rejectedRefundRetryEligibility } from "../../payments/infrastructure/d1/refund-retry-eligibility";
 import {
   reconciliationResolutionEvidence,
   refundedCommitmentResolutionEvidence,
@@ -875,8 +876,9 @@ export async function getAdminPayment(
     }>();
   const refunds = await deps.db
     .prepare(
-      `SELECT id, amount_minor AS amountMinor, currency, status, reason, created_at AS createdAt,version,attempt_count,next_retry_at,last_error_code,processing_started_at
-       FROM payment_refund WHERE payment_intent_id=? ORDER BY created_at DESC`,
+      `SELECT refund.id, refund.amount_minor AS amountMinor, refund.currency, refund.status, refund.reason, refund.created_at AS createdAt,refund.version,refund.attempt_count,refund.next_retry_at,refund.last_error_code,refund.processing_started_at,
+       (${rejectedRefundRetryEligibility}) AS can_retry
+       FROM payment_refund refund WHERE refund.payment_intent_id=? ORDER BY refund.created_at DESC`,
     )
     .bind(request.paymentIntentId)
     .all<{
@@ -891,6 +893,7 @@ export async function getAdminPayment(
       next_retry_at: number | null;
       last_error_code: string | null;
       processing_started_at: number | null;
+      can_retry: number;
     }>();
   const events = await deps.db
     .prepare(
@@ -1067,6 +1070,8 @@ export async function getAdminPayment(
         refundId: refund.id,
         version: refund.version,
         recovery: {
+          canRetry:
+            access.value.capabilities.includes("refunds.manage") && Boolean(refund.can_retry),
           attempts: refund.attempt_count,
           nextCheckAt: refund.attempt_count >= 5 ? null : toOptionalIso(refund.next_retry_at),
           lastErrorCode: refund.last_error_code,

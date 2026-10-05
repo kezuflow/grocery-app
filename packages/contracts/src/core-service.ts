@@ -308,6 +308,7 @@ export const coreServiceMethodNames = [
   "getAdminPayment",
   "requestAdminRefund",
   "recheckAdminRefund",
+  "retryAdminRefund",
   "recheckAdminPayment",
   "retryAdminProviderEvent",
   "retryAdminPaymentReaction",
