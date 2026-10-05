@@ -191,6 +191,7 @@ for (const surface of ["quick view", "product page"] as const) {
   it(`${surface} still adds a priced available item to the cart`, async () => {
     await showProduct("AVAILABLE");
     expect(document.body.textContent).not.toContain("Set your delivery location first");
+    expect(document.querySelector("fieldset")?.textContent).toContain("₱100.00 / One piece");
     const action = [...document.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Add to cart"),
     );

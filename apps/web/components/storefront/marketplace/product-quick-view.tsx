@@ -294,7 +294,7 @@ export function ProductQuickView({
                       <label
                         key={variant.id}
                         className={cn(
-                          "flex cursor-pointer items-center justify-between gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-sm has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]",
+                          "flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded-[var(--fm-radius-surface)] border p-3 text-sm has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]",
                           variant.availability !== "AVAILABLE"
                             ? "border-[var(--fm-border)] opacity-60"
                             : "border-[var(--fm-border)]",
@@ -312,7 +312,7 @@ export function ProductQuickView({
                           />
                           <span className="font-semibold">{variant.label}</span>
                         </span>
-                        <span className="fm-font-display text-base font-bold tabular-nums">
+                        <span className="fm-font-display ml-auto max-w-full text-right text-base font-bold tabular-nums">
                           {variant.availability === "OUT_OF_STOCK" ? (
                             "Out of stock"
                           ) : (
@@ -377,10 +377,7 @@ export function ProductQuickView({
                             {product.defaultVariant?.priceMinor != null &&
                             product.defaultVariant.currency ? (
                               <span className="fm-font-display block text-xs font-semibold tabular-nums text-[var(--fm-text-muted)]">
-                                {formatMoney(
-                                  product.defaultVariant.priceMinor,
-                                  product.defaultVariant.currency,
-                                )}
+                                <ProductPrice variant={product.defaultVariant} />
                               </span>
                             ) : null}
                           </button>

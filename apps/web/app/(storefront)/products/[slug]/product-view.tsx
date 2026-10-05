@@ -114,7 +114,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
           {view.product.variants.map((variant) => (
             <label
               key={variant.id}
-              className="flex cursor-pointer items-center justify-between gap-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]"
+              className="flex cursor-pointer flex-wrap items-center justify-between gap-4 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-4 has-[:checked]:border-[var(--fm-primary-dark)] has-[:checked]:bg-[var(--fm-surface-soft)]"
             >
               <span className="flex items-center gap-3">
                 <input
@@ -136,7 +136,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
                   </span>
                 </span>
               </span>
-              <span className="fm-font-display shrink-0 text-right text-base font-bold">
+              <span className="fm-font-display ml-auto max-w-full text-right text-base font-bold">
                 {variant.availability === "OUT_OF_STOCK" ? (
                   "Out of stock"
                 ) : (
