@@ -337,7 +337,6 @@ html:has(.fm-admin) {
   --fm-cycle-ordering: var(--fm-admin-chart-1);
   --fm-cycle-procurement: var(--fm-admin-chart-2);
   --fm-cycle-preparation: var(--fm-admin-chart-3);
-  --fm-cycle-pickup: var(--fm-admin-chart-4);
   --fm-cycle-delivery: var(--fm-admin-chart-5);
   --fm-primary-hover: oklch(0.269 0 0);
   --fm-background: var(--fm-admin-canvas);
@@ -414,7 +413,6 @@ html.fm-admin-dark:has(.fm-admin) {
   --fm-cycle-ordering: var(--fm-admin-chart-1);
   --fm-cycle-procurement: var(--fm-admin-chart-2);
   --fm-cycle-preparation: var(--fm-admin-chart-3);
-  --fm-cycle-pickup: var(--fm-admin-chart-4);
   --fm-cycle-delivery: var(--fm-admin-chart-5);
   --fm-background: var(--fm-admin-canvas);
   --fm-surface-soft: var(--fm-admin-canvas);
@@ -593,10 +591,6 @@ html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
   --fm-cycle-event-color: var(--fm-cycle-preparation);
 }
 
-.fm-cycle-event-pickup {
-  --fm-cycle-event-color: var(--fm-cycle-pickup);
-}
-
 .fm-cycle-event-delivery {
   --fm-cycle-event-color: var(--fm-cycle-delivery);
   border-left: 3px solid var(--fm-cycle-delivery) !important;
@@ -623,10 +617,6 @@ html.fm-admin-dark .fm-admin:has(.fm-admin-task-index) {
 
 .fm-cycle-timeline-dot-preparation {
   background: var(--fm-cycle-preparation);
-}
-
-.fm-cycle-timeline-dot-pickup {
-  background: var(--fm-cycle-pickup);
 }
 
 .fm-cycle-timeline-dot-delivery {

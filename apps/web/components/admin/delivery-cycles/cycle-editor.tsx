@@ -52,7 +52,6 @@ const scheduleFields = [
   ["cutoffAt", "Order cutoff", "cutoff"],
   ["procurementAt", "Procurement starts", "procurement"],
   ["preparationAt", "Preparation starts", "preparation"],
-  ["pickupAt", "Planned pickup", "pickup"],
 ] as const;
 
 function displayDate(date: string) {
@@ -456,8 +455,8 @@ export function CycleEditor({
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Fulfillment locations</legend>
                 <p className="text-xs text-muted-foreground">
-                  All selected locations follow this cycle’s ordering, procurement, preparation, and
-                  pickup schedule.
+                  All selected locations follow this cycle’s ordering, procurement, preparation and
+                  customer delivery schedule. Choose rider pickup when each order is packed.
                 </p>
                 {destinationError ? (
                   <p role="alert" className="text-sm text-destructive">

@@ -489,7 +489,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       cutoffAt: new Date(draft.cutoffAt).toISOString(),
       procurementAt: new Date(draft.procurementAt).toISOString(),
       preparationAt: new Date(draft.preparationAt).toISOString(),
-      pickupAt: new Date(draft.pickupAt).toISOString(),
+      pickupAt: new Date(draft.windows[0].startsAt).toISOString(),
       windows: draft.windows.map((window) => ({
         windowId: rescheduling && current ? current.windows[0].windowId : crypto.randomUUID(),
         name: window.name,
@@ -508,7 +508,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       next.cancellationUnavailableReason = cancellation?.reason ?? null;
     }
   } else {
-    if (!current || !current.procurementAt || !current.preparationAt || !current.pickupAt)
+    if (!current || !current.procurementAt || !current.preparationAt)
       return failure(
         "CONFIGURATION_ERROR",
         "Configure the complete cycle schedule first",
@@ -519,7 +519,6 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
         ...current,
         procurementAt: current.procurementAt,
         preparationAt: current.preparationAt,
-        pickupAt: current.pickupAt,
       },
       now,
     );
@@ -653,7 +652,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
           next.timezone,
           Date.parse(draft.procurementAt),
           Date.parse(draft.preparationAt),
-          Date.parse(draft.pickupAt),
+          Date.parse(draft.windows[0].startsAt),
           now,
           now,
         ),

@@ -264,7 +264,7 @@ export default function ProcurementPage() {
                     ["Ordering opens", week.orderOpensAt],
                     ["Order cutoff", week.cutoffAt],
                     ["Purchase available", week.settlementEndsAt],
-                    ["Pickup planned", week.pickupAt],
+                    ["Preparation starts", week.preparationAt],
                   ].map(([name, value]) => (
                     <div key={String(name)}>
                       <dt className="text-muted-foreground">{name}</dt>

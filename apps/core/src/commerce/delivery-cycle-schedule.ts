@@ -4,13 +4,7 @@ import type { DeliveryCycleDraft } from "@freshmarkets/contracts";
 export function validateDeliveryCycleSchedule(
   draft: Pick<
     DeliveryCycleDraft,
-    | "orderOpensAt"
-    | "cutoffAt"
-    | "procurementAt"
-    | "preparationAt"
-    | "pickupAt"
-    | "windows"
-    | "participation"
+    "orderOpensAt" | "cutoffAt" | "procurementAt" | "preparationAt" | "windows" | "participation"
   >,
   now: number,
   options: { requireFutureCutoff?: boolean } = {},
@@ -19,19 +13,17 @@ export function validateDeliveryCycleSchedule(
   const cutoff = Date.parse(draft.cutoffAt);
   const procurement = Date.parse(draft.procurementAt);
   const preparation = Date.parse(draft.preparationAt);
-  const pickup = Date.parse(draft.pickupAt);
-  if (![opens, cutoff, procurement, preparation, pickup].every(Number.isSafeInteger))
+  if (![opens, cutoff, procurement, preparation].every(Number.isSafeInteger))
     return "Schedule times must be valid instants";
   if (
     !(
       opens < cutoff &&
       (options.requireFutureCutoff === false || cutoff > now) &&
       cutoff <= procurement &&
-      procurement <= preparation &&
-      preparation <= pickup
+      procurement <= preparation
     )
   )
-    return "Order opening, cutoff, procurement, preparation and pickup must be in order";
+    return "Order opening, cutoff, procurement and preparation must be in order";
   if (draft.windows.length !== 1) return "A Scheduled cycle must have one customer delivery range";
   if (
     draft.windows.some((window) => {
@@ -40,12 +32,12 @@ export function validateDeliveryCycleSchedule(
       return (
         !Number.isSafeInteger(starts) ||
         !Number.isSafeInteger(ends) ||
-        starts < pickup ||
+        starts < preparation ||
         ends <= starts
       );
     })
   )
-    return "The customer delivery range must follow pickup and end after it starts";
+    return "The customer delivery range must follow preparation and end after it starts";
   if (
     draft.participation.length === 0 ||
     new Set(draft.participation.map((item) => JSON.stringify([item.zoneId, item.locationId])))

@@ -8,7 +8,6 @@ export type CycleField =
   | "cutoffAt"
   | "procurementAt"
   | "preparationAt"
-  | "pickupAt"
   | "deliveryStartsAt"
   | "deliveryEndsAt"
   | "reason";
@@ -30,7 +29,6 @@ export function validateCycleDraft(
     ["cutoffAt", draft.cutoffAt],
     ["procurementAt", draft.procurementAt],
     ["preparationAt", draft.preparationAt],
-    ["pickupAt", draft.pickupAt],
     ["deliveryStartsAt", delivery?.startsAt ?? ""],
     ["deliveryEndsAt", delivery?.endsAt ?? ""],
   ];
@@ -43,7 +41,6 @@ export function validateCycleDraft(
   const cutoff = Date.parse(draft.cutoffAt);
   const procurement = Date.parse(draft.procurementAt);
   const preparation = Date.parse(draft.preparationAt);
-  const pickup = Date.parse(draft.pickupAt);
   const deliveryStart = Date.parse(delivery!.startsAt);
   const deliveryEnd = Date.parse(delivery!.endsAt);
   if (opens >= cutoff) errors.cutoffAt = "Order cutoff must be after orders open.";
@@ -53,9 +50,8 @@ export function validateCycleDraft(
     errors.procurementAt = "Procurement cannot start before the order cutoff.";
   if (preparation < procurement)
     errors.preparationAt = "Preparation cannot start before procurement.";
-  if (pickup < preparation) errors.pickupAt = "Planned pickup cannot be before preparation starts.";
-  if (deliveryStart < pickup)
-    errors.deliveryStartsAt = "Delivery must start at or after the planned pickup.";
+  if (deliveryStart < preparation)
+    errors.deliveryStartsAt = "Delivery must start at or after preparation starts.";
   if (deliveryEnd <= deliveryStart) errors.deliveryEndsAt = "Delivery must end after it starts.";
   return errors;
 }

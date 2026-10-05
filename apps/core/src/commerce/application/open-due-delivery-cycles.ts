@@ -4,9 +4,9 @@ import { auditEventStatement } from "../../audit/application/append-audit-event"
 export async function openDueDeliveryCycles(database: D1Database, now: number): Promise<number> {
   const eligible = `c.status='SCHEDULED' AND c.order_opens_at<=? AND c.order_opens_at<c.cutoff_at
     AND EXISTS (SELECT 1 FROM delivery_cycle_schedule s WHERE s.cycle_id=c.id
-      AND c.cutoff_at<=s.procurement_at AND s.procurement_at<=s.preparation_at AND s.preparation_at<=s.pickup_at
+      AND c.cutoff_at<=s.procurement_at AND s.procurement_at<=s.preparation_at
       AND EXISTS (SELECT 1 FROM delivery_cycle_window w WHERE w.cycle_id=c.id)
-      AND NOT EXISTS (SELECT 1 FROM delivery_cycle_window w WHERE w.cycle_id=c.id AND (w.starts_at<s.pickup_at OR w.ends_at<=w.starts_at)))
+      AND NOT EXISTS (SELECT 1 FROM delivery_cycle_window w WHERE w.cycle_id=c.id AND (w.starts_at<s.preparation_at OR w.ends_at<=w.starts_at)))
     AND EXISTS (SELECT 1 FROM delivery_cycle_zone p WHERE p.cycle_id=c.id AND p.status='ACTIVE')`;
   const due = await database
     .prepare(

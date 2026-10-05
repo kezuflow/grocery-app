@@ -50,7 +50,6 @@ function draft(): DeliveryCycleDraft {
     cutoffAt: cycle.cutoffAt,
     procurementAt: cycle.procurementAt!,
     preparationAt: cycle.preparationAt!,
-    pickupAt: cycle.pickupAt!,
     windows: cycle.windows,
     participation: [{ zoneId: "zone-1", locationId: "location-1" }],
     expectedVersion: 0,
@@ -89,7 +88,6 @@ describe("cycle planning presentation", () => {
       cutoffAt: { date: "2026-09-26", time: "00:00" },
       procurementAt: { date: "2026-09-26", time: "01:00" },
       preparationAt: { date: "2026-09-26", time: "02:00" },
-      pickupAt: { date: "2026-09-26", time: "04:00" },
     });
   });
 
@@ -103,7 +101,6 @@ describe("cycle planning presentation", () => {
       "cutoff",
       "procurement",
       "preparation",
-      "pickup",
       "delivery",
     ]);
   });
@@ -112,16 +109,15 @@ describe("cycle planning presentation", () => {
     const equal = draft();
     equal.procurementAt = equal.cutoffAt;
     equal.preparationAt = equal.cutoffAt;
-    equal.pickupAt = equal.cutoffAt;
     equal.windows = [{ ...equal.windows[0]!, startsAt: equal.cutoffAt }];
     expect(validateCycleDraft(equal, Date.parse("2026-09-20T00:00:00Z"))).toEqual({});
 
     const invalid = draft();
     invalid.preparationAt = "2026-09-25T20:00:00Z";
-    invalid.windows = [{ ...invalid.windows[0]!, startsAt: "2026-09-26T00:00:00Z" }];
+    invalid.windows = [{ ...invalid.windows[0]!, startsAt: "2026-09-25T19:00:00Z" }];
     expect(validateCycleDraft(invalid, Date.parse("2026-09-20T00:00:00Z"))).toMatchObject({
       preparationAt: "Preparation cannot start before procurement.",
-      deliveryStartsAt: "Delivery must start at or after the planned pickup.",
+      deliveryStartsAt: "Delivery must start at or after preparation starts.",
     });
   });
 });

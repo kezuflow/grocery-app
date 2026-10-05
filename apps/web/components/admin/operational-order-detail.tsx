@@ -135,7 +135,7 @@ export function OperationalOrderDetail({
           <dt className="font-semibold">Delivery timing</dt>
           <dd>
             {detail.timing.windowName ?? detail.timing.cycleName ?? "Instant"} ·{" "}
-            {date(detail.timing.startsAt ?? detail.timing.pickupAt, detail.timing.timezone)}
+            {date(detail.timing.startsAt, detail.timing.timezone)}
           </dd>
         </div>
         <div>

@@ -675,7 +675,6 @@ export function FulfillmentWorkspace({
                           <span className="text-muted-foreground">
                             {dateTime(
                               item.operational?.timing.startsAt ??
-                                item.operational?.timing.pickupAt ??
                                 item.operational?.committedAt ??
                                 null,
                               item.operational?.timing.timezone ?? null,

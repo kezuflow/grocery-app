@@ -245,9 +245,6 @@ export function CycleCalendar({
           <span className="size-2 rounded-full bg-[var(--fm-cycle-preparation)]" /> Preparation
         </span>
         <span className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-[var(--fm-cycle-pickup)]" /> Pickup
-        </span>
-        <span className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-[var(--fm-cycle-delivery)]" /> Delivery
         </span>
       </div>

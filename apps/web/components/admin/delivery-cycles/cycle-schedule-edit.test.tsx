@@ -92,6 +92,7 @@ function editorProps(): ComponentProps<typeof CycleEditor> {
 it("offers schedule editing on a committed active cycle only to a manager", () => {
   const cycle: AdminDeliveryCycleView = {
     ...draft,
+    pickupAt: null,
     cycleId: "cycle-1",
     version: 3,
     status: "OPEN",
@@ -150,7 +151,6 @@ it("requires an audit reason and keeps all timing controls editable", () => {
     "Order cutoff",
     "Procurement starts",
     "Preparation starts",
-    "Planned pickup",
     "Customer delivery starts",
     "Customer delivery ends",
   ]) {
@@ -159,6 +159,7 @@ it("requires an audit reason and keeps all timing controls editable", () => {
       (screen.getByRole("button", { name: `${label} date` }) as HTMLButtonElement).disabled,
     ).toBe(false);
   }
+  expect(document.querySelector('input[aria-label="Planned pickup time"]')).toBeNull();
   act(() => {
     const input = screen.getByLabelText("Order cutoff time");
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "01:00");
@@ -218,11 +219,11 @@ it("edits the delivery start and end in Step 2 and saves the reviewed range acro
   fireEvent.click(button("Apply schedule"));
   expect(props.onSave).toHaveBeenCalledExactlyOnceWith(updated);
 });
-it("keeps Step 2 open when customer delivery starts before pickup or ends before its start", () => {
+it("keeps Step 2 open when customer delivery starts before preparation or ends before its start", () => {
   const props = editorProps();
   const { rerender } = render(<CycleEditor {...props} step={2} reviewed />);
   for (const windows of [
-    [{ ...draft.windows[0], startsAt: "2026-10-09T05:00:00Z" }],
+    [{ ...draft.windows[0], startsAt: "2026-10-09T04:00:00Z" }],
     [{ ...draft.windows[0], endsAt: "2026-10-09T06:00:00Z" }],
   ]) {
     rerender(<CycleEditor {...props} draft={{ ...draft, windows }} step={2} reviewed />);

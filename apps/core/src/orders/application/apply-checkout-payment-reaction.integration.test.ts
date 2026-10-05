@@ -1,4 +1,4 @@
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { locationManager } from "../../test-location-fixtures";
 import { seedTestCycle } from "../../test-commerce-fixtures";
@@ -232,6 +232,100 @@ function paymentCommandForQuote(
 }
 
 describe("order commitment from canonical payment reactions", () => {
+  it.each(["DELIVERY_START", "LEGACY_PICKUP"] as const)(
+    "prices, revalidates and commits %s timing without changing historical evidence",
+    async (timing) => {
+      const fixture = await seededCheckout({ onHand: 0 });
+      const plan = await env.DB.prepare(`SELECT s.pickup_at pickup,w.starts_at starts
+        FROM delivery_cycle_schedule s JOIN delivery_cycle_window w ON w.cycle_id=s.cycle_id
+        WHERE s.cycle_id='cycle-next-cebu' ORDER BY w.starts_at LIMIT 1`).first<{
+        pickup: number;
+        starts: number;
+      }>();
+      if (!plan) throw new Error("Missing cycle plan");
+      expect(plan.pickup).not.toBe(plan.starts);
+      const providerQuote = vi.spyOn(deliveryProvider, "quote");
+      onTestFinished(() => providerQuote.mockRestore());
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      expect(providerQuote.mock.calls[0]?.[0].schedule?.pickupFrom).toBe(
+        new Date(plan.starts).toISOString(),
+      );
+      const chosen = new Date(
+        timing === "DELIVERY_START" ? plan.starts : plan.pickup,
+      ).toISOString();
+      if (timing === "LEGACY_PICKUP") {
+        await env.DB.prepare(`UPDATE checkout_quote SET
+          cycle_snapshot_json=json_set(json_remove(cycle_snapshot_json,'$.deliveryWindow.quotationTiming'),'$.deliveryWindow.pickupAt',?),
+          delivery_fee_snapshot_json=json_set(delivery_fee_snapshot_json,'$.scheduleAt',?) WHERE id=?`)
+          .bind(chosen, chosen, quote.value.quoteId)
+          .run();
+      }
+      const before = await env.DB.prepare(
+        "SELECT cycle_snapshot_json FROM checkout_quote WHERE id=?",
+      )
+        .bind(quote.value.quoteId)
+        .first();
+      await requireProviderRefresh(quote.value.quoteId);
+      const provider = createMockPaymentProvider();
+      const registry = new ProviderRegistry("test", [provider]);
+      const payment = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        quoteDependencies.deliveryProviders,
+      );
+      if (!payment.ok) throw new Error(payment.error.message);
+      expect(providerQuote.mock.lastCall?.[0].schedule?.pickupFrom).toBe(chosen);
+      const attempt = await env.DB.prepare(
+        "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+      )
+        .bind(payment.value.paymentIntentId)
+        .first<{ provider_reference: string }>();
+      if (!attempt) throw new Error("Missing payment attempt");
+      setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+      expect(
+        await reconcilePayment(env.DB, registry, {
+          paymentIntentId: payment.value.paymentIntentId,
+          idempotencyKey: crypto.randomUUID(),
+          actorId: "test",
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      const reaction = await env.DB.prepare(
+        "SELECT id FROM payment_reaction WHERE payment_intent_id=? AND reaction_type='COMMIT_ORDER'",
+      )
+        .bind(payment.value.paymentIntentId)
+        .first<{ id: string }>();
+      if (!reaction) throw new Error("Missing payment reaction");
+      const committed = await applyCheckoutPaymentReaction(env.DB, {
+        reactionId: reaction.id,
+        paymentIntentId: payment.value.paymentIntentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      });
+      expect(committed.applied).toBe(true);
+      expect(
+        await env.DB.prepare(
+          "SELECT pickup_at FROM order_delivery_window_snapshot WHERE order_id=?",
+        )
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ pickup_at: Date.parse(chosen) });
+      expect(
+        await env.DB.prepare("SELECT cycle_snapshot_json FROM checkout_quote WHERE id=?")
+          .bind(quote.value.quoteId)
+          .first(),
+      ).toEqual(before);
+      expect(
+        await env.DB.prepare(
+          "SELECT pickup_at FROM delivery_cycle_schedule WHERE cycle_id='cycle-next-cebu'",
+        ).first(),
+      ).toEqual({ pickup_at: plan.pickup });
+    },
+  );
   it("preserves the admitted Scheduled cutoff through recovery and closes QR generation exactly at cutoff", async () => {
     const fixture = await seededCheckout({ onHand: 0 });
     const quote = await createQuote(fixture);
@@ -796,7 +890,7 @@ describe("order commitment from canonical payment reactions", () => {
       await env.DB.prepare("SELECT pickup_at FROM order_delivery_window_snapshot WHERE order_id=?")
         .bind(committed.orderId)
         .first(),
-    ).toEqual({ pickup_at: Date.parse(at(30)) });
+    ).toEqual({ pickup_at: Date.parse(at(31)) });
     expect(
       await env.DB.prepare(
         "SELECT on_hand,reserved FROM inventory_balance WHERE inventory_pool_id=?",
@@ -810,7 +904,7 @@ describe("order commitment from canonical payment reactions", () => {
         .run(),
     ).rejects.toThrow();
   });
-  it.each(["revision", "cutoff"])(
+  it.each(["revision", "cutoff", "delivery-start", "preparation"])(
     "rejects %s changes during provider revalidation before creating a payment intent",
     async (change) => {
       const fixture = await seededCheckout({ onHand: 0 });
@@ -825,8 +919,18 @@ describe("order commitment from canonical payment reactions", () => {
         status: string;
         version: number;
       }>();
+      const timing = await env.DB.prepare(`SELECT s.preparation_at preparation,w.starts_at starts
+        FROM delivery_cycle_schedule s JOIN delivery_cycle_window w ON w.cycle_id=s.cycle_id
+        WHERE w.id='window-test-cebu'`).first<{ preparation: number; starts: number }>();
+      if (!timing) throw new Error("Missing cycle timing");
       onTestFinished(async () => {
         await env.DB.batch([
+          env.DB.prepare(
+            "UPDATE delivery_cycle_schedule SET preparation_at=? WHERE cycle_id='cycle-next-cebu'",
+          ).bind(timing.preparation),
+          env.DB.prepare(
+            "UPDATE delivery_cycle_window SET starts_at=? WHERE id='window-test-cebu'",
+          ).bind(timing.starts),
           ...readiness.results.map((row) =>
             env.DB.prepare(
               "UPDATE fulfillment_location_readiness SET dispatch_ready=? WHERE location_id=?",
@@ -849,7 +953,11 @@ describe("order commitment from canonical payment reactions", () => {
           const sql =
             change === "revision"
               ? "UPDATE geography_configuration SET version=version+1 WHERE market_id='market-metro-cebu'"
-              : "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE status='OPEN'";
+              : change === "cutoff"
+                ? "UPDATE delivery_cycle SET status='CLOSED',version=version+1 WHERE status='OPEN'"
+                : change === "delivery-start"
+                  ? "UPDATE delivery_cycle_window SET starts_at=starts_at+1800000 WHERE id='window-test-cebu'"
+                  : "UPDATE delivery_cycle_schedule SET preparation_at=(SELECT starts_at+1 FROM delivery_cycle_window WHERE id='window-test-cebu') WHERE cycle_id='cycle-next-cebu'";
           await env.DB.prepare(sql).run();
           return deliveryProvider.quote(...args);
         },

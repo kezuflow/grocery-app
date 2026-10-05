@@ -10,7 +10,8 @@ export type DeliveryCycleDraft = {
   cutoffAt: string;
   procurementAt: string;
   preparationAt: string;
-  pickupAt: string;
+  /** Older Admin clients may send this; Core derives quotation timing from the delivery range. */
+  pickupAt?: string;
   windows: readonly { name: string; startsAt: string; endsAt: string }[];
   participation: readonly { zoneId: string; locationId: string }[];
   expectedVersion: number;
@@ -29,6 +30,7 @@ export type AdminDeliveryCycleView = {
   cutoffAt: string;
   procurementAt: string | null;
   preparationAt: string | null;
+  /** Retained internal/historical quotation timing, never an operator pickup instruction. */
   pickupAt: string | null;
   windows: readonly { windowId: string; name: string; startsAt: string; endsAt: string }[];
   participation: readonly {

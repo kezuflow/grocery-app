@@ -34,6 +34,8 @@ Subscription, trial and recurring-billing lifecycles are not active release work
 
 DeliveryCycle exists only for `SCHEDULED`; `WEEKLY` is a configured cadence. Global mode switching is an explicit versioned configuration command, not a DeliveryCycle state transition. Operators pause selling, preserve and review committed work, activate the new mode, verify readiness, and reopen. Completion of every historical Order is not a prerequisite. The switch invalidates uncommitted commerce and never advances or rewrites existing Orders.
 
+Cycle authoring, activation, automatic opening and Scheduled availability use ordering opening < cutoff <= procurement <= preparation <= delivery start < delivery end. Planned pickup is not an operator milestone or lifecycle gate. New checkout quotations derive a pricing timestamp from delivery start; retained accepted quotation evidence remains unchanged. Actual rider pickup is requested independently after packing and does not automatically record a revised customer arrival agreement.
+
 ```text
 DRAFT -> SCHEDULED -> OPEN -> CUTOFF_REACHED
       -> PROCUREMENT -> RECEIVING -> PACKING

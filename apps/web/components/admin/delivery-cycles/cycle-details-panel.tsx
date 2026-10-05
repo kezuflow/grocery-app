@@ -83,7 +83,12 @@ export function CycleDetailsPanel({
               <Button
                 type="button"
                 size="sm"
-                disabled={pending || !cycle.pickupAt || cycle.windows.length !== 1}
+                disabled={
+                  pending ||
+                  !cycle.procurementAt ||
+                  !cycle.preparationAt ||
+                  cycle.windows.length !== 1
+                }
                 onClick={() => setConfirmation("activate")}
               >
                 <Power aria-hidden className="size-3.5" /> Activate cycle
@@ -164,7 +169,6 @@ export function CycleDetailsPanel({
               { label: "Order cutoff", value: cycle.cutoffAt, kind: "cutoff" },
               { label: "Procurement starts", value: cycle.procurementAt, kind: "procurement" },
               { label: "Preparation starts", value: cycle.preparationAt, kind: "preparation" },
-              { label: "Planned courier pickup", value: cycle.pickupAt, kind: "pickup" },
               {
                 label: "Customer delivery",
                 value: primaryWindow?.startsAt ?? null,
@@ -215,12 +219,12 @@ export function CycleDetailsPanel({
           </Button>
         ) : null}
       </footer>
-      {editable && (!cycle.pickupAt || cycle.windows.length !== 1) ? (
+      {editable && (!cycle.procurementAt || !cycle.preparationAt || cycle.windows.length !== 1) ? (
         <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
           Activate unavailable:{" "}
           {cycle.windows.length !== 1
             ? "This cycle has multiple delivery ranges."
-            : "Add a planned pickup time and save the draft."}
+            : "Add procurement and preparation times and save the draft."}
         </p>
       ) : null}
       <AdminConfirmationDialog

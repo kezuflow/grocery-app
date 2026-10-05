@@ -141,7 +141,12 @@ export async function revalidateCheckoutQuote(
     const acceptedWindow = scheduledWindowSnapshotSchema.safeParse(snapshot.deliveryWindow);
     const currentWindow =
       acceptedWindow.success && quote.deliveryCycleId
-        ? await selectScheduledWindow(database, quote.deliveryCycleId, acceptedWindow.data.windowId)
+        ? await selectScheduledWindow(
+            database,
+            quote.deliveryCycleId,
+            acceptedWindow.data.windowId,
+            acceptedWindow.data.quotationTiming ?? "LEGACY_PICKUP",
+          )
         : null;
     if (
       !acceptedWindow.success ||

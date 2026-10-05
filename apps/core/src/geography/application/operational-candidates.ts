@@ -61,7 +61,7 @@ export async function operationalCandidates(
     l.latitude,l.longitude,z.id zoneId,z.name zoneName,g.fulfillment_mode mode,g.version modeVersion,
     revision.version geographyVersion,l.version locationVersion,r.version readinessVersion,r.instant_promise_minutes promiseMinutes,
     hours.definition_json scheduleJson,hours.timezone scheduleTimezone,
-    (SELECT json_group_array(json_object('id',cycle.id,'pickupAt',plan.pickup_at)) FROM delivery_cycle cycle
+    (SELECT json_group_array(json_object('id',cycle.id)) FROM delivery_cycle cycle
       JOIN delivery_cycle_schedule plan ON plan.cycle_id=cycle.id JOIN delivery_cycle_zone p ON p.cycle_id=cycle.id
       WHERE p.location_id=l.id AND p.zone_id=z.id AND p.status='ACTIVE' AND cycle.status='OPEN'
         AND cycle.order_opens_at<=? AND cycle.cutoff_at>?) cyclesJson
@@ -86,7 +86,7 @@ export async function operationalCandidates(
           SELECT 1 FROM delivery_cycle cycle JOIN delivery_cycle_zone participation ON participation.cycle_id=cycle.id
           WHERE cycle.market_id=m.id AND cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
             AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
-              WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at)
+              WHERE w.cycle_id=cycle.id AND s.preparation_at<=w.starts_at AND w.starts_at<w.ends_at)
             AND participation.zone_id=z.id AND participation.location_id=l.id AND participation.status='ACTIVE'
             AND (? IS NULL OR cycle.id=?))))
     ORDER BY l.id,z.id`)
@@ -111,9 +111,7 @@ export async function operationalCandidates(
       candidate.scheduleJson && candidate.scheduleTimezone
         ? locationOperatingScheduleSchema.parse(JSON.parse(candidate.scheduleJson))
         : null;
-    const cycles = z
-      .array(z.object({ id: z.string(), pickupAt: z.number() }))
-      .parse(JSON.parse(cyclesJson));
+    const cycles = z.array(z.object({ id: z.string() })).parse(JSON.parse(cyclesJson));
     const eligibleCycleIds = cycles
       .filter((cycle) => !input.cycleId || cycle.id === input.cycleId)
       .map((cycle) => cycle.id);

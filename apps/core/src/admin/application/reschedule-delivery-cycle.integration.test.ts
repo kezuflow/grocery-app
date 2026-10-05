@@ -165,7 +165,7 @@ it("edits every schedule field on an open cycle, preserves paid snapshots and ex
       cutoffAt: at(2),
       procurementAt: at(3),
       preparationAt: at(4),
-      pickupAt: at(5),
+      pickupAt: at(6),
       windows: [{ windowId: cycle.windows[0].windowId, endsAt: at(12) }],
     },
   });

@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Cycle pickup simplification — owner approval 2026-10-05
+
+Scheduled cycle editor/review/details/calendar omit Planned pickup and its legend. Keep editable ordering, procurement, preparation and Customer delivery start/end in the existing stock shadcn composition. Chronology compares preparation to delivery start. Procurement displays Preparation starts; operational Order/Fulfillment views show the delivery range without falling back to a quotation timestamp as though it were arrival. Internal quotation timing and retained compatibility fields are not operator controls. Existing Book Lalamove defaults to immediate pickup after packing, with explicit future pickup available separately; that chosen rider time is not a revised customer arrival agreement. Existing late dispatch and saved-request recovery remain unchanged.
+
 ## Cycle schedule editor correction — owner report 2026-10-05
 
 Step 2 places editable Customer delivery starts and Customer delivery ends date/time controls beside the operational milestones. Each endpoint changes independently in the business timezone and retains chronology validation before Review. Review displays the end date when the range crosses days. Date/time rows use stock FieldSet/Field composition with flexible date/time columns beneath the label, fitting the narrow editor without hiding time controls in horizontal overflow. Step 1 delivery controls remain available; pending and saved-request protections retain their existing ownership.
@@ -169,12 +173,12 @@ location address and coordinate, asking only for contact and instructions. The f
 activates an inactive location and separately saves dispatch readiness under Core's existing guards.
 View-only access does not enable writes. Scheduled weeks remain separate from Instant operating hours;
 their checkout eligibility follows the cycle opening and cutoff while the customer total still requires
-a supported future courier quotation for the planned pickup.
+a supported future courier quotation using the customer delivery start as internal pricing timing.
 
 Owner follow-up, 2026-09-13: the Scheduled cycles workspace presents one cycle as an ordering period,
 one fulfillment plan and one customer arrival range. It hides the internal Market and delivery-zone
 layers, labels participating customer-fulfillment locations by their location names, and omits the
-obsolete window-name and add/remove-window controls. A different pickup or arrival plan is a separate
+obsolete window-name and add/remove-window controls. A different arrival plan is a separate
 cycle. Cycle summaries retain status, timezone, operational times, arrival range and fulfillment
 locations. Customer checkout and Order detail show the arrival range without an internal window label.
 
@@ -193,7 +197,7 @@ Owner redesign, 2026-09-20: Scheduled cycles keeps the calendar as the primary w
 `/admin/settings/scheduled-cycles`. Month is the default desktop view and shows one connected cycle as
 a compact ordering-period bar plus customer-delivery duration; Week adds exact milestone markers and
 Agenda is the chronological/mobile default. Every derived element selects the same parent cycle and
-highlights its related elements. Procurement, preparation and planned pickup remain timestamp markers,
+highlights its related elements. Procurement and preparation remain timestamp markers,
 never invented durations or inferred completion. The selected cycle opens a customer-delivery-first
 timeline beside the calendar only when width permits; narrower screens use an overlay/full-screen panel
 without squeezing seven columns. Range, filters and calendar position remain mounted across panel work.
@@ -207,17 +211,17 @@ mobile fallback. A new cycle may suggest an editable name and working schedule, 
 proposed dates relative to the chosen delivery date without moving the original or overwriting edited
 business times. The three editor stages are Delivery and
 locations, Schedule, and Review and save. Inline chronology feedback preserves the existing weak
-ordering between cutoff/procurement/preparation/pickup, keeps the future-cutoff rule, and never silently
+ordering between cutoff/procurement/preparation/customer delivery start, keeps the future-cutoff rule, and never silently
 repairs another field. An unsaved preview is visually distinct. Draft save remains separate from
 activation. Activation explains the opening-time admission; deactivation uses the named confirmation
 dialog and Core-provided blocked reason. Unknown command recovery stays inside the open panel with the
 original request and idempotency identity. Historical multiple delivery ranges remain readable.
 
-Owner supplement, 2026-10-05: activated cycle details expose **Edit schedule** to authorized Global managers. The existing editor allows every ordering, procurement, preparation, pickup and delivery date/time plus name; market/locations stay fixed. Corrections allow an elapsed cutoff without silently moving other milestones. Review requires a reason and a stock confirmation dialog that explains current operational timing, preserved paid promises/charges and normal courier booking changes. Extending ordering can reopen an unpurchased early-state cycle; Core supplies purchase/payment/version rejection. The timeline displays the last accepted ordering minute and the exact exclusive cutoff separately, in the business timezone, so Thursday 11:59 PM and Friday 12:00 AM are unambiguous. Customer Storefront composition and immutable paid-order presentation remain unchanged.
+Owner supplement, 2026-10-05: activated cycle details expose **Edit schedule** to authorized Global managers. The existing editor allows every ordering, procurement, preparation and delivery date/time plus name; market/locations stay fixed. Corrections allow an elapsed cutoff without silently moving other milestones. Review requires a reason and a stock confirmation dialog that explains current operational timing, preserved paid promises/charges and normal courier booking changes. Extending ordering can reopen an unpurchased early-state cycle; Core supplies purchase/payment/version rejection. The timeline displays the last accepted ordering minute and the exact exclusive cutoff separately, in the business timezone, so Thursday 11:59 PM and Friday 12:00 AM are unambiguous. Customer Storefront composition and immutable paid-order presentation remain unchanged.
 
 Owner follow-up, 2026-09-20: a newly suggested schedule opens ordering at 12:00 AM on its first day
 and uses 11:59 PM on the day before delivery as the full-day cutoff. Procurement begins at 12:00 AM
-on delivery day, exactly one minute later, preparation at 2:00 AM and planned pickup at 4:00 AM. These
+on delivery day, exactly one minute later, with preparation at 2:00 AM. These
 are editable Web suggestions only; Core chronology and activation guards remain authoritative.
 
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point

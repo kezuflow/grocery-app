@@ -93,7 +93,6 @@ function blank(marketId: string): DeliveryCycleDraft {
     cutoffAt: "",
     procurementAt: "",
     preparationAt: "",
-    pickupAt: "",
     windows: [{ name: "Scheduled delivery", startsAt: "", endsAt: "" }],
     participation: [],
     expectedVersion: 0,
@@ -110,7 +109,6 @@ function draftFromCycle(cycle: AdminDeliveryCycleView): DeliveryCycleDraft {
     cutoffAt: cycle.cutoffAt,
     procurementAt: cycle.procurementAt ?? "",
     preparationAt: cycle.preparationAt ?? "",
-    pickupAt: cycle.pickupAt ?? "",
     windows: [
       cycle.windows[0]
         ? {

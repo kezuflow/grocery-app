@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import { buildRouteDistancePort } from "../../geography/infrastructure/runtime-route-distance";
 import { listFulfillmentOptions } from "./list-fulfillment-options";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
@@ -7,7 +7,7 @@ import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-d
 const provider = createMockDeliveryProvider();
 
 describe("listFulfillmentOptions", () => {
-  it("binds options to confirmed address/cart versions and hides routing", async () => {
+  it("binds options to confirmed address/cart versions, ignores retained pickup and hides routing", async () => {
     const suffix = crypto.randomUUID();
     const customerId = `options-customer-${suffix}`;
     const addressId = `options-address-${suffix}`;
@@ -32,6 +32,19 @@ describe("listFulfillmentOptions", () => {
     ]);
     await env.DB.prepare(`INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at)
       SELECT 'retained-options-window',id,'Retained later range',delivery_date+14400000,delivery_date+21600000,0 FROM delivery_cycle WHERE id='cycle-next-cebu'`).run();
+    const original = await env.DB.prepare(
+      "SELECT pickup_at pickup FROM delivery_cycle_schedule WHERE cycle_id='cycle-next-cebu'",
+    ).first<{ pickup: number }>();
+    if (!original) throw new Error("Missing retained cycle schedule");
+    onTestFinished(async () => {
+      await env.DB.prepare(
+        "UPDATE delivery_cycle_schedule SET pickup_at=? WHERE cycle_id='cycle-next-cebu'",
+      )
+        .bind(original.pickup)
+        .run();
+    });
+    await env.DB.prepare(`UPDATE delivery_cycle_schedule SET pickup_at=(SELECT MAX(ends_at)+3600000
+      FROM delivery_cycle_window WHERE cycle_id='cycle-next-cebu') WHERE cycle_id='cycle-next-cebu'`).run();
     const query = {
       customerId,
       addressId,

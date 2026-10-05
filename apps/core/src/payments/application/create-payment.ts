@@ -214,7 +214,9 @@ export async function createPayment(
                   AND schedule.timezone=json_extract(q.cycle_snapshot_json,'$.deliveryWindow.timezone')
                   AND window.starts_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.startsAt'),'subsec')*1000 AS INTEGER)
                   AND window.ends_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.endsAt'),'subsec')*1000 AS INTEGER)
-                  AND schedule.pickup_at=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER))
+                  AND (CASE WHEN json_extract(q.cycle_snapshot_json,'$.deliveryWindow.quotationTiming')='DELIVERY_START'
+                    THEN window.starts_at ELSE schedule.pickup_at END)=CAST(unixepoch(json_extract(q.cycle_snapshot_json,'$.deliveryWindow.pickupAt'),'subsec')*1000 AS INTEGER)
+                  AND schedule.preparation_at<=window.starts_at)
               AND cycle.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.cycleVersion'),cycle.version)
               AND participation.zone_id=json_extract(q.cycle_snapshot_json,'$.zoneId') AND participation.location_id=l.id AND participation.status='ACTIVE')))
     )`)

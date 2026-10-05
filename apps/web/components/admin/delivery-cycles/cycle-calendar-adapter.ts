@@ -8,7 +8,6 @@ export type CycleCalendarElementKind =
   | "cutoff"
   | "procurement"
   | "preparation"
-  | "pickup"
   | "delivery";
 
 export type CycleCalendarEvent = EventInput & {
@@ -29,7 +28,6 @@ type CalendarCycle = Pick<
   | "cutoffAt"
   | "procurementAt"
   | "preparationAt"
-  | "pickupAt"
   | "windows"
 >;
 
@@ -38,7 +36,6 @@ const milestoneLabels = {
   cutoffAt: ["Order cutoff", "cutoff"],
   procurementAt: ["Procurement starts", "procurement"],
   preparationAt: ["Preparation starts", "preparation"],
-  pickupAt: ["Planned pickup", "pickup"],
 } as const;
 
 export function cycleToCalendarEvents(
@@ -115,7 +112,6 @@ export function cyclesToCalendarEvents(
         cutoffAt: draft.value.cutoffAt,
         procurementAt: draft.value.procurementAt || null,
         preparationAt: draft.value.preparationAt || null,
-        pickupAt: draft.value.pickupAt || null,
         windows: [{ windowId: "unsaved-window", ...window }],
       },
       detail,

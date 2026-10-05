@@ -128,7 +128,7 @@ async function readinessBlockers(
            JOIN delivery_cycle_zone zone ON zone.cycle_id=cycle.id AND zone.status='ACTIVE'
           WHERE cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
             AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
-              WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at)
+              WHERE w.cycle_id=cycle.id AND s.preparation_at<=w.starts_at AND w.starts_at<w.ends_at)
           LIMIT 1`,
       )
       .bind(Date.now(), Date.now())
@@ -384,7 +384,7 @@ async function execute(
             JOIN delivery_cycle_zone zone ON zone.cycle_id=cycle.id AND zone.status='ACTIVE'
             WHERE cycle.status='OPEN' AND cycle.cutoff_at>? AND cycle.order_opens_at<=?
               AND EXISTS (SELECT 1 FROM delivery_cycle_window w JOIN delivery_cycle_schedule s ON s.cycle_id=w.cycle_id
-                WHERE w.cycle_id=cycle.id AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at))`)
+                WHERE w.cycle_id=cycle.id AND s.preparation_at<=w.starts_at AND w.starts_at<w.ends_at))`)
             .bind(now, now),
     );
   }

@@ -122,7 +122,6 @@ export async function listFulfillmentOptions(
       windowName: string;
       startsAt: number;
       endsAt: number;
-      pickupAt: number;
     };
     let cycles: CycleWindow[] = [];
     if (candidate && mode === "INSTANT") {
@@ -137,13 +136,13 @@ export async function listFulfillmentOptions(
         const availableCycles = await database
           .prepare(
             `SELECT dc.id,dc.cutoff_at cutoff,dc.delivery_date delivery,dc.version,
-              w.id windowId,w.name windowName,w.starts_at startsAt,w.ends_at endsAt,s.pickup_at pickupAt
+              w.id windowId,w.name windowName,w.starts_at startsAt,w.ends_at endsAt
          FROM delivery_cycle dc JOIN delivery_cycle_zone cycle_zone ON cycle_zone.cycle_id=dc.id
           AND cycle_zone.zone_id=? AND cycle_zone.location_id=? AND cycle_zone.status='ACTIVE'
          JOIN delivery_cycle_schedule s ON s.cycle_id=dc.id JOIN delivery_cycle_window w ON w.cycle_id=dc.id
          WHERE dc.market_id=? AND dc.status='OPEN' AND dc.cutoff_at>? AND dc.order_opens_at<=?
            AND dc.id IN (SELECT value FROM json_each(?))
-           AND s.pickup_at<=w.starts_at AND w.starts_at<w.ends_at
+           AND s.preparation_at<=w.starts_at AND w.starts_at<w.ends_at
          ORDER BY dc.delivery_date,dc.id,w.starts_at,w.id LIMIT 30`,
           )
           .bind(

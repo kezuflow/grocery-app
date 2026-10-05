@@ -37,7 +37,6 @@ export function suggestedCycleSchedule(
     cutoffAt: businessFieldsToInstant({ date: deliveryDate, time: "00:00" }, timezone),
     procurementAt: businessFieldsToInstant({ date: deliveryDate, time: "01:00" }, timezone),
     preparationAt: businessFieldsToInstant({ date: deliveryDate, time: "02:00" }, timezone),
-    pickupAt: businessFieldsToInstant({ date: deliveryDate, time: "04:00" }, timezone),
   };
 }
 

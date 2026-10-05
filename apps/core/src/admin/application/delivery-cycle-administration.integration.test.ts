@@ -56,6 +56,68 @@ async function noEffects(request: SaveAdminDeliveryCycleRequest) {
   ).toEqual({ count: 0 });
 }
 describe("Global cycle administration", () => {
+  it("saves without operator pickup and ignores pickup sent by an older client", async () => {
+    const staff = await manager();
+    const request = draft(staff.headers);
+    delete request.pickupAt;
+    const saved = await core.saveAdminDeliveryCycleDraft(request);
+    if (!saved.ok) throw new Error(saved.error.message);
+    onTestFinished(async () => {
+      await env.DB.prepare("UPDATE delivery_cycle SET status='CLOSED' WHERE id=?")
+        .bind(saved.value.cycleId)
+        .run();
+    });
+    expect(saved.value.pickupAt).toBe(request.windows[0].startsAt);
+    const edited = await core.saveAdminDeliveryCycleDraft({
+      ...request,
+      cycleId: saved.value.cycleId,
+      expectedVersion: saved.value.version,
+      idempotencyKey: crypto.randomUUID(),
+      pickupAt: new Date(Date.parse(request.windows[0].endsAt) + 3600000).toISOString(),
+    });
+    if (!edited.ok) throw new Error(edited.error.message);
+    expect(edited.value.pickupAt).toBe(request.windows[0].startsAt);
+    expect(
+      await env.DB.prepare("SELECT pickup_at FROM delivery_cycle_schedule WHERE cycle_id=?")
+        .bind(saved.value.cycleId)
+        .first(),
+    ).toEqual({ pickup_at: Date.parse(request.windows[0].startsAt) });
+  });
+  it("opens a retained cycle and finds its location without using its old pickup milestone", async () => {
+    const staff = await manager();
+    const request = draft(staff.headers);
+    const saved = await core.saveAdminDeliveryCycleDraft(request);
+    if (!saved.ok) throw new Error(saved.error.message);
+    onTestFinished(async () => {
+      await env.DB.prepare("UPDATE delivery_cycle SET status='CLOSED' WHERE id=?")
+        .bind(saved.value.cycleId)
+        .run();
+    });
+    await env.DB.prepare("UPDATE delivery_cycle_schedule SET pickup_at=? WHERE cycle_id=?")
+      .bind(Date.parse(request.windows[0].endsAt) + 3600000, saved.value.cycleId)
+      .run();
+    expect(
+      await core.scheduleAdminDeliveryCycle({
+        headers: staff.headers,
+        requestId: crypto.randomUUID(),
+        cycleId: saved.value.cycleId,
+        expectedVersion: 1,
+        reason: "Activate using preparation and arrival",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    const now = Date.parse(request.orderOpensAt);
+    expect(await openDueDeliveryCycles(env.DB, now)).toBe(1);
+    expect(
+      (
+        await operationalCandidates(
+          env.DB,
+          { latitude: 10.32, longitude: 123.9 },
+          { mode: "SCHEDULED", cycleId: saved.value.cycleId, now },
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+  });
   it("opens and cuts off at exact boundaries through the saved and scheduled commands", async () => {
     const staff = await manager();
     const request = draft(staff.headers);
@@ -206,7 +268,7 @@ describe("Global cycle administration", () => {
     const inside = await core.listAdminDeliveryCycles({
       headers: staff.headers,
       requestId: crypto.randomUUID(),
-      rangeStart: new Date(Date.parse(request.pickupAt) - 30 * 60_000).toISOString(),
+      rangeStart: new Date(Date.parse(request.windows[0].startsAt) - 30 * 60_000).toISOString(),
       rangeEnd: new Date(Date.parse(request.windows[0]!.endsAt) + 30 * 60_000).toISOString(),
       marketId: request.marketId,
       locationId: request.participation[0]!.locationId,
@@ -314,6 +376,18 @@ describe("Global cycle administration", () => {
     const request = draft(staff.headers);
     expect(
       await core.saveAdminDeliveryCycleDraft({ ...request, cutoffAt: request.orderOpensAt }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    await noEffects(request);
+    expect(
+      await core.saveAdminDeliveryCycleDraft({
+        ...request,
+        windows: [
+          {
+            ...request.windows[0],
+            startsAt: new Date(Date.parse(request.preparationAt) - 1).toISOString(),
+          },
+        ],
+      }),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
     await noEffects(request);
     expect(
