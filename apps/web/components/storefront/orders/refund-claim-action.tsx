@@ -17,11 +17,11 @@ export function RefundClaimAction({
         target="_blank"
         rel="noopener noreferrer"
         referrerPolicy="no-referrer"
-        className="mt-2 inline-block font-semibold underline"
+        className="mt-3 inline-flex min-h-11 items-center justify-center rounded-[var(--fm-radius-control)] bg-red-700 px-5 py-2 text-sm font-bold text-white! hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700!"
       >
         Claim refund
       </a>
-      <p className="mt-1 text-sm text-[var(--fm-text-muted)]">
+      <p className="mt-2 text-sm text-[var(--fm-text-muted)]">
         Claim before{" "}
         {new Date(action.expiresAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}. Your
         refund remains processing until it is confirmed.

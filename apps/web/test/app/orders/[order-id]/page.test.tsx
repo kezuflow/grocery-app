@@ -149,6 +149,42 @@ function detail(source: CustomerOrderDetailView["financial"]["source"]): Custome
 }
 
 describe("customer order detail", () => {
+  it.each(["COMMITTED", "DELIVERED"] as const)(
+    "keeps an available refund claim in Order options for %s",
+    (status) => {
+      const order = detail("CHECKOUT_QUOTE");
+      order.status = status;
+      order.refunds = [
+        {
+          refundId: "claim-refund",
+          amountMinor: 28500,
+          currency: "PHP",
+          status: "PROCESSING",
+          createdAt: "2026-10-05T00:00:00Z",
+          updatedAt: "2026-10-05T00:00:00Z",
+          claimAction: {
+            url: "https://transfer.paymongo.com/fixture-claim",
+            expiresAt: "2026-10-08T00:00:00Z",
+          },
+        },
+      ];
+      const host = document.createElement("div");
+      host.innerHTML = renderToStaticMarkup(<OrderDetailContent order={order} />);
+      expect(
+        host.querySelectorAll('a[href="https://transfer.paymongo.com/fixture-claim"]'),
+      ).toHaveLength(1);
+      expect(
+        host.querySelector('section[aria-labelledby="order-options-heading"] a')?.textContent,
+      ).toBe("Claim refund");
+      expect(host.querySelector('section[aria-labelledby="payment-heading"] a')).toBeNull();
+      if (status === "DELIVERED") expect(host.textContent).not.toContain("Cancel order");
+      order.refunds[0].status = "SUCCEEDED";
+      host.innerHTML = renderToStaticMarkup(<OrderDetailContent order={order} />);
+      expect(
+        host.querySelector('a[href="https://transfer.paymongo.com/fixture-claim"]'),
+      ).toBeNull();
+    },
+  );
   it("refreshes an open order when the customer returns to the tab", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const host = document.createElement("div");

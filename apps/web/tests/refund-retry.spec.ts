@@ -126,11 +126,23 @@ for (const width of [1440, 390])
     });
     await page.goto(`/orders/${orderId}`);
     const claim = page.getByRole("link", { name: "Claim refund", exact: true });
+    const options = page.getByRole("region", { name: "Order options", exact: true });
+    await expect(options.getByRole("link", { name: "Claim refund", exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Payment", exact: true })
+        .getByRole("link", { name: "Claim refund", exact: true }),
+    ).toHaveCount(0);
+    await expect(claim).toHaveCount(1);
     await expect(claim).toHaveAttribute(
       "href",
       `https://transfer.paymongo.com/fixture-claim-${suffix}`,
     );
     await expect(claim).toHaveAttribute("referrerpolicy", "no-referrer");
+    await claim.focus();
+    await expect(claim).toBeFocused();
+    const claimBounds = await claim.boundingBox();
+    expect(claimBounds?.height).toBeGreaterThanOrEqual(44);
     await expect(
       page.getByText("Your refund remains processing until it is confirmed.", { exact: false }),
     ).toBeVisible();
@@ -141,6 +153,7 @@ for (const width of [1440, 390])
       path: testInfo.outputPath(`refund-claim-${width}.png`),
       fullPage: true,
     });
+    await options.screenshot({ path: testInfo.outputPath(`refund-claim-options-${width}.png`) });
     executeAdminE2eSql(
       `UPDATE payment_refund SET claim_expires_at=1 WHERE payment_intent_id='${paymentId}' AND status='PROCESSING'`,
     );

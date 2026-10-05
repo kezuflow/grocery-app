@@ -1,5 +1,14 @@
 # FreshMarkets Design
 
+## Customer refund claim action — owner approval 2026-10-05
+
+Place an available QR Ph Claim refund action in Customer Order options as a red button with white
+text, a visible keyboard-focus outline and at least a 44px tap target. Keep the customer destination
+instruction, claim expiry and processing-until-confirmed explanation beside it. Payment retains
+financial history without a duplicate claim action; a delivered Order with an available claim must
+still expose Order options. The transaction summary retains its claim action with the same button
+presentation. Core owns availability and the private provider link.
+
 ## Native Mobile direction — owner approval 2026-09-30
 
 The Expo app uses a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy may adapt the Foodpanda Mobbin references linked in [the mobile plan](../../mobile/README.md), using FreshMarkets branding, original components and copy. The expanded customer journey uses rounded category/product cards, a clear delivery-address entry, full product detail, sign-in, private favorites, cart, quote-backed checkout, order progress and private post-delivery review. Show location-specific prices only with Core-confirmed browsing context; show order recommendations only when supported by real order data. Display unavailable, pending, empty and failure states honestly.

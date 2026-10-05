@@ -37,6 +37,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
   const reorderAction = order.actions.find((action) => action.action === "REORDER");
   const issueAction = order.actions.find((action) => action.action === "SUBMIT_ISSUE");
   const cancelAction = order.actions.find((action) => action.action === "CANCEL");
+  const hasClaimAction = order.refunds.some(
+    (refund) => refund.status === "PROCESSING" && refund.claimAction,
+  );
   const summaryAction = order.actions.find(
     (action) => action.action === "VIEW_TRANSACTION_SUMMARY",
   );
@@ -183,12 +186,15 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
             </dl>
           </section>
 
-          {order.status !== "DELIVERED" ? (
+          {order.status !== "DELIVERED" || hasClaimAction ? (
             <section className="p-5 sm:p-6" aria-labelledby="order-options-heading">
               <h2 id="order-options-heading" className="text-xl font-bold">
                 Order options
               </h2>
-              {cancelAction ? (
+              {order.refunds.map((refund) => (
+                <RefundClaimAction key={refund.refundId} refund={refund} />
+              ))}
+              {order.status !== "DELIVERED" && cancelAction ? (
                 <div className="mt-4">
                   <CancelOrderAction
                     orderId={order.orderId}
@@ -317,9 +323,6 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                   .join(", ")}
               </p>
             ) : null}
-            {order.refunds.map((refund) => (
-              <RefundClaimAction key={refund.refundId} refund={refund} />
-            ))}
           </section>
         </div>
       </div>
