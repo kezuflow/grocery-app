@@ -4,6 +4,7 @@ import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
+import { Badge } from "@/components/admin/shadcn/badge";
 import { ExternalDeliveryBooking } from "./external-delivery-booking";
 import { ManualDeliveryControls } from "./manual-delivery-controls";
 
@@ -30,6 +31,17 @@ export function DispatchActions({
 
   return (
     <div className="space-y-3">
+      {item.courierPickup.isLate ? (
+        <Alert>
+          <AlertTitle>
+            <Badge variant="destructive">Late</Badge> Scheduled delivery window passed
+          </AlertTitle>
+          <AlertDescription>
+            Continue delivery with a recorded reason after packing. The original customer promise
+            stays on the order.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {competing ? (
         <section
           aria-label="Choose dispatch method"

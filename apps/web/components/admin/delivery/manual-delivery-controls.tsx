@@ -5,6 +5,7 @@ import type { AdminDeliveryOperationView, ManualDeliveryAction } from "@freshmar
 import { z } from "@freshmarkets/validation";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
+import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -58,6 +59,11 @@ export function ManualDeliveryControls({
   const [saved, setSaved] = useState<{ body: string; key: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const manual = item.manualDelivery;
+  const needsLateReason =
+    action === "ASSIGN" &&
+    item.fulfillmentMode === "SCHEDULED" &&
+    (item.courierPickup.isLate ||
+      (item.courierPickup.deadlineAt && Date.parse(item.courierPickup.deadlineAt) <= Date.now()));
   const interaction = useRef(onInteractionState);
   interaction.current = onInteractionState;
   useEffect(() => {
@@ -75,6 +81,10 @@ export function ManualDeliveryControls({
 
   async function submit() {
     if (!action || pending || disabled) return;
+    if (!saved && needsLateReason && !noteOrReason.trim()) {
+      setMessage("Enter a reason for late delivery.");
+      return;
+    }
     setReviewing(false);
     const actualCostMinor = cost.trim() === "" ? null : Math.round(Number(cost) * 100);
     if (
@@ -99,6 +109,7 @@ export function ManualDeliveryControls({
               personName,
               phoneE164,
               ...(noteOrReason.trim() ? { note: noteOrReason.trim() } : {}),
+              ...(needsLateReason ? { lateDispatchReason: noteOrReason.trim() } : {}),
             }
           : { dispatchId: manual?.dispatchId }),
         ...(action === "COMPLETE" || action === "FAIL" ? { actualCostMinor } : {}),
@@ -188,6 +199,8 @@ export function ManualDeliveryControls({
             event.preventDefault();
             if (disabled) return;
             if (saved) void submit();
+            else if (needsLateReason && !noteOrReason.trim())
+              setMessage("Enter a reason for late delivery.");
             else if (
               cost.trim() !== "" &&
               (!/^\d+(\.\d{1,2})?$/.test(cost) ||
@@ -232,15 +245,24 @@ export function ManualDeliveryControls({
               </>
             ) : null}
             {action === "ASSIGN" || action === "FAIL" ? (
-              <label className="block">
-                {action === "ASSIGN" ? "Operational note (optional)" : "What went wrong"}
-                <Input
-                  value={noteOrReason}
-                  onChange={(e) => setNoteOrReason(e.target.value)}
-                  maxLength={1000}
-                  required={action === "FAIL"}
-                />
-              </label>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor={`manual-note-${item.jobId}`}>
+                    {needsLateReason
+                      ? "Reason for late delivery"
+                      : action === "ASSIGN"
+                        ? "Operational note (optional)"
+                        : "What went wrong"}
+                  </FieldLabel>
+                  <Input
+                    id={`manual-note-${item.jobId}`}
+                    value={noteOrReason}
+                    onChange={(e) => setNoteOrReason(e.target.value)}
+                    maxLength={1000}
+                    required={action === "FAIL" || Boolean(needsLateReason)}
+                  />
+                </Field>
+              </FieldGroup>
             ) : null}
             {action === "COMPLETE" || action === "FAIL" ? (
               <label className="block">
@@ -291,6 +313,7 @@ export function ManualDeliveryControls({
                 : action === "COMPLETE"
                   ? `Record delivery as completed. Actual delivery cost: ${cost.trim() || "unknown"} ${manual?.currency ?? "PHP"}.`
                   : `Record delivery as failed. Actual delivery cost: ${cost.trim() || "unknown"} ${manual?.currency ?? "PHP"}.`}
+            {needsLateReason ? ` Late delivery reason: ${noteOrReason.trim()}.` : ""}
           </AlertDialogDescription>
           <div className="flex justify-end gap-2">
             <AlertDialogCancel asChild disabled={pending}>

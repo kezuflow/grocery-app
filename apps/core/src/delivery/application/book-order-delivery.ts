@@ -177,6 +177,19 @@ export async function bookOrderDelivery(
   actorUserId: string | null,
 ): Promise<RpcResult<ExternalDeliveryDispatchView>> {
   const automaticInstant = actorUserId === null;
+  const lateDispatchReason =
+    typeof request.lateDispatchReason === "string" ? request.lateDispatchReason.trim() : undefined;
+  if (
+    request.lateDispatchReason !== undefined &&
+    (typeof request.lateDispatchReason !== "string" ||
+      !lateDispatchReason ||
+      lateDispatchReason.length > 1000)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Enter a reason for late delivery (up to 1000 characters)",
+      request.requestId,
+    );
   if (deps.provider.code !== request.providerCode)
     return failure(
       "CONFIGURATION_ERROR",
@@ -193,6 +206,7 @@ export async function bookOrderDelivery(
     expectedVersion: request.expectedVersion,
     providerCode: request.providerCode,
     pickup: request.pickup,
+    ...(lateDispatchReason ? { lateDispatchReason } : {}),
   };
   const hash = await requestHash(commandPayload);
   const prior = await deps.db
@@ -292,6 +306,7 @@ export async function bookOrderDelivery(
       );
   } else {
     const eligibility = firstDispatchEligibility({
+      fulfillmentMode: row.fulfillment_mode,
       canManage: true,
       jobStatus: row.job_status,
       orderStatus: row.order_status,
@@ -385,10 +400,24 @@ export async function bookOrderDelivery(
     );
   const pickupAt = request.pickup.kind === "SCHEDULED" ? Date.parse(request.pickup.pickupAt) : null;
   const deliveryBoundary = row.fulfillment_mode === "INSTANT" ? row.promised_at : row.delivery_date;
+  const late =
+    !automaticInstant &&
+    row.fulfillment_mode === "SCHEDULED" &&
+    deliveryBoundary !== null &&
+    (now >= deliveryBoundary || (pickupAt !== null && pickupAt > deliveryBoundary));
+  if (late && !lateDispatchReason)
+    return failure(
+      "VALIDATION_FAILED",
+      "This Scheduled delivery is late. Enter a reason before booking",
+      request.requestId,
+    );
   if (
     (pickupAt !== null && (!Number.isFinite(pickupAt) || pickupAt <= now)) ||
-    (pickupAt !== null && deliveryBoundary !== null && pickupAt > deliveryBoundary) ||
-    (request.pickup.kind === "IMMEDIATE" && deliveryBoundary !== null && now > deliveryBoundary)
+    (!late && pickupAt !== null && deliveryBoundary !== null && pickupAt > deliveryBoundary) ||
+    (!late &&
+      request.pickup.kind === "IMMEDIATE" &&
+      deliveryBoundary !== null &&
+      now > deliveryBoundary)
   )
     return failure(
       "VALIDATION_FAILED",
@@ -469,6 +498,15 @@ export async function bookOrderDelivery(
     clientIdempotencyKey: request.idempotencyKey,
     now: deps.now,
     ...(actorUserId === null ? {} : { actorAuthUserId: actorUserId }),
+    ...(late && lateDispatchReason && deliveryBoundary !== null
+      ? {
+          lateDispatch: {
+            reason: lateDispatchReason,
+            deadlineAt: deliveryBoundary,
+            locationId: request.locationId,
+          },
+        }
+      : {}),
     completionStatements: [
       deps.db
         .prepare(`UPDATE idempotency_records SET status='SUCCEEDED',result_reference=(

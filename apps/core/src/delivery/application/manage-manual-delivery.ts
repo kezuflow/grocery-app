@@ -13,7 +13,7 @@ import { auditEventStatement } from "../../audit/application/append-audit-event"
 import { deliveryNotificationStatements } from "../../notifications/application/delivery-notifications";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { manualDeliveryActions } from "../domain/manual-delivery";
-import { deliveryRetryReadySql } from "./delivery-retry-readiness";
+import { deliveryRetryReadySql, scheduledDeliveryDeadlineSql } from "./delivery-retry-readiness";
 
 const identity = z.string().trim().min(1).max(200);
 const reason = z.string().trim().min(1).max(1000);
@@ -29,6 +29,7 @@ const commandSchema = z.discriminatedUnion("action", [
     ...common,
     action: z.literal("ASSIGN"),
     note: z.string().trim().min(1).max(1000).optional(),
+    lateDispatchReason: reason.optional(),
     personName: z.string().trim().min(1).max(120),
     phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
   }),
@@ -153,6 +154,20 @@ export async function manageManualDelivery(
   const prior = await replay();
   if (prior) return prior;
   const now = Date.now();
+  const late =
+    command.action === "ASSIGN" &&
+    row.fulfillment_mode === "SCHEDULED" &&
+    row.delivery_deadline !== null &&
+    row.delivery_deadline <= now;
+  if (late && command.action === "ASSIGN" && !command.lateDispatchReason)
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "This Scheduled delivery is late. Enter a reason before handover",
+        requestId: request.requestId,
+      },
+    };
   const actions = manualDeliveryActions({
     mode: row.fulfillment_mode,
     returnedGoodsInspected: Boolean(row.returned_goods_inspected),
@@ -213,6 +228,14 @@ export async function manageManualDelivery(
             .bind(row.dispatch_id, row.attempt_version, row.attempt_status, row.handed_over_at),
         ]
       : []),
+    ...(late
+      ? [
+          db
+            .prepare(`INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (
+      SELECT 1 FROM delivery_job job WHERE job.id=? AND job.fulfillment_mode='SCHEDULED' AND ${scheduledDeliveryDeadlineSql}=?)`)
+            .bind(command.jobId, row.delivery_deadline),
+        ]
+      : []),
     db
       .prepare(`INSERT INTO commitment_abort(id) SELECT -38 WHERE NOT EXISTS (
       SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id JOIN role_permission rp ON rp.role_id=sr.role_id
@@ -233,8 +256,10 @@ export async function manageManualDelivery(
         AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=? AND location_id=? AND status='PACKED' AND version=?)
         AND EXISTS (SELECT 1 FROM delivery_job current_job JOIN order_fulfillment_snapshot current_snapshot ON current_snapshot.order_id=current_job.order_id
         LEFT JOIN (${currentOrderDeliveryWindowSql}) current_window ON current_window.order_id=current_job.order_id
-        WHERE current_job.id=? AND (CASE WHEN current_job.fulfillment_mode='INSTANT' THEN current_job.promised_at ELSE
-          COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=current_job.id ORDER BY revision.job_version DESC LIMIT 1),current_window.ends_at,current_snapshot.delivery_date) END)>?)
+        WHERE current_job.id=? AND ((CASE WHEN current_job.fulfillment_mode='INSTANT' THEN current_job.promised_at ELSE
+          COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=current_job.id ORDER BY revision.job_version DESC LIMIT 1),current_window.ends_at,current_snapshot.delivery_date) END)>?
+        OR (current_job.fulfillment_mode='SCHEDULED' AND ?=1 AND
+          COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=current_job.id ORDER BY revision.job_version DESC LIMIT 1),current_window.ends_at,current_snapshot.delivery_date)=?)))
       ))
       OR COALESCE((SELECT MAX(attempt_sequence) FROM delivery_provider_dispatch WHERE delivery_job_id=?),0)<>?
       OR EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch d ON d.id=c.dispatch_id WHERE d.delivery_job_id=? AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED'))`)
@@ -247,6 +272,8 @@ export async function manageManualDelivery(
         row.fulfillment_version,
         command.jobId,
         now,
+        late ? 1 : 0,
+        row.delivery_deadline,
         command.jobId,
         row.attempt_sequence,
         command.jobId,
@@ -373,7 +400,7 @@ export async function manageManualDelivery(
       locationId: command.locationId,
       reason:
         command.action === "ASSIGN"
-          ? "STAFF_SELECTED_MANUAL"
+          ? (command.lateDispatchReason ?? "STAFF_SELECTED_MANUAL")
           : "reason" in command
             ? command.reason
             : null,
@@ -383,6 +410,14 @@ export async function manageManualDelivery(
       before: { jobStatus: row.status, attemptVersion: row.attempt_version },
       after: {
         ...result,
+        ...(late && command.action === "ASSIGN"
+          ? {
+              lateDispatch: {
+                reason: command.lateDispatchReason,
+                deadlineAt: row.delivery_deadline,
+              },
+            }
+          : {}),
         jobStatus,
         actualCostMinor: "actualCostMinor" in command ? command.actualCostMinor : null,
       },

@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Late Scheduled dispatch — owner approval 2026-10-05
+
+The existing Admin dispatch controls show a stock destructive **Late** badge and explain that the Scheduled delivery window passed. Core still supplies eligible Lalamove and Manual actions. For overdue dispatch or a future pickup beyond the current window, require a bounded Reason for late delivery field and include its trimmed value in the confirmation. Explain that the original customer promise and charge remain unchanged. Unknown results lock fields and preserve the exact submitted body/key for retry. No generic status override, automatic customer message or Storefront redesign accompanies this control.
+
 ## Orders workflow actions — owner approval 2026-10-05
 
 The Orders preview keeps current status visible and offers an Update order selector grouping eligible

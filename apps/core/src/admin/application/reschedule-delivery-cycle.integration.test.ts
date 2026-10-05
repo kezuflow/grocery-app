@@ -150,7 +150,7 @@ it("edits every schedule field on an open cycle, preserves paid snapshots and ex
   };
   expect(await core.manageManualDelivery(manual)).toMatchObject({
     ok: false,
-    error: { code: "ILLEGAL_TRANSITION" },
+    error: { code: "VALIDATION_FAILED" },
   });
   const freshness = await env.DB.prepare(
     "SELECT revision FROM operational_revision WHERE location_id='location-cebu-central'",

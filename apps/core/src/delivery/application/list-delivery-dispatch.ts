@@ -54,6 +54,7 @@ function courierPickupDecision(row: {
 }): AdminDeliveryOperationView["courierPickup"] {
   const eligibility = firstDispatchEligibility({
     canManage: Boolean(row.can_manage),
+    fulfillmentMode: row.fulfillment_mode,
     jobStatus: row.status,
     orderStatus: row.order_status,
     fulfillmentStatus: row.fulfillment_status,
@@ -63,11 +64,26 @@ function courierPickupDecision(row: {
     deliveryDeadline: row.fulfillment_mode === "INSTANT" ? row.promised_at : row.pickup_deadline,
     now: Date.now(),
   });
+  const deadline = row.fulfillment_mode === "INSTANT" ? row.promised_at : row.pickup_deadline;
+  const timing = {
+    deadlineAt: deadline === null ? null : new Date(deadline).toISOString(),
+    isLate:
+      row.fulfillment_mode === "SCHEDULED" &&
+      row.status !== "DELIVERED" &&
+      !["DELIVERED", "CANCELED", "REFUNDED"].includes(row.order_status) &&
+      deadline !== null &&
+      deadline <= Date.now(),
+  };
   if (!eligibility.eligible)
-    return { allowedKinds: [], unavailableReason: dispatchUnavailableMessage(eligibility) };
+    return {
+      ...timing,
+      allowedKinds: [],
+      unavailableReason: dispatchUnavailableMessage(eligibility),
+    };
   return {
     allowedKinds: row.fulfillment_mode === "INSTANT" ? ["IMMEDIATE"] : ["IMMEDIATE", "SCHEDULED"],
     unavailableReason: null,
+    ...timing,
   };
 }
 

@@ -52,6 +52,8 @@ describe("staff-selected manual delivery", () => {
     expect(manualDeliveryActions({ ...facts, retryReady: false })).toEqual([]);
     expect(manualDeliveryActions({ ...facts, orderStatus: "OUT_FOR_DELIVERY" })).toEqual([]);
     expect(manualDeliveryActions({ ...facts, fulfillmentStatus: "HANDED_OFF" })).toEqual([]);
-    expect(manualDeliveryActions({ ...facts, deliveryDeadline: 100 })).toEqual([]);
+    expect(manualDeliveryActions({ ...facts, deliveryDeadline: 100 })).toEqual(["ASSIGN"]);
+    expect(manualDeliveryActions({ ...facts, mode: "INSTANT", deliveryDeadline: 100 })).toEqual([]);
+    expect(manualDeliveryActions({ ...facts, deliveryDeadline: null })).toEqual([]);
   });
 });

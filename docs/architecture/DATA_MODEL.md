@@ -1,5 +1,9 @@
 # Conceptual D1 Data Model
 
+## Audited late Scheduled dispatch — owner approval 2026-10-05
+
+No schema change or stored Late status is introduced. Existing `delivery_provider_dispatch` retains each attempt and provider outcome; `audit_event` records `DELIVERY.LATE_DISPATCH_AUTHORIZED` with the original operational deadline, selected pickup, reason, actor, location and command identity in the admission transaction before the provider call. Manual `DELIVERY.MANUAL_ASSIGN` audit retains its late reason and deadline with assignment, custody and receipt. Command intent hashes bind the reason; provider request snapshots remain provider-only payloads. Original paid fulfillment snapshots, charges and cycle schedules retain their existing immutability and owners. Current late presentation is derived from the current operational deadline and unfinished delivery.
+
 Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../product/PRODUCT.md#source-provenance).
 
 ## Purpose and Conventions

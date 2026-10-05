@@ -19,6 +19,7 @@ export function manualDeliveryActions(facts: {
     if (facts.mode === "INSTANT" && attempt === null) return [];
     return firstDispatchEligibility({
       canManage: true,
+      fulfillmentMode: facts.mode,
       jobStatus: facts.jobStatus,
       orderStatus: facts.orderStatus,
       fulfillmentStatus: facts.fulfillmentStatus,

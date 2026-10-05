@@ -188,6 +188,9 @@ export type AdminDeliveryOperationView = {
   courierPickup: {
     allowedKinds: ReadonlyArray<"IMMEDIATE" | "SCHEDULED">;
     unavailableReason: string | null;
+    /** Current operational deadline; retained responses may omit timing metadata. */
+    deadlineAt?: string | null;
+    isLate?: boolean;
   };
   manualDelivery: {
     dispatchId: string;
@@ -267,6 +270,7 @@ export type RequestExternalDeliveryRequest = AdminOperationsLocationRequest & {
   expectedVersion: number;
   providerCode: "lalamove";
   pickup: { kind: "IMMEDIATE" } | { kind: "SCHEDULED"; pickupAt: string };
+  lateDispatchReason?: string;
   idempotencyKey: string;
 };
 
@@ -291,7 +295,13 @@ export type ManualDeliveryRequest = AdminOperationsLocationRequest & {
   expectedVersion: number;
   idempotencyKey: string;
 } & (
-    | { action: "ASSIGN"; note?: string; personName: string; phoneE164: string }
+    | {
+        action: "ASSIGN";
+        note?: string;
+        personName: string;
+        phoneE164: string;
+        lateDispatchReason?: string;
+      }
     | { action: "HAND_OVER"; dispatchId: string }
     | { action: "COMPLETE"; dispatchId: string; actualCostMinor: number | null }
     | { action: "FAIL"; dispatchId: string; reason: string; actualCostMinor: number | null }

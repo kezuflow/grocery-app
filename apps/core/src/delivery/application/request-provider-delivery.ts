@@ -1,7 +1,8 @@
 import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
-import { deliveryRetryReadySql } from "./delivery-retry-readiness";
+import { deliveryRetryReadySql, scheduledDeliveryDeadlineSql } from "./delivery-retry-readiness";
+import { auditEventStatement } from "../../audit/application/append-audit-event";
 
 type DispatchStatus =
   | "PENDING"
@@ -114,12 +115,27 @@ export async function requestProviderDelivery(
     automaticInstant?: boolean;
     clientIdempotencyKey?: string;
     actorAuthUserId?: string;
+    /** Internal audited permission to dispatch a known overdue Scheduled order. */
+    lateDispatch?: { reason: string; deadlineAt: number; locationId: string };
     now?: () => number;
     /** Owning command receipt/audit, committed atomically with provider identity and evidence. */
     completionStatements?: readonly D1PreparedStatement[];
     request: CreateDeliveryRequest;
   }>,
 ): Promise<RequestProviderDeliveryResult> {
+  if (
+    command.lateDispatch &&
+    (!command.actorAuthUserId ||
+      command.automaticInstant ||
+      !command.lateDispatch.reason.trim() ||
+      command.lateDispatch.reason.length > 1000 ||
+      !Number.isSafeInteger(command.lateDispatch.deadlineAt))
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Late dispatch requires an authorized operator and a reason",
+      command.requestId,
+    );
   const requestSnapshot = JSON.stringify(command.request);
   const requestHash = await sha256(requestSnapshot);
   const attemptIdentity = await sha256(
@@ -211,13 +227,15 @@ export async function requestProviderDelivery(
              WHERE grocery.id=job.order_id AND fulfillment.location_id=job.location_id
                AND grocery.status='FULFILLMENT_READY' AND fulfillment.status='PACKED'
            )
-           AND (SELECT CASE WHEN job.fulfillment_mode='INSTANT'
+           AND (? IS NULL OR (job.fulfillment_mode='SCHEDULED' AND ${scheduledDeliveryDeadlineSql}=? AND job.location_id=?))
+           AND ((job.fulfillment_mode='SCHEDULED' AND ? IS NOT NULL) OR ((SELECT CASE WHEN job.fulfillment_mode='INSTANT'
              THEN COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),job.promised_at)
              ELSE COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) END
              FROM order_fulfillment_snapshot snapshot LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)>?
+           AND (? IS NULL OR ?<=(SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
+             FROM order_fulfillment_snapshot snapshot LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id))))
            AND (job.fulfillment_mode!='INSTANT' OR ? IS NULL)
-           AND (? IS NULL OR (?>? AND ?<=(SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
-             FROM order_fulfillment_snapshot snapshot LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
+           AND (? IS NULL OR ?>?)
        ) AND (? IS NULL OR EXISTS (
          SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
          JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission permission ON permission.id=rp.permission_id
@@ -241,16 +259,21 @@ export async function requestProviderDelivery(
           command.expectedDeliveryJobVersion ?? null,
           command.expectedDeliveryJobVersion ?? null,
           command.retry ? 1 : 0,
+          command.lateDispatch?.reason ?? null,
+          command.lateDispatch?.deadlineAt ?? null,
+          command.lateDispatch?.locationId ?? null,
+          command.lateDispatch?.reason ?? null,
           now,
           scheduledPickupAt,
           scheduledPickupAt,
           scheduledPickupAt,
-          now,
           scheduledPickupAt,
+          scheduledPickupAt,
+          now,
           command.actorAuthUserId ?? null,
           command.actorAuthUserId ?? null,
         );
-  if (command.retry) {
+  if (command.retry || command.lateDispatch) {
     // The new durable attempt and retry state are admitted together before any provider call.
     const guard = () =>
       database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()<>1");
@@ -258,18 +281,40 @@ export async function requestProviderDelivery(
       await database.batch([
         admission,
         guard(),
-        database
-          .prepare(
-            "UPDATE delivery_job SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='FAILED'",
-          )
-          .bind(now, command.deliveryJobId, command.expectedDeliveryJobVersion ?? null),
-        guard(),
-        database
-          .prepare(
-            "UPDATE delivery_stop SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE delivery_job_id=? AND status='FAILED'",
-          )
-          .bind(now, command.deliveryJobId),
-        guard(),
+        ...(command.retry
+          ? [
+              database
+                .prepare(
+                  "UPDATE delivery_job SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE id=? AND version=? AND status='FAILED'",
+                )
+                .bind(now, command.deliveryJobId, command.expectedDeliveryJobVersion ?? null),
+              guard(),
+              database
+                .prepare(
+                  "UPDATE delivery_stop SET status='RETRY_SCHEDULED',version=version+1,updated_at=? WHERE delivery_job_id=? AND status='FAILED'",
+                )
+                .bind(now, command.deliveryJobId),
+              guard(),
+            ]
+          : []),
+        ...(command.lateDispatch
+          ? [
+              auditEventStatement(database, {
+                actorUserId: command.actorAuthUserId!,
+                action: "DELIVERY.LATE_DISPATCH_AUTHORIZED",
+                resourceType: "delivery_provider_dispatch",
+                resourceId: dispatchId,
+                reason: command.lateDispatch.reason,
+                before: { deadlineAt: command.lateDispatch.deadlineAt },
+                after: { pickupAt: scheduledPickupAt, authorizedAt: now },
+                locationId: command.lateDispatch.locationId,
+                correlationId: command.requestId,
+                idempotencyKey: command.clientIdempotencyKey,
+                occurredAt: now,
+              }),
+              guard(),
+            ]
+          : []),
       ]);
     } catch (error) {
       if (!(error instanceof Error) || !/constraint failed|DELIVERY_ATTEMPT_/i.test(error.message))

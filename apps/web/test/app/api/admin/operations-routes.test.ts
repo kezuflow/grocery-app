@@ -13,6 +13,8 @@ const coreMocks = vi.hoisted(() => ({
   advanceAdminFulfillment: vi.fn(),
   listDeliveryOperations: vi.fn(),
   refreshExternalDelivery: vi.fn(),
+  requestExternalDelivery: vi.fn(),
+  manageManualDelivery: vi.fn(),
   advanceFulfillment: vi.fn(),
   getGlobalCommerceConfiguration: vi.fn(),
   pauseSelling: vi.fn(),
@@ -36,6 +38,8 @@ import {
   POST as advanceFulfillment,
 } from "@/app/api/admin/fulfillment/route";
 import { POST as refreshDelivery } from "@/app/api/admin/external-deliveries/[dispatch-id]/refresh/route";
+import { POST as bookDelivery } from "@/app/api/admin/external-deliveries/route";
+import { POST as assignManualDelivery } from "@/app/api/admin/manual-deliveries/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
 import { GET as activityGet } from "@/app/api/admin/operations-activity/route";
 import { GET as streamGet } from "@/app/api/admin/operational-stream/route";
@@ -61,6 +65,39 @@ function command(url: string, body: unknown, idempotencyKey = "command-1"): Requ
 }
 
 describe("admin operations BFF routes", () => {
+  it.each(["courier", "manual"])(
+    "forwards a bounded late %s reason without deciding eligibility in Web",
+    async (method) => {
+      const route = method === "courier" ? bookDelivery : assignManualDelivery;
+      const mock =
+        method === "courier" ? coreMocks.requestExternalDelivery : coreMocks.manageManualDelivery;
+      mock.mockResolvedValue(ok);
+      const body = {
+        locationId: "location-1",
+        jobId: "job-1",
+        expectedVersion: 1,
+        lateDispatchReason: "  Packing ran late  ",
+        ...(method === "courier"
+          ? { providerCode: "lalamove", pickup: { kind: "IMMEDIATE" } }
+          : { action: "ASSIGN", personName: "Rider", phoneE164: "+639171234567" }),
+      };
+      expect((await route(command("https://app/delivery", body))).status).toBe(200);
+      expect(mock).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          ...body,
+          lateDispatchReason: "Packing ran late",
+          idempotencyKey: "command-1",
+          headers: expect.objectContaining(cookie),
+        }),
+      );
+      for (const reason of [" ", "x".repeat(1001), 123])
+        expect(
+          (await route(command("https://app/delivery", { ...body, lateDispatchReason: reason })))
+            .status,
+        ).toBe(400);
+      expect(mock).toHaveBeenCalledOnce();
+    },
+  );
   it("forwards a complete schedule correction and rejects missing review versions or reasons", async () => {
     coreMocks.rescheduleAdminDeliveryCycle.mockResolvedValue(ok);
     const body = {

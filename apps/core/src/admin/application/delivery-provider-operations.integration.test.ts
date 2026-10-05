@@ -357,6 +357,419 @@ async function preparePackedDelivery(
 }
 
 describe("external delivery request", () => {
+  async function lateFixture(kind: "IMMEDIATE" | "SCHEDULED" = "IMMEDIATE") {
+    const now = Date.now();
+    const deps = dependencies(["delivery.read", "delivery.manage"]);
+    await upsertLocationDeliveryProfile(deps, profileRequest(0));
+    const delivery = await seedScheduledDelivery(now - 2 * 86400000);
+    await preparePackedDelivery(delivery, "SCHEDULED", now - 2 * 86400000);
+    const provider = createMockDeliveryProvider(() => now);
+    const create = vi.spyOn(provider, "create");
+    const request = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      jobId: delivery.jobId,
+      expectedVersion: 1,
+      providerCode: "lalamove" as const,
+      pickup:
+        kind === "IMMEDIATE"
+          ? { kind: "IMMEDIATE" as const }
+          : { kind: "SCHEDULED" as const, pickupAt: new Date(now + 3_600_000).toISOString() },
+      lateDispatchReason: "Packing ran late because of order volume",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    return {
+      now,
+      deps,
+      delivery,
+      provider,
+      create,
+      request,
+      bookingDeps: { ...deps, provider, configuredServiceType: "MOTORCYCLE", now: () => now },
+    };
+  }
+  it.each(["IMMEDIATE", "SCHEDULED"] as const)(
+    "books overdue Scheduled %s pickup with a pre-submission audit and no promise or price rewrite",
+    async (kind) => {
+      const { now, deps, delivery, create, request, bookingDeps } = await lateFixture(kind);
+      const original = await env.DB.prepare(
+        "SELECT * FROM order_fulfillment_snapshot WHERE order_id=?",
+      )
+        .bind(delivery.orderId)
+        .first();
+      const queue = await listAdminDeliveryOperations(deps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        orderId: delivery.orderId,
+      });
+      expect(queue.ok && queue.value.items[0]).toMatchObject({
+        courierPickup: { isLate: true, allowedKinds: ["IMMEDIATE", "SCHEDULED"] },
+        manualActions: ["ASSIGN"],
+      });
+      for (const invalid of [undefined, " ", "x".repeat(1001)])
+        expect(
+          await requestExternalDelivery(bookingDeps, { ...request, lateDispatchReason: invalid }),
+        ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+      expect(create).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+        )
+          .bind(delivery.jobId)
+          .first(),
+      ).toEqual({ n: 0 });
+      const underlying = createMockDeliveryProvider(() => now).create;
+      let auditBeforeSubmission: { reason: string; before_json: string } | null = null;
+      create.mockImplementation(async (payload) => {
+        auditBeforeSubmission = await env.DB.prepare(
+          "SELECT reason,before_json FROM audit_event WHERE idempotency_key=? AND action='DELIVERY.LATE_DISPATCH_AUTHORIZED'",
+        )
+          .bind(request.idempotencyKey)
+          .first<{ reason: string; before_json: string }>();
+        return underlying(payload);
+      });
+      const booked = await requestExternalDelivery(bookingDeps, request);
+      if (!booked.ok) throw new Error(`${booked.error.code}: ${booked.error.message}`);
+      expect(booked).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+      expect(auditBeforeSubmission).toMatchObject({ reason: request.lateDispatchReason });
+      expect(JSON.parse(auditBeforeSubmission!.before_json)).toEqual({
+        deadlineAt: now - 86400000,
+      });
+      expect(await requestExternalDelivery(bookingDeps, request)).toEqual(booked);
+      expect(create).toHaveBeenCalledOnce();
+      expect(
+        await requestExternalDelivery(bookingDeps, {
+          ...request,
+          lateDispatchReason: "Different reason",
+        }),
+      ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+      expect(
+        await env.DB.prepare("SELECT * FROM order_fulfillment_snapshot WHERE order_id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual(original);
+      expect(
+        await env.DB.prepare("SELECT total_minor,status FROM grocery_order WHERE id=?")
+          .bind(delivery.orderId)
+          .first(),
+      ).toEqual({ total_minor: 12500, status: "FULFILLMENT_READY" });
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) n FROM audit_event WHERE idempotency_key=? AND action='DELIVERY.LATE_DISPATCH_AUTHORIZED'",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ n: 1 });
+      expect(create.mock.calls[0][0]).not.toHaveProperty("lateDispatchReason");
+      expect(
+        await requestExternalDelivery(bookingDeps, {
+          ...request,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: false });
+      expect(create).toHaveBeenCalledOnce();
+    },
+  );
+  it("rolls back late admission if its audit is ignored, then safely retries after correction", async () => {
+    const { create, request, bookingDeps, delivery } = await lateFixture();
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_late_audit BEFORE INSERT ON audit_event WHEN NEW.action='DELIVERY.LATE_DISPATCH_AUTHORIZED' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      expect(await requestExternalDelivery(bookingDeps, request)).toMatchObject({ ok: false });
+      expect(create).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+        )
+          .bind(delivery.jobId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+          .bind(delivery.jobId)
+          .first(),
+      ).toEqual({ status: "UNASSIGNED", version: 1 });
+      expect(
+        await env.DB.prepare("SELECT count(*) n FROM audit_event WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM idempotency_records WHERE idempotency_key=?")
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ status: "FAILED" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_late_audit");
+    }
+    expect(
+      await requestExternalDelivery(bookingDeps, {
+        ...request,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
+  });
+  it.each(["authority", "packing", "cancellation", "deadline"])(
+    "fences concurrent %s changes before a late provider call",
+    async (changed) => {
+      const { create, request, bookingDeps, delivery, now } = await lateFixture();
+      const db = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (changed === "authority")
+                await env.DB.prepare(
+                  "UPDATE staff_identity SET status='suspended' WHERE id='staff-delivery-operator'",
+                ).run();
+              if (changed === "packing")
+                await env.DB.prepare(
+                  "UPDATE fulfillment_record SET status='HANDED_OFF' WHERE order_id=?",
+                )
+                  .bind(delivery.orderId)
+                  .run();
+              if (changed === "cancellation")
+                await env.DB.prepare("UPDATE grocery_order SET status='CANCELED' WHERE id=?")
+                  .bind(delivery.orderId)
+                  .run();
+              if (changed === "deadline")
+                await env.DB.prepare(
+                  "INSERT INTO delivery_promise_revision(id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,agreement_note,actor_user_id,recorded_at) VALUES (?,?,NULL,1,?,?,'Synthetic agreement','auth-delivery-operator',?)",
+                )
+                  .bind(crypto.randomUUID(), delivery.jobId, now - 86400000, now + 3_600_000, now)
+                  .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      try {
+        expect(await requestExternalDelivery({ ...bookingDeps, db }, request)).toMatchObject({
+          ok: false,
+        });
+        expect(create).not.toHaveBeenCalled();
+        expect(
+          await env.DB.prepare(
+            "SELECT count(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+          )
+            .bind(delivery.jobId)
+            .first(),
+        ).toEqual({ n: 0 });
+        expect(
+          await env.DB.prepare("SELECT count(*) n FROM audit_event WHERE idempotency_key=?")
+            .bind(request.idempotencyKey)
+            .first(),
+        ).toEqual({ n: 0 });
+      } finally {
+        await env.DB.prepare(
+          "UPDATE staff_identity SET status='active' WHERE id='staff-delivery-operator'",
+        ).run();
+      }
+    },
+  );
+  it("retains the late reason after a provider timeout and blocks duplicate replacement", async () => {
+    const { request, bookingDeps, delivery, create, deps } = await lateFixture();
+    create.mockRejectedValue(new Error("Synthetic timeout"));
+    expect(await requestExternalDelivery(bookingDeps, request)).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_provider_dispatch WHERE delivery_job_id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "OUTCOME_UNKNOWN" });
+    expect(
+      await env.DB.prepare(
+        "SELECT reason FROM audit_event WHERE action='DELIVERY.LATE_DISPATCH_AUTHORIZED' AND idempotency_key=?",
+      )
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ reason: request.lateDispatchReason });
+    expect(await requestExternalDelivery(bookingDeps, request)).toMatchObject({ ok: false });
+    expect(
+      await requestExternalDelivery(bookingDeps, {
+        ...request,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false });
+    expect(create).toHaveBeenCalledOnce();
+    const queue = await listAdminDeliveryOperations(deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      orderId: delivery.orderId,
+    });
+    expect(queue.ok && queue.value.items[0]).toMatchObject({
+      courierPickup: { allowedKinds: [], isLate: true },
+      manualActions: [],
+    });
+  });
+  it("permits overdue Manual handover only with a reason and replays the recorded action", async () => {
+    const { deps, request, delivery, now } = await lateFixture();
+    const manual = {
+      ...request,
+      action: "ASSIGN" as const,
+      personName: "Synthetic courier",
+      phoneE164: "+639171110000",
+    };
+    expect(
+      await manageManualDelivery(deps, { ...manual, lateDispatchReason: undefined }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const result = await manageManualDelivery(deps, manual);
+    expect(result).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+    expect(await manageManualDelivery(deps, manual)).toEqual(result);
+    const audit = await env.DB.prepare(
+      "SELECT reason,after_json FROM audit_event WHERE action='DELIVERY.MANUAL_ASSIGN' AND idempotency_key=?",
+    )
+      .bind(manual.idempotencyKey)
+      .first<{ reason: string; after_json: string }>();
+    expect(audit?.reason).toBe(manual.lateDispatchReason);
+    expect(JSON.parse(audit!.after_json).lateDispatch).toEqual({
+      reason: manual.lateDispatchReason,
+      deadlineAt: now - 86400000,
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "OUT_FOR_DELIVERY" });
+  });
+  it("requires a late reason for a future pickup beyond an otherwise open Scheduled window", async () => {
+    const { request, bookingDeps, create, now } = await lateFixture("SCHEDULED");
+    const beforeDeadline = { ...bookingDeps, now: () => now - 2 * 86400000 };
+    expect(
+      await requestExternalDelivery(beforeDeadline, { ...request, lateDispatchReason: undefined }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(create).not.toHaveBeenCalled();
+    expect(await requestExternalDelivery(beforeDeadline, request)).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledOnce();
+  });
+  it("permits a new audited late attempt only after the previous courier is definitely canceled", async () => {
+    const { request, bookingDeps, create, delivery } = await lateFixture();
+    const first = await requestExternalDelivery(bookingDeps, request);
+    if (!first.ok) throw new Error(first.error.message);
+    expect(
+      await cancelExternalDelivery(bookingDeps, {
+        headers: {},
+        requestId: crypto.randomUUID(),
+        locationId: LOCATION,
+        dispatchId: first.value.dispatchId,
+        expectedVersion: first.value.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+    const job = await env.DB.prepare("SELECT version FROM delivery_job WHERE id=?")
+      .bind(delivery.jobId)
+      .first<{ version: number }>();
+    const retry = {
+      ...request,
+      expectedVersion: job!.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(await requestExternalDelivery(bookingDeps, retry)).toMatchObject({
+      ok: true,
+      value: { status: "ACTIVE" },
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) n FROM audit_event WHERE action='DELIVERY.LATE_DISPATCH_AUTHORIZED' AND idempotency_key IN (?,?)",
+      )
+        .bind(request.idempotencyKey, retry.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 2 });
+    expect(
+      await env.DB.prepare("SELECT status FROM delivery_provider_dispatch WHERE id=?")
+        .bind(first.value.dispatchId)
+        .first(),
+    ).toEqual({ status: "CANCELED" });
+  });
+  it("does not let a late reason bypass an expired Instant deadline", async () => {
+    const { deps, request, bookingDeps, create, now } = await lateFixture();
+    const delivery = await seedScheduledDelivery(now - 2 * 86400000, "INSTANT");
+    await preparePackedDelivery(delivery, "INSTANT", now - 2 * 86400000);
+    const expired = { ...request, jobId: delivery.jobId, idempotencyKey: crypto.randomUUID() };
+    expect(await requestExternalDelivery(bookingDeps, expired)).toMatchObject({ ok: false });
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      await manageManualDelivery(deps, {
+        ...expired,
+        action: "ASSIGN",
+        personName: "Synthetic courier",
+        phoneE164: "+639171110000",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it("rolls back every manual handover effect when the reviewed late deadline changes", async () => {
+    const { deps, request, delivery, now } = await lateFixture();
+    const db = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await env.DB.prepare(
+              "INSERT INTO delivery_promise_revision(id,delivery_job_id,dispatch_id,job_version,previous_promised_at,promised_at,agreement_note,actor_user_id,recorded_at) VALUES (?,?,NULL,1,?,?,'Synthetic agreement','auth-delivery-operator',?)",
+            )
+              .bind(crypto.randomUUID(), delivery.jobId, now - 86400000, now + 3600000, now)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      await manageManualDelivery(
+        { ...deps, db },
+        {
+          ...request,
+          action: "ASSIGN",
+          personName: "Synthetic courier",
+          phoneE164: "+639171110000",
+        },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) n FROM delivery_provider_dispatch WHERE delivery_job_id=?",
+      )
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM delivery_job WHERE id=?")
+        .bind(delivery.jobId)
+        .first(),
+    ).toEqual({ status: "UNASSIGNED", version: 1 });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "FULFILLMENT_READY" });
+    expect(
+      await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
+        .bind(delivery.orderId)
+        .first(),
+    ).toEqual({ status: "PACKED" });
+    expect(
+      await env.DB.prepare("SELECT count(*) n FROM audit_event WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare("SELECT count(*) n FROM idempotency_records WHERE idempotency_key=?")
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
   it("recovers an interrupted unsubmitted booking without losing audit or calling the provider twice", async () => {
     const admittedAt = Date.now() - 300001;
     const deps = dependencies(["delivery.read", "delivery.manage"]);
@@ -2124,7 +2537,7 @@ describe("customer-agreed delivery times", () => {
     const before = await listAdminDeliveryOperations(deps, queueRequest);
     expect(before.ok && before.value.items[0]).toMatchObject({
       canRevisePromise: true,
-      courierPickup: { allowedKinds: [] },
+      courierPickup: { allowedKinds: ["IMMEDIATE", "SCHEDULED"], isLate: true },
     });
 
     const request = {

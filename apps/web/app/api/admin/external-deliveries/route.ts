@@ -16,6 +16,7 @@ const bodySchema = z.object({
     z.object({ kind: z.literal("IMMEDIATE") }),
     z.object({ kind: z.literal("SCHEDULED"), pickupAt: z.string().datetime({ offset: true }) }),
   ]),
+  lateDispatchReason: z.string().trim().min(1).max(1000).optional(),
   idempotencyKey: z.string().trim().min(1).optional(),
 });
 

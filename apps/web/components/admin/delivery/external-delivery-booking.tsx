@@ -17,6 +17,7 @@ import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
 import { notifyCommandSuccess } from "../admin-feedback";
 import { Label } from "@/components/admin/shadcn/label";
+import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/admin/shadcn/field";
 import type { OrderedDeliveryItem } from "./delivery-order-list";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -49,6 +50,7 @@ export function ExternalDeliveryBooking({
     readiness.allowedKinds[0] ?? "SCHEDULED",
   );
   const [pickupAt, setPickupAt] = useState("");
+  const [lateReason, setLateReason] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [pending, setPending] = useState(false);
   const [unknown, setUnknown] = useState(false);
@@ -57,16 +59,24 @@ export function ExternalDeliveryBooking({
   const saved = useRef<{ key: string; body: string } | null>(null);
   const interaction = useRef(onInteractionState);
   interaction.current = onInteractionState;
+  const deadline = readiness.deadlineAt ? Date.parse(readiness.deadlineAt) : null;
+  const needsLateReason =
+    fulfillmentMode === "SCHEDULED" &&
+    (readiness.isLate ||
+      (deadline !== null &&
+        (deadline <= Date.now() ||
+          (pickupKind === "SCHEDULED" && Date.parse(pickupAt) > deadline))));
 
   useEffect(() => {
     interaction.current?.(
       reviewing ||
         pickupAt !== "" ||
+        lateReason !== "" ||
         pickupKind !== (readiness.allowedKinds[0] ?? "SCHEDULED") ||
         unknown,
       pending || unknown,
     );
-  }, [reviewing, pickupAt, pickupKind, readiness.allowedKinds, pending, unknown]);
+  }, [reviewing, pickupAt, lateReason, pickupKind, readiness.allowedKinds, pending, unknown]);
   useEffect(() => () => interaction.current?.(false, false), []);
 
   useEffect(() => {
@@ -74,6 +84,7 @@ export function ExternalDeliveryBooking({
     key.current = crypto.randomUUID();
     setPickupKind(readiness.allowedKinds[0] ?? "SCHEDULED");
     setPickupAt("");
+    setLateReason("");
     setReviewing(false);
     setMessage(null);
   }, [delivery.jobId, delivery.version, readiness.allowedKinds[0]]);
@@ -81,8 +92,10 @@ export function ExternalDeliveryBooking({
   async function book() {
     if (
       pending ||
-      !readiness.allowedKinds.includes(pickupKind) ||
-      (pickupKind === "SCHEDULED" && !pickupAt)
+      (!saved.current &&
+        (!readiness.allowedKinds.includes(pickupKind) ||
+          (pickupKind === "SCHEDULED" && !pickupAt) ||
+          (needsLateReason && !lateReason.trim())))
     )
       return;
     setPending(true);
@@ -92,6 +105,7 @@ export function ExternalDeliveryBooking({
       jobId: delivery.jobId,
       expectedVersion: delivery.version,
       providerCode: "lalamove" as const,
+      ...(lateReason.trim() ? { lateDispatchReason: lateReason.trim() } : {}),
       pickup:
         pickupKind === "IMMEDIATE"
           ? ({ kind: "IMMEDIATE" } as const)
@@ -178,7 +192,7 @@ export function ExternalDeliveryBooking({
         <p className="text-xs text-muted-foreground">
           {fulfillmentMode === "INSTANT"
             ? "Retry the courier the customer chose at checkout after a definite failure and packing. First booking starts automatically during packing."
-            : "After packing, request a driver now or choose a future pickup within the customer’s delivery range."}
+            : "After packing, request a driver now or choose a future pickup. A pickup after the delivery window requires a reason."}
         </p>
       </div>
       {fulfillmentMode === "SCHEDULED" ? (
@@ -223,7 +237,29 @@ export function ExternalDeliveryBooking({
           ) : null}
         </fieldset>
       ) : null}
-      {(pickupAt || pickupKind !== (readiness.allowedKinds[0] ?? "SCHEDULED")) && !unknown ? (
+      {needsLateReason ? (
+        <FieldGroup>
+          <Field data-disabled={disabled || pending || unknown}>
+            <FieldLabel htmlFor={`late-reason-${delivery.jobId}`}>
+              Reason for late delivery
+            </FieldLabel>
+            <Input
+              id={`late-reason-${delivery.jobId}`}
+              value={lateReason}
+              required
+              maxLength={1000}
+              disabled={disabled || pending || unknown}
+              onChange={(event) => setLateReason(event.target.value)}
+            />
+            <FieldDescription>
+              This reason is recorded with the booking. The customer’s original promise and charge
+              stay unchanged.
+            </FieldDescription>
+          </Field>
+        </FieldGroup>
+      ) : null}
+      {(pickupAt || lateReason || pickupKind !== (readiness.allowedKinds[0] ?? "SCHEDULED")) &&
+      !unknown ? (
         <Button
           type="button"
           size="sm"
@@ -232,6 +268,7 @@ export function ExternalDeliveryBooking({
           onClick={() => {
             setPickupKind(readiness.allowedKinds[0] ?? "SCHEDULED");
             setPickupAt("");
+            setLateReason("");
           }}
         >
           Reset pickup choice
@@ -246,7 +283,8 @@ export function ExternalDeliveryBooking({
           disabled ||
           pending ||
           (!unknown && !readiness.allowedKinds.includes(pickupKind)) ||
-          (pickupKind === "SCHEDULED" && !pickupAt)
+          (!unknown &&
+            ((pickupKind === "SCHEDULED" && !pickupAt) || (needsLateReason && !lateReason.trim())))
         }
         onClick={() => (unknown ? void book() : setReviewing(true))}
       >
@@ -263,6 +301,7 @@ export function ExternalDeliveryBooking({
           <AlertDialogDescription>
             Confirming requests a fresh, short-lived courier quote and submits the booking. The
             customer’s delivery charge does not change.
+            {needsLateReason ? ` Late delivery reason: ${lateReason.trim()}.` : ""}
             {pickupKind === "SCHEDULED" && pickupAt
               ? ` Pickup: ${new Date(pickupAt).toLocaleString("en-PH")}.`
               : " Pickup: as soon as possible."}

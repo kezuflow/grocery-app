@@ -20,6 +20,7 @@ export type DispatchEligibility = {
  */
 export function firstDispatchEligibility(facts: {
   canManage: boolean;
+  fulfillmentMode?: string;
   jobStatus: string;
   orderStatus: string;
   fulfillmentStatus: string;
@@ -33,7 +34,10 @@ export function firstDispatchEligibility(facts: {
   if (!facts.canManage) blockers.push("DELIVERY_MANAGEMENT_REQUIRED");
   if (facts.orderStatus !== "FULFILLMENT_READY") blockers.push("ORDER_NOT_READY_FOR_DISPATCH");
   if (facts.fulfillmentStatus !== "PACKED") blockers.push("FULFILLMENT_NOT_PACKED");
-  if (facts.deliveryDeadline === null || facts.deliveryDeadline <= facts.now)
+  if (
+    facts.deliveryDeadline === null ||
+    (facts.deliveryDeadline <= facts.now && facts.fulfillmentMode !== "SCHEDULED")
+  )
     blockers.push("DELIVERY_WINDOW_UNAVAILABLE");
   if (facts.pendingCancellation) blockers.push("DELIVERY_EXECUTION_UNRESOLVED");
 

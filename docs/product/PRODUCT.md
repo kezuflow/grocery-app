@@ -248,6 +248,8 @@ Customers may choose an available verified courier; Lalamove is first and GrabEx
 
 ## Failed delivery and customer agreements
 
+Owner supplement, 2026-10-05: an overdue known Scheduled delivery window marks unfinished delivery **Late** and does not permanently prevent dispatch. An authorized delivery administrator may request Lalamove now, choose a future pickup beyond the current deadline, or assign Manual delivery with a required audit reason. Existing paid/packed readiness, location scope, current version, definite prior-attempt closure, custody and uncertain-provider-outcome safeguards remain mandatory. The reason authorizes this dispatch; it does not fabricate customer agreement or change the original paid promise, charges, cycle dates or stock. Missing deadlines and expired Instant promises remain blocked. An individual agreement and Edit schedule remain separate explicit controls. No Friday time range is made a default by this approval.
+
 **customer-caused missed deliveries are not automatically refundable**. A courier failure report alone does not establish customer fault. Staff review delivery-attempt/contact evidence; unclear responsibility remains under review. Merely leaving the facility does not end FreshMarkets responsibility. FreshMarkets/courier-caused failures retain applicable replacement/refund handling and the existing FreshMarkets-caused cancellation rules. This is not a blanket denial of refunds after dispatch.
 
 staff will manually enter both the new agreed delivery deadline and courier pickup time in Admin. No 3:00–10:00 PM value is an approved default, and no provider booking was authorized on the owner's behalf. This does not change published delivery weeks.
