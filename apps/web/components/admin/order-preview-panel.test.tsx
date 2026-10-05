@@ -118,6 +118,10 @@ describe("OrderPreviewPanel", () => {
   });
 
   it("refreshes an open preview on focus and drops actions revoked by current Core state", async () => {
+    const manageable: AdminOrderDetail = {
+      ...detail,
+      allowedActions: ["CANCEL", "OVERRIDE_STATUS"],
+    };
     const delivered: AdminOrderDetail = {
       ...detail,
       status: "DELIVERED",
@@ -125,15 +129,17 @@ describe("OrderPreviewPanel", () => {
       allowedActions: [],
     };
     fetchMock
-      .mockResolvedValueOnce(Response.json({ ok: true, value: detail }))
+      .mockResolvedValueOnce(Response.json({ ok: true, value: manageable }))
       .mockResolvedValueOnce(Response.json({ ok: true, value: delivered }));
     await act(async () => {
       root.render(<OrderPreviewPanel order={detail} onClose={() => {}} onUpdated={onUpdated} />);
     });
     expect(host.textContent).toContain("Committed");
+    expect(host.querySelector('[aria-label="Override Order status"]')).not.toBeNull();
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(host.textContent).toContain("Delivered");
     expect(host.textContent).not.toContain("Canceled");
+    expect(host.querySelector('[aria-label="Override Order status"]')).toBeNull();
     expect(onUpdated).toHaveBeenLastCalledWith(delivered);
   });
 });

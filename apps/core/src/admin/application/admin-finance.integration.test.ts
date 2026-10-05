@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import type { CoreServiceBinding } from "@freshmarkets/contracts";
+import { orderStates, type OrderState, type CoreServiceBinding } from "@freshmarkets/contracts";
+import { overrideAdminOrderStatus } from "./override-order-status";
+import { createAuth } from "../../auth/service";
 import { completeResolvedReconciliationCases } from "../../payments/application/complete-reconciliation-cases";
 import { requestHash } from "../../idempotency";
 
@@ -162,6 +164,330 @@ async function seedOrderWithPayment(options: { status?: string } = {}): Promise<
 }
 
 describe("finance administration", () => {
+  it("overrides every canonical Order status in either direction with only Order, audit and receipt effects", async () => {
+    const manager = await seedManager();
+    const fixture = await seedOrderWithPayment({ status: "DELIVERED" });
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','PACKED',4,1)",
+      ).bind(crypto.randomUUID(), fixture.orderId),
+      env.DB.prepare(
+        "INSERT INTO delivery_job(id,order_id,fulfillment_mode,cycle_id,location_id,zone_id,status,context_resolution_status,address_snapshot_json,version,created_at,updated_at) VALUES (?,?,'SCHEDULED',(SELECT cycle_id FROM grocery_order WHERE id=?),'location-cebu-central','zone-cebu-city-core','UNASSIGNED','RESOLVED','{}',3,1,1)",
+      ).bind(crypto.randomUUID(), fixture.orderId, fixture.orderId),
+    ]);
+    const snapshot = async () => {
+      const facts: Record<string, unknown> = {};
+      for (const table of [
+        "payment_intent",
+        "payment_attempt",
+        "payment_refund",
+        "fulfillment_record",
+        "delivery_job",
+        "delivery_provider_dispatch",
+        "inventory_reservation",
+        "inventory_ledger_entries",
+        "committed_demand",
+        "order_cancellation",
+        "order_cancellation_refund_member",
+        "notification_outbox",
+      ]) {
+        facts[table] = (
+          await env.DB.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()
+        ).results;
+      }
+      return facts;
+    };
+    const before = await snapshot();
+    let version = 1;
+    for (const status of orderStates) {
+      const result = await core.overrideAdminOrderStatus({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        orderId: fixture.orderId,
+        status,
+        reason: "Physical operation corrected by administrator",
+        expectedVersion: version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        value: { orderId: fixture.orderId, status, version: ++version },
+      });
+    }
+    expect(await snapshot()).toEqual(before);
+    const audit = await env.DB.prepare(
+      "SELECT action,reason,before_json,after_json FROM audit_event WHERE aggregate_id=? AND action='ORDER.STATUS_OVERRIDDEN' ORDER BY rowid",
+    )
+      .bind(fixture.orderId)
+      .all();
+    expect(audit.results).toHaveLength(orderStates.length);
+    expect(audit.results[0]).toMatchObject({
+      action: "ORDER.STATUS_OVERRIDDEN",
+      reason: "Physical operation corrected by administrator",
+      before_json: JSON.stringify({ status: "DELIVERED", version: 1 }),
+      after_json: JSON.stringify({ status: "PENDING_PAYMENT", version: 2 }),
+    });
+  });
+
+  it("requires current Global manage access and exposes override only to a manager", async () => {
+    const fixture = await seedOrderWithPayment();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: {},
+      orderId: fixture.orderId,
+      status: "DELIVERED" as const,
+      reason: "Audited correction",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(await core.overrideAdminOrderStatus(request)).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHENTICATED" },
+    });
+    for (const manager of [
+      await seedManager(["orders.read"]),
+      await seedManager(["orders.read", "orders.manage"], "location"),
+    ])
+      expect(
+        await core.overrideAdminOrderStatus({ ...request, headers: { cookie: manager.cookie } }),
+      ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    const reader = await seedManager(["orders.read"]);
+    expect(
+      await core.getAdminOrder({
+        requestId: request.requestId,
+        headers: { cookie: reader.cookie },
+        orderId: fixture.orderId,
+      }),
+    ).toMatchObject({ ok: true, value: { allowedActions: [] } });
+  });
+
+  it("replays the immutable original correction after later progress and rejects a changed intent", async () => {
+    const manager = await seedManager();
+    const fixture = await seedOrderWithPayment();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId: fixture.orderId,
+      status: "CANCELED" as const,
+      reason: "Status only correction",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const first = await core.overrideAdminOrderStatus(request);
+    expect(first.ok).toBe(true);
+    await env.DB.prepare("UPDATE grocery_order SET status='COMMITTED',version=3 WHERE id=?")
+      .bind(fixture.orderId)
+      .run();
+    expect(await core.overrideAdminOrderStatus(request)).toEqual(first);
+    expect(
+      await core.overrideAdminOrderStatus({ ...request, reason: "Different reason" }),
+    ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED", version: 3 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='ORDER.STATUS_OVERRIDDEN'",
+      )
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ n: 1 });
+  });
+
+  it("rejects stale, missing-reason and noncanonical/financial status input without effects", async () => {
+    const manager = await seedManager();
+    const fixture = await seedOrderWithPayment();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId: fixture.orderId,
+      status: "DELIVERED" as const,
+      reason: "Reviewed correction",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    expect(await core.overrideAdminOrderStatus({ ...request, expectedVersion: 0 })).toMatchObject({
+      ok: false,
+      error: { code: "STALE_VERSION" },
+    });
+    expect(await core.overrideAdminOrderStatus({ ...request, reason: " " })).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(
+      await core.overrideAdminOrderStatus({ ...request, status: "REFUNDED" as OrderState }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+        .bind(fixture.orderId)
+        .first(),
+    ).toEqual({ status: "COMMITTED", version: 1 });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM idempotency_records WHERE scope='orders.status_override' AND idempotency_key=?",
+      )
+        .bind(request.idempotencyKey)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+
+  it.each(["order", "audit", "receipt"])(
+    "rolls back when a status correction's %s effect is ignored",
+    async (effect) => {
+      const manager = await seedManager();
+      const fixture = await seedOrderWithPayment();
+      const request = {
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        orderId: fixture.orderId,
+        status: "DELIVERED" as const,
+        reason: "Reviewed correction",
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const trigger =
+        effect === "order"
+          ? `BEFORE UPDATE ON grocery_order WHEN NEW.id='${fixture.orderId}'`
+          : effect === "audit"
+            ? "BEFORE INSERT ON audit_event WHEN NEW.action='ORDER.STATUS_OVERRIDDEN'"
+            : "BEFORE INSERT ON idempotency_records WHEN NEW.scope='orders.status_override'";
+      await env.DB.exec(
+        `CREATE TRIGGER omit_status_override ${trigger} BEGIN SELECT RAISE(IGNORE); END`,
+      );
+      try {
+        expect((await core.overrideAdminOrderStatus(request)).ok).toBe(false);
+      } finally {
+        await env.DB.exec("DROP TRIGGER omit_status_override");
+      }
+      expect(
+        await env.DB.prepare("SELECT status,version FROM grocery_order WHERE id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ status: "COMMITTED", version: 1 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='ORDER.STATUS_OVERRIDDEN'",
+        )
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM idempotency_records WHERE scope='orders.status_override' AND idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ n: 0 });
+      expect((await core.overrideAdminOrderStatus(request)).ok).toBe(true);
+    },
+  );
+
+  it.each(["version", "scope", "capability", "staff"])(
+    "rechecks %s immediately before the atomic correction",
+    async (changed) => {
+      const manager = await seedManager();
+      const fixture = await seedOrderWithPayment();
+      const request = {
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        orderId: fixture.orderId,
+        status: "DELIVERED" as const,
+        reason: "Reviewed correction",
+        expectedVersion: 1,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const db = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "batch")
+            return async (statements: D1PreparedStatement[]) => {
+              if (changed === "version")
+                await target
+                  .prepare("UPDATE grocery_order SET version=2 WHERE id=?")
+                  .bind(fixture.orderId)
+                  .run();
+              if (changed === "scope")
+                await target
+                  .prepare("DELETE FROM staff_scope WHERE staff_id=?")
+                  .bind(manager.staffId)
+                  .run();
+              if (changed === "capability")
+                await target
+                  .prepare("DELETE FROM staff_role WHERE staff_id=?")
+                  .bind(manager.staffId)
+                  .run();
+              if (changed === "staff")
+                await target
+                  .prepare("UPDATE staff_identity SET status='inactive' WHERE id=?")
+                  .bind(manager.staffId)
+                  .run();
+              return target.batch(statements);
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      expect((await overrideAdminOrderStatus({ auth: createAuth(env), db }, request)).ok).toBe(
+        false,
+      );
+      expect(
+        await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+          .bind(fixture.orderId)
+          .first(),
+      ).toEqual({ status: "COMMITTED" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) n FROM idempotency_records WHERE scope='orders.status_override' AND idempotency_key=?",
+        )
+          .bind(request.idempotencyKey)
+          .first(),
+      ).toEqual({ n: 0 });
+    },
+  );
+
+  it("serializes duplicate requests and competing administrator corrections", async () => {
+    const manager = await seedManager();
+    const fixture = await seedOrderWithPayment();
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      orderId: fixture.orderId,
+      status: "DELIVERED" as const,
+      reason: "Reviewed correction",
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const duplicates = await Promise.all([
+      core.overrideAdminOrderStatus(request),
+      core.overrideAdminOrderStatus(request),
+    ]);
+    expect(duplicates[0].ok).toBe(true);
+    expect(duplicates[1]).toEqual(duplicates[0]);
+    const second = await seedOrderWithPayment();
+    const competing = await Promise.all([
+      core.overrideAdminOrderStatus({
+        ...request,
+        orderId: second.orderId,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+      core.overrideAdminOrderStatus({
+        ...request,
+        orderId: second.orderId,
+        status: "CANCELED",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(competing.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='ORDER.STATUS_OVERRIDDEN'",
+      )
+        .bind(second.orderId)
+        .first(),
+    ).toEqual({ n: 1 });
+  });
+
   it("authorizes rejected refund retry through RPC and derives its read action from current evidence", async () => {
     const f = await seedOrderWithPayment(),
       now = Date.now(),
@@ -275,7 +601,7 @@ describe("finance administration", () => {
       phone: "+639171234567",
       addressLines: ["Ayala Center Cebu", "Luz", "Cebu City", "Central Visayas", "6000"],
     });
-    expect(detail.value.allowedActions).toEqual(["CANCEL"]);
+    expect(detail.value.allowedActions).toEqual(["CANCEL", "OVERRIDE_STATUS"]);
     expect(detail.value.progress?.steps.map((step) => step.state)).toEqual([
       "COMPLETE",
       "CURRENT",
@@ -296,7 +622,7 @@ describe("finance administration", () => {
       orderId,
     });
     expect(terminalDetail.ok).toBe(true);
-    if (terminalDetail.ok) expect(terminalDetail.value.allowedActions).toEqual([]);
+    if (terminalDetail.ok) expect(terminalDetail.value.allowedActions).toEqual(["OVERRIDE_STATUS"]);
   });
 
   it("paginates by the same committed timestamp exposed in the order DTO", async () => {

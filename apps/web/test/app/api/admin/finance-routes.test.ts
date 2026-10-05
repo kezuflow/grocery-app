@@ -4,6 +4,7 @@ const coreMocks = vi.hoisted(() => ({
   listAdminOrders: vi.fn(),
   getAdminOrder: vi.fn(),
   cancelAdminOrder: vi.fn(),
+  overrideAdminOrderStatus: vi.fn(),
   listAdminPayments: vi.fn(),
   listAdminPaymentAttention: vi.fn(),
   getAdminPayment: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("cloudflare:workers", () => ({
 
 import { GET as listOrders } from "@/app/api/admin/orders/route";
 import { POST as cancelOrder } from "@/app/api/admin/orders/[order-id]/cancel/route";
+import { POST as overrideOrderStatus } from "@/app/api/admin/orders/[order-id]/status/route";
 import { POST as requestRefund } from "@/app/api/admin/payments/refunds/route";
 import { POST as retryRefund } from "@/app/api/admin/payments/refunds/retry/route";
 import { GET as paymentAttention } from "@/app/api/admin/payments/attention/route";
@@ -51,6 +53,54 @@ function jsonRequest(url: string, body: unknown): Request {
 }
 
 describe("finance BFF routes", () => {
+  it("delegates status-only correction with path ownership, audit reason, current version and stable key", async () => {
+    coreMocks.overrideAdminOrderStatus.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
+    await overrideOrderStatus(
+      jsonRequest("https://x/orders/o1/status", {
+        orderId: "untrusted",
+        status: "DELIVERED",
+        reason: " Reviewed physical completion ",
+        expectedVersion: 3,
+      }),
+      { params: Promise.resolve({ "order-id": "o1" }) },
+    );
+    expect(coreMocks.overrideAdminOrderStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: "o1",
+        status: "DELIVERED",
+        reason: "Reviewed physical completion",
+        expectedVersion: 3,
+        idempotencyKey: "idem-1",
+        headers: expect.objectContaining(COOKIE),
+      }),
+    );
+    expect(coreMocks.cancelAdminOrder).not.toHaveBeenCalled();
+    expect(coreMocks.requestAdminRefund).not.toHaveBeenCalled();
+  });
+  it("rejects invalid status corrections or missing keys without forwarding a command", async () => {
+    const context = { params: Promise.resolve({ "order-id": "o1" }) };
+    for (const body of [
+      { status: "REFUNDED", reason: "Reviewed", expectedVersion: 1 },
+      { status: "DELIVERED", reason: " ", expectedVersion: 1 },
+      { status: "DELIVERED", reason: "Reviewed", expectedVersion: -1 },
+    ])
+      expect(
+        (await overrideOrderStatus(jsonRequest("https://x/orders/o1/status", body), context))
+          .status,
+      ).toBe(400);
+    expect(
+      (
+        await overrideOrderStatus(
+          new Request("https://x/orders/o1/status", {
+            method: "POST",
+            body: JSON.stringify({ status: "DELIVERED", reason: "Reviewed", expectedVersion: 1 }),
+          }),
+          context,
+        )
+      ).status,
+    ).toBe(400);
+    expect(coreMocks.overrideAdminOrderStatus).not.toHaveBeenCalled();
+  });
   it("delegates refund retry with the current version, actor headers and stable key", async () => {
     coreMocks.retryAdminRefund.mockResolvedValue({ ok: true, value: {}, requestId: "r" });
     await retryRefund(

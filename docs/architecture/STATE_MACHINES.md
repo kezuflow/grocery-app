@@ -83,6 +83,15 @@ Rules:
 - Cancellation is policy-driven by fulfillment mode, Scheduled cutoff/procurement where applicable, fulfillment/dispatch progress, hold/reservation/demand, and refund state.
 - Delivery/fulfillment projections may advance order state only through application orchestration after their own transition succeeds.
 
+The Order transitions above describe normal workflow orchestration. Under the explicit
+2026-10-05 PRODUCT supplement, `OverrideAdminOrderStatus` permits a Global `orders.manage`
+administrator to set any canonical Order status from any recorded status, with a required reason
+and expected version. It changes only Order status/version, before/after Audit and immutable
+command receipt. It does not transition Payment, Refund, Fulfillment, Delivery, cancellation,
+reservation or demand state, and sends no customer message. Canonical refund outcomes remain
+provider-confirmed. Normal commands and later provider reactions retain their existing guards;
+the correction does not prevent future valid projection changes.
+
 ## Order Amendment
 
 ```text

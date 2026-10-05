@@ -3,13 +3,22 @@
 ## Orders workflow actions — owner approval 2026-10-05
 
 The Orders preview keeps current status visible and offers an Update order selector grouping eligible
-Preparation, Manual delivery and Cancellation actions. Compose existing Core reads and commands;
-do not permit arbitrary status assignment. Use the selected Order's authoritative location in Global
+Preparation, Manual delivery and Cancellation actions. Compose existing Core reads and commands.
+Use the selected Order's authoritative location in Global
 scope, or the matching selected location, with the current capability and Core resource checks.
 Preparation and manual delivery keep their confirmations, input requirements and exact saved-request
 retries. Pending or unknown commands guard Order selection, scope and navigation; confirmed results
 refresh detail and allowed actions. Explain unavailable actions and retain links to dedicated screens.
 Courier observations and canonical refund success continue to own their respective outcomes.
+
+Owner follow-up authorizes a separate **Order status** selector containing every canonical status
+for Core-provided `OVERRIDE_STATUS` authority. Selecting a value opens an AlertDialog showing
+previous/new status and a required Audit reason textarea. Explain that this changes only Order
+status and that payments, refunds, stock and delivery records remain unchanged. Keep ordinary
+workflow actions available separately. Confirmed results refresh detail; unknown/conflicting
+outcomes retain exact saved request/key, lock competing actions/navigation and expose an explicit
+retry. Read-only callers do not see the override. Use stock Admin Select, FieldGroup/Field,
+Textarea, AlertDialog, Alert and Button compositions; Storefront/auth/shared primitives are unchanged.
 
 ## Customer refund claim action — owner approval 2026-10-05
 

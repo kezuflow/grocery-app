@@ -25,7 +25,7 @@ Type narrowing and discriminated-union behavior should follow the installed comp
 
 ## Commands, state, and authorization
 
-- Every meaningful write has a named command, one owning context, validated preconditions, a legal transition, capability/ownership/scope enforcement, and a defined result. Do not expose arbitrary status or field patches for lifecycle changes.
+- Every meaningful write has a named command, one owning context, validated preconditions, a legal transition, capability/ownership/scope enforcement, and a defined result. Do not expose arbitrary status or field patches for lifecycle changes. The explicit PRODUCT owner supplement permits the dedicated Global Order status-only correction command: any canonical Order status with required audit reason, current version, atomic authority/audit/original receipt and no dependent workflow effects. This exception does not broaden normal transition commands or financial/provider authority.
 - Derive identity from the authenticated Core context. Caller-supplied resource IDs and browser scope preferences are inputs to authorize, never proof of authority.
 - Revalidate mutable prerequisites at the write boundary. UI-disabled controls, prior reads, middleware, and cached permissions do not protect concurrent commands.
 - Coordinate cross-context effects through application operations. A provider adapter or projection must not directly mutate another context's lifecycle merely because all tables share D1.

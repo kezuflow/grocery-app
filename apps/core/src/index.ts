@@ -146,6 +146,8 @@ import {
 } from "./validation";
 import { handleProviderWebhook } from "./payments/http/provider-webhook";
 import { drizzle } from "drizzle-orm/d1";
+import { overrideAdminOrderStatus } from "./admin/application/override-order-status";
+import { orderStatusOverrideCommandSchema } from "./orders/application/override-order-status";
 import { log, observeCoreRpc, requestId } from "./observability";
 import { createAuth, type AuthEnvironment } from "./auth/service";
 import { resolveServiceability } from "./geography/serviceability";
@@ -942,6 +944,9 @@ const orderListSchema = authenticatedRequestSchema.extend({
 const orderDetailSchema = authenticatedRequestSchema.extend({
   orderId: validationSchema.string().trim().min(1).max(200),
 });
+const orderStatusOverrideSchema = authenticatedRequestSchema.extend(
+  orderStatusOverrideCommandSchema.shape,
+);
 
 const orderCancelSchema = authenticatedRequestSchema.extend({
   orderId: validationSchema.string().trim().min(1).max(200),
@@ -2939,6 +2944,17 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         },
         validation.data,
       ),
+    );
+  }
+  async overrideAdminOrderStatus(
+    input: import("@freshmarkets/contracts").AdminOrderStatusOverrideRequest,
+  ) {
+    const validation = orderStatusOverrideSchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    return overrideAdminOrderStatus(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      validation.data,
     );
   }
   async listAdminPayments(input: import("@freshmarkets/contracts").AdminPaymentListRequest) {

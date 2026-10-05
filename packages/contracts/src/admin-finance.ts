@@ -2,6 +2,7 @@ import type { AuthenticatedRequest } from "./auth";
 import type { RpcResult } from "./common";
 import type { OrderCancellationView } from "./orders";
 import type { CustomerOrderProgressView } from "./orders";
+import type { OrderState } from "./states";
 
 export const orderIssueCategories = [
   "MISSING_ITEM",
@@ -156,7 +157,7 @@ export type AdminTimelineEntry = {
 export type AdminOrderDetail = AdminOrderSummary & {
   /** Omitted by older Core revisions during a paired Worker rollout. */
   progress?: CustomerOrderProgressView | null;
-  allowedActions: ReadonlyArray<"CANCEL">;
+  allowedActions: ReadonlyArray<"CANCEL" | "OVERRIDE_STATUS">;
   customer: AdminOrderCustomerView;
   financial: AdminOrderFinancialView;
   items: ReadonlyArray<AdminOrderItemView>;
@@ -195,6 +196,22 @@ export type AdminOrderCancelRequest = AuthenticatedRequest & {
   resolution?: string;
   expectedVersion: number;
   idempotencyKey: string;
+};
+
+/** Explicit status-only correction; independently owned effects are not requested. */
+export type AdminOrderStatusOverrideRequest = AuthenticatedRequest & {
+  orderId: string;
+  status: OrderState;
+  reason: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+};
+
+export type AdminOrderStatusOverrideResult = {
+  orderId: string;
+  previousStatus: string;
+  status: OrderState;
+  version: number;
 };
 
 /** Frozen accepted operation; getAdminOrder supplies current progress separately. */
@@ -506,6 +523,9 @@ export type AdminOrderIssueDetailRequest = AuthenticatedRequest & { issueId: str
 export type AdminOrdersService = {
   listAdminOrders(request: AdminOrderListRequest): Promise<RpcResult<AdminOrderPage>>;
   getAdminOrder(request: AdminOrderDetailRequest): Promise<RpcResult<AdminOrderDetail>>;
+  overrideAdminOrderStatus(
+    request: AdminOrderStatusOverrideRequest,
+  ): Promise<RpcResult<AdminOrderStatusOverrideResult>>;
   cancelAdminOrder(
     request: AdminOrderCancelRequest,
   ): Promise<RpcResult<AdminOrderCancellationResult>>;

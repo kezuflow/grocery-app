@@ -13,6 +13,7 @@ import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
 import { OrderStatusBadge } from "./order-status-badge";
 import { OrderWorkflowActions } from "./order-workflow-actions";
+import { OrderStatusOverride } from "./order-status-override";
 import { Button } from "@/components/admin/shadcn/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
@@ -68,6 +69,7 @@ export function OrderPreviewPanel({
   const [confirming, setConfirming] = useState(false);
   const [savedCancellation, setSavedCancellation] = useState<string | null>(null);
   const [workflowInteraction, setWorkflowInteraction] = useState({ dirty: false, locked: false });
+  const [overrideInteraction, setOverrideInteraction] = useState({ dirty: false, locked: false });
   const cancelIntent = useAdminCommandIntent();
   const onUpdatedRef = useRef(onUpdated);
   onUpdatedRef.current = onUpdated;
@@ -76,11 +78,13 @@ export function OrderPreviewPanel({
     cancelIntent.uncertain ||
     savedCancellation !== null ||
     confirming ||
-    workflowInteraction.locked;
+    workflowInteraction.locked ||
+    overrideInteraction.locked;
   const commandLockedRef = useRef(commandLocked);
-  commandLockedRef.current = commandLocked || workflowInteraction.dirty;
-  useAdminRouteGuard(workflowInteraction.dirty, commandLocked);
-  useAdminScopeGuard(workflowInteraction.dirty, commandLocked);
+  commandLockedRef.current =
+    commandLocked || workflowInteraction.dirty || overrideInteraction.dirty;
+  useAdminRouteGuard(workflowInteraction.dirty || overrideInteraction.dirty, commandLocked);
+  useAdminScopeGuard(workflowInteraction.dirty || overrideInteraction.dirty, commandLocked);
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false, confirmedCommand = false) => {
@@ -270,6 +274,20 @@ export function OrderPreviewPanel({
               <p className="text-sm font-medium">Current status</p>
               <OrderStatusBadge status={detail.status} />
             </div>
+            <OrderStatusOverride
+              key={`override:${detail.orderId}`}
+              order={detail}
+              disabled={
+                cancelIntent.pending ||
+                cancelIntent.uncertain ||
+                savedCancellation !== null ||
+                confirming ||
+                workflowInteraction.dirty ||
+                workflowInteraction.locked
+              }
+              onChanged={() => load(undefined, true, true)}
+              onInteractionState={(dirty, locked) => setOverrideInteraction({ dirty, locked })}
+            />
             <OrderWorkflowActions
               key={detail.orderId}
               order={detail}
@@ -277,7 +295,9 @@ export function OrderPreviewPanel({
                 cancelIntent.pending ||
                 cancelIntent.uncertain ||
                 savedCancellation !== null ||
-                confirming
+                confirming ||
+                overrideInteraction.dirty ||
+                overrideInteraction.locked
               }
               onCancel={() => setConfirming(true)}
               onChanged={() => load(undefined, true, true)}

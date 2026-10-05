@@ -527,7 +527,7 @@ export async function getAdminOrder(
           })
         : null,
     allowedActions: access.value.capabilities.includes("orders.manage")
-      ? allowedOrderActions(row, Date.now())
+      ? [...allowedOrderActions(row, Date.now()), "OVERRIDE_STATUS"]
       : [],
     customer: toOrderCustomer(row.addressSnapshotJson, row.customerEmail),
     financial: quote

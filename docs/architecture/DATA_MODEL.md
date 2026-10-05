@@ -190,6 +190,14 @@ and receipt unchanged.
 
 ## Orders and Amendments
 
+Owner-authorized status-only correction (2026-10-05) uses existing storage: a versioned
+`grocery_order.status` update, `audit_event` with required reason, actor and previous/new
+status/version, and a SUCCEEDED `idempotency_records` receipt under `orders.status_override`.
+All three writes and the current Global staff/capability/version checks share one atomic batch;
+ignored receipt, Order or Audit effects abort it. The stored receipt is immutable and returns the
+original result after later Order progress. No new schema or writes to payment, refund,
+inventory, demand, preparation, delivery, cancellation or notification storage are introduced.
+
 - `orders(id PK, order_number UNIQUE, customer_id FK, market_id FK, fulfillment_mode INSTANT|SCHEDULED, cycle_id FK NULL, zone_id FK, location_id FK, fulfillment_configuration_id FK, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, tax_minor, final_total_minor, currency, address_snapshot_json, fulfillment_promise_snapshot_json, provider_quotation_snapshot_json, delivery_execution_snapshot_json NULL, cycle_snapshot_json NULL, fulfillment_context_snapshot_json, committed_at, version, created_at, updated_at)`; legacy Service Fee/pre-fee fields remain readable only for historical committed Orders.
 - `order_items(id PK, order_id FK, sku_id FK NULL, inventory_pool_id FK NULL, product_name_snapshot, sku_code_snapshot, sku_label_snapshot, sell_quantity_snapshot, sell_unit_snapshot_json, quantity_sellable, inventory_quantity_base_each, quantity_base_total, base_unit_code_snapshot NULL, shipping_weight_grams NULL, unit_price_minor, item_discount_minor, order_discount_allocation_minor, line_total_minor, sourcing_mode_snapshot, tax_snapshot_json NULL)`
 - `order_amendments(id PK, original_order_id FK, amendment_number, status, merchandise_subtotal_minor, item_discount_minor, order_discount_minor, delivery_fee_minor, delivery_discount_minor, service_fee_minor, tax_minor, final_total_minor, currency, committed_at NULL, version, UNIQUE(original_order_id, amendment_number))`

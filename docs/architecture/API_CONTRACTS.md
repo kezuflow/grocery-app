@@ -486,6 +486,24 @@ That transaction repair initially covered fixed/percentage merchandise discounts
 
 ## Admin Orders and Payments
 
+`overrideAdminOrderStatus` is the dedicated owner-authorized status-only correction RPC.
+The authenticated request contains `orderId`, canonical `status`, required trimmed `reason`
+(1–500 characters), nonnegative `expectedVersion` and `idempotencyKey`. Web exposes
+`POST /api/admin/orders/:orderId/status`; the path owns Order identity, and the required
+`Idempotency-Key` header owns command identity. Core requires current active Global
+`orders.manage`; detail exposes `OVERRIDE_STATUS` only to that authority, including for terminal
+Orders. No actor or scope supplied by Web is trusted.
+
+The result contains `orderId`, `previousStatus`, `status` and incremented `version`. Core
+atomically guards current authority and Order status/version, updates only status/version,
+appends `ORDER.STATUS_OVERRIDDEN` Audit with reason and before/after evidence, and stores the
+immutable success receipt. Same actor/key/normalized command returns that original receipt;
+changed input rejects with `IDEMPOTENCY_CONFLICT`. Stale authority/version or any ignored effect
+leaves no partial command effects. Unknown responses retain the exact saved body/key for retry.
+This RPC does not call cancellation, refunds, inventory, preparation, delivery or publication
+commands, and does not assert financial or physical completion. Subsequent normal workflow
+reactions remain eligible under their existing rules.
+
 `retryAdminRefund` requires authenticated Global `refunds.manage`, refund ID, current refund version, a reason and a stable command key. Only `REJECTED` without provider refund reference or active recovery, without a prior replacement, and with the exact amount available against captured money is eligible. Core exposes optional `AdminRefundProgress.recovery.canRetry` (absent on older deployments). `POST /api/admin/payments/refunds/retry` submits the decision. Admission preserves the old refund and atomically reserves/links one new identity, audit and immutable `AdminRefundView` with `REQUESTED` status; this is acceptance, not provider success. Identical replay returns that receipt without another provider submission. Unknown outcomes retain the new identity for existing read-only provider recovery. A prior cancellation keeps its exact member amount and completes only from canonical replacement success.
 
 - `admin.orders.recordExceptionResolution(...)`

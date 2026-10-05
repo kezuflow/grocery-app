@@ -2,6 +2,23 @@
 
 Current rules by subject. Product approval, source implementation and application/provider acceptance remain distinct. The protected [owner discussion](SIMPLIFICATION_DISCUSSION.md) and source map preserve decisions; the [checkpoint](../operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) owns unfinished work. Later explicit owner decisions win over historical baselines.
 
+## Audited Order status correction — owner supplement 2026-10-05
+
+The owner explicitly authorizes unrestricted **Order status only** changes with an audit reason.
+A Global administrator with `orders.manage` may select any canonical Order status in either
+direction, including on terminal Orders, after confirmation. This corrects the recorded Order
+status; it does not perform or undo commitment, payment, refund, cancellation, stock, preparation,
+delivery or customer messaging. These independently owned facts retain their existing commands
+and provider-confirmed outcomes. Selecting Canceled does not request a refund; selecting Delivered
+does not record physical delivery. The required reason, previous/new status and administrator are
+audited. Normal workflow actions remain available under their existing eligibility rules.
+
+This explicit supplement supersedes the earlier exclusion of an unrestricted Order-status
+override. It does not introduce an editable Delivery/Fulfillment status or manual financial
+confirmation. The correction does not freeze the Order: subsequent valid workflow/provider
+reactions may update its status through their existing rules. Source implementation and acceptance
+are recorded separately in the active checkpoint under `ORDER-STATUS-OVERRIDE-20261005`.
+
 ## Global modes and stock
 
 One versioned Global selling state (Open/Paused) and one active fulfillment mode govern new authenticated commerce. Instant uses exact local stock, holds and paid reservations; Scheduled uses exact paid demand with no physical-stock admission/netting or capacity. Pause before changing mode. Complete the last planned Scheduled week, receive/count Instant stock and check products/prices/location readiness before switching and reopening; there is no automatic switch date or all-history completion prerequisite. Started payments, immutable paid commitments and outstanding Scheduled goods remain recoverable. Only inspected surplus can become physical Instant stock.
@@ -360,6 +377,12 @@ The 21 GD-D source entries below retain links to the protected original discussi
 - [Original source hashes](https://github.com/kezuflow/grocery-app/blob/75c0bd35936ccb3d5ef0fbcff565b0da877906bc/docs/archive/guidance-20260909/SOURCE_HASHES.json), [changed-block review](https://github.com/kezuflow/grocery-app/blob/75c0bd35936ccb3d5ef0fbcff565b0da877906bc/docs/archive/guidance-20260909/REQUIREMENT_REVIEW.json) and [complete section review](https://github.com/kezuflow/grocery-app/blob/75c0bd35936ccb3d5ef0fbcff565b0da877906bc/docs/archive/guidance-20260909/FINAL_SECTION_REVIEW.json).
 
 ### Original decision sources
+
+The explicit 2026-10-05 owner request and effect-choice reply authorize the
+[audited Order status-only correction](#audited-order-status-correction--owner-supplement-2026-10-05).
+This later supplement changes only Order correction authority, preserving independently owned
+financial and operational facts. Its implementation and acceptance are tracked separately as
+`ORDER-STATUS-OVERRIDE-20261005` in the active checkpoint.
 
 The 21 agreed sources remain unchanged; their later owner-approved corrections are applied in the subject rules above.
 

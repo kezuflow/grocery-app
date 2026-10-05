@@ -303,6 +303,7 @@ export const coreServiceMethodNames = [
   "listAdminOrders",
   "getAdminOrder",
   "cancelAdminOrder",
+  "overrideAdminOrderStatus",
   "listAdminPayments",
   "listAdminPaymentAttention",
   "getAdminPayment",
