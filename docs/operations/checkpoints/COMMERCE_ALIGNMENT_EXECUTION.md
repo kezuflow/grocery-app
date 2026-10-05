@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Produce image conversion follow-up — PRODUCE-WEBP-20261005-R3
+
+Owner request (5 October 2026): repeat PNG-to-WebP conversion in `apps/web/public/produce`. Phase: **Static produce asset conversion**; checkpoint: `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner: owner request. Acceptance: replace every current PNG with a same-basename WebP preserving dimensions, transparency and decoded pixels; preserve unrelated work.
+
+Started on `main` at `72553b04808c53677f06f33fec5cfaa06cc97a20` with one new untracked `pears-century.png`. No repository PNG references or existing output matched. Preserved Mobile/Mobile API deletions and the pre-existing `mango.webp` deletion. Caller-to-write path: local PNG -> installed Pillow lossless encoder -> public WebP. **PRODUCE-WEBP-20261005-R3 complete: 1/1 file converted** to `pears-century.webp`, 1254 x 1254, from 1,636,372 to 1,167,988 bytes (28.6% smaller). Original backup and safe receipt: ignored `.wrangler/produce-webp-20261005-r3`.
+
+Verification: PowerShell here-string piped into bundled `python.exe -` exited 0, reopened original backup/output and verified WEBP format, dimensions and exact RGBA bytes, then asserted zero remaining PNGs. Repository reference search returned no matches. Final naming/diff checks and Git landing are recorded in the task response. No application/browser/provider acceptance or deployment is claimed. Zero conversions remain at the file counting level; inherited commerce obligations remain open. Next action: review, commit only this asset/checkpoint and push `main`.
+
 ## Produce image conversion follow-up — PRODUCE-WEBP-20261005-R2
 
 Owner request (5 October 2026): convert the newly added PNGs in `apps/web/public/produce` again. Phase: **Static produce asset conversion**. Active checkpoint: `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner: the owner request; acceptance: all current PNGs replaced with same-basename valid WebP files preserving dimensions, transparency and decoded pixels, with unrelated work preserved.
