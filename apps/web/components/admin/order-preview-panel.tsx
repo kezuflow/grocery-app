@@ -12,15 +12,9 @@ import { notifyCommandSuccess } from "./admin-feedback";
 import { AdminConfirmationDialog } from "./admin-controls";
 import { AdminPageState } from "./admin-page-state";
 import { OrderStatusBadge } from "./order-status-badge";
+import { OrderWorkflowActions } from "./order-workflow-actions";
 import { Button } from "@/components/admin/shadcn/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/admin/shadcn/select";
 import {
   Table,
   TableBody,
@@ -45,16 +39,16 @@ function dateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function orderLabel(order: AdminOrderSummary): string {
+  return order.orderNumber ?? order.orderId;
+}
+
 function humanize(value: string): string {
   return value
     .toLowerCase()
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function orderLabel(order: AdminOrderSummary): string {
-  return order.orderNumber ?? order.orderId;
 }
 
 export function OrderPreviewPanel({
@@ -73,18 +67,23 @@ export function OrderPreviewPanel({
   const [requestId, setRequestId] = useState<string | undefined>();
   const [confirming, setConfirming] = useState(false);
   const [savedCancellation, setSavedCancellation] = useState<string | null>(null);
+  const [workflowInteraction, setWorkflowInteraction] = useState({ dirty: false, locked: false });
   const cancelIntent = useAdminCommandIntent();
   const onUpdatedRef = useRef(onUpdated);
   onUpdatedRef.current = onUpdated;
   const commandLocked =
-    cancelIntent.pending || cancelIntent.uncertain || savedCancellation !== null || confirming;
+    cancelIntent.pending ||
+    cancelIntent.uncertain ||
+    savedCancellation !== null ||
+    confirming ||
+    workflowInteraction.locked;
   const commandLockedRef = useRef(commandLocked);
-  commandLockedRef.current = commandLocked;
-  useAdminRouteGuard(false, commandLocked);
-  useAdminScopeGuard(false, commandLocked);
+  commandLockedRef.current = commandLocked || workflowInteraction.dirty;
+  useAdminRouteGuard(workflowInteraction.dirty, commandLocked);
+  useAdminScopeGuard(workflowInteraction.dirty, commandLocked);
 
   const load = useCallback(
-    async (signal?: AbortSignal, background = false) => {
+    async (signal?: AbortSignal, background = false, confirmedCommand = false) => {
       if (!background) {
         setState("loading");
         setRequestId(undefined);
@@ -96,7 +95,7 @@ export function OrderPreviewPanel({
         });
         const payload = (await response.json()) as RpcResult<AdminOrderDetail>;
         if (signal?.aborted) return;
-        if (background && commandLockedRef.current) return;
+        if (background && commandLockedRef.current && !confirmedCommand) return;
         if (!payload.ok) {
           if (background && !["FORBIDDEN", "UNAUTHENTICATED"].includes(payload.error.code)) {
             setUpdatesDelayed(true);
@@ -231,7 +230,7 @@ export function OrderPreviewPanel({
           />
         ) : null}
         {state === "ready" && detail ? (
-          <div className="space-y-5">
+          <div className="flex flex-col gap-5">
             {updatesDelayed ? (
               <Alert role="status">
                 <AlertTitle>Updates are delayed</AlertTitle>
@@ -267,31 +266,23 @@ export function OrderPreviewPanel({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <label className="grid gap-1 text-sm font-medium">
-                Status
-                <Select
-                  value={detail.status}
-                  disabled={cancelIntent.pending || savedCancellation !== null}
-                  onValueChange={(value) => {
-                    if (value === "CANCELED" && detail.allowedActions.includes("CANCEL")) {
-                      setConfirming(true);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="min-w-48" aria-label="Order status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value={detail.status}>{humanize(detail.status)}</SelectItem>
-                    {detail.allowedActions.includes("CANCEL") && detail.status !== "CANCELED" ? (
-                      <SelectItem value="CANCELED">Canceled</SelectItem>
-                    ) : null}
-                  </SelectContent>
-                </Select>
-              </label>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium">Current status</p>
               <OrderStatusBadge status={detail.status} />
             </div>
+            <OrderWorkflowActions
+              key={detail.orderId}
+              order={detail}
+              disabled={
+                cancelIntent.pending ||
+                cancelIntent.uncertain ||
+                savedCancellation !== null ||
+                confirming
+              }
+              onCancel={() => setConfirming(true)}
+              onChanged={() => load(undefined, true, true)}
+              onInteractionState={(dirty, locked) => setWorkflowInteraction({ dirty, locked })}
+            />
             <p className="text-xs text-muted-foreground">
               Available changes follow the order’s current lifecycle and your permissions.
             </p>

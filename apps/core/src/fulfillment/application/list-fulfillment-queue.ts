@@ -5,6 +5,7 @@ import type {
   OperationalOrderLineView,
 } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, type StateMap } from "../../commerce/state-machines";
+import { isOrderEligibleForPreparation } from "../domain/order-preparation";
 
 const NEXT_ACTION: Readonly<
   Record<string, ReadonlyArray<FulfillmentQueueItem["allowedActions"][number]>>
@@ -26,8 +27,20 @@ const NEXT_ACTION: Readonly<
  * machine. The board filters sections by capability; actions listed here are
  * exactly the legal transitions the shipped commands accept.
  */
-export function allowedFulfillmentActions(status: string): FulfillmentQueueItem["allowedActions"] {
-  return NEXT_ACTION[status] ?? [];
+export function allowedFulfillmentActions(
+  status: string,
+  orderStatus?: string,
+): FulfillmentQueueItem["allowedActions"] {
+  if (orderStatus !== undefined && !isOrderEligibleForPreparation(orderStatus)) return [];
+  return (NEXT_ACTION[status] ?? []).filter(
+    (action) =>
+      orderStatus === undefined ||
+      (action === "START_PICKING"
+        ? orderStatus === "COMMITTED"
+        : action === "MARK_PACKED"
+          ? orderStatus === "FULFILLMENT_PENDING"
+          : true),
+  );
 }
 
 export function legalFulfillmentTransitions(): StateMap {
@@ -57,6 +70,7 @@ export async function listFulfillmentQueue(
       manualCustody: boolean;
       packingGoodsReady: boolean;
       canCompleteScheduledPacking: boolean;
+      orderStatus: string;
       sortAt: number;
       operational: OperationalOrderDetailView;
     }
@@ -252,6 +266,7 @@ export async function listFulfillmentQueue(
   const iso = (value: number | null) => (value === null ? null : new Date(value).toISOString());
   return rows.results.map((r) => ({
     orderId: r.order_id,
+    orderStatus: r.order_status,
     status: r.status,
     locationId: r.location_id,
     version: r.version,

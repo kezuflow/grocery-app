@@ -1,5 +1,16 @@
 # FreshMarkets Design
 
+## Orders workflow actions — owner approval 2026-10-05
+
+The Orders preview keeps current status visible and offers an Update order selector grouping eligible
+Preparation, Manual delivery and Cancellation actions. Compose existing Core reads and commands;
+do not permit arbitrary status assignment. Use the selected Order's authoritative location in Global
+scope, or the matching selected location, with the current capability and Core resource checks.
+Preparation and manual delivery keep their confirmations, input requirements and exact saved-request
+retries. Pending or unknown commands guard Order selection, scope and navigation; confirmed results
+refresh detail and allowed actions. Explain unavailable actions and retain links to dedicated screens.
+Courier observations and canonical refund success continue to own their respective outcomes.
+
 ## Customer refund claim action — owner approval 2026-10-05
 
 Place an available QR Ph Claim refund action in Customer Order options as a red button with white

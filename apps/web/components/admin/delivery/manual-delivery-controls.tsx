@@ -36,11 +36,17 @@ export function ManualDeliveryControls({
   onChanged,
   onInteractionState,
   initialAction = null,
+  disabled = false,
+  onDismiss,
+  onRejected,
 }: {
   item: AdminDeliveryOperationView;
   onChanged: () => void;
   onInteractionState?: (dirty: boolean, locked: boolean) => void;
   initialAction?: ManualDeliveryAction | null;
+  disabled?: boolean;
+  onDismiss?: () => void;
+  onRejected?: (message: string) => void;
 }) {
   const [action, setAction] = useState<ManualDeliveryAction | null>(initialAction);
   const [reviewing, setReviewing] = useState(false);
@@ -61,13 +67,14 @@ export function ManualDeliveryControls({
         initialAction !== "ASSIGN" ||
         personName !== "" ||
         phoneE164 !== "" ||
-        noteOrReason !== "");
+        noteOrReason !== "" ||
+        cost !== "");
     interaction.current?.(draft || reviewing, pending || saved !== null);
-  }, [action, initialAction, personName, phoneE164, noteOrReason, reviewing, pending, saved]);
+  }, [action, initialAction, personName, phoneE164, noteOrReason, cost, reviewing, pending, saved]);
   useEffect(() => () => interaction.current?.(false, false), []);
 
   async function submit() {
-    if (!action || pending) return;
+    if (!action || pending || disabled) return;
     setReviewing(false);
     const actualCostMinor = cost.trim() === "" ? null : Math.round(Number(cost) * 100);
     if (
@@ -117,6 +124,7 @@ export function ManualDeliveryControls({
       } else {
         setSaved(null);
         setMessage(result.error.message);
+        onRejected?.(result.error.message);
       }
     } catch {
       setMessage("The result is unknown. Retry the saved request to check the same action.");
@@ -126,7 +134,7 @@ export function ManualDeliveryControls({
   }
 
   return (
-    <div className="space-y-2 text-sm">
+    <div className="flex flex-col gap-2 text-sm">
       {manual ? (
         <div>
           <p>
@@ -161,6 +169,7 @@ export function ManualDeliveryControls({
               key={next}
               size="sm"
               variant="outline"
+              disabled={disabled}
               onClick={() => {
                 setAction(next);
                 setMessage(null);
@@ -174,9 +183,10 @@ export function ManualDeliveryControls({
         </div>
       ) : (
         <form
-          className="space-y-2"
+          className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
+            if (disabled) return;
             if (saved) void submit();
             else if (
               cost.trim() !== "" &&
@@ -192,7 +202,10 @@ export function ManualDeliveryControls({
             }
           }}
         >
-          <fieldset disabled={pending || saved !== null} className="space-y-2">
+          <fieldset
+            disabled={disabled || pending || saved !== null}
+            className="flex flex-col gap-2"
+          >
             <legend>{labels[action]}</legend>
             {action === "ASSIGN" ? (
               <>
@@ -241,7 +254,7 @@ export function ManualDeliveryControls({
               </label>
             ) : null}
           </fieldset>
-          <Button size="sm" type="submit" disabled={pending}>
+          <Button size="sm" type="submit" disabled={disabled || pending}>
             {pending
               ? "Saving…"
               : saved
@@ -249,7 +262,16 @@ export function ManualDeliveryControls({
                 : `Review ${labels[action].toLowerCase()}`}
           </Button>
           {!saved ? (
-            <Button size="sm" variant="ghost" type="button" onClick={() => setAction(null)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              disabled={disabled || pending}
+              onClick={() => {
+                setAction(null);
+                onDismiss?.();
+              }}
+            >
               Back
             </Button>
           ) : null}
@@ -276,7 +298,7 @@ export function ManualDeliveryControls({
                 Back
               </Button>
             </AlertDialogCancel>
-            <Button type="button" disabled={pending} onClick={() => void submit()}>
+            <Button type="button" disabled={disabled || pending} onClick={() => void submit()}>
               {pending ? "Saving…" : "Confirm"}
             </Button>
           </div>

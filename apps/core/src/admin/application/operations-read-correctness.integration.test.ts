@@ -121,6 +121,75 @@ async function runBatches(statements: D1PreparedStatement[]) {
 }
 
 describe("Admin operational read correctness", () => {
+  it.each(["CANCELLATION_REQUESTED", "CANCELED", "EXCEPTION", "EXPIRED"])(
+    "offers no preparation action for an Order in %s even before fulfillment cleanup",
+    async (orderStatus) => {
+      const prefix = `blocked-${crypto.randomUUID()}`;
+      const locationId = await seedLocation(prefix);
+      const cookie = await seedStaff(["fulfillment.read", "fulfillment.manage"], locationId);
+      const customerId = await seedCustomer(prefix);
+      await runBatches(
+        orderStatements({
+          id: prefix,
+          customerId,
+          locationId,
+          status: "NOT_STARTED",
+          committedAt: 1,
+        }),
+      );
+      await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
+        .bind(orderStatus, prefix)
+        .run();
+      const result = await core.listFulfillmentQueue({
+        requestId: crypto.randomUUID(),
+        headers: { cookie },
+        locationId,
+        orderId: prefix,
+        filter: "ALL",
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0].allowedActions).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["NOT_STARTED", "COMMITTED", ["START_PICKING"]],
+    ["NOT_STARTED", "FULFILLMENT_PENDING", []],
+    ["PACKING", "FULFILLMENT_PENDING", ["MARK_PACKED", "RECORD_SHORTAGE"]],
+    ["PACKING", "FULFILLMENT_READY", ["RECORD_SHORTAGE"]],
+  ] as const)(
+    "matches preparation command state guards for %s / %s",
+    async (fulfillmentStatus, orderStatus, actions) => {
+      const prefix = `eligible-${crypto.randomUUID()}`;
+      const locationId = await seedLocation(prefix);
+      const cookie = await seedStaff(["fulfillment.read", "fulfillment.manage"], locationId);
+      const customerId = await seedCustomer(prefix);
+      await runBatches(
+        orderStatements({
+          id: prefix,
+          customerId,
+          locationId,
+          status: fulfillmentStatus,
+          committedAt: 1,
+        }),
+      );
+      await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
+        .bind(orderStatus, prefix)
+        .run();
+      const result = await core.listFulfillmentQueue({
+        requestId: crypto.randomUUID(),
+        headers: { cookie },
+        locationId,
+        orderId: prefix,
+        filter: "ALL",
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.items[0].allowedActions).toEqual(actions);
+    },
+  );
+
   it("filters fulfillment before pagination and binds cursors to the complete query", async () => {
     const prefix = `filter-${crypto.randomUUID()}`;
     const locationId = await seedLocation(prefix);

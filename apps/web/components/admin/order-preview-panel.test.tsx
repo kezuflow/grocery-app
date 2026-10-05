@@ -5,6 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrderPreviewPanel } from "./order-preview-panel";
 
+vi.mock("../../app/admin/admin-context-provider", () => ({
+  useAdminContext: () => ({
+    state: { phase: "ready", selectedScope: { kind: "GLOBAL" }, context: { capabilities: [] } },
+  }),
+  useAdminScopeGuard: () => undefined,
+}));
+
 const detail: AdminOrderDetail = {
   orderId: "order-1",
   orderNumber: "FM-1001",

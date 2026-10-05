@@ -261,7 +261,7 @@ export async function listAdminFulfillmentQueue(
             ? row.canCompleteScheduledPacking
               ? ["COMPLETE_SCHEDULED_PACKING"]
               : []
-            : allowedFulfillmentActions(row.status),
+            : allowedFulfillmentActions(row.status, row.orderStatus),
         operational: row.operational,
       })),
       nextCursor:

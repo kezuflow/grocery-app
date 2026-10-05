@@ -3,6 +3,7 @@ import type { AppError, AppErrorCode } from "@freshmarkets/contracts";
 import { fulfillmentTransitions, transitionToResult } from "../../commerce/state-machines";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { fulfillmentStates } from "@freshmarkets/contracts";
+import { isOrderEligibleForPreparation } from "../../fulfillment/domain/order-preparation";
 import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
@@ -140,16 +141,7 @@ export async function advanceFulfillment(
     .prepare("SELECT status,version,fulfillment_mode FROM grocery_order WHERE id=?")
     .bind(command.orderId)
     .first<{ status: string; version: number; fulfillment_mode: "INSTANT" | "SCHEDULED" }>();
-  if (
-    !order ||
-    ![
-      "COMMITTED",
-      "FULFILLMENT_PENDING",
-      "FULFILLMENT_READY",
-      "OUT_FOR_DELIVERY",
-      "DELIVERED",
-    ].includes(order.status)
-  )
+  if (!order || !isOrderEligibleForPreparation(order.status))
     return failure(
       "ILLEGAL_TRANSITION",
       "Order is not eligible for preparation",
