@@ -22,6 +22,7 @@ import {
   type AdminPromotionSummary,
 } from "@freshmarkets/contracts";
 import { Button } from "@/components/admin/shadcn/button";
+import { PromotionArchiveButton } from "@/components/admin/promotion-archive-button";
 import { Input } from "@/components/admin/shadcn/input";
 import {
   DropdownMenu,
@@ -1094,45 +1095,71 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                 onClick={(event) => event.stopPropagation()}
                                 onKeyDown={(event) => event.stopPropagation()}
                               >
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      aria-label={`Open actions for ${promotion.code}`}
-                                      className="size-8 rounded-md"
-                                    >
-                                      <EllipsisVertical aria-hidden="true" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuGroup>
-                                      <DropdownMenuItem asChild>
-                                        <Link
-                                          href={`/admin/promotions/${promotion.promotionId}`}
-                                          prefetch={false}
-                                        >
-                                          <Eye aria-hidden="true" />
-                                          View details
-                                        </Link>
-                                      </DropdownMenuItem>
-                                      {canManage &&
-                                      (promotion.status === "DRAFT" ||
-                                        promotion.status === "INACTIVE") ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  {canManage ? (
+                                    <PromotionArchiveButton
+                                      promotion={promotion}
+                                      onApplied={(summary) => {
+                                        setPage((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                items: current.items.map((item) =>
+                                                  item.promotionId === summary.promotionId
+                                                    ? summary
+                                                    : item,
+                                                ),
+                                              }
+                                            : current,
+                                        );
+                                        setSelectedPromotion((current) =>
+                                          current?.promotionId === summary.promotionId
+                                            ? summary
+                                            : current,
+                                        );
+                                      }}
+                                    />
+                                  ) : null}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={`Open actions for ${promotion.code}`}
+                                        className="size-8 rounded-md"
+                                      >
+                                        <EllipsisVertical aria-hidden="true" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuGroup>
                                         <DropdownMenuItem asChild>
                                           <Link
                                             href={`/admin/promotions/${promotion.promotionId}`}
                                             prefetch={false}
                                           >
-                                            <Pencil aria-hidden="true" />
-                                            Edit details
+                                            <Eye aria-hidden="true" />
+                                            View details
                                           </Link>
                                         </DropdownMenuItem>
-                                      ) : null}
-                                    </DropdownMenuGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                        {canManage &&
+                                        (promotion.status === "DRAFT" ||
+                                          promotion.status === "INACTIVE") ? (
+                                          <DropdownMenuItem asChild>
+                                            <Link
+                                              href={`/admin/promotions/${promotion.promotionId}`}
+                                              prefetch={false}
+                                            >
+                                              <Pencil aria-hidden="true" />
+                                              Edit details
+                                            </Link>
+                                          </DropdownMenuItem>
+                                        ) : null}
+                                      </DropdownMenuGroup>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
