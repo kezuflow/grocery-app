@@ -900,6 +900,37 @@ describe("AddressEditor", () => {
     act(() => root.unmount());
   });
 
+  it.each(["  Unit 4  \nBlue gate \n", ""])(
+    "preserves delivery-instruction whitespace while typing and saving %j",
+    async (instructions) => {
+      let updateBody: Record<string, unknown> | undefined;
+      const fetchImpl = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+        updateBody = JSON.parse(String(init?.body));
+        return Promise.resolve(
+          response({ ok: true, value: { id: savedAddress.id }, requestId: "update" }),
+        );
+      }) as unknown as typeof fetch;
+      const { container, root } = mount({ fetchImpl, initialAddress: savedAddress });
+      const control = input(container, "Delivery instructions (optional)");
+      change(control, "");
+      for (const character of instructions) {
+        const next = control.value + character;
+        change(control, next);
+        expect(control.value).toBe(next);
+      }
+      const update = Array.from(container.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Update confirmed address"),
+      );
+      if (!update) throw new Error("Missing update action");
+      click(update);
+      await flush();
+      expect(updateBody).toMatchObject({
+        instructions: { deliveryInstructions: instructions || null },
+      });
+      act(() => root.unmount());
+    },
+  );
+
   it("does not clear an existing note that the address read model did not load", async () => {
     let updateBody: Record<string, unknown> | undefined;
     const fetchImpl = vi.fn((_url: string | URL | Request, init?: RequestInit) => {

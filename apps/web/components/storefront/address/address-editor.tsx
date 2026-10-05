@@ -80,11 +80,6 @@ export type AddressEditorProps = Readonly<{
 
 export type ServiceabilitySelection = Readonly<ConfirmedBrowsingLocation>;
 
-function nullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
 function normalizePhilippineMobile(value: string): string | null {
   const compact = value.trim().replace(/[\s().-]/g, "");
   const normalized = compact.startsWith("09")
@@ -1450,7 +1445,7 @@ export function AddressEditor({
                 maxLength={1000}
                 value={instructions.deliveryInstructions ?? ""}
                 onChange={(event) => {
-                  const value = nullable(event.currentTarget.value);
+                  const value = event.currentTarget.value || null;
                   setInstructions({ deliveryInstructions: value });
                 }}
               />
