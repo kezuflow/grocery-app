@@ -212,15 +212,22 @@ export async function updateAdminPromotion(
   const db = deps.db;
   const current = await db
     .prepare(
-      "SELECT id,code,status,version,benefit_type,discount_minor,percent FROM promotion WHERE id=?",
+      "SELECT id,code,status,version,benefit_type,discount_minor,percent,EXISTS(SELECT 1 FROM promotion_product_target WHERE promotion_id=promotion.id) AS hasProductTargets FROM promotion WHERE id=?",
     )
     .bind(request.promotionId)
-    .first<PromotionRow>();
+    .first<PromotionRow & { hasProductTargets: number }>();
   if (!current) return failure("NOT_FOUND", "Promotion not found", request.requestId);
   if (current.version !== request.expectedVersion)
     return failure("STALE_VERSION", "Promotion changed; reload before saving", request.requestId);
-  if (current.status !== "DRAFT")
-    return failure("VALIDATION_FAILED", "Only draft definitions can change", request.requestId);
+  if (
+    current.status !== "DRAFT" &&
+    (current.status !== "INACTIVE" || current.hasProductTargets || request.productTargets?.length)
+  )
+    return failure(
+      "VALIDATION_FAILED",
+      "Deactivate promotion codes before editing; product sale definitions require a draft",
+      request.requestId,
+    );
   const discount = request.discountMinor ?? current.discount_minor;
   const percent = request.percent ?? current.percent;
   if (
@@ -245,7 +252,7 @@ export async function updateAdminPromotion(
     [
       db
         .prepare(
-          "UPDATE promotion SET name=?,description=?,discount_minor=?,percent=?,minimum_minor=?,starts_at=?,ends_at=?,maximum_discount_minor=CASE WHEN ? THEN ? ELSE maximum_discount_minor END,global_usage_limit=CASE WHEN ? THEN ? ELSE global_usage_limit END,per_customer_usage_limit=CASE WHEN ? THEN ? ELSE per_customer_usage_limit END,automatic=COALESCE(?,automatic),updated_at=?,version=version+1 WHERE id=? AND version=? AND status='DRAFT'",
+          "UPDATE promotion SET name=?,description=?,discount_minor=?,percent=?,minimum_minor=?,starts_at=?,ends_at=?,maximum_discount_minor=CASE WHEN ? THEN ? ELSE maximum_discount_minor END,global_usage_limit=CASE WHEN ? THEN ? ELSE global_usage_limit END,per_customer_usage_limit=CASE WHEN ? THEN ? ELSE per_customer_usage_limit END,automatic=COALESCE(?,automatic),updated_at=?,version=version+1 WHERE id=? AND version=? AND status=? AND (status='DRAFT' OR NOT EXISTS(SELECT 1 FROM promotion_product_target WHERE promotion_id=promotion.id))",
         )
         .bind(
           request.name,
@@ -271,9 +278,10 @@ export async function updateAdminPromotion(
           now,
           current.id,
           request.expectedVersion,
+          current.status,
         ),
       required(db),
-      ...(request.productTargets === undefined
+      ...(current.status !== "DRAFT" || request.productTargets === undefined
         ? []
         : replaceProductSaleTargets(db, current.id, request.productTargets)),
       auditEventStatement(db, {

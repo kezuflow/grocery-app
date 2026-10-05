@@ -80,70 +80,77 @@ it("authors a customer audience, preserves original replay after activation and 
   ).toMatchObject({ ok: true, value: { eligible: true, discountMinor: 500 } });
 });
 for (const effect of ["promotion", "rule-delete", "rule-insert", "audit", "receipt"])
-  it(`rolls back every audience effect when ${effect} is suppressed`, async () => {
-    const { meta, promotionId } = await fixture();
-    expect(
-      await exports.default.setAdminPromotionAudience({
-        ...meta,
-        promotionId,
-        expectedVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-        rules: [{ type: "FIRST_ORDER", parameters: {} }],
-      }),
-    ).toMatchObject({ ok: true });
-    const before = (
-      await env.DB.prepare("SELECT * FROM promotion_rule WHERE promotion_id=?")
-        .bind(promotionId)
-        .all()
-    ).results;
-    const event =
-      effect === "promotion"
-        ? "UPDATE ON promotion"
-        : effect === "rule-delete"
-          ? "DELETE ON promotion_rule"
-          : effect === "rule-insert"
-            ? "INSERT ON promotion_rule"
-            : effect === "audit"
-              ? "INSERT ON audit_event WHEN NEW.action='PROMOTION.AUDIENCE_UPDATED'"
-              : "UPDATE ON idempotency_records WHEN NEW.scope='admin.promotions.audience' AND NEW.status='SUCCEEDED'";
-    await env.DB.exec(
-      `CREATE TRIGGER suppress_audience_effect BEFORE ${event} BEGIN SELECT RAISE(IGNORE); END;`,
-    );
-    const key = crypto.randomUUID();
-    try {
+  for (const editableStatus of ["DRAFT", "INACTIVE"])
+    it(`rolls back every ${editableStatus} audience effect when ${effect} is suppressed`, async () => {
+      const { meta, promotionId } = await fixture();
       expect(
         await exports.default.setAdminPromotionAudience({
           ...meta,
           promotionId,
-          expectedVersion: 2,
-          idempotencyKey: key,
-          rules: [{ type: "NEW_CUSTOMER", parameters: {} }],
+          expectedVersion: 1,
+          idempotencyKey: crypto.randomUUID(),
+          rules: [{ type: "FIRST_ORDER", parameters: {} }],
         }),
-      ).toMatchObject({ ok: false });
-    } finally {
-      await env.DB.exec("DROP TRIGGER suppress_audience_effect;");
-    }
-    expect(
-      (
+      ).toMatchObject({ ok: true });
+      if (editableStatus === "INACTIVE")
+        await env.DB.prepare("UPDATE promotion SET status='INACTIVE' WHERE id=?")
+          .bind(promotionId)
+          .run();
+      const before = (
         await env.DB.prepare("SELECT * FROM promotion_rule WHERE promotion_id=?")
           .bind(promotionId)
           .all()
-      ).results,
-    ).toEqual(before);
-    expect(
-      await env.DB.prepare("SELECT version FROM promotion WHERE id=?").bind(promotionId).first(),
-    ).toEqual({ version: 2 });
-    expect(
-      await env.DB.prepare(
-        "SELECT idempotency_key FROM idempotency_records WHERE idempotency_key=?",
-      )
-        .bind(key)
-        .first(),
-    ).toBeNull();
-    expect(
-      await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?").bind(key).first(),
-    ).toBeNull();
-  });
+      ).results;
+      const event =
+        effect === "promotion"
+          ? "UPDATE ON promotion"
+          : effect === "rule-delete"
+            ? "DELETE ON promotion_rule"
+            : effect === "rule-insert"
+              ? "INSERT ON promotion_rule"
+              : effect === "audit"
+                ? "INSERT ON audit_event WHEN NEW.action='PROMOTION.AUDIENCE_UPDATED'"
+                : "UPDATE ON idempotency_records WHEN NEW.scope='admin.promotions.audience' AND NEW.status='SUCCEEDED'";
+      await env.DB.exec(
+        `CREATE TRIGGER suppress_audience_effect BEFORE ${event} BEGIN SELECT RAISE(IGNORE); END;`,
+      );
+      const key = crypto.randomUUID();
+      try {
+        expect(
+          await exports.default.setAdminPromotionAudience({
+            ...meta,
+            promotionId,
+            expectedVersion: 2,
+            idempotencyKey: key,
+            rules: [{ type: "NEW_CUSTOMER", parameters: {} }],
+          }),
+        ).toMatchObject({ ok: false });
+      } finally {
+        await env.DB.exec("DROP TRIGGER suppress_audience_effect;");
+      }
+      expect(
+        (
+          await env.DB.prepare("SELECT * FROM promotion_rule WHERE promotion_id=?")
+            .bind(promotionId)
+            .all()
+        ).results,
+      ).toEqual(before);
+      expect(
+        await env.DB.prepare("SELECT version FROM promotion WHERE id=?").bind(promotionId).first(),
+      ).toEqual({ version: 2 });
+      expect(
+        await env.DB.prepare(
+          "SELECT idempotency_key FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(key)
+          .first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT id FROM audit_event WHERE idempotency_key=?")
+          .bind(key)
+          .first(),
+      ).toBeNull();
+    });
 for (const change of ["customer", "segment", "authority", "activation"])
   it(`rejects a raced ${change} change without a partial audience`, async () => {
     const { manager, meta, promotionId, customerId } = await fixture();

@@ -42,6 +42,100 @@ const sale = {
   ],
 } as const;
 
+for (const viewport of [
+  { width: 1440, height: 1000 },
+  { width: 390, height: 844 },
+]) {
+  test(`a promotion code can be deactivated, edited and reactivated at ${viewport.width}px`, async ({
+    adminPage: page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const createdResponse = await page.request.post("/api/admin/promotions", {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: {
+        code: `EDIT_${crypto.randomUUID().replaceAll("-", "").toUpperCase()}`,
+        name: "Editable code",
+        description: "",
+        benefitType: "ORDER_FIXED_DISCOUNT",
+        discountMinor: 1000,
+        minimumMinor: 0,
+        startsAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    });
+    const created = await createdResponse.json();
+    expect(created).toMatchObject({ ok: true, value: { status: "DRAFT" } });
+    const promotionId = created.value.promotionId;
+    const activated = await page.request.post(`/api/admin/promotions/${promotionId}/status`, {
+      headers: { "idempotency-key": crypto.randomUUID() },
+      data: { action: "ACTIVATE", expectedVersion: created.value.version },
+    });
+    expect(await activated.json()).toMatchObject({ ok: true, value: { status: "ACTIVE" } });
+    await page.goto(`/admin/promotions/${promotionId}`);
+    await expect(page.getByText("Deactivate to edit", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Campaign name", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Deactivate", exact: true }).click();
+    await expect(page.getByLabel("Campaign name", { exact: true })).toBeVisible();
+    await page.getByLabel("Campaign name", { exact: true }).fill("Edited inactive code");
+    await page.getByLabel("Campaign discount", { exact: true }).fill("12.50");
+    // Lose the response after the real Core write; the normal editor retries the original identity.
+    const writes: Array<{ body: string | null; key: string | undefined }> = [];
+    await page.route(`**/api/admin/promotions/${promotionId}`, async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      writes.push({
+        body: route.request().postData(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      const response = await route.fetch();
+      if (writes.length === 1) await route.abort("failed");
+      else await route.fulfill({ response });
+    });
+    await page.getByRole("button", { name: "Save campaign", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edited inactive code", exact: true }),
+    ).toBeVisible();
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual(writes[0]);
+    const savedResponse = await page.request.get(`/api/admin/promotions/${promotionId}`);
+    const saved = await savedResponse.json();
+    expect(saved).toMatchObject({
+      ok: true,
+      value: { status: "INACTIVE", version: 4, discountMinor: 1250, code: created.value.code },
+    });
+    await page.reload();
+    await expect(page.getByLabel("Campaign name", { exact: true })).toHaveValue(
+      "Edited inactive code",
+    );
+    await page.getByRole("button", { name: "Add condition", exact: true }).click();
+    await page.getByRole("button", { name: "Save audience", exact: true }).click();
+    await expect(page.getByText("Audience saved.", { exact: true }).first()).toBeVisible();
+    const audienceResponse = await page.request.get(
+      `/api/admin/promotions/${promotionId}/audience`,
+    );
+    expect(await audienceResponse.json()).toMatchObject({
+      ok: true,
+      value: { version: 5, rules: [{ type: "FIRST_ORDER", parameters: {} }] },
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `../../.wrangler/promotion-edit-${viewport.width}.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page.getByRole("button", { name: "Activate", exact: true }).click();
+    await expect(page.getByText("Deactivate to edit", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Campaign name", { exact: true })).toHaveCount(0);
+    const finalResponse = await page.request.get(`/api/admin/promotions/${promotionId}`);
+    expect(await finalResponse.json()).toMatchObject({
+      ok: true,
+      value: { status: "ACTIVE", version: 6, name: "Edited inactive code", discountMinor: 1250 },
+    });
+  });
+}
+
 function rpc(value: unknown) {
   return { ok: true, requestId: "discount-detail-fixture", value };
 }

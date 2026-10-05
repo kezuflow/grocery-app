@@ -201,7 +201,7 @@ export function PromotionDefinitionForm({
           onEnabledChange={setProductSale}
           value={productTargets}
           onChange={setProductTargets}
-          disabled={disabled}
+          disabled={disabled || promotion.status !== "DRAFT"}
         />
       ) : null}
       {error ? (

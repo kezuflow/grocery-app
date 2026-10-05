@@ -26,6 +26,7 @@ import { Input } from "@/components/admin/shadcn/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/admin/shadcn/dropdown-menu";
@@ -1106,26 +1107,30 @@ function PromotionsWorkspace({ canManage }: { canManage: boolean }) {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/admin/promotions/${promotion.promotionId}`}
-                                        prefetch={false}
-                                      >
-                                        <Eye aria-hidden="true" />
-                                        View details
-                                      </Link>
-                                    </DropdownMenuItem>
-                                    {canManage ? (
+                                    <DropdownMenuGroup>
                                       <DropdownMenuItem asChild>
                                         <Link
                                           href={`/admin/promotions/${promotion.promotionId}`}
                                           prefetch={false}
                                         >
-                                          <Pencil aria-hidden="true" />
-                                          Edit details
+                                          <Eye aria-hidden="true" />
+                                          View details
                                         </Link>
                                       </DropdownMenuItem>
-                                    ) : null}
+                                      {canManage &&
+                                      (promotion.status === "DRAFT" ||
+                                        promotion.status === "INACTIVE") ? (
+                                        <DropdownMenuItem asChild>
+                                          <Link
+                                            href={`/admin/promotions/${promotion.promotionId}`}
+                                            prefetch={false}
+                                          >
+                                            <Pencil aria-hidden="true" />
+                                            Edit details
+                                          </Link>
+                                        </DropdownMenuItem>
+                                      ) : null}
+                                    </DropdownMenuGroup>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </TableCell>

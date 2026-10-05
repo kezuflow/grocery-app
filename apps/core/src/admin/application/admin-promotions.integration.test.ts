@@ -5,6 +5,146 @@ import type { CoreServiceBinding } from "@freshmarkets/contracts";
 
 const core = exports.default as unknown as CoreServiceBinding;
 
+it("edits a deactivated code and audience, preserving grants and original receipts through reactivation", async () => {
+  const manager = await seedManager();
+  const meta = { headers: { cookie: manager.cookie }, requestId: crypto.randomUUID() };
+  const definition = {
+    name: "Before edit",
+    description: "",
+    discountMinor: 500,
+    minimumMinor: 0,
+    startsAt: new Date(Date.now() - 1000).toISOString(),
+  };
+  const created = await core.createAdminPromotion({
+    ...meta,
+    ...definition,
+    code: `EDIT_${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    benefitType: "ORDER_FIXED_DISCOUNT",
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (!created.ok) throw new Error(created.error.message);
+  const promotionId = created.value.promotionId;
+  const status = async (action: "ACTIVATE" | "DEACTIVATE" | "ARCHIVE", expectedVersion: number) => {
+    const result = await core.changeAdminPromotionStatus({
+      ...meta,
+      promotionId,
+      action,
+      expectedVersion,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  };
+  await status("ACTIVATE", 1);
+  const customerId = await seedCustomer();
+  const grant = await core.grantAdminPromotion({
+    ...meta,
+    promotionId,
+    customerId,
+    maxRedemptions: 2,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(grant.ok).toBe(true);
+  const update = {
+    ...meta,
+    ...definition,
+    promotionId,
+    name: "Edited code",
+    discountMinor: 750,
+    expectedVersion: 2,
+    idempotencyKey: crypto.randomUUID(),
+  };
+  expect(await core.updateAdminPromotion(update)).toMatchObject({
+    ok: false,
+    error: { code: "VALIDATION_FAILED" },
+  });
+  expect(
+    await core.setAdminPromotionAudience({
+      ...meta,
+      promotionId,
+      expectedVersion: 2,
+      rules: [],
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+  await status("DEACTIVATE", 2);
+  const savedRequest = {
+    ...update,
+    expectedVersion: 3,
+    idempotencyKey: crypto.randomUUID(),
+    productTargets: [],
+  };
+  const saved = await core.updateAdminPromotion(savedRequest);
+  expect(saved).toMatchObject({
+    ok: true,
+    value: {
+      name: "Edited code",
+      discountMinor: 750,
+      status: "INACTIVE",
+      code: created.value.code,
+      version: 4,
+    },
+  });
+  expect(
+    await core.updateAdminPromotion({
+      ...savedRequest,
+      expectedVersion: 3,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+  expect(
+    await core.updateAdminPromotion({
+      ...savedRequest,
+      expectedVersion: 4,
+      idempotencyKey: crypto.randomUUID(),
+      productTargets: [
+        { skuId: "sku-abiu-1pc", locationId: "location-cebu-central", quantityLimit: null },
+      ],
+    }),
+  ).toMatchObject({ ok: false });
+  expect(
+    await core.setAdminPromotionAudience({
+      ...meta,
+      promotionId,
+      expectedVersion: 4,
+      rules: [{ type: "FIRST_ORDER", parameters: {} }],
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: true, value: { version: 5 } });
+  await status("ACTIVATE", 5);
+  expect(await core.updateAdminPromotion(savedRequest)).toEqual(saved);
+  expect(
+    await core.updateAdminPromotion({ ...savedRequest, name: "Different intent" }),
+  ).toMatchObject({ ok: false, error: { code: "IDEMPOTENCY_CONFLICT" } });
+  expect(await core.listPromotionGrants({ ...meta, promotionId })).toMatchObject({
+    ok: true,
+    value: {
+      items: [
+        expect.objectContaining({
+          grantId: grant.ok ? grant.value.grantId : "",
+          maxRedemptions: 2,
+        }),
+      ],
+    },
+  });
+  expect(
+    await env.DB.prepare(
+      "SELECT COUNT(*) count FROM audit_event WHERE aggregate_id=? AND action='PROMOTION.UPDATED'",
+    )
+      .bind(promotionId)
+      .first(),
+  ).toEqual({ count: 1 });
+  await status("DEACTIVATE", 6);
+  await status("ARCHIVE", 7);
+  expect(
+    await core.updateAdminPromotion({
+      ...savedRequest,
+      expectedVersion: 8,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ ok: false });
+});
+
 let counter = 0;
 
 async function signUp(): Promise<{ cookie: string; userId: string }> {
@@ -212,7 +352,7 @@ describe("promotion administration", () => {
     }
   });
 
-  it("updates only drafts with version guards and audits the change", async () => {
+  it("updates drafts with version guards and audits the change", async () => {
     const manager = await seedManager();
     const created = await core.createAdminPromotion({
       requestId: crypto.randomUUID(),
@@ -260,8 +400,10 @@ describe("promotion administration", () => {
     expect(updated.value).toMatchObject({ discountMinor: 4000, version: 2 });
 
     const auditRow = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'PROMOTION.UPDATED'",
-    ).first<{ count: number }>();
+      "SELECT COUNT(*) AS count FROM audit_event WHERE action = 'PROMOTION.UPDATED' AND aggregate_id=?",
+    )
+      .bind(created.value.promotionId)
+      .first<{ count: number }>();
     expect(auditRow?.count ?? 0).toBe(1);
   });
 

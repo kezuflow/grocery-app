@@ -78,12 +78,14 @@ export function PromotionAudienceEditor({
   status,
   version,
   canManage,
+  allowInactive = false,
   onSaved,
 }: {
   promotionId: string;
   status: string;
   version: number;
   canManage: boolean;
+  allowInactive?: boolean;
   onSaved: (version: number) => void;
 }) {
   const [view, setView] = useState<AdminPromotionAudienceView | null>(null);
@@ -94,7 +96,7 @@ export function PromotionAudienceEditor({
   const [searching, setSearching] = useState(false);
   const command = useCatalogCommand(adminPromotionAudienceSchema);
   const frozen = command.pending || command.uncertain;
-  const editable = canManage && status === "DRAFT";
+  const editable = canManage && (status === "DRAFT" || (allowInactive && status === "INACTIVE"));
   const url = `/api/admin/promotions/${encodeURIComponent(promotionId)}/audience`;
   useEffect(() => {
     const controller = new AbortController();

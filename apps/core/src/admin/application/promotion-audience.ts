@@ -149,21 +149,27 @@ export async function setAdminPromotionAudience(
   if (replay) return replay;
   const db = deps.db;
   const current = await db
-    .prepare("SELECT version,status FROM promotion WHERE id=?")
+    .prepare(
+      "SELECT version,status,EXISTS(SELECT 1 FROM promotion_product_target WHERE promotion_id=promotion.id) AS hasProductTargets FROM promotion WHERE id=?",
+    )
     .bind(request.promotionId)
-    .first<{ version: number; status: string }>();
+    .first<{ version: number; status: string; hasProductTargets: number }>();
   if (!current) return failure("NOT_FOUND", "Promotion not found", request.requestId);
   if (current.version !== request.expectedVersion)
     return failure("STALE_VERSION", "Campaign changed; reload before saving", request.requestId);
-  if (current.status !== "DRAFT")
-    return failure("ILLEGAL_TRANSITION", "Only draft audiences can change", request.requestId);
+  if (current.status !== "DRAFT" && (current.status !== "INACTIVE" || current.hasProductTargets))
+    return failure(
+      "ILLEGAL_TRANSITION",
+      "Deactivate promotion codes before editing their audience; product sale audiences require a draft",
+      request.requestId,
+    );
   const now = Date.now();
   const effects: D1PreparedStatement[] = [
     db
       .prepare(
-        "UPDATE promotion SET version=version+1,updated_at=? WHERE id=? AND version=? AND status='DRAFT'",
+        "UPDATE promotion SET version=version+1,updated_at=? WHERE id=? AND version=? AND status=? AND (status='DRAFT' OR NOT EXISTS(SELECT 1 FROM promotion_product_target WHERE promotion_id=promotion.id))",
       )
-      .bind(now, request.promotionId, request.expectedVersion),
+      .bind(now, request.promotionId, request.expectedVersion, current.status),
     required(db),
     db.prepare("DELETE FROM promotion_rule WHERE promotion_id=?").bind(request.promotionId),
     db

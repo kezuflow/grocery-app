@@ -20,7 +20,7 @@ async function GETHandler(
   return adminJson(result);
 }
 
-/** Draft-definition update. Transport only; Core owns the lifecycle rules. */
+/** Campaign-definition update. Transport only; Core owns the lifecycle rules. */
 async function PATCHHandler(
   request: Request,
   context: { params: Promise<{ "promotion-id": string }> },

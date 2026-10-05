@@ -35,6 +35,8 @@ Bulk weight and actual counted Small/Medium/Large pieces or packs describe the s
 
 ## Catalog, prices and promotions
 
+Owner correction, 2026-10-06: Promotion Codes follow deactivate -> edit -> reactivate after their first activation. Authorized Global managers may change campaign details and audience while INACTIVE; ACTIVE and ARCHIVED definitions remain locked. Code identity and benefit type stay fixed, usage/grants/redemptions and immutable paid discounts remain preserved, and saving never reactivates the code automatically. Inactive code edits cannot convert it into a selected-product sale; those sales retain draft-only definition/audience editing and existing allowance safeguards.
+
 promotion and inventory-sale activation, deactivation and archiving do not require an operator-entered reason. Normal lifecycle permissions, current-version checks and automatic actor/status audit remain required.
 
 Global owns Product/category identity, selling-option definition, media and lifecycle. Listed location prices are exact and fixed, without Global/Market fallback or post-packing repricing. Weight variants share gram stock; count goods have exact piece/pack contents. An authorized location-scoped `prices.manage` operator edits the displayed selling-option price inline in that location's Product preview. Global preview provides Product rename/lifecycle, selling-option lifecycle and multiple ordered categories; each category selection saves immediately, the first is the compatibility primary category, and all participate in browsing. Location previews do not expose those Global controls. Current versions, audit, immutable history and atomic replacement remain required.

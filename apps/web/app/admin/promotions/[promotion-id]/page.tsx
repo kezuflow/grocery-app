@@ -342,6 +342,9 @@ function PromotionDetailWorkspace({
   }
 
   const { promotion, grants, redemptions } = state;
+  const editable =
+    promotion.status === "DRAFT" ||
+    (promotion.status === "INACTIVE" && !promotion.productTargets?.length);
 
   return (
     <div className="w-full space-y-6">
@@ -399,11 +402,29 @@ function PromotionDetailWorkspace({
         title="Campaign details"
         description={
           canManage
-            ? "Draft details can be edited before activation."
+            ? promotion.status === "DRAFT"
+              ? "Draft details can be edited before activation."
+              : promotion.status === "INACTIVE" && editable
+                ? "Save changes while inactive, then reactivate when ready."
+                : promotion.status === "ARCHIVED"
+                  ? "Archived campaign details are read-only."
+                  : promotion.productTargets?.length
+                    ? "Product sale details can be edited only while draft."
+                    : "Deactivate promotion codes before editing their details."
             : "Recorded campaign definition and limits."
         }
       >
-        {canManage && promotion.status === "DRAFT" ? (
+        {canManage && promotion.status === "ACTIVE" && !promotion.productTargets?.length ? (
+          <Alert>
+            <AlertTitle>Deactivate to edit</AlertTitle>
+            <AlertDescription>
+              Deactivate this promotion in Lifecycle below to edit its campaign details and
+              audience, then reactivate it when ready. Existing usage history and paid discounts are
+              preserved.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {canManage && editable ? (
           <PromotionDefinitionForm
             key={promotion.version}
             promotion={promotion}
@@ -471,6 +492,7 @@ function PromotionDetailWorkspace({
           status={promotion.status}
           version={promotion.version}
           canManage={canManage}
+          allowInactive={!promotion.productTargets?.length}
           onSaved={(version) => {
             setNotice("Audience saved.");
             setState((current) =>
