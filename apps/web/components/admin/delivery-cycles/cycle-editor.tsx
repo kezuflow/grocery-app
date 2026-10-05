@@ -20,7 +20,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/admin/shadcn/alert-dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldSet,
+  FieldLegend,
+} from "@/components/admin/shadcn/field";
 import { Input } from "@/components/admin/shadcn/input";
 import { Label } from "@/components/admin/shadcn/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
@@ -83,10 +89,10 @@ function DateButton({
           variant="outline"
           aria-label={`${label} date`}
           aria-invalid={invalid}
-          className="w-full justify-start font-normal"
+          className="w-full min-w-0 justify-start font-normal"
         >
-          <CalendarDays aria-hidden className="size-4 text-muted-foreground" />
-          {displayDate(value)}
+          <CalendarDays aria-hidden data-icon="inline-start" />
+          <span className="truncate">{displayDate(value)}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">
@@ -116,34 +122,42 @@ function DateTimeRow({
   const fields = instantToBusinessFields(value, timezone);
   const update = (next: Partial<typeof fields>) =>
     onChange(businessFieldsToInstant({ ...fields, ...next }, timezone));
-  const errorId = `${label.replaceAll(" ", "-").toLowerCase()}-error`;
+  const fieldId = label.replaceAll(" ", "-").toLowerCase();
+  const errorId = `${fieldId}-error`;
   return (
-    <div className="grid gap-2 py-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(10rem,1.25fr)_7.5rem] sm:items-start">
-      <Label className="pt-2 text-sm">{label}</Label>
-      <DateButton
-        label={label}
-        value={fields.date}
-        invalid={Boolean(error)}
-        onChange={(date) => update({ date })}
-      />
-      <Input
-        aria-label={`${label} time`}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? errorId : undefined}
-        type="time"
-        value={fields.time}
-        onChange={(event) => update({ time: event.target.value })}
-      />
+    <FieldSet className="min-w-0 gap-2 py-2">
+      <FieldLegend variant="label">{label}</FieldLegend>
+      <FieldGroup className="grid min-w-0 grid-cols-2 gap-2">
+        <Field className="min-w-0">
+          <DateButton
+            label={label}
+            value={fields.date}
+            invalid={Boolean(error)}
+            onChange={(date) => update({ date })}
+          />
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-time`} className="sr-only">
+            {label} time
+          </FieldLabel>
+          <Input
+            id={`${fieldId}-time`}
+            aria-label={`${label} time`}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            type="time"
+            className="min-w-0"
+            value={fields.time}
+            onChange={(event) => update({ time: event.target.value })}
+          />
+        </Field>
+      </FieldGroup>
       {error ? (
-        <p
-          id={errorId}
-          role="alert"
-          className="text-xs text-destructive sm:col-start-2 sm:col-span-2"
-        >
+        <p id={errorId} role="alert" className="text-xs text-destructive">
           {error}
         </p>
       ) : null}
-    </div>
+    </FieldSet>
   );
 }
 
@@ -254,6 +268,21 @@ export function CycleEditor({
   const delivery = draft.windows[0];
   const deliveryStart = instantToBusinessFields(delivery?.startsAt ?? "", timezone);
   const deliveryEnd = instantToBusinessFields(delivery?.endsAt ?? "", timezone);
+  const deliveryRange = `${displayDate(deliveryStart.date)} · ${deliveryStart.time}–${
+    deliveryEnd.date !== deliveryStart.date ? `${displayDate(deliveryEnd.date)} · ` : ""
+  }${deliveryEnd.time}`;
+  const setDeliveryBoundary = (field: "startsAt" | "endsAt", value: string) =>
+    onChange({
+      ...draft,
+      windows: [
+        {
+          ...delivery,
+          name: delivery?.name ?? "Scheduled delivery",
+          startsAt: field === "startsAt" ? value : (delivery?.startsAt ?? ""),
+          endsAt: field === "endsAt" ? value : (delivery?.endsAt ?? ""),
+        },
+      ],
+    });
   const setDeliveryTime = (field: "startsAt" | "endsAt", time: string) => {
     const startTime = field === "startsAt" ? time : deliveryStart.time;
     const endTime = field === "endsAt" ? time : deliveryEnd.time;
@@ -288,7 +317,10 @@ export function CycleEditor({
       if (blocked) return;
     }
     if (step === 2) {
-      const blocked = scheduleFields.some(([field]) => errors[field]);
+      const blocked =
+        scheduleFields.some(([field]) => errors[field]) ||
+        errors.deliveryStartsAt ||
+        errors.deliveryEndsAt;
       if (blocked) return;
     }
     setStep((current) => Math.min(3, current + 1));
@@ -508,13 +540,26 @@ export function CycleEditor({
                   />
                 ))}
               </div>
-              <div className="rounded-md bg-muted p-3 text-sm">
-                <span className="text-muted-foreground">Customer delivery</span>
-                <br />
-                {delivery?.startsAt && delivery.endsAt
-                  ? `${displayDate(deliveryStart.date)} · ${deliveryStart.time}–${deliveryEnd.time}`
-                  : "Choose the delivery date and range in Step 1."}
-              </div>
+              <FieldSet>
+                <FieldLegend>Customer delivery</FieldLegend>
+                <p className="text-sm text-muted-foreground">
+                  When customers should receive their orders. Set the start and end independently.
+                </p>
+                <DateTimeRow
+                  label="Customer delivery starts"
+                  value={delivery?.startsAt ?? ""}
+                  timezone={timezone}
+                  error={reviewed ? errors.deliveryStartsAt : undefined}
+                  onChange={(value) => setDeliveryBoundary("startsAt", value)}
+                />
+                <DateTimeRow
+                  label="Customer delivery ends"
+                  value={delivery?.endsAt ?? ""}
+                  timezone={timezone}
+                  error={reviewed ? errors.deliveryEndsAt : undefined}
+                  onChange={(value) => setDeliveryBoundary("endsAt", value)}
+                />
+              </FieldSet>
             </div>
           ) : null}
           {step === 3 ? (
@@ -529,9 +574,7 @@ export function CycleEditor({
               </div>
               <section>
                 <h4 className="text-xs font-semibold text-muted-foreground">Customer delivery</h4>
-                <p className="mt-2 font-semibold">
-                  {displayDate(deliveryStart.date)} · {deliveryStart.time}–{deliveryEnd.time}
-                </p>
+                <p className="mt-2 font-semibold">{deliveryRange}</p>
               </section>
               <section>
                 <h4 className="text-xs font-semibold text-muted-foreground">Schedule</h4>

@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Cycle schedule editor correction — owner report 2026-10-05
+
+Step 2 places editable Customer delivery starts and Customer delivery ends date/time controls beside the operational milestones. Each endpoint changes independently in the business timezone and retains chronology validation before Review. Review displays the end date when the range crosses days. Date/time rows use stock FieldSet/Field composition with flexible date/time columns beneath the label, fitting the narrow editor without hiding time controls in horizontal overflow. Step 1 delivery controls remain available; pending and saved-request protections retain their existing ownership.
+
 ## Late Scheduled dispatch — owner approval 2026-10-05
 
 The existing Admin dispatch controls show a stock destructive **Late** badge and explain that the Scheduled delivery window passed. Core still supplies eligible Lalamove and Manual actions. For overdue dispatch or a future pickup beyond the current window, require a bounded Reason for late delivery field and include its trimmed value in the confirmation. Explain that the original customer promise and charge remain unchanged. Unknown results lock fields and preserve the exact submitted body/key for retry. No generic status override, automatic customer message or Storefront redesign accompanies this control.

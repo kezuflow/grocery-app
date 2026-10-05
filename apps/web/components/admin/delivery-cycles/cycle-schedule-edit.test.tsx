@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, type ComponentProps, type ReactNode } from "react";
+import { act, useState, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { AdminDeliveryCycleView, DeliveryCycleDraft } from "@freshmarkets/contracts";
 import { CycleEditor } from "./cycle-editor";
@@ -151,6 +151,8 @@ it("requires an audit reason and keeps all timing controls editable", () => {
     "Procurement starts",
     "Preparation starts",
     "Planned pickup",
+    "Customer delivery starts",
+    "Customer delivery ends",
   ]) {
     expect((screen.getByLabelText(`${label} time`) as HTMLInputElement).disabled).toBe(false);
     expect(
@@ -164,6 +166,70 @@ it("requires an audit reason and keeps all timing controls editable", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   expect(props.onChange).toHaveBeenCalledWith({ ...draft, cutoffAt: "2026-10-08T17:00:00Z" });
+});
+it("edits the delivery start and end in Step 2 and saves the reviewed range across days", () => {
+  const props = editorProps();
+  function Harness() {
+    const [current, setCurrent] = useState(draft);
+    const [step, setStep] = useState(2);
+    const [reviewed, setReviewed] = useState(false);
+    return (
+      <CycleEditor
+        {...props}
+        draft={current}
+        step={step}
+        setStep={setStep}
+        reviewed={reviewed}
+        setReviewed={setReviewed}
+        onChange={(next) => {
+          props.onChange(next);
+          setCurrent(next);
+        }}
+      />
+    );
+  }
+  render(<Harness />);
+  function changeTime(label: string, value: string) {
+    act(() => {
+      const input = screen.getByLabelText(`${label} time`);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  changeTime("Customer delivery starts", "16:00");
+  changeTime("Customer delivery ends", "22:00");
+  fireEvent.click(button("Customer delivery ends date"));
+  const nextDay = [...document.querySelectorAll<HTMLButtonElement>("button[data-day]")].find(
+    (button) => button.dataset.day === new Date("2026-10-10T12:00:00").toLocaleDateString(),
+  );
+  expect(nextDay).toBeDefined();
+  fireEvent.click(nextDay!);
+  const updated = {
+    ...draft,
+    windows: [
+      { ...draft.windows[0], startsAt: "2026-10-09T08:00:00Z", endsAt: "2026-10-10T14:00:00Z" },
+    ],
+  };
+  expect(props.onChange).toHaveBeenLastCalledWith(updated);
+  fireEvent.click(button("Continue"));
+  expect(document.body.textContent).toContain("Oct 9, 2026 · 16:00–Oct 10, 2026 · 22:00");
+  fireEvent.click(button("Save schedule"));
+  expect(props.onSave).not.toHaveBeenCalled();
+  fireEvent.click(button("Apply schedule"));
+  expect(props.onSave).toHaveBeenCalledExactlyOnceWith(updated);
+});
+it("keeps Step 2 open when customer delivery starts before pickup or ends before its start", () => {
+  const props = editorProps();
+  const { rerender } = render(<CycleEditor {...props} step={2} reviewed />);
+  for (const windows of [
+    [{ ...draft.windows[0], startsAt: "2026-10-09T05:00:00Z" }],
+    [{ ...draft.windows[0], endsAt: "2026-10-09T06:00:00Z" }],
+  ]) {
+    rerender(<CycleEditor {...props} draft={{ ...draft, windows }} step={2} reviewed />);
+    fireEvent.click(button("Continue"));
+    expect(props.setStep).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  }
 });
 it("shows the last ordering minute on Thursday and the exclusive cutoff on Friday in business time", () => {
   const { container } = render(
