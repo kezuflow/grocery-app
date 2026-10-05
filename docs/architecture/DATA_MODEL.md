@@ -360,13 +360,9 @@ reconciliation evidence and is never copied to diagnostic logs or ordinary Admin
 `provider_observed_at` plus a stable status rank prevents a delayed webhook from regressing the
 latest external dispatch observation.
 
-Lalamove v3 supplies a signed `eventId`; Core uses it directly as `(provider, provider_event_id)`
-identity after verifying the HMAC over the documented `data` object and exact configured webhook
-path. Status events apply monotonically. Authenticated non-status events, including replacement or
-edited-order events that require additional operational interpretation, are retained as protected
-reconciliation evidence instead of fabricating a canonical delivery transition. A later
-provider-adapter migration expands the closed provider constraint without weakening the existing
-dispatch/inbox checks.
+Lalamove event identities include event type and provider eventId after HMAC verification over the documented data and callback path. The inbox's unique provider_event_id stores that internal pair for new callbacks; matching retained bare-ID rows keep their existing references. Migration `0112_delivery_provider_events.sql` adds independent `driver_observed_at`, internal `custody_review_required`, `route_review_required`, `replacement_pending` and `missing_delivery_proof` flags, plus bounded `lookup_attempts` (0-5) and `next_lookup_at`. Inbox `normalized_event_json` is protected and bounded to 64 KiB; raw verified history remains retained.
+
+`delivery_provider_identity(provider,provider_delivery_id PK,dispatch_id FK,previous_provider_delivery_id NULL FK,observed_at)` retains immutable lineage with one successor per prior identity. Existing external identities are backfilled without changing custody or finances. `delivery_provider_evidence(dispatch_id,kind PK,observed_at,evidence_json)` projects current DRIVER/COST/DELIVERY_PROOF/PICKUP_PROOF/DELIVERY_CODE/EDIT facts independently by observation time. Replacement invalidates current evidence projections; prior authenticated inbox history remains. Evidence/inbox success and lifecycle effects commit in guarded D1 transactions. Missing proof never supplies delivery/refund authority. Provider cost changes affect compatible courier payable/variance while preserving the accepted customer charge.
 
 The one-to-one store sender/pickup profile does not duplicate
 `fulfillment_location.latitude/longitude`; external dispatches retain the client command

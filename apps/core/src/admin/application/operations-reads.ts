@@ -362,6 +362,10 @@ export async function listAdminDeliveryOperations(
     externalDispatch:
       row.externalDispatchId && row.externalProvider && row.externalStatus && row.externalVersion
         ? {
+            custodyReviewRequired: row.externalCustodyReviewRequired,
+            routeReviewRequired: row.externalRouteReviewRequired,
+            replacementPending: row.externalReplacementPending,
+            proofs: row.externalProofs,
             dispatchId: row.externalDispatchId,
             provider: row.externalProvider,
             status: row.externalStatus,

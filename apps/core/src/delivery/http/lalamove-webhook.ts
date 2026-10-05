@@ -1,7 +1,7 @@
-import { applyProviderObservation } from "../application/apply-provider-observation";
+import { applyProviderEvent } from "../application/apply-provider-event";
+import { parseLalamoveEvent } from "../infrastructure/lalamove/lalamove-event";
 import { readBoundedText } from "../../http/bounded-body";
 import { log } from "../../observability";
-import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
 
 const WEBHOOK_PATH = "/webhooks/delivery/lalamove";
 const MAXIMUM_BODY_BYTES = 64 * 1024;
@@ -14,24 +14,6 @@ type LalamoveWebhookEnvironment = Readonly<{
 }>;
 
 type JsonObject = Record<string, unknown>;
-type DispatchRow = {
-  id: string;
-  merchant_order_id: string;
-  version: number;
-  provider_observed_at: number | null;
-  provider_status_rank: number | null;
-};
-
-type LalamoveStatusEvent = Readonly<{
-  eventId: string;
-  eventType: "ORDER_STATUS_CHANGED";
-  orderId: string;
-  observedAt: number;
-  status: ProviderDeliveryStatus;
-  trackingUrl: string | null;
-  driverId: string | null;
-}>;
-
 function object(value: unknown): JsonObject | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonObject)
@@ -40,57 +22,6 @@ function object(value: unknown): JsonObject | null {
 
 function nonemptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function providerStatus(value: unknown): ProviderDeliveryStatus | null {
-  switch (value) {
-    case "ASSIGNING_DRIVER":
-      return "ALLOCATING";
-    case "ON_GOING":
-      return "PENDING_PICKUP";
-    case "PICKED_UP":
-      return "IN_DELIVERY";
-    case "COMPLETED":
-      return "COMPLETED";
-    case "CANCELED":
-      return "CANCELED";
-    case "REJECTED":
-    case "EXPIRED":
-      return "FAILED";
-    default:
-      return null;
-  }
-}
-
-function parseStatusEvent(payload: unknown): LalamoveStatusEvent | null {
-  const root = object(payload);
-  const data = object(root?.data);
-  const order = object(data?.order);
-  const eventId = nonemptyString(root?.eventId);
-  const eventType = nonemptyString(root?.eventType);
-  const orderId = nonemptyString(order?.orderId);
-  const status = providerStatus(order?.status);
-  const updatedAt = nonemptyString(data?.updatedAt);
-  const observedAt = updatedAt ? Date.parse(updatedAt) : Number.NaN;
-  if (
-    !eventId ||
-    eventId.length > 128 ||
-    eventType !== "ORDER_STATUS_CHANGED" ||
-    !orderId ||
-    orderId.length > 64 ||
-    !status ||
-    !Number.isSafeInteger(observedAt)
-  )
-    return null;
-  return {
-    eventId,
-    eventType,
-    orderId,
-    observedAt,
-    status,
-    trackingUrl: nonemptyString(order?.shareLink),
-    driverId: nonemptyString(order?.driverId),
-  };
 }
 
 function enabled(environment: LalamoveWebhookEnvironment): boolean {
@@ -152,7 +83,7 @@ function json(requestId: string, status: number, body: unknown): Response {
   return Response.json(body, { status, headers: { "x-request-id": requestId } });
 }
 
-/** Narrow signed Lalamove v3 status ingress. Other event types are retained for reconciliation. */
+/** Signed Lalamove v3 event ingress with protected evidence and durable replay. */
 export async function handleLalamoveWebhook(
   database: D1Database,
   environment: LalamoveWebhookEnvironment,
@@ -206,82 +137,69 @@ export async function handleLalamoveWebhook(
       error: { code: "WEBHOOK_AUTHENTICATION_FAILED", message: "Unauthorized", requestId },
     });
 
-  const parsed = parseStatusEvent(payload);
-  const genericEventId = nonemptyString(root.eventId);
-  const genericType = nonemptyString(root.eventType);
-  const genericData = object(root.data);
-  const genericOrder = object(genericData?.order);
-  const genericOrderId = nonemptyString(genericOrder?.orderId);
-  const genericUpdatedAt = nonemptyString(genericData?.updatedAt);
-  const genericObservedAt = genericUpdatedAt ? Date.parse(genericUpdatedAt) : Number.NaN;
-  if (
-    !genericEventId ||
-    genericEventId.length > 128 ||
-    !genericType ||
-    !genericOrderId ||
-    genericOrderId.length > 64 ||
-    !Number.isSafeInteger(genericObservedAt)
-  )
+  let parsed = parseLalamoveEvent(payload);
+  if (!parsed)
     return json(requestId, 400, {
       error: { code: "WEBHOOK_EVENT_INVALID", message: "Webhook event is invalid", requestId },
     });
-
-  const dispatch = await database
+  // Retry signatures/timestamps can differ. Compare the complete signed evidence
+  // and envelope semantics, not the transport authentication fields.
+  const payloadHash = await sha256(
+    JSON.stringify({ eventType: root.eventType, eventVersion: root.eventVersion, data: root.data }),
+  );
+  // Actual PH sandbox sends STATUS_CHANGED and DRIVER_ASSIGNED with the same
+  // eventId. Type is part of delivery identity; different facts within one
+  // type still conflict. Preserve matching retained rows and their references.
+  const legacy = await database
     .prepare(
-      `SELECT id, merchant_order_id, version, provider_observed_at, provider_status_rank
-       FROM delivery_provider_dispatch
-       WHERE provider='lalamove' AND provider_delivery_id=?`,
+      "SELECT id,raw_payload FROM delivery_provider_event_inbox WHERE provider='lalamove' AND provider_event_id=?",
     )
-    .bind(genericOrderId)
-    .first<DispatchRow>();
-  const payloadHash = await sha256(body.value);
-  const inboxId = `lalamove-event:${genericEventId}`;
-  const receivedAt = Date.now();
-  const canApply = Boolean(dispatch && parsed);
+    .bind(parsed.eventId)
+    .first<{ id: string; raw_payload: string }>();
+  const legacyPayload = legacy ? object(JSON.parse(legacy.raw_payload)) : null;
+  const matchingLegacy =
+    legacyPayload?.eventId === parsed.eventId && legacyPayload?.eventType === root.eventType;
+  const eventIdentity = matchingLegacy
+    ? parsed.eventId
+    : JSON.stringify([root.eventType, parsed.eventId]);
+  const inboxId =
+    matchingLegacy && legacy ? legacy.id : `lalamove-event:${await sha256(eventIdentity)}`;
   const inserted = await database
-    .prepare(
-      `INSERT OR IGNORE INTO delivery_provider_event_inbox
-       (id, provider, provider_event_id, dispatch_id, provider_delivery_id,
-        merchant_order_id, observed_at, provider_status, payload_hash, raw_payload,
-        processing_status, last_error_code, received_at)
-       VALUES (?, 'lalamove', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
+    .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox
+    (id,provider,provider_event_id,provider_delivery_id,merchant_order_id,observed_at,provider_status,payload_hash,raw_payload,normalized_event_json,processing_status,received_at)
+    VALUES (?,'lalamove',?,?,'UNKNOWN',?,?,?,?,?,'RECEIVED',?)`)
     .bind(
       inboxId,
-      genericEventId,
-      dispatch?.id ?? null,
-      genericOrderId,
-      dispatch?.merchant_order_id ?? "UNKNOWN",
-      genericObservedAt,
-      parsed?.status ?? genericType,
+      eventIdentity,
+      parsed.providerDeliveryId ?? "WALLET",
+      parsed.observedAt,
+      parsed.status ?? String(root.eventType),
       payloadHash,
       body.value,
-      canApply ? "RECEIVED" : "RECONCILIATION_REQUIRED",
-      dispatch
-        ? parsed
-          ? null
-          : "LALAMOVE_EVENT_REQUIRES_RECONCILIATION"
-        : "DELIVERY_DISPATCH_NOT_FOUND",
-      receivedAt,
+      JSON.stringify(parsed),
+      Date.now(),
     )
     .run();
-  if ((inserted.meta?.changes ?? 0) !== 1) {
+  if (inserted.meta.changes !== 1) {
     const existing = await database
-      .prepare(`SELECT processing_status,provider_delivery_id,observed_at,provider_status
-      FROM delivery_provider_event_inbox WHERE id=?`)
+      .prepare(
+        `SELECT processing_status,payload_hash,raw_payload FROM delivery_provider_event_inbox WHERE id=?`,
+      )
       .bind(inboxId)
-      .first<{
-        processing_status: string;
-        provider_delivery_id: string;
-        observed_at: number;
-        provider_status: string;
-      }>();
-    if (
-      !existing ||
-      existing.provider_delivery_id !== genericOrderId ||
-      existing.observed_at !== genericObservedAt ||
-      existing.provider_status !== (parsed?.status ?? genericType)
-    )
+      .first<{ processing_status: string; payload_hash: string; raw_payload: string }>();
+    // Support inbox rows written before the normalized fingerprint migration.
+    let existingHash = existing?.payload_hash;
+    if (existing && existingHash !== payloadHash) {
+      const old = object(JSON.parse(existing.raw_payload));
+      existingHash = await sha256(
+        JSON.stringify({
+          eventType: old?.eventType,
+          eventVersion: old?.eventVersion,
+          data: old?.data,
+        }),
+      );
+    }
+    if (!existing || existingHash !== payloadHash)
       return json(requestId, 409, {
         error: {
           code: "WEBHOOK_EVENT_CONFLICT",
@@ -291,36 +209,21 @@ export async function handleLalamoveWebhook(
       });
     if (existing.processing_status === "APPLIED")
       return json(requestId, 200, { ok: true, duplicate: true, requestId });
+    // Preserve the first verified callback time when transport retry timestamps change.
+    parsed = parseLalamoveEvent(JSON.parse(existing.raw_payload)) ?? parsed;
   }
-  if (!dispatch || !parsed) {
-    log("warn", "delivery_provider_webhook", {
-      requestId,
-      provider: "lalamove",
-      result: "RECONCILIATION_REQUIRED",
-      eventType: genericType,
-    });
-    return json(requestId, 200, { ok: true, reconciliationRequired: true, requestId });
-  }
-
-  const result = await applyProviderObservation(
-    database,
-    {
-      dispatchId: dispatch.id,
-      status: parsed.status,
-      observedAt: parsed.observedAt,
-      trackingUrl: parsed.trackingUrl,
-      driverId: parsed.driverId,
-    },
-    { inboxId },
-  );
-  if (result.outcome === "RECONCILIATION_REQUIRED")
-    return json(requestId, 202, { ok: true, reconciliationRequired: true, requestId });
-  log("info", "delivery_provider_webhook", {
+  const result = await applyProviderEvent(database, parsed, inboxId);
+  log(result.outcome === "RECONCILIATION_REQUIRED" ? "warn" : "info", "delivery_provider_webhook", {
     requestId,
     provider: "lalamove",
     result: result.outcome,
-    providerStatus: parsed.status,
   });
+  if (result.outcome === "RECONCILIATION_REQUIRED")
+    return json(
+      requestId,
+      parsed.kind === "UNKNOWN" || result.reason === "DELIVERY_DISPATCH_NOT_FOUND" ? 200 : 202,
+      { ok: true, reconciliationRequired: true, requestId },
+    );
   return json(requestId, 200, {
     ok: true,
     duplicate: result.outcome === "DUPLICATE",

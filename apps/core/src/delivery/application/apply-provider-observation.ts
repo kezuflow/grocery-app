@@ -1,3 +1,4 @@
+import { providerEvidenceStatements } from "./provider-evidence-statements";
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
 import { completeProviderCommandStatements } from "../infrastructure/provider-command-repository";
 import { deliveryNotificationStatements } from "../../notifications/application/delivery-notifications";
@@ -9,6 +10,10 @@ export type ProviderObservation = Readonly<{
   trackingUrl: string | null;
   driverId?: string | null;
   pickupPin?: string | null;
+  /** Explicit provider driver reset; absent fields never erase a rider. */
+  resetDriver?: boolean;
+  replacementCheck?: boolean;
+  evidence?: import("../ports/provider-event").ProviderEvent["evidence"];
 }>;
 
 type ApplyOptions = Readonly<{
@@ -91,7 +96,7 @@ export async function applyProviderObservation(
   options: ApplyOptions = {},
 ): Promise<ApplyResult> {
   const dispatch = await database
-    .prepare(`SELECT id,merchant_order_id,version,provider_observed_at,provider_status_rank,provider_status
+    .prepare(`SELECT id,merchant_order_id,version,provider_delivery_id,provider_observed_at,provider_status_rank,provider_status,provider,handed_over_at,custody_review_required,driver_observed_at
     FROM delivery_provider_dispatch WHERE id=? AND method='EXTERNAL'`)
     .bind(observation.dispatchId)
     .first<{
@@ -101,9 +106,20 @@ export async function applyProviderObservation(
       provider_observed_at: number | null;
       provider_status_rank: number | null;
       provider_status: string | null;
+      provider_delivery_id: string | null;
+      provider: string;
+      handed_over_at: number | null;
+      custody_review_required: number;
+      driver_observed_at: number | null;
     }>();
   const now = Date.now();
   const completion = [
+    ...providerEvidenceStatements(
+      database,
+      observation.dispatchId,
+      observation.observedAt,
+      observation.evidence,
+    ),
     ...(options.completionStatements ?? []),
     ...(options.inboxId
       ? completeProviderCommandStatements(database, options.inboxId, observation.observedAt, now)
@@ -137,6 +153,16 @@ export async function applyProviderObservation(
   if (!(await database.prepare(currentAttemptSql).bind(dispatch.id).first()))
     return defer("DELIVERY_ATTEMPT_SUPERSEDED");
   if (options.inboxId) {
+    const identity = await database
+      .prepare("SELECT provider_delivery_id FROM delivery_provider_event_inbox WHERE id=?")
+      .bind(options.inboxId)
+      .first<{ provider_delivery_id: string }>();
+    if (
+      identity &&
+      dispatch.provider_delivery_id !== null &&
+      identity.provider_delivery_id !== dispatch.provider_delivery_id
+    )
+      return defer("DELIVERY_IDENTITY_CHANGED");
     const applied = await database
       .prepare(
         "SELECT id FROM delivery_provider_event_inbox WHERE id=? AND processing_status='APPLIED'",
@@ -144,12 +170,57 @@ export async function applyProviderObservation(
       .bind(options.inboxId)
       .first();
     if (applied) {
-      if (completion.length) await database.batch([...completion]);
       return { outcome: "DUPLICATE" };
     }
   }
   if (options.expectedVersion !== undefined && dispatch.version !== options.expectedVersion)
     return defer("DELIVERY_DISPATCH_STALE");
+  if (
+    observation.replacementCheck &&
+    (dispatch.provider_observed_at === null ||
+      dispatch.provider_observed_at <= observation.observedAt)
+  ) {
+    // A support cancellation can create a replacement. Keep the commercial
+    // delivery and physical custody while waiting for its verified identity.
+    if (["COMPLETED", "RETURNED"].includes(dispatch.provider_status ?? ""))
+      return defer("DELIVERY_TERMINAL_CONFLICT");
+    try {
+      await database.batch([
+        database
+          .prepare(
+            `INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (${currentAttemptSql})`,
+          )
+          .bind(dispatch.id),
+        ...(options.inboxId
+          ? [
+              database
+                .prepare(
+                  "INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (SELECT 1 FROM delivery_provider_event_inbox WHERE id=? AND processing_status!='APPLIED')",
+                )
+                .bind(options.inboxId),
+            ]
+          : []),
+        database
+          .prepare(
+            `UPDATE delivery_provider_dispatch SET replacement_pending=1,status='RECONCILIATION_REQUIRED',custody_review_required=CASE WHEN handed_over_at IS NOT NULL THEN 1 ELSE custody_review_required END,version=version+1,updated_at=? WHERE id=? AND version=?`,
+          )
+          .bind(now, dispatch.id, dispatch.version),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
+        ...completion,
+        ...(options.inboxId
+          ? [
+              inboxApplied(),
+              database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
+            ]
+          : []),
+      ]);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed: id = 0"))
+        throw error;
+      return defer("DELIVERY_DISPATCH_STALE");
+    }
+    return { outcome: "APPLIED" };
+  }
   if (observation.status === "UNKNOWN") return defer("DELIVERY_STATUS_UNKNOWN");
   const rank = statusRank(observation.status);
   if (
@@ -165,18 +236,54 @@ export async function applyProviderObservation(
       (dispatch.provider_observed_at === observation.observedAt &&
         (dispatch.provider_status_rank ?? 0) >= rank));
   if (older) {
-    const statements = [...completion];
-    if (options.inboxId) statements.push(inboxApplied());
-    if (statements.length) await database.batch(statements);
+    const statements = [
+      database
+        .prepare(
+          `INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch WHERE id=? AND version=?)`,
+        )
+        .bind(dispatch.id, dispatch.version),
+      database
+        .prepare(
+          `INSERT INTO commitment_abort(id) SELECT -32 WHERE NOT EXISTS (${currentAttemptSql})`,
+        )
+        .bind(dispatch.id),
+      ...completion,
+    ];
+    if (options.inboxId)
+      statements.push(
+        inboxApplied(),
+        database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
+      );
+    try {
+      await database.batch(statements);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("CHECK constraint failed: id = 0"))
+        throw error;
+      return defer("DELIVERY_DISPATCH_STALE");
+    }
     return { outcome: "OLDER" };
   }
   if (dispatch.provider_status !== observation.status) {
     if (["COMPLETED", "CANCELED", "FAILED", "RETURNED"].includes(dispatch.provider_status ?? ""))
       return defer("DELIVERY_TERMINAL_CONFLICT");
-    if (["IN_DELIVERY", "IN_RETURN"].includes(dispatch.provider_status ?? "") && rank < 50)
+    if (
+      ["IN_DELIVERY", "IN_RETURN"].includes(dispatch.provider_status ?? "") &&
+      rank < 50 &&
+      !(
+        dispatch.provider === "lalamove" &&
+        dispatch.provider_status === "IN_DELIVERY" &&
+        observation.status === "ALLOCATING"
+      )
+    )
       return defer("DELIVERY_STATUS_REGRESSION");
   }
-  const normalized = jobStatus(observation.status);
+  const rematching =
+    dispatch.provider === "lalamove" &&
+    observation.status === "ALLOCATING" &&
+    dispatch.provider_status !== "ALLOCATING" &&
+    dispatch.provider_status !== null;
+  const custodyHeld = dispatch.handed_over_at !== null && rank < 50;
+  const normalized = custodyHeld ? null : rematching ? "UNASSIGNED" : jobStatus(observation.status);
   const orderStatus =
     normalized === "EN_ROUTE"
       ? "OUT_FOR_DELIVERY"
@@ -210,7 +317,12 @@ export async function applyProviderObservation(
   statements.push(
     database
       .prepare(`UPDATE delivery_provider_dispatch SET status=?,provider_status=?,provider_observed_at=?,provider_status_rank=?,
-      tracking_url=COALESCE(?,tracking_url),driver_id=COALESCE(?,driver_id),pickup_pin=COALESCE(?,pickup_pin),
+      tracking_url=COALESCE(?,tracking_url),
+      driver_id=CASE WHEN ?=1 AND COALESCE(driver_observed_at,0)<=? THEN ? ELSE driver_id END,
+      driver_observed_at=CASE WHEN ?=1 AND COALESCE(driver_observed_at,0)<=? THEN ? ELSE driver_observed_at END,
+      custody_review_required=CASE WHEN ?=1 THEN 0 WHEN ?=1 AND handed_over_at IS NOT NULL THEN 1 ELSE custody_review_required END,
+      replacement_pending=CASE WHEN ?=1 THEN 0 ELSE replacement_pending END,
+      pickup_pin=COALESCE(?,pickup_pin),
       handed_over_at=CASE WHEN ?=1 THEN COALESCE(handed_over_at,?) ELSE handed_over_at END,
       completed_at=CASE WHEN ?=1 THEN COALESCE(completed_at,?) ELSE completed_at END,
       last_error_code=?,version=version+1,updated_at=?
@@ -221,7 +333,15 @@ export async function applyProviderObservation(
         observation.observedAt,
         rank,
         observation.trackingUrl,
-        observation.driverId ?? null,
+        observation.driverId != null || observation.resetDriver || rematching ? 1 : 0,
+        observation.observedAt,
+        rematching || observation.resetDriver ? null : (observation.driverId ?? null),
+        observation.driverId != null || observation.resetDriver || rematching ? 1 : 0,
+        observation.observedAt,
+        observation.observedAt,
+        observation.status === "COMPLETED" ? 1 : 0,
+        rematching ? 1 : 0,
+        ["COMPLETED", "RETURNED"].includes(observation.status) ? 1 : 0,
         observation.pickupPin ?? null,
         ["IN_DELIVERY", "COMPLETED"].includes(observation.status) ? 1 : 0,
         observation.observedAt,
@@ -295,7 +415,11 @@ export async function applyProviderObservation(
       ),
     );
   statements.push(...completion);
-  if (options.inboxId) statements.push(inboxApplied());
+  if (options.inboxId)
+    statements.push(
+      inboxApplied(),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -32 WHERE changes()!=1"),
+    );
   try {
     await database.batch(statements);
     return { outcome: "APPLIED" };

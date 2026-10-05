@@ -15,6 +15,7 @@ type TrackingRow = {
   dispatch_status: string | null;
   provider_delivery_id: string | null;
   driver_id: string | null;
+  driver_evidence: string | null;
 };
 
 function coordinate(latitude: unknown, longitude: unknown): Coordinate | null {
@@ -78,7 +79,8 @@ export async function getDeliveryTracking(
       job.location_id,o.address_snapshot_json,stop.latitude AS stop_latitude,
       stop.longitude AS stop_longitude,dispatch.id AS dispatch_id,dispatch.method,
       dispatch.provider,dispatch.status AS dispatch_status,
-      dispatch.provider_delivery_id,dispatch.driver_id
+      dispatch.provider_delivery_id,dispatch.driver_id,
+      (SELECT evidence_json FROM delivery_provider_evidence WHERE dispatch_id=dispatch.id AND kind='DRIVER' AND json_extract(evidence_json,'$.driverId')=dispatch.driver_id AND observed_at>=COALESCE(dispatch.driver_observed_at,0)) AS driver_evidence
      FROM grocery_order o
      LEFT JOIN delivery_job job ON job.order_id=o.id
      LEFT JOIN delivery_stop stop ON stop.id=(
@@ -132,19 +134,34 @@ export async function getDeliveryTracking(
       value: view("WAITING", null, null, pin, row.dispatch_id),
       requestId: input.requestId,
     };
+  const startedAt = Date.now();
+  let savedContact: DeliveryTrackingView["riderContact"] = null;
+  if (row.driver_evidence) {
+    const evidence = JSON.parse(row.driver_evidence) as {
+      name: string | null;
+      phone: string | null;
+      plateNumber: string | null;
+    };
+    savedContact = {
+      name: evidence.name,
+      phone: evidence.phone && /^\+?\d{7,15}$/.test(evidence.phone) ? evidence.phone : null,
+      plateNumber: evidence.plateNumber,
+    };
+  }
   try {
     const hub = env.DELIVERY_TRACKING_HUB.getByName(env.LALAMOVE_MARKET || "PH");
     const observation = await hub.snapshot(row.provider_delivery_id, row.driver_id);
     if (observation.driverId && observation.driverId !== row.driver_id && row.dispatch_id) {
       try {
         await env.DB.prepare(
-          `UPDATE delivery_provider_dispatch SET driver_id=? WHERE id=? AND provider_delivery_id=?
+          `UPDATE delivery_provider_dispatch SET driver_id=?,driver_observed_at=?,version=version+1 WHERE id=? AND provider_delivery_id=?
            AND status='ACTIVE' AND driver_id IS ? AND id=(SELECT id FROM delivery_provider_dispatch
              WHERE delivery_job_id=(SELECT delivery_job_id FROM delivery_provider_dispatch WHERE id=?)
              ORDER BY attempt_sequence DESC LIMIT 1)`,
         )
           .bind(
             observation.driverId,
+            startedAt,
             row.dispatch_id,
             row.provider_delivery_id,
             row.driver_id,
@@ -191,7 +208,11 @@ export async function getDeliveryTracking(
         position ? lastUpdate : null,
         pin,
         row.dispatch_id,
-        observation.unavailable || !observation.driverId ? null : (observation.contact ?? null),
+        observation.driverId === row.driver_id
+          ? (observation.contact ?? savedContact)
+          : observation.unavailable || !observation.driverId
+            ? null
+            : observation.contact,
         roadRoute,
       ),
       requestId: input.requestId,
@@ -199,7 +220,7 @@ export async function getDeliveryTracking(
   } catch {
     return {
       ok: true,
-      value: view("UNAVAILABLE", null, null, pin, row.dispatch_id),
+      value: view("UNAVAILABLE", null, null, pin, row.dispatch_id, savedContact),
       requestId: input.requestId,
     };
   }

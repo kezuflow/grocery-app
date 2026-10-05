@@ -1,4 +1,5 @@
 import type { ScheduledJob } from "./types";
+import { deliveryProviderLookupJob } from "./jobs/delivery-provider-lookup";
 import { instantDeliveryBookingJob } from "./jobs/instant-delivery-booking";
 import { productMediaCleanupJob } from "./jobs/product-media-cleanup";
 import { deliveryObservationRedriveJob } from "./jobs/delivery-observation-redrive";
@@ -30,6 +31,7 @@ const REGISTRY: Readonly<Record<string, readonly ScheduledJob[]>> = {
     deliveryCycleCutoffJob,
     providerActionExpiryJob,
     instantDeliveryBookingJob,
+    deliveryProviderLookupJob,
     orderCancellationRefundsJob,
     refundReconciliationJob,
     membershipScheduledCancellationsJob,

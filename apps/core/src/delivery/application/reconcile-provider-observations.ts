@@ -1,3 +1,5 @@
+import { applyProviderEvent } from "./apply-provider-event";
+import { parseLalamoveEvent } from "../infrastructure/lalamove/lalamove-event";
 import { applyProviderObservation } from "./apply-provider-observation";
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
 import { expireUnsubmittedBookings } from "./expire-unsubmitted-bookings";
@@ -44,7 +46,7 @@ export async function reconcileProviderObservations(database: D1Database, now: n
   ]);
   const pending = await database
     .prepare(`SELECT inbox.id,inbox.provider_status,inbox.observed_at,inbox.raw_payload,
-    inbox.recovery_attempts,dispatch.id AS dispatch_id
+    inbox.recovery_attempts,inbox.provider,dispatch.id AS dispatch_id
     FROM delivery_provider_event_inbox inbox LEFT JOIN delivery_provider_dispatch dispatch
       ON dispatch.provider=inbox.provider AND dispatch.provider_delivery_id=inbox.provider_delivery_id
     WHERE inbox.processing_status!='APPLIED' AND inbox.recovery_attempts<5 AND inbox.next_recovery_at<=?
@@ -52,6 +54,7 @@ export async function reconcileProviderObservations(database: D1Database, now: n
     .bind(now)
     .all<{
       id: string;
+      provider: string;
       provider_status: string;
       observed_at: number;
       raw_payload: string;
@@ -77,6 +80,21 @@ export async function reconcileProviderObservations(database: D1Database, now: n
     } catch {
       failure = "DELIVERY_EVIDENCE_INVALID";
     }
+    if (!failure && row.provider === "lalamove" && raw?.eventType) {
+      const event = parseLalamoveEvent(raw);
+      if (event) {
+        try {
+          const result = await applyProviderEvent(database, event, row.id);
+          if (result.outcome !== "RECONCILIATION_REQUIRED") {
+            applied++;
+            continue;
+          }
+          failure = result.reason ?? "DELIVERY_RECONCILIATION_REQUIRED";
+        } catch {
+          failure = "DELIVERY_OBSERVATION_APPLICATION_FAILED";
+        }
+      }
+    }
     if (!normalized) failure = "DELIVERY_STATUS_UNKNOWN";
     if (!row.dispatch_id) failure = "DELIVERY_DISPATCH_NOT_FOUND";
     if (!failure && normalized && row.dispatch_id) {
@@ -87,9 +105,15 @@ export async function reconcileProviderObservations(database: D1Database, now: n
           database,
           {
             dispatchId: row.dispatch_id,
+            replacementCheck: raw?.replacementCheck === true,
+            evidence: raw?.evidence as import("../ports/provider-event").ProviderEvent["evidence"],
             status: normalized,
             observedAt: row.observed_at,
             trackingUrl: typeof tracking === "string" ? tracking : null,
+            driverId:
+              typeof (raw?.driverId ?? order?.driverId) === "string"
+                ? String(raw?.driverId ?? order?.driverId)
+                : null,
             pickupPin: typeof raw?.pickupPin === "string" ? raw.pickupPin : null,
           },
           { inboxId: row.id },

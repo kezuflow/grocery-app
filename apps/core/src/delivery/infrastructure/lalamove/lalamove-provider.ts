@@ -1,3 +1,4 @@
+import { lalamoveCost, lalamoveProofs } from "./lalamove-event";
 import type {
   DeliveryContact,
   DeliveryProvider,
@@ -240,6 +241,12 @@ function parseDelivery(
     trackingUrl: nonemptyString(data.shareLink),
     pickupPin: null,
     quote: parsedQuote,
+    evidence: [
+      ...(lalamoveProofs(data) ?? []),
+      ...(lalamoveCost(data.priceBreakdown ?? data.price) ?? []),
+    ],
+    replacementCheck:
+      data.status === "CANCELED" && data.cancelParty === "LALAMOVE_CUSTOMER_SUPPORT",
   };
 }
 
@@ -309,6 +316,7 @@ function validRequest(request: DeliveryProviderRequest, now: number): boolean {
     !validContact(request.recipient) ||
     !validAddress(request.origin) ||
     !validAddress(request.destination) ||
+    (request.origin.instructions.deliveryInstructions?.length ?? 0) > 1_500 ||
     (request.destination.instructions.deliveryInstructions?.length ?? 0) > 1_500
   )
     return false;
@@ -529,7 +537,11 @@ export function createLalamoveProvider(
         const body = JSON.stringify({
           data: {
             quotationId: quoted.value.quotationId,
-            sender: contact(request.sender, quoted.value.stopIds[0]),
+            sender: contact(
+              request.sender,
+              quoted.value.stopIds[0],
+              request.origin.instructions.deliveryInstructions?.trim() || undefined,
+            ),
             recipients: [contact(request.recipient, quoted.value.stopIds[1], remarks(request))],
             isPODEnabled: true,
             metadata: { merchantOrderId: request.merchantOrderId },
@@ -623,6 +635,7 @@ export function createLalamoveProvider(
             updatedAt,
             contact: {
               name: nonemptyString(data?.name)?.slice(0, 120) ?? null,
+              plateNumber: nonemptyString(data?.plateNumber)?.slice(0, 64) ?? null,
               phone: phone && /^\+?\d{7,15}$/.test(phone) ? phone : null,
             },
           },

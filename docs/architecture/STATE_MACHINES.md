@@ -278,6 +278,10 @@ Mapping any observation into the canonical Delivery Job/Stop state machine requi
 explicit Delivery application command and legal transition; the adapter does not fabricate
 `ARRIVED` or any other missing FreshMarkets event.
 
+Lalamove rematching is an explicit exception to ordinary status regression protection. Before pickup, ASSIGNING_DRIVER clears assignment to UNASSIGNED; initial create preserves an agreed retry state. After handed_over_at, courier search/assignment retains Job EN_ROUTE and Order OUT_FOR_DELIVERY and flags custody review for Admin. Completion clears custody review. Verified ORDER_REPLACED switches the current provider identity under one latest dispatch; prior-identity callbacks are history only. Support cancellation awaits replacement evidence without fabricating failure, refund or a second booking. Conflicting terminal/lineage evidence stays reconciliation-required.
+
+Proof/code evidence is independent of lifecycle status. Completion without proof proceeds with a backend-only flag; signed/delivered proof or a verified code clears it. Missing, pending or failed proof never fabricates delivery failure/refund. Edited-route evidence flags staff comparison and preserves paid route/contact snapshots.
+
 ## Cancellation Effects by Stage
 
 | Stage | Normal authority | Inventory/demand effect | Financial effect |

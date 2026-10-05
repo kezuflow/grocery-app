@@ -21,6 +21,9 @@ export function RiderContact({
           <p className="text-sm text-muted-foreground">
             {contact?.name || "Rider contact is not available yet."}
           </p>
+          {contact?.plateNumber ? (
+            <p className="text-sm text-muted-foreground">Vehicle plate: {contact.plateNumber}</p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Pickup issues go to the store contact on the booking.
           </p>

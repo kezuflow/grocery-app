@@ -206,6 +206,10 @@ export type AdminDeliveryOperationView = {
     version: number;
   } | null;
   externalDispatch: {
+    custodyReviewRequired?: boolean;
+    routeReviewRequired?: boolean;
+    replacementPending?: boolean;
+    proofs?: { kind: "PICKUP" | "DELIVERY"; status: string; imageUrls: string[] }[];
     providerStatus: string | null;
     dispatchId: string;
     provider: "lalamove" | "grab-express";

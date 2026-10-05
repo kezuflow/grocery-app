@@ -120,6 +120,8 @@ export type ProviderDelivery = Readonly<{
   trackingUrl: string | null;
   pickupPin: string | null;
   quote: DeliveryQuote | null;
+  evidence?: import("./provider-event").ProviderEvent["evidence"];
+  replacementCheck?: boolean;
 }>;
 
 /** Provider-specific vocabulary stops at this boundary. */
@@ -138,7 +140,7 @@ export interface DeliveryProvider {
     DeliveryProviderResult<{
       coordinate: { latitude: number; longitude: number };
       updatedAt: string;
-      contact: { name: string | null; phone: string | null };
+      contact: { name: string | null; phone: string | null; plateNumber?: string | null };
     }>
   >;
   cancel(providerDeliveryId: string): Promise<DeliveryProviderResult<null>>;

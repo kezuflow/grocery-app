@@ -18,6 +18,6 @@ export type DeliveryTrackingView = {
   /** Google suggested road from the last reported rider position, not travel history or an ETA. */
   roadRoute: ReadonlyArray<Coordinate> | null;
   /** Current assigned rider only; null when unavailable, invalidated, or finished. */
-  riderContact: { name: string | null; phone: string | null } | null;
+  riderContact: { name: string | null; phone: string | null; plateNumber?: string | null } | null;
   nextRefreshMilliseconds: number | null;
 };

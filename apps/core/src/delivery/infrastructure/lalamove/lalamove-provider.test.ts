@@ -290,6 +290,8 @@ describe("Lalamove delivery adapter", () => {
       ok: true,
       providerRequestId: "lalamove-order-request",
       value: {
+        evidence: [],
+        replacementCheck: false,
         providerDeliveryId: "order-lalamove-1",
         driverId: null,
         merchantOrderId: "FM-1001",
@@ -315,6 +317,7 @@ describe("Lalamove delivery adapter", () => {
         quotationId: "quote-1",
         sender: {
           stopId: "stop-origin",
+          remarks: request.origin.instructions.deliveryInstructions,
           name: "FreshMarkets Cebu",
           phone: "+639171110000",
         },

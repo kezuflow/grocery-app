@@ -631,7 +631,7 @@ is limited to the near-term horizon.
 
 The Lalamove v3 adapter uses the documented sandbox/production REST hosts and signs every request
 with lowercase-hex HMAC-SHA256 over timestamp, method, exact `/v3/...` path, and exact JSON body.
-It sends `Market` and nonce `Request-ID` headers, creates a short-lived quotation immediately before placing an order, uses returned stop IDs for sender/recipient contacts, retains the leading `+` on E.164 phones, and stores the FreshMarkets merchant reference in provider metadata. Customer destination instructions may use labeled CRLF-separated building/unit, landmark, access, delivery-note, and recipient-instruction lines in recipient remarks only when no separate supported field exists. Store pickup instructions and the internal bag/box classification are never placed in recipient remarks. Orders request proof of delivery. Price strings are
+It sends `Market` and nonce `Request-ID` headers, creates a short-lived quotation immediately before placing an order, uses returned stop IDs for sender/recipient contacts, retains the leading `+` on E.164 phones, and stores the FreshMarkets merchant reference in provider metadata. Customer destination instructions may use labeled CRLF-separated building/unit, landmark, access, delivery-note, and recipient-instruction lines in recipient remarks only when no separate supported field exists. Store pickup instructions are forwarded in sender remarks. Pickup instructions and the internal bag/box classification are never placed in recipient remarks. Orders request proof of delivery. Price strings are
 converted exactly into integer currency minor units. The PH integration omits Lalamove's optional
 `item` object, parcel dimensions, and perishable/temperature/keep-dry handling metadata. Configured
 service keys are never invented from display labels.
@@ -664,11 +664,11 @@ data, tracking URLs, or pickup PINs.
 
 Lalamove callbacks enter only through `POST /webhooks/delivery/lalamove`. Core verifies the
 documented HMAC authorization against the configured API key/secret, exact callback path, and
-serialized `data` object before persisting anything. It uses Lalamove's signed `eventId` for durable
-deduplication, orders status observations by `data.updatedAt`, and translates only documented order
-statuses. Authenticated non-status events are acknowledged and retained as reconciliation-required
-evidence until a purpose-built handler exists; in particular, an `ORDER_REPLACED` event may not
-silently switch the external order identity.
+serialized `data` object before persisting anything. The `(eventType,eventId)` identity and complete signed evidence/type/version fingerprint deduplicate retries; changed evidence within a type conflicts. Actual PH sandbox status and driver callbacks reuse the same eventId across types. Matching retained bare-ID receipts preserve their references; other types receive distinct internal identities. Per-event v3 parsing handles status/created, driver, replacement, amount, edited order, delivery/pickup proof, delivery code and wallet envelopes. Wallet events need no Order and alter no commercial state. Unknown authenticated shapes and unsupported cost formats remain protected reconciliation evidence. Standard provider `updatedAt` timestamps order observations. The observed PH sandbox `HH:mm.ssZ` timestamp format is invalid and labels a local clock as UTC; only that recognized format falls back to the authenticated Unix callback timestamp. Retries retain the first verified observation time and original raw evidence.
+
+Rematching clears stale assignment before pickup. After handover, it preserves custody and shows an Admin-only notice; verified delivery progress continues without a new approval gate. Verified immutable replacement lineage switches the current provider identity under the same dispatch. Prior-identity callbacks cannot cancel/complete its replacement. Support cancellation retains replacement pending and prevents independent rebooking. Scoped Admin reads expose available proof status/image links, current rider plate and custody/replacement/edit notices. Missing proof remains backend-only; completion proceeds, and signed/delivered proof or verified code clears the missing flag. Proof callbacks never independently advance overall Order delivery status. Provider edits flag staff comparison and preserve paid snapshots. Exact PHP courier costs preserve the accepted customer charge.
+
+Minute GET repair claims at most five due deliveries, checks current identity/version and journals observations before applying them. Five failed reads stop; active successes continue at bounded intervals; missing terminal proof gets at most five reads. Fifteen-minute local inbox replay stays separate. Neither task resubmits mutations or invents unknown identities.
 
 ## Analytics Queries
 

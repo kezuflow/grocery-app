@@ -495,6 +495,8 @@ export async function requestProviderDelivery(
       trackingUrl: created.value.trackingUrl,
       driverId: created.value.driverId,
       pickupPin: created.value.pickupPin,
+      evidence: created.value.evidence,
+      replacementCheck: created.value.replacementCheck,
     },
     { inboxId },
   );

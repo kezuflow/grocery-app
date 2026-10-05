@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/a
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
+import { ProviderDeliveryEvidence } from "./provider-delivery-evidence";
 import { DeliveryTrackingDialog } from "./delivery-tracking-dialog";
 import {
   Table,
@@ -376,6 +377,7 @@ export function ExternalDeliveryQueue() {
                                 : "GrabExpress"}{" "}
                               · {externalStatusLabel(item.externalDispatch)}
                             </p>
+                            <ProviderDeliveryEvidence dispatch={item.externalDispatch} />
                             {item.externalDispatch.quoteAmountMinor != null &&
                             item.externalDispatch.quoteCurrency ? (
                               <p>

@@ -120,10 +120,39 @@ it("rolls back an invalid retained D1 upgrade and then preserves the full valid 
   const retainedFulfillment = (
     await env.DB.prepare("SELECT rowid,* FROM order_fulfillment_snapshot ORDER BY order_id").all()
   ).results;
+  await env.DB.prepare(`INSERT INTO delivery_provider_dispatch
+    (id,delivery_job_id,provider,merchant_order_id,provider_delivery_id,request_hash,request_snapshot_json,status,provider_status,created_at,updated_at,final_payable_minor,customer_delivery_charge_minor,courier_variance_minor,delivery_currency)
+    SELECT 'retained-provider-dispatch',id,'lalamove','retained-provider-merchant','retained-provider-identity','retained-hash','{}','CANCELED','CANCELED',1,1,4000,5000,-1000,'PHP' FROM delivery_job ORDER BY id LIMIT 1`).run();
   await applyD1Migrations(
     env.DB,
     migrations.filter((candidate) => candidate.name >= "0081_"),
   );
+  // Provider lineage backfills retained identities without changing their
+  // dispatch, custody or original commercial evidence.
+  const externalIdentities = (
+    await env.DB.prepare(
+      "SELECT provider,provider_delivery_id, id AS dispatch_id,created_at AS observed_at FROM delivery_provider_dispatch WHERE method='EXTERNAL' AND provider_delivery_id IS NOT NULL ORDER BY provider,provider_delivery_id",
+    ).all()
+  ).results;
+  expect(externalIdentities.length).toBeGreaterThan(0);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT provider,provider_delivery_id,dispatch_id,observed_at FROM delivery_provider_identity ORDER BY provider,provider_delivery_id",
+      ).all()
+    ).results,
+  ).toEqual(externalIdentities);
+  await expect(
+    env.DB.prepare("UPDATE delivery_provider_identity SET observed_at=observed_at+1").run(),
+  ).rejects.toThrow(/immutable/);
+  await expect(env.DB.prepare("DELETE FROM delivery_provider_identity").run()).rejects.toThrow(
+    /immutable/,
+  );
+  expect(
+    await env.DB.prepare(
+      "SELECT count(*) AS n FROM delivery_provider_dispatch WHERE lookup_attempts!=0 OR custody_review_required!=0 OR missing_delivery_proof!=0",
+    ).first(),
+  ).toEqual({ n: 0 });
   for (const snapshot of emailSnapshots)
     expect((await env.DB.prepare(snapshot.sql).all()).results).toEqual(snapshot.rows);
   expect(

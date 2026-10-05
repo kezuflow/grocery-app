@@ -26,6 +26,10 @@ type DispatchRow = {
   fulfillmentMode: "INSTANT" | "SCHEDULED";
   addressSnapshotJson: string;
   recipientContactJson: string | null;
+  externalCustodyReviewRequired: boolean;
+  externalRouteReviewRequired: boolean;
+  externalReplacementPending: boolean;
+  externalProofs: NonNullable<AdminDeliveryOperationView["externalDispatch"]>["proofs"];
   externalProvider: "lalamove" | "grab-express" | null;
   externalProviderDeliveryId: string | null;
   externalDispatchId: string | null;
@@ -124,6 +128,8 @@ export async function listDeliveryDispatch(
               (SELECT stop.contact_snapshot_json FROM delivery_stop stop
                WHERE stop.delivery_job_id=d.id ORDER BY stop.created_at,stop.id LIMIT 1)
                AS recipient_contact_json,
+              dispatch.custody_review_required,dispatch.route_review_required,dispatch.replacement_pending,
+              (SELECT json_group_array(json_object('kind',CASE evidence.kind WHEN 'PICKUP_PROOF' THEN 'PICKUP' ELSE 'DELIVERY' END,'status',json_extract(proof.value,'$.status'),'imageUrls',json_extract(proof.value,'$.imageUrls'))) FROM delivery_provider_evidence evidence,json_each(evidence.evidence_json) proof WHERE evidence.dispatch_id=dispatch.id AND evidence.kind IN ('PICKUP_PROOF','DELIVERY_PROOF')) AS provider_proofs,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
               dispatch.provider_delivery_id AS external_provider_delivery_id,
               dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
@@ -153,6 +159,10 @@ export async function listDeliveryDispatch(
     )
     .bind(query.actorAuthUserId ?? null, ...binds, limit)
     .all<{
+      custody_review_required: number | null;
+      route_review_required: number | null;
+      replacement_pending: number | null;
+      provider_proofs: string;
       method: string | null;
       manual_person_name: string | null;
       manual_phone_e164: string | null;
@@ -251,6 +261,12 @@ export async function listDeliveryDispatch(
     version: r.version,
     cycleId: r.cycle_id,
     fulfillmentMode: r.fulfillment_mode,
+    externalCustodyReviewRequired: r.custody_review_required === 1,
+    externalRouteReviewRequired: r.route_review_required === 1,
+    externalReplacementPending: r.replacement_pending === 1,
+    externalProofs: JSON.parse(r.provider_proofs) as NonNullable<
+      AdminDeliveryOperationView["externalDispatch"]
+    >["proofs"],
     externalProvider: r.external_provider,
     externalDispatchId: r.external_dispatch_id,
     externalProviderDeliveryId: r.external_provider_delivery_id,

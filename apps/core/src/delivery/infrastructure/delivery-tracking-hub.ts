@@ -4,7 +4,7 @@ import { buildRoutePreviewPort } from "../../geography/infrastructure/runtime-ro
 import { buildDeliveryProviderRegistry } from "./runtime-delivery-provider";
 
 type Position = { coordinate: { latitude: number; longitude: number }; updatedAt: string };
-type Contact = { name: string | null; phone: string | null };
+type Contact = { name: string | null; phone: string | null; plateNumber?: string | null };
 type TrackingResult = {
   driverId: string | null;
   position: Position | null;

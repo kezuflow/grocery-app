@@ -31,6 +31,85 @@ async function seed() {
 }
 
 describe("delivery tracking projection", () => {
+  it("serves current signed rider contact without GPS only within delivery access and clears it on rematch", async () => {
+    const orderId = await seed();
+    await env.DB.prepare(
+      "UPDATE delivery_provider_dispatch SET driver_id='signed-rider',driver_observed_at=100 WHERE id=?",
+    )
+      .bind(`dispatch-${orderId}`)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO delivery_provider_evidence(dispatch_id,kind,observed_at,evidence_json) VALUES (?,'DRIVER',100,?)",
+    )
+      .bind(
+        `dispatch-${orderId}`,
+        JSON.stringify({
+          driverId: "signed-rider",
+          name: "Sandbox rider",
+          phone: "+639000000000",
+          plateNumber: "TEST",
+        }),
+      )
+      .run();
+    const snapshot = vi.fn(async () => ({
+      driverId: "signed-rider" as string | null,
+      position: null,
+      contact: null,
+      unavailable: true,
+    }));
+    const runtime = {
+      ...env,
+      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot }) },
+    } as unknown as Env;
+    const input = { orderId, customerId: `customer-${orderId}`, requestId: crypto.randomUUID() };
+    expect(await getDeliveryTracking(runtime, { ...input, customerId: "other" })).toMatchObject({
+      ok: false,
+      error: { code: "NOT_FOUND" },
+    });
+    expect(snapshot).not.toHaveBeenCalled();
+    await env.DB.prepare("UPDATE grocery_order SET status='FULFILLMENT_READY' WHERE id=?")
+      .bind(orderId)
+      .run();
+    expect(await getDeliveryTracking(runtime, input)).toMatchObject({
+      ok: true,
+      value: { availability: "WAITING", riderContact: null },
+    });
+    expect(snapshot).not.toHaveBeenCalled();
+    await env.DB.prepare("UPDATE grocery_order SET status='OUT_FOR_DELIVERY' WHERE id=?")
+      .bind(orderId)
+      .run();
+    expect(await getDeliveryTracking(runtime, input)).toMatchObject({
+      ok: true,
+      value: {
+        availability: "UNAVAILABLE",
+        rider: null,
+        riderContact: { name: "Sandbox rider", phone: "+639000000000", plateNumber: "TEST" },
+      },
+    });
+    await env.DB.prepare(
+      "UPDATE delivery_provider_dispatch SET driver_id=NULL,driver_observed_at=200 WHERE id=?",
+    )
+      .bind(`dispatch-${orderId}`)
+      .run();
+    snapshot.mockResolvedValue({
+      driverId: null,
+      position: null,
+      contact: null,
+      unavailable: true,
+    });
+    expect(await getDeliveryTracking(runtime, input)).toMatchObject({
+      ok: true,
+      value: { riderContact: null },
+    });
+    await env.DB.prepare("UPDATE delivery_provider_dispatch SET status='COMPLETED' WHERE id=?")
+      .bind(`dispatch-${orderId}`)
+      .run();
+    expect(await getDeliveryTracking(runtime, input)).toMatchObject({
+      ok: true,
+      value: { availability: "FINISHED", riderContact: null },
+    });
+    expect(snapshot).toHaveBeenCalledTimes(2);
+  });
   it("enforces Order ownership and location before reading a provider position", async () => {
     const orderId = await seed();
     const snapshot = vi.fn(async () => ({
