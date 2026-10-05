@@ -173,6 +173,48 @@ async function seedOrder(options: {
 }
 
 describe("getCustomerOrderDetail", () => {
+  it("exposes a pending claim only to its owner and hides expired or terminal actions", async () => {
+    const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true, withRefund: true }),
+      expiresAt = Date.now() + 60000;
+    await env.DB.prepare(
+      "UPDATE payment_refund SET claim_url='https://transfer.paymongo.com/fixture-private-claim',claim_expires_at=? WHERE payment_intent_id=?",
+    )
+      .bind(expiresAt, fixture.intentId)
+      .run();
+    const read = () =>
+      getCustomerOrderDetail(env.DB, {
+        customerId: fixture.customerId,
+        orderId: fixture.orderId,
+        requestId: "claim-read",
+      });
+    const pending = await read();
+    expect(pending.ok).toBe(true);
+    if (!pending.ok) return;
+    expect(pending.value.refunds[0].claimAction).toEqual({
+      url: "https://transfer.paymongo.com/fixture-private-claim",
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
+    expect(JSON.stringify(pending.value)).not.toContain('"claimUrl"');
+    expect(
+      await getCustomerOrderDetail(env.DB, {
+        customerId: fixture.otherCustomerId,
+        orderId: fixture.orderId,
+        requestId: "claim-other",
+      }),
+    ).toMatchObject({ ok: false });
+    await env.DB.prepare("UPDATE payment_refund SET claim_expires_at=1 WHERE payment_intent_id=?")
+      .bind(fixture.intentId)
+      .run();
+    const expired = await read();
+    expect(expired.ok && expired.value.refunds[0].claimAction).toBeNull();
+    await env.DB.prepare(
+      "UPDATE payment_refund SET claim_expires_at=?,status='SUCCEEDED' WHERE payment_intent_id=?",
+    )
+      .bind(expiresAt, fixture.intentId)
+      .run();
+    const terminal = await read();
+    expect(terminal.ok && terminal.value.refunds[0].claimAction).toBeNull();
+  });
   it("returns owned immutable snapshots, safe projections, actions, and a stable timeline", async () => {
     const fixture = await seedOrder({ mode: "SCHEDULED", withQuote: true, withRefund: true });
     const result = await getCustomerOrderDetail(env.DB, {

@@ -12,5 +12,6 @@ export async function GET(request: Request, context: { params: Promise<{ "order-
       orderId,
     }),
     requestContext.requestId,
+    { headers: { "cache-control": "private, no-store" } },
   );
 }

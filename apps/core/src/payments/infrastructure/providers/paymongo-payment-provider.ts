@@ -9,6 +9,7 @@ import type {
 } from "../../ports/payment-provider";
 
 const DEFAULT_API_BASE = "https://api.paymongo.com";
+const QRPH_REFUND_API_BASE = "https://refunds-api.paymongo.com";
 const MAX_PROVIDER_RESPONSE_BYTES = 256 * 1024;
 const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
 const PROVIDER_ACTION_TTL_MS = 60 * 60 * 1000;
@@ -20,6 +21,7 @@ export type PayMongoPaymentProviderConfiguration = {
   secretKey: string;
   webhookSecret: string;
   apiBaseUrl?: string;
+  qrphRefundApiBaseUrl?: string;
   fetcher?: Fetcher;
   now?: () => number;
 };
@@ -172,7 +174,9 @@ function providerError(payload: unknown, status: number): string {
   const errors = object(payload)?.errors;
   const first = Array.isArray(errors) ? object(errors[0]) : null;
   const code = string(object(first?.code)?.code) ?? string(first?.code);
-  return code ? `PAYMONGO_${code.toUpperCase()}` : `PAYMONGO_HTTP_${status}`;
+  return code && /^[a-z0-9_]{1,80}$/i.test(code)
+    ? `PAYMONGO_${code.toUpperCase()}`
+    : `PAYMONGO_HTTP_${status}`;
 }
 
 function subscriptionView(payload: unknown): ProviderSubscriptionView | null {
@@ -209,17 +213,48 @@ export function createPayMongoPaymentProvider(
   const apiBaseUrl = (configuration.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
   const authorization = `Basic ${btoa(`${configuration.secretKey}:`)}`;
 
+  function refundKey(attributes: JsonObject): string | null {
+    const notes = string(attributes.notes);
+    return (
+      string(object(attributes.metadata)?.freshmarkets_refund_key) ??
+      (notes?.startsWith("FreshMarkets refund: ")
+        ? notes.slice("FreshMarkets refund: ".length)
+        : null)
+    );
+  }
+  function claimAction(attributes: JsonObject): { url: string; expiresAt: number } | undefined {
+    const link = string(attributes.transfer_link);
+    if (!link) return undefined;
+    const url = new URL(link);
+    const allowed = liveMode
+      ? ["transfer.paymongo.com"]
+      : ["transfer.paymongo.com", "transfer.paymongo-stg.com"];
+    if (
+      url.protocol !== "https:" ||
+      !allowed.includes(url.hostname) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      link.length > 2048
+    )
+      throw new Error("PAYMONGO_UNSAFE_REFUND_CLAIM_URL");
+    const createdAt = unixSeconds(attributes.created_at);
+    if (createdAt === null) throw new Error("PAYMONGO_REFUND_CLAIM_EXPIRY_MISSING");
+    return { url: link, expiresAt: createdAt + 3 * 24 * 60 * 60 * 1000 };
+  }
+
   async function api(
     path: string,
     init: RequestInit = {},
     idempotencyKey?: string,
+    baseUrl = apiBaseUrl,
   ): Promise<unknown> {
     const headers = new Headers(init.headers);
     headers.set("authorization", authorization);
     headers.set("accept", "application/json");
     if (init.body) headers.set("content-type", "application/json");
     if (idempotencyKey) headers.set("idempotency-key", idempotencyKey);
-    const response = await fetcher(`${apiBaseUrl}${path}`, {
+    const response = await fetcher(`${baseUrl}${path}`, {
       ...init,
       headers,
       signal: init.signal ?? AbortSignal.timeout(10_000),
@@ -234,6 +269,7 @@ export function createPayMongoPaymentProvider(
     view: ProviderPaymentView;
     clientToken: string | null;
     paymentReference: string | null;
+    paymentSourceType: string | null;
   } | null> {
     try {
       const payload = await api(`/v1/payment_intents/${encodeURIComponent(reference)}`);
@@ -257,6 +293,7 @@ export function createPayMongoPaymentProvider(
         view: { providerReference: item.id, canonicalState: state, amountMinor, currency },
         clientToken: string(item.attributes.client_key),
         paymentReference: string(paid?.id),
+        paymentSourceType: string(object(object(paid?.attributes)?.source)?.type),
       };
     } catch (error) {
       if (error instanceof PayMongoApiError && error.status === 404) return null;
@@ -499,16 +536,29 @@ export function createPayMongoPaymentProvider(
                   amount: input.amountMinor,
                   payment_id: intent.paymentReference,
                   reason: "others",
-                  metadata: { freshmarkets_refund_key: input.refundProviderIdempotencyKey },
+                  notes: `FreshMarkets refund: ${input.refundProviderIdempotencyKey}`,
+                  ...(intent.paymentSourceType === "qrph"
+                    ? {}
+                    : {
+                        metadata: { freshmarkets_refund_key: input.refundProviderIdempotencyKey },
+                      }),
                 },
               },
             }),
           },
           input.refundProviderIdempotencyKey,
+          intent.paymentSourceType === "qrph"
+            ? (configuration.qrphRefundApiBaseUrl ?? QRPH_REFUND_API_BASE)
+            : apiBaseUrl,
         );
         const item = resource(payload);
         if (item?.type !== "refund") throw new Error("PAYMONGO_INVALID_RESPONSE");
-        return { ok: true, providerRefundReference: item.id };
+        const action = claimAction(item.attributes);
+        return {
+          ok: true,
+          providerRefundReference: item.id,
+          ...(action ? { claimAction: action } : {}),
+        };
       } catch (error) {
         // Once sent, a timeout, server failure or malformed success is not proof
         // of rejection. Payments must retain the reserved identity for recovery.
@@ -534,7 +584,7 @@ export function createPayMongoPaymentProvider(
         function found(item: ReturnType<typeof resource>): ProviderRefundLookupResult {
           if (!item || item.type !== "refund" || item.attributes.payment_id !== paymentReference)
             return { outcome: "UNRESOLVED", reason: "MISMATCH" };
-          const key = string(object(item.attributes.metadata)?.freshmarkets_refund_key);
+          const key = refundKey(item.attributes);
           if (
             (key !== null && key !== input.refundProviderIdempotencyKey) ||
             (!input.providerRefundReference && key !== input.refundProviderIdempotencyKey)
@@ -562,8 +612,38 @@ export function createPayMongoPaymentProvider(
               canonicalState:
                 state === "succeeded" ? "SUCCEEDED" : state === "failed" ? "FAILED" : "PROCESSING",
               observedAt: now(),
+              ...(state === "pending" || state === "processing"
+                ? { claimAction: claimAction(item.attributes) }
+                : {}),
             },
           };
+        }
+        if (intent.paymentSourceType === "qrph") {
+          const payment = resource(
+            await api(`/v1/payments/${encodeURIComponent(paymentReference)}`),
+          );
+          if (
+            !payment ||
+            payment.id !== paymentReference ||
+            payment.type !== "payment" ||
+            payment.attributes.payment_intent_id !== input.providerReference
+          )
+            return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+          const refunds = Array.isArray(payment.attributes.refunds)
+            ? payment.attributes.refunds
+            : [];
+          const matches = refunds
+            .map((value) => resource({ data: value }))
+            .filter(
+              (item) =>
+                item &&
+                (input.providerRefundReference
+                  ? item.id === input.providerRefundReference
+                  : refundKey(item.attributes) === input.refundProviderIdempotencyKey),
+            );
+          if (matches.length !== 1)
+            return { outcome: "UNRESOLVED", reason: matches.length ? "AMBIGUOUS" : "NOT_FOUND" };
+          return found(matches[0]);
         }
         if (input.providerRefundReference) {
           const item = resource(
@@ -616,6 +696,68 @@ export function createPayMongoPaymentProvider(
           seenCursors.add(cursor);
         }
         return { outcome: "UNRESOLVED", reason: "SEARCH_LIMIT" };
+      } catch {
+        return { outcome: "UNRESOLVED", reason: "UNAVAILABLE" };
+      }
+    },
+    async lookupExternalRefund(input): Promise<ProviderRefundLookupResult> {
+      try {
+        const payment = resource(
+          await api(`/v1/payments/${encodeURIComponent(input.providerPaymentReference)}`),
+        );
+        const intentReference = string(payment?.attributes.payment_intent_id);
+        if (
+          !payment ||
+          payment.type !== "payment" ||
+          payment.id !== input.providerPaymentReference ||
+          !intentReference ||
+          payment.attributes.livemode !== liveMode ||
+          !["paid", "succeeded", "refunded", "partially_refunded"].includes(
+            String(payment.attributes.status),
+          )
+        )
+          return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+        const refunds = Array.isArray(payment.attributes.refunds) ? payment.attributes.refunds : [];
+        const matches = refunds
+          .map((value) => resource({ data: value }))
+          .filter((item) => item?.id === input.providerRefundReference);
+        if (matches.length !== 1)
+          return { outcome: "UNRESOLVED", reason: matches.length ? "AMBIGUOUS" : "NOT_FOUND" };
+        const refund = matches[0];
+        if (
+          !refund ||
+          refund.type !== "refund" ||
+          refund.attributes.payment_id !== payment.id ||
+          refund.attributes.livemode !== liveMode
+        )
+          return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+        const amountMinor = integer(refund.attributes.amount),
+          currency = string(refund.attributes.currency)?.toUpperCase();
+        const state = refund.attributes.status;
+        if (
+          amountMinor === null ||
+          amountMinor <= 0 ||
+          !Number.isSafeInteger(amountMinor) ||
+          !currency ||
+          !["pending", "processing", "succeeded", "failed"].includes(String(state))
+        )
+          return { outcome: "UNRESOLVED", reason: "MISMATCH" };
+        return {
+          outcome: "FOUND",
+          refund: {
+            providerReference: intentReference,
+            providerRefundReference: refund.id,
+            idempotencyKey: refundKey(refund.attributes),
+            amountMinor,
+            currency,
+            canonicalState:
+              state === "succeeded" ? "SUCCEEDED" : state === "failed" ? "FAILED" : "PROCESSING",
+            observedAt: now(),
+            ...(state === "pending" || state === "processing"
+              ? { claimAction: claimAction(refund.attributes) }
+              : {}),
+          },
+        };
       } catch {
         return { outcome: "UNRESOLVED", reason: "UNAVAILABLE" };
       }

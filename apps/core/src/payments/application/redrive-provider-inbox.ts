@@ -1,6 +1,7 @@
 import { paymentDomainStates } from "../domain/payment";
 import { z } from "@freshmarkets/validation";
 import type { VerifiedProviderEvent } from "../ports/payment-provider";
+import type { PaymentProviderRegistry } from "../ports/provider-registry";
 import { extendPaymentRepository } from "../infrastructure/d1/payment-repository";
 import { applyVerifiedProviderEvent } from "./ingest-provider-event";
 import { validateSettlement } from "../domain/settlement";
@@ -83,7 +84,12 @@ export type ProviderInboxRedriveResult = {
 /** Recover due normalized observations without requiring provider redelivery. */
 export async function redriveProviderInbox(
   database: D1Database,
-  options: { now?: number; limit?: number; leaseMs?: number } = {},
+  options: {
+    now?: number;
+    limit?: number;
+    leaseMs?: number;
+    registry?: PaymentProviderRegistry;
+  } = {},
 ): Promise<ProviderInboxRedriveResult> {
   const now = options.now ?? Date.now();
   const repository = extendPaymentRepository(database);
@@ -155,7 +161,14 @@ export async function redriveProviderInbox(
       continue;
     }
     try {
-      const applied = await applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);
+      const applied = await applyVerifiedProviderEvent(
+        database,
+        event,
+        inbox.id,
+        leaseOwner,
+        now,
+        options.registry,
+      );
       if (
         applied.value.processingStatus === "APPLIED" ||
         applied.value.processingStatus === "DUPLICATE"

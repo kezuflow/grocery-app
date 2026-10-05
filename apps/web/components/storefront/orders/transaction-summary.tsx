@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProvisionalTransactionSummaryView } from "@freshmarkets/contracts";
+import { RefundClaimAction } from "./refund-claim-action";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -130,6 +131,7 @@ export function TransactionSummary({ summary }: { summary: ProvisionalTransactio
             {summary.refunds.map((refund) => (
               <li key={refund.refundId}>
                 {money(refund.amountMinor, refund.currency)} · {refund.status}
+                <RefundClaimAction refund={refund} />
               </li>
             ))}
           </ul>

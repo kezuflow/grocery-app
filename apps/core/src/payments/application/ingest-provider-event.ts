@@ -1,4 +1,5 @@
 import { linkProviderReconciliationCases } from "./link-provider-reconciliation-cases";
+import { associateProviderRefund } from "./associate-provider-refund";
 import type { VerifiedProviderEvent } from "../ports/payment-provider";
 import {
   extendPaymentRepository,
@@ -57,6 +58,7 @@ export async function applyVerifiedProviderEvent(
   inboxId: string,
   leaseOwner: string,
   now = Date.now(),
+  registry?: PaymentProviderRegistry,
 ): Promise<{ ok: true; value: ProviderEventResult }> {
   const repository = extendPaymentRepository(database);
   let mappedPaymentId: string | null = null;
@@ -117,10 +119,9 @@ export async function applyVerifiedProviderEvent(
 
   if (event.kind === "refund" && event.refundReference) {
     const refunds = extendPaymentRepositoryForRefunds(database);
-    const refund = await refunds.findRefundByProviderReference(
-      event.refundReference,
-      event.provider,
-    );
+    const refund =
+      (await refunds.findRefundByProviderReference(event.refundReference, event.provider)) ??
+      (await associateProviderRefund(database, registry, event, now));
     if (!refund) {
       await repository.recordReconciliationCase({
         intentId: null,
@@ -448,7 +449,7 @@ export async function ingestProviderEvent(
     expectedAttempts: inbox.attempts,
   });
   if (claimedLease !== 1) return result(event, "RETRY_REQUIRED");
-  return applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now);
+  return applyVerifiedProviderEvent(database, event, inbox.id, leaseOwner, now, registry);
 }
 
 async function sha256(value: string): Promise<string> {

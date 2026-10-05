@@ -34,6 +34,31 @@ function summary(source: "CHECKOUT_QUOTE" | "ORDER_TOTAL_ONLY"): ProvisionalTran
 }
 
 describe("TransactionSummary", () => {
+  it("shows the authenticated customer claim action as processing without exposing it after success", () => {
+    const value = summary("CHECKOUT_QUOTE");
+    value.refunds = [
+      {
+        refundId: "refund-fixture",
+        amountMinor: 53500,
+        currency: "PHP",
+        status: "PROCESSING",
+        createdAt: "2026-10-05T00:00:00Z",
+        updatedAt: "2026-10-05T00:00:00Z",
+        claimAction: {
+          url: "https://transfer.paymongo.com/fixture-claim",
+          expiresAt: "2026-10-08T00:00:00Z",
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(<TransactionSummary summary={value} />);
+    expect(html).toContain("Claim refund");
+    expect(html).toContain("Your refund remains processing");
+    expect(html).toContain('referrerPolicy="no-referrer"');
+    value.refunds = [{ ...value.refunds[0], status: "SUCCEEDED" }];
+    expect(renderToStaticMarkup(<TransactionSummary summary={value} />)).not.toContain(
+      "fixture-claim",
+    );
+  });
   it("prominently labels the document and renders historical fee evidence", () => {
     const html = renderToStaticMarkup(<TransactionSummary summary={summary("CHECKOUT_QUOTE")} />);
     expect(html.match(/NOT AN OFFICIAL BIR INVOICE/g)).toHaveLength(2);

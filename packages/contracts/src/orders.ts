@@ -185,6 +185,8 @@ export type CustomerOrderDetailView = {
     currency: string;
     createdAt: string;
     updatedAt: string;
+    /** Private authenticated customer action; pending until verified provider success. */
+    claimAction?: { url: string; expiresAt: string } | null;
   }[];
   amendments: readonly {
     amendmentId: string;

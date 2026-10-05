@@ -108,4 +108,42 @@ for (const width of [1440, 390])
         ],
       },
     ]);
+    const profile = await (await page.request.get("/api/commerce/profile")).json();
+    expect(profile.ok).toBe(true);
+    const owner = profile.value.customerId as string;
+    expect(owner).toMatch(/^[a-zA-Z0-9-]+$/);
+    // Only this disposable fixture is assigned to the signed-in customer for the private claim read.
+    executeAdminE2eSql(`UPDATE grocery_order SET customer_id='${owner}' WHERE id='${orderId}';
+      UPDATE payment_intent SET customer_id='${owner}' WHERE id='${paymentId}';
+      UPDATE payment_attempt SET customer_id='${owner}' WHERE payment_intent_id='${paymentId}';
+      UPDATE payment_refund SET claim_url='https://transfer.paymongo.com/fixture-claim-${suffix}',claim_expires_at=${Date.now() + 259200000}
+        WHERE payment_intent_id='${paymentId}' AND status='PROCESSING';`);
+    const customerDetail = await page.request.get(`/api/commerce/orders/${orderId}`);
+    expect(customerDetail.headers()["cache-control"]).toBe("private, no-store");
+    expect(await customerDetail.json()).toMatchObject({
+      ok: true,
+      value: { status: "CANCELLATION_REQUESTED" },
+    });
+    await page.goto(`/orders/${orderId}`);
+    const claim = page.getByRole("link", { name: "Claim refund", exact: true });
+    await expect(claim).toHaveAttribute(
+      "href",
+      `https://transfer.paymongo.com/fixture-claim-${suffix}`,
+    );
+    await expect(claim).toHaveAttribute("referrerpolicy", "no-referrer");
+    await expect(
+      page.getByText("Your refund remains processing until it is confirmed.", { exact: false }),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`refund-claim-${width}.png`),
+      fullPage: true,
+    });
+    executeAdminE2eSql(
+      `UPDATE payment_refund SET claim_expires_at=1 WHERE payment_intent_id='${paymentId}' AND status='PROCESSING'`,
+    );
+    await page.reload();
+    await expect(claim).toHaveCount(0);
   });

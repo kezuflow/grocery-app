@@ -9,6 +9,7 @@ import { ReorderAction } from "../../../../components/storefront/orders/reorder-
 import { OrderIssueForm } from "../../../../components/storefront/orders/order-issue-form";
 import { CancelOrderAction } from "../../../../components/storefront/orders/cancel-order-action";
 import { OrderTrackingDialog } from "../../../../components/storefront/orders/order-tracking-dialog";
+import { RefundClaimAction } from "../../../../components/storefront/orders/refund-claim-action";
 
 function money(value: number | null, currency: string): string {
   return value === null
@@ -316,6 +317,9 @@ export function OrderDetailContent({ order }: { order: CustomerOrderDetailView }
                   .join(", ")}
               </p>
             ) : null}
+            {order.refunds.map((refund) => (
+              <RefundClaimAction key={refund.refundId} refund={refund} />
+            ))}
           </section>
         </div>
       </div>

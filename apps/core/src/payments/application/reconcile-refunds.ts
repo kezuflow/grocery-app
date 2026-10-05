@@ -108,6 +108,7 @@ export async function reconcileRefunds(
           fromStatus: row.status,
           toStatus: observation.canonicalState,
           providerRefundReference: observation.providerRefundReference,
+          claimAction: observation.claimAction,
           observation: {
             provider: attempt.provider,
             providerReference: observation.providerRefundReference,

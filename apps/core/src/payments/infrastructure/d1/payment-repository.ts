@@ -974,6 +974,8 @@ export type RefundStatusChange = {
   fromStatus: string;
   toStatus: string;
   providerRefundReference?: string | null;
+  claimAction?: { url: string; expiresAt: number };
+  lastErrorCode?: string | null;
   settlementObservation?: {
     provider: string;
     providerEventId: string;
@@ -1021,6 +1023,22 @@ export function refundStatusChangeStatements(
     update,
     database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
   ];
+  if (input.claimAction || input.lastErrorCode !== undefined) {
+    statements.push(
+      database
+        .prepare(`UPDATE payment_refund SET claim_url=COALESCE(?,claim_url),
+      claim_expires_at=COALESCE(?,claim_expires_at),last_error_code=? WHERE id=? AND version=? AND status=?`)
+        .bind(
+          input.claimAction?.url ?? null,
+          input.claimAction?.expiresAt ?? null,
+          input.lastErrorCode ?? null,
+          input.refundId,
+          input.expectedVersion + 1,
+          input.toStatus,
+        ),
+      database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+    );
+  }
   if (input.settlementObservation)
     statements.push(
       extendPaymentRepository(database).recordSettlementObservationStatement({

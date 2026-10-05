@@ -400,12 +400,14 @@ export async function getCustomerOrderDetail(
             currency: string;
             createdAt: number;
             updatedAt: number;
+            claimUrl: string | null;
+            claimExpiresAt: number | null;
           }>,
         }
       : await database
           .prepare(
             `SELECT id AS refundId, status, amount_minor AS amountMinor, currency,
-                    created_at AS createdAt, updated_at AS updatedAt
+                    created_at AS createdAt, updated_at AS updatedAt, claim_url AS claimUrl, claim_expires_at AS claimExpiresAt
              FROM payment_refund WHERE payment_intent_id IN (${paymentIds.map(() => "?").join(",")})
              ORDER BY created_at,id`,
           )
@@ -417,9 +419,18 @@ export async function getCustomerOrderDetail(
             currency: string;
             createdAt: number;
             updatedAt: number;
+            claimUrl: string | null;
+            claimExpiresAt: number | null;
           }>();
-  const refunds = refundsResult.results.map((refund) => ({
+  const refunds = refundsResult.results.map(({ claimUrl, claimExpiresAt, ...refund }) => ({
     ...refund,
+    claimAction:
+      refund.status === "PROCESSING" &&
+      claimUrl &&
+      claimExpiresAt !== null &&
+      claimExpiresAt > Date.now()
+        ? { url: claimUrl, expiresAt: new Date(claimExpiresAt).toISOString() }
+        : null,
     createdAt: new Date(refund.createdAt).toISOString(),
     updatedAt: new Date(refund.updatedAt).toISOString(),
   }));

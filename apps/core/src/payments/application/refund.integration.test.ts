@@ -98,6 +98,53 @@ function refundCommand(
 }
 
 describe("staff retry of definitively rejected refunds", () => {
+  it("persists the private provider claim action with processing and retains a safe definitive rejection code", async () => {
+    const f = await succeededIntent(),
+      expiresAt = Date.now() + 259200000;
+    const provider = {
+      ...sharedMock,
+      requestRefund: vi.fn().mockResolvedValue({
+        ok: true,
+        providerRefundReference: crypto.randomUUID(),
+        claimAction: { url: "https://transfer.paymongo.com/fixture-claim", expiresAt },
+      }),
+    };
+    const result = await requestRefund(
+      env.DB,
+      new ProviderRegistry("test", [provider]),
+      refundCommand(f.intentId, { amountMinor: 10000 }),
+    );
+    expect(result).toMatchObject({ ok: true, value: { state: "PROCESSING" } });
+    if (!result.ok) return;
+    expect(
+      await env.DB.prepare(
+        "SELECT status,claim_url,claim_expires_at FROM payment_refund WHERE id=?",
+      )
+        .bind(result.value.refundId)
+        .first(),
+    ).toEqual({
+      status: "PROCESSING",
+      claim_url: "https://transfer.paymongo.com/fixture-claim",
+      claim_expires_at: expiresAt,
+    });
+    provider.requestRefund.mockResolvedValueOnce({
+      ok: false,
+      errorCode: "PAYMONGO_INSUFFICIENT_BALANCE",
+    });
+    const rejected = await requestRefund(
+      env.DB,
+      new ProviderRegistry("test", [provider]),
+      refundCommand(f.intentId, { amountMinor: 10000 }),
+    );
+    expect(rejected).toMatchObject({ ok: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT last_error_code FROM payment_refund WHERE payment_intent_id=? AND status='REJECTED'",
+      )
+        .bind(f.intentId)
+        .first(),
+    ).toEqual({ last_error_code: "PAYMONGO_INSUFFICIENT_BALANCE" });
+  });
   async function staff(scope: "global" | "location" = "global", permitted = true) {
     const manager = await locationManager(scope);
     if (permitted)
@@ -214,6 +261,154 @@ describe("staff retry of definitively rejected refunds", () => {
       ).results,
     };
   }
+  it("records a verified dashboard refund, preserves rejection and finishes cancellation once without submission", async () => {
+    const f = await fixture(),
+      ref = crypto.randomUUID();
+    const delegate = {
+      ...sharedMock,
+      lookupExternalRefund: vi.fn().mockResolvedValue({
+        outcome: "FOUND",
+        refund: {
+          providerReference: f.reference,
+          providerRefundReference: ref,
+          idempotencyKey: null,
+          canonicalState: "SUCCEEDED",
+          amountMinor: 20000,
+          currency: "PHP",
+          observedAt: Date.now(),
+        },
+      }),
+    };
+    const registry = new ProviderRegistry("test", [delegate]);
+    const submit = vi.spyOn(delegate, "requestRefund");
+    const send = async (eventId: string) => {
+      const raw = JSON.stringify({
+        eventId,
+        reference: "provider-captured-payment",
+        vendorState: "paid",
+        amountMinor: 20000,
+        currency: "PHP",
+        kind: "refund",
+        refundReference: ref,
+      });
+      return ingestProviderEvent(
+        env.DB,
+        registry,
+        "mock",
+        new Headers({
+          "x-mock-signature": await mockSignatureFor(raw),
+          "x-mock-timestamp": String(Date.now()),
+        }),
+        raw,
+      );
+    };
+    expect(await send(crypto.randomUUID())).toMatchObject({
+      ok: true,
+      value: { processingStatus: "APPLIED", canonicalState: "SUCCEEDED" },
+    });
+    expect(await send(crypto.randomUUID())).toMatchObject({
+      ok: true,
+      value: { processingStatus: "DUPLICATE" },
+    });
+    expect(submit).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_refund WHERE id=?")
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual({ status: "REJECTED" });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?").bind(f.orderId).first(),
+    ).toEqual({ status: "CANCELED" });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_intent WHERE id=?").bind(f.intentId).first(),
+    ).toEqual({ status: "REFUNDED" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) count FROM payment_refund WHERE provider_refund_reference=?",
+      )
+        .bind(ref)
+        .first(),
+    ).toEqual({ count: 1 });
+    submit.mockRestore();
+  });
+  it.each(["amount", "currency", "payment", "budget", "audit"])(
+    "leaves manual refund %s conflicts unresolved with no partial import",
+    async (kind) => {
+      const f = await fixture(),
+        ref = crypto.randomUUID();
+      if (kind === "budget")
+        await env.DB.prepare(
+          "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,1,'PHP','ESCALATED',?,?,?)",
+        )
+          .bind(crypto.randomUUID(), f.intentId, crypto.randomUUID(), Date.now(), Date.now())
+          .run();
+      const delegate = {
+        ...sharedMock,
+        lookupExternalRefund: vi.fn().mockResolvedValue({
+          outcome: "FOUND",
+          refund: {
+            providerReference: kind === "payment" ? "other-payment" : f.reference,
+            providerRefundReference: ref,
+            idempotencyKey: null,
+            canonicalState: "SUCCEEDED",
+            amountMinor: kind === "amount" ? 1 : 20000,
+            currency: kind === "currency" ? "USD" : "PHP",
+            observedAt: Date.now(),
+          },
+        }),
+      };
+      const database =
+        kind === "audit"
+          ? new Proxy(env.DB, {
+              get(target, key) {
+                if (key === "batch")
+                  return (statements: D1PreparedStatement[]) =>
+                    target.batch([
+                      ...statements,
+                      target.prepare("INSERT INTO commitment_abort(id) VALUES (-40)"),
+                    ]);
+                const value: unknown = Reflect.get(target, key, target);
+                return typeof value === "function" ? value.bind(target) : value;
+              },
+            })
+          : env.DB;
+      const raw = JSON.stringify({
+        eventId: crypto.randomUUID(),
+        reference: "provider-captured-payment",
+        vendorState: "paid",
+        amountMinor: 20000,
+        currency: "PHP",
+        kind: "refund",
+        refundReference: ref,
+      });
+      expect(
+        await ingestProviderEvent(
+          database,
+          new ProviderRegistry("test", [delegate]),
+          "mock",
+          new Headers({
+            "x-mock-signature": await mockSignatureFor(raw),
+            "x-mock-timestamp": String(Date.now()),
+          }),
+          raw,
+        ),
+      ).toMatchObject({ ok: true, value: { processingStatus: "RECONCILIATION_REQUIRED" } });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM payment_refund WHERE provider_refund_reference=?",
+        )
+          .bind(ref)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT refund_id FROM order_cancellation_refund_member WHERE payment_intent_id=?",
+        )
+          .bind(f.intentId)
+          .first(),
+      ).toEqual({ refund_id: f.refund.id });
+    },
+  );
   it("retries the recorded amount, preserves rejection, replays once, and completes only after verified success", async () => {
     const f = await fixture(),
       submit = vi.spyOn(sharedMock, "requestRefund");

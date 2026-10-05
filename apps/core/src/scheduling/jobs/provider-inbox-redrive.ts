@@ -4,7 +4,10 @@ import type { ScheduledJob } from "../types";
 export const providerInboxRedriveJob: ScheduledJob = {
   name: "payments.provider-inbox-redrive",
   async run(context) {
-    const outcome = await redriveProviderInbox(context.database, { now: context.now });
+    const outcome = await redriveProviderInbox(context.database, {
+      now: context.now,
+      registry: context.registry,
+    });
     const affected = outcome.applied + outcome.escalated;
     return {
       status: affected > 0 ? "SUCCEEDED" : "SKIPPED",

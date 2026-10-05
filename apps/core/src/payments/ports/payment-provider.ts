@@ -24,6 +24,7 @@ export type ProviderRefundLookupResult =
         amountMinor: number;
         currency: string;
         observedAt: number;
+        claimAction?: { url: string; expiresAt: number };
       };
     }
   | {
@@ -209,10 +210,23 @@ export interface PaymentProvider {
     refundProviderIdempotencyKey: string;
     amountMinor: number;
     currency: string;
-  }): Promise<{ ok: true; providerRefundReference: string } | { ok: false; errorCode: string }>;
+  }): Promise<
+    | {
+        ok: true;
+        providerRefundReference: string;
+        claimAction?: { url: string; expiresAt: number };
+      }
+    | { ok: false; errorCode: string }
+  >;
 
   /** Read-only recovery; absence never authorizes another refund submission. */
   lookupRefund?(input: ProviderRefundLookupInput): Promise<ProviderRefundLookupResult>;
+
+  /** Observe a dashboard-created refund and its captured Payment identity; never submits money. */
+  lookupExternalRefund?(input: {
+    providerPaymentReference: string;
+    providerRefundReference: string;
+  }): Promise<ProviderRefundLookupResult>;
 
   /** Ensure one provider customer identity for an application customer. */
   ensureCustomer?(input: {

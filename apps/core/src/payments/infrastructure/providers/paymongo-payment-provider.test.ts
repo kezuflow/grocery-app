@@ -223,6 +223,146 @@ describe("PayMongo refund outcome certainty", () => {
   });
 });
 
+describe("PayMongo QR Ph refund service", () => {
+  const request = {
+    providerReference: "pi_qr",
+    refundProviderIdempotencyKey: "qr-refund-key",
+    amountMinor: 500,
+    currency: "PHP",
+  };
+  function captured() {
+    return Response.json({
+      data: {
+        id: "pi_qr",
+        type: "payment_intent",
+        attributes: {
+          status: "succeeded",
+          amount: 1000,
+          currency: "PHP",
+          payments: [{ id: "pay_qr", attributes: { status: "paid", source: { type: "qrph" } } }],
+        },
+      },
+    });
+  }
+  function refund(status = "processing") {
+    return {
+      id: "ref_qr",
+      type: "refund",
+      attributes: {
+        payment_id: "pay_qr",
+        amount: 500,
+        currency: "PHP",
+        livemode: false,
+        status,
+        created_at: NOW / 1000,
+        transfer_link: "https://transfer.paymongo-stg.com/fixture-claim",
+        notes: "FreshMarkets refund: qr-refund-key",
+      },
+    };
+  }
+  it("submits once to the QR Ph service and returns the private claim action without success", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(captured())
+      .mockResolvedValueOnce(Response.json({ data: refund() }));
+    expect(await provider(fetcher).requestRefund(request)).toEqual({
+      ok: true,
+      providerRefundReference: "ref_qr",
+      claimAction: {
+        url: "https://transfer.paymongo-stg.com/fixture-claim",
+        expiresAt: NOW + 259200000,
+      },
+    });
+    expect(fetcher.mock.calls[1][0]).toBe("https://refunds-api.paymongo.com/v1/refunds");
+    expect(new Headers(fetcher.mock.calls[1][1]?.headers).get("idempotency-key")).toBe(
+      request.refundProviderIdempotencyKey,
+    );
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).data.attributes.notes).toBe(
+      "FreshMarkets refund: qr-refund-key",
+    );
+  });
+  it("recovers QR Ph evidence through the captured payment, never the unsupported refund GET", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(captured())
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            id: "pay_qr",
+            type: "payment",
+            attributes: { payment_intent_id: "pi_qr", refunds: [refund()] },
+          },
+        }),
+      );
+    expect(
+      await provider(fetcher).lookupRefund?.({ ...request, providerRefundReference: null }),
+    ).toMatchObject({
+      outcome: "FOUND",
+      refund: {
+        canonicalState: "PROCESSING",
+        providerRefundReference: "ref_qr",
+        idempotencyKey: "qr-refund-key",
+        claimAction: { expiresAt: NOW + 259200000 },
+      },
+    });
+    expect(fetcher.mock.calls[1][0]).toBe("https://api.paymongo.com/v1/payments/pay_qr");
+    for (const call of fetcher.mock.calls) expect(call[1]?.method ?? "GET").toBe("GET");
+  });
+  it("keeps a lost QR Ph response unknown and rejects unsafe claim URLs", async () => {
+    for (const response of [
+      undefined,
+      Response.json({
+        data: {
+          ...refund(),
+          attributes: { ...refund().attributes, transfer_link: "https://attacker.example/claim" },
+        },
+      }),
+    ]) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(captured());
+      if (response) fetcher.mockResolvedValueOnce(response);
+      else fetcher.mockRejectedValueOnce(Error("Lost response"));
+      await expect(provider(fetcher).requestRefund(request)).rejects.toThrow(
+        "PAYMONGO_REFUND_OUTCOME_UNKNOWN",
+      );
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    }
+  });
+  it("observes a dashboard refund only under its exact live-mode captured Payment", async () => {
+    const manual = {
+      ...refund("succeeded"),
+      attributes: { ...refund("succeeded").attributes, notes: "Dashboard refund" },
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      Response.json({
+        data: {
+          id: "pay_qr",
+          type: "payment",
+          attributes: {
+            status: "paid",
+            livemode: false,
+            payment_intent_id: "pi_qr",
+            refunds: [manual],
+          },
+        },
+      }),
+    );
+    expect(
+      await provider(fetcher).lookupExternalRefund?.({
+        providerPaymentReference: "pay_qr",
+        providerRefundReference: "ref_qr",
+      }),
+    ).toMatchObject({
+      outcome: "FOUND",
+      refund: {
+        providerReference: "pi_qr",
+        idempotencyKey: null,
+        canonicalState: "SUCCEEDED",
+        amountMinor: 500,
+      },
+    });
+  });
+});
+
 describe("PayMongo read-only Refund lookup", () => {
   const input = {
     providerReference: "pi_lookup",

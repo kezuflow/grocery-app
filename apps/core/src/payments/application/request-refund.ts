@@ -197,14 +197,18 @@ export async function submitClaimedRefund(
       currency: input.currency,
     });
     if (!outcome.ok) {
-      await repository.updateRefundStatusCas({
+      const rejected = await repository.updateRefundStatusCas({
         refundId,
         paymentIntentId: input.paymentIntentId,
         expectedVersion: requestedVersion,
         fromStatus: "REQUESTED",
         toStatus: "REJECTED",
+        lastErrorCode: /^[A-Z0-9_]{1,100}$/.test(outcome.errorCode)
+          ? outcome.errorCode
+          : "PROVIDER_REJECTED",
         now,
       });
+      if (rejected !== 1) throw new Error("REFUND_STATUS_CONFLICT");
       return failure(
         "PAYMENT_FAILED",
         `Provider rejected the refund: ${outcome.errorCode}`,
@@ -218,6 +222,8 @@ export async function submitClaimedRefund(
       fromStatus: "REQUESTED",
       toStatus: "PROCESSING",
       providerRefundReference: outcome.providerRefundReference,
+      claimAction: outcome.claimAction,
+      lastErrorCode: null,
       now,
     });
     if (processing !== 1) throw new Error("REFUND_STATUS_CONFLICT");
