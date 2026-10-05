@@ -9,7 +9,7 @@ import type { PaymentProviderRegistry } from "../ports/provider-registry";
 
 const MAX_ATTEMPTS = 5;
 const LEASE_MS = 5 * 60_000;
-const due = `(status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED') AND attempt_count<${MAX_ATTEMPTS} AND COALESCE(next_retry_at,created_at+60000)<=?) OR (status IN ('SUCCEEDED','FAILED') AND attempt_count<${MAX_ATTEMPTS} AND next_retry_at IS NOT NULL AND next_retry_at<=?)`;
+const due = `(status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED') AND attempt_count<${MAX_ATTEMPTS} AND (COALESCE(next_retry_at,created_at+60000)<=? OR (status='PROCESSING' AND last_error_code='PROVIDER_PROCESSING' AND claim_url IS NOT NULL AND claim_expires_at>? AND processing_started_at IS NULL))) OR (status IN ('SUCCEEDED','FAILED') AND attempt_count<${MAX_ATTEMPTS} AND next_retry_at IS NOT NULL AND next_retry_at<=?)`;
 type RecoveryRow = {
   id: string;
   payment_intent_id: string;
@@ -32,7 +32,7 @@ export async function reconcileRefunds(
     .prepare(
       `SELECT id,payment_intent_id,amount_minor,currency,status,version,idempotency_key,provider_refund_reference,attempt_count FROM payment_refund WHERE ${due} ORDER BY COALESCE(next_retry_at,created_at),id LIMIT 5`,
     )
-    .bind(now, now)
+    .bind(now, now, now)
     .all<RecoveryRow>();
   let attempted = 0,
     unresolved = 0;
@@ -41,7 +41,7 @@ export async function reconcileRefunds(
       .prepare(
         `UPDATE payment_refund SET processing_started_at=?,next_retry_at=?,attempt_count=attempt_count+1,version=version+1 WHERE id=? AND version=? AND (${due})`,
       )
-      .bind(now, now + LEASE_MS, row.id, row.version, now, now)
+      .bind(now, now + LEASE_MS, row.id, row.version, now, now, now)
       .run();
     if (claim.meta.changes !== 1) continue;
     attempted++;
@@ -148,8 +148,12 @@ export async function reconcileRefunds(
         version: claimed.version + 1,
       };
       if (observed.status === "PROCESSING") {
-        await recordUnresolved(database, observed, "PROVIDER_PROCESSING", now);
-        unresolved++;
+        if (observation.claimAction && observation.claimAction.expiresAt > now) {
+          await awaitCustomerClaim(database, observed, observation.claimAction.expiresAt, now);
+        } else {
+          await recordUnresolved(database, observed, "PROVIDER_PROCESSING", now);
+          unresolved++;
+        }
       } else await finishProjection(database, observed, now);
     } catch {
       // Keep the leased intent recoverable after database/projection failure; no financial retry is submitted.
@@ -164,6 +168,44 @@ export async function reconcileRefunds(
     }
   }
   return { considered: rows.results.length, attempted, unresolved };
+}
+
+/** Verified customer action is normal progress; webhooks remain active during the claim window. */
+async function awaitCustomerClaim(
+  database: D1Database,
+  row: RecoveryRow,
+  expiresAt: number,
+  now: number,
+): Promise<void> {
+  const auditKey = `refund-awaiting-claim:${row.id}:${row.version}`;
+  await database.batch([
+    database
+      .prepare(
+        "UPDATE payment_refund SET next_retry_at=?,processing_started_at=NULL,last_error_code=NULL,attempt_count=0 WHERE id=? AND version=? AND status='PROCESSING' AND claim_url IS NOT NULL AND claim_expires_at=? AND claim_expires_at>?",
+      )
+      .bind(expiresAt, row.id, row.version, expiresAt, now),
+    database.prepare("INSERT INTO commitment_abort(id) SELECT -42 WHERE changes()!=1"),
+    database
+      .prepare(
+        "UPDATE payment_reconciliation_case SET status='RESOLVED',resolved_at=?,version=version+1 WHERE id=(SELECT reconciliation_case_id FROM payment_refund WHERE id=?) AND status='OPEN' AND category='REFUND_UNRESOLVED' AND json_extract(details_json,'$.reason')='PROVIDER_PROCESSING'",
+      )
+      .bind(now, row.id),
+    auditEventStatement(database, {
+      actorUserId: null,
+      action: "payments.refund.awaiting-customer-claim",
+      resourceType: "payment_refund",
+      resourceId: row.id,
+      details: { expiresAt },
+      idempotencyKey: auditKey,
+      correlationId: auditKey,
+      occurredAt: now,
+    }),
+    database
+      .prepare(
+        "INSERT INTO commitment_abort(id) SELECT -42 WHERE NOT EXISTS (SELECT 1 FROM audit_event WHERE aggregate_id=? AND action='payments.refund.awaiting-customer-claim' AND idempotency_key=?)",
+      )
+      .bind(row.id, auditKey),
+  ]);
 }
 
 async function finishProjection(

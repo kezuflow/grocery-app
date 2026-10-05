@@ -170,6 +170,132 @@ describe("bounded provider Refund lookup recovery", () => {
     expect(submit).not.toHaveBeenCalled();
     submit.mockRestore();
   });
+  it("waits for a verified customer claim without exhausting retries or reporting unknown money", async () => {
+    const f = await uncertainRefund();
+    const start = Date.now() + 61_000;
+    const expiresAt = start + 3 * 24 * 60 * 60_000;
+    setMockRefundObservation(sharedMock, f.command.idempotencyKey, {
+      outcome: "FOUND",
+      refund: { ...f.observed, canonicalState: "PROCESSING" },
+    });
+    await reconcileRefunds(env.DB, testRegistry(), start);
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_reconciliation_case WHERE id=?")
+        .bind(`refund-recovery:${f.refund.id}`)
+        .first(),
+    ).toEqual({ status: "OPEN" });
+    // Preserve a pending claim produced by the preceding release and recover its processing-only case.
+    await env.DB.prepare(
+      "UPDATE payment_refund SET claim_url='https://transfer.paymongo.com/fixture-claim',claim_expires_at=? WHERE id=?",
+    )
+      .bind(expiresAt, f.refund.id)
+      .run();
+    setMockRefundObservation(sharedMock, f.command.idempotencyKey, {
+      outcome: "FOUND",
+      refund: {
+        ...f.observed,
+        canonicalState: "PROCESSING",
+        claimAction: {
+          url: "https://transfer.paymongo.com/fixture-claim",
+          expiresAt,
+        },
+      },
+    });
+    const submit = vi.spyOn(sharedMock, "requestRefund");
+    const lookup = vi.spyOn(sharedMock, "lookupRefund");
+    await reconcileRefunds(env.DB, testRegistry(), start + 1);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,attempt_count,last_error_code,next_retry_at,succeeded_at FROM payment_refund WHERE id=?",
+      )
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual({
+      status: "PROCESSING",
+      attempt_count: 0,
+      last_error_code: null,
+      next_retry_at: expiresAt,
+      succeeded_at: null,
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM payment_reconciliation_case WHERE id=?")
+        .bind(`refund-recovery:${f.refund.id}`)
+        .first(),
+    ).toEqual({ status: "RESOLVED" });
+    for (let hour = 1; hour < 72; hour++)
+      await reconcileRefunds(env.DB, testRegistry(), start + hour * 60 * 60_000);
+    expect(
+      lookup.mock.calls.filter(
+        ([input]) => input.refundProviderIdempotencyKey === f.command.idempotencyKey,
+      ),
+    ).toHaveLength(1);
+    await reconcileRefunds(env.DB, testRegistry(), expiresAt + 1);
+    expect(
+      await env.DB.prepare(
+        "SELECT status,last_error_code,attempt_count FROM payment_refund WHERE id=?",
+      )
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual({ status: "PROCESSING", last_error_code: "PROVIDER_PROCESSING", attempt_count: 1 });
+    await reconcileRefunds(env.DB, testRegistry(), expiresAt + 2);
+    expect(
+      await env.DB.prepare("SELECT attempt_count FROM payment_refund WHERE id=?")
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual({ attempt_count: 1 });
+    expect(submit).not.toHaveBeenCalled();
+    submit.mockRestore();
+    lookup.mockRestore();
+  });
+  it("rolls back claim-wait scheduling when its required audit is ignored", async () => {
+    const f = await uncertainRefund();
+    const start = Date.now() + 61_000;
+    const expiresAt = start + 3 * 24 * 60 * 60_000;
+    setMockRefundObservation(sharedMock, f.command.idempotencyKey, {
+      outcome: "FOUND",
+      refund: {
+        ...f.observed,
+        canonicalState: "PROCESSING",
+        claimAction: {
+          url: "https://transfer.paymongo.com/fixture-claim",
+          expiresAt,
+        },
+      },
+    });
+    await env.DB.exec(
+      "CREATE TRIGGER ignore_claim_wait_audit BEFORE INSERT ON audit_event WHEN NEW.action='payments.refund.awaiting-customer-claim' BEGIN SELECT RAISE(IGNORE); END",
+    );
+    try {
+      await reconcileRefunds(env.DB, testRegistry(), start);
+    } finally {
+      await env.DB.exec("DROP TRIGGER ignore_claim_wait_audit");
+    }
+    const saved = await env.DB.prepare(
+      "SELECT status,attempt_count,last_error_code,next_retry_at,succeeded_at FROM payment_refund WHERE id=?",
+    )
+      .bind(f.refund.id)
+      .first<{
+        status: string;
+        attempt_count: number;
+        last_error_code: string;
+        next_retry_at: number;
+        succeeded_at: number | null;
+      }>();
+    expect(saved).toMatchObject({
+      status: "PROCESSING",
+      attempt_count: 1,
+      last_error_code: "RECOVERY_APPLICATION_FAILED",
+      succeeded_at: null,
+    });
+    expect(saved?.next_retry_at).not.toBe(expiresAt);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) n FROM audit_event WHERE aggregate_id=? AND action='payments.refund.awaiting-customer-claim'",
+      )
+        .bind(f.refund.id)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
   it.each(["amount", "currency", "key", "reference"])(
     "keeps mismatched %s evidence unresolved and reserved",
     async (field) => {
