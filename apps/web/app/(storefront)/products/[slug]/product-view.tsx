@@ -8,6 +8,7 @@ import { Button } from "../../../../components/ui/button";
 import { ProductGallery } from "../../../../components/storefront/product-gallery";
 import { ProductPrice } from "../../../../components/storefront/product-price";
 import { addToCart, announceToast } from "../../../../lib/storefront/cart-client";
+import { DELIVERY_LOCATION_REQUEST_EVENT } from "../../../../lib/storefront/browsing-location";
 
 export function ProductView({ view }: { view: MarketplaceProductView | null }) {
   const [selectedVariantId, setSelectedVariantId] = useState("");
@@ -33,6 +34,7 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
     product.variants.find((variant) => variant.availability === "AVAILABLE") ??
     product.variants[0];
   const selectedPrice = selectedVariant?.priceMinor ?? null;
+  const needsLocation = selectedVariant?.availability === "LOCATION_REQUIRED";
 
   async function add() {
     if (!selectedVariant || selectedPrice === null || selectedVariant.availability !== "AVAILABLE")
@@ -85,6 +87,15 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
         </p>
         <h1 className="mt-2 text-4xl font-bold tracking-[-0.03em]">{view.product.name}</h1>
         <p className="mt-3 leading-6 text-[var(--fm-text-muted)]">{view.product.description}</p>
+        {needsLocation ? (
+          <div className="mt-4 text-sm leading-6">
+            <p className="font-semibold">Set your delivery location first</p>
+            <p className="text-[var(--fm-text-muted)]">
+              Choose your delivery address to see prices and availability before ordering. We
+              currently deliver only to supported areas in Cebu.
+            </p>
+          </div>
+        ) : null}
         {view.product.details.length > 0 ? (
           <dl className="mt-4 space-y-1.5">
             {view.product.details.map((detail) => (
@@ -177,15 +188,21 @@ export function ProductView({ view }: { view: MarketplaceProductView | null }) {
           <Button
             type="button"
             variant="storefrontPrimary"
-            onClick={() => void add()}
+            onClick={() => {
+              if (needsLocation) {
+                window.dispatchEvent(new Event(DELIVERY_LOCATION_REQUEST_EVENT));
+                return;
+              }
+              void add();
+            }}
             className="min-h-11 font-bold"
             disabled={
               !selectedVariant ||
-              selectedPrice === null ||
-              selectedVariant.availability !== "AVAILABLE"
+              (!needsLocation &&
+                (selectedPrice === null || selectedVariant.availability !== "AVAILABLE"))
             }
           >
-            Add to cart
+            {needsLocation ? "Set delivery location" : "Add to cart"}
           </Button>
         </div>
         {status ? (

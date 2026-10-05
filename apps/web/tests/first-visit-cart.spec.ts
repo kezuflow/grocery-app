@@ -177,7 +177,11 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("article").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /^Add .* to cart$/ })).toHaveCount(0);
     await page.goto("/products/red-onion");
-    await expect(page.getByRole("button", { name: "Add to cart", exact: true })).toBeDisabled();
+    const productLocationAction = page
+      .getByRole("button", { name: "Set delivery location", exact: true })
+      .last();
+    await expect(productLocationAction).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Add to cart", exact: true })).toHaveCount(0);
     const unlocated = z
       .object({
         product: z.object({
@@ -192,7 +196,7 @@ for (const width of [1440, 390]) {
         (item) => item.availability === "LOCATION_REQUIRED" && item.priceMinor === null,
       ),
     ).toBe(true);
-    await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
+    await productLocationAction.click();
     await expect(locationDialog).toBeVisible();
     await locationDialog.getByRole("button", { name: "Choose map", exact: true }).click();
     await locationDialog

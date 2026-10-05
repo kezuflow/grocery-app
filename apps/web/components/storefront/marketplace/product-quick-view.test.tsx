@@ -3,6 +3,15 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProductQuickView } from "./product-quick-view";
+import type { CatalogVariant, MarketplaceProductView } from "@freshmarkets/contracts";
+import { ProductView } from "../../../app/(storefront)/products/[slug]/product-view";
+import { DELIVERY_LOCATION_REQUEST_EVENT } from "../../../lib/storefront/browsing-location";
+
+const cart = vi.hoisted(() => ({
+  addToCart: vi.fn(async () => ({ ok: true, requiresSignIn: false })),
+  announceToast: vi.fn(),
+}));
+vi.mock("../../../lib/storefront/cart-client", () => cart);
 
 let root: Root;
 let resolve: (response: Response) => void;
@@ -16,6 +25,8 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   close.mockClear();
+  cart.addToCart.mockClear();
+  cart.announceToast.mockClear();
   vi.stubGlobal(
     "fetch",
     vi.fn(
@@ -94,3 +105,102 @@ it("ends a hung read and retries only when requested", async () => {
   expect(document.querySelector('[aria-label="Loading product"]')).not.toBeNull();
   await act(async () => resolve(Response.json({ ok: false })));
 });
+
+function productView(availability: CatalogVariant["availability"]): MarketplaceProductView {
+  const priced = availability === "AVAILABLE" || availability === "OUT_OF_STOCK";
+  return {
+    product: {
+      id: "product-abiu",
+      slug: "abiu",
+      name: "Abiu",
+      description: null,
+      category: { code: "fruit", name: "Fruit", slug: "fruit" },
+      media: null,
+      details: [],
+      available: availability === "AVAILABLE",
+      variants: [
+        {
+          id: "sku-abiu",
+          code: "abiu",
+          name: "One piece",
+          merchandisingLabel: null,
+          sellQuantity: 1,
+          sellUnitCode: "PC",
+          unit: "piece",
+          consumptionBaseQuantity: 1,
+          contentsNote: null,
+          priceMinor: priced ? 10000 : null,
+          currency: priced ? "PHP" : null,
+          priceVersion: priced ? 1 : null,
+          availability,
+        },
+      ],
+    },
+    images: [],
+    deliveryContext: { locationAware: availability !== "LOCATION_REQUIRED" },
+  };
+}
+
+for (const surface of ["quick view", "product page"] as const) {
+  async function showProduct(availability: CatalogVariant["availability"]) {
+    const view = productView(availability);
+    if (surface === "quick view") {
+      await render("abiu");
+      await act(async () => resolve(Response.json({ ok: true, value: view })));
+    } else {
+      await act(async () => root.render(<ProductView view={view} />));
+    }
+  }
+
+  it(`${surface} opens location selection instead of attempting an unlocated cart addition`, async () => {
+    await showProduct("LOCATION_REQUIRED");
+    expect(document.body.textContent).toContain("Set your delivery location first");
+    expect(document.body.textContent).toContain("supported areas in Cebu");
+    expect(document.body.textContent).not.toContain("Currently unavailable");
+    const action = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Set delivery location"),
+    );
+    expect(action?.disabled).toBe(false);
+    const requested = vi.fn(() => {
+      if (surface === "quick view") expect(document.querySelector("dialog")?.open).toBe(false);
+    });
+    window.addEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requested);
+    try {
+      await act(async () => action?.click());
+      expect(requested).toHaveBeenCalledOnce();
+      expect(cart.addToCart).not.toHaveBeenCalled();
+      if (surface === "quick view") expect(close).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener(DELIVERY_LOCATION_REQUEST_EVENT, requested);
+    }
+  });
+
+  for (const availability of ["OUT_OF_STOCK", "PRICE_UNAVAILABLE"] as const) {
+    it(`${surface} keeps ${availability} disabled instead of requesting a location`, async () => {
+      await showProduct(availability);
+      expect(document.body.textContent).not.toContain("Set your delivery location first");
+      const action = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes("Add to cart"),
+      );
+      expect(action?.disabled).toBe(true);
+      await act(async () => action?.click());
+      expect(cart.addToCart).not.toHaveBeenCalled();
+    });
+  }
+
+  it(`${surface} still adds a priced available item to the cart`, async () => {
+    await showProduct("AVAILABLE");
+    expect(document.body.textContent).not.toContain("Set your delivery location first");
+    const action = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Add to cart"),
+    );
+    expect(action?.disabled).toBe(false);
+    await act(async () => action?.click());
+    expect(cart.addToCart).toHaveBeenCalledWith("sku-abiu", 1, {
+      name: "Abiu",
+      media: null,
+      unitPriceMinor: 10000,
+      currency: "PHP",
+    });
+  });
+}

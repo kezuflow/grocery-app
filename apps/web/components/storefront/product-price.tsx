@@ -9,7 +9,7 @@ export function ProductPrice({
     availability?: CatalogVariant["availability"];
   };
 }) {
-  if (variant.availability === "LOCATION_REQUIRED") return <>Choose delivery location</>;
+  if (variant.availability === "LOCATION_REQUIRED") return <>Set delivery location</>;
   if (variant.priceMinor === null || variant.currency === null) return <>Unavailable</>;
   return variant.sale ? (
     <span className="inline-flex flex-wrap items-baseline gap-x-2">

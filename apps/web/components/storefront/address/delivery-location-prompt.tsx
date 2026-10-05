@@ -40,9 +40,12 @@ export function DeliveryLocationPrompt() {
             className="mt-0.5 size-5 shrink-0 text-[var(--fm-storefront-action)]"
           />
           <div>
-            <p className="text-sm font-semibold text-[var(--fm-text)]">Where should we deliver?</p>
+            <p className="text-sm font-semibold text-[var(--fm-text)]">
+              Set your delivery location first
+            </p>
             <p className="text-sm text-[var(--fm-text-muted)]">
-              Set your location to see prices and availability in your area.
+              Choose your delivery address to see prices and availability before ordering. We
+              currently deliver only to supported areas in Cebu.
             </p>
           </div>
         </div>

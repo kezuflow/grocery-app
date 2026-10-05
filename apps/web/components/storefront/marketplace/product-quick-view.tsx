@@ -12,6 +12,7 @@ import type { MarketplaceProductView } from "@freshmarkets/contracts";
 import { formatMoney, toPresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import type { PresentationProduct } from "../../../lib/storefront/catalog-presentation";
 import { addToCart, announceToast } from "../../../lib/storefront/cart-client";
+import { DELIVERY_LOCATION_REQUEST_EVENT } from "../../../lib/storefront/browsing-location";
 import { cn } from "../../../lib/utils";
 
 /**
@@ -91,16 +92,25 @@ export function ProductQuickView({
   const preview = products.find((product) => product.slug === slug);
   const variants = presentation?.variants ?? [];
   const selected = variants.find((variant) => variant.id === variantId) ?? null;
+  const needsLocation = selected?.availability === "LOCATION_REQUIRED";
   const total =
     selected && selected.priceMinor !== null && selected.currency
       ? formatMoney(selected.priceMinor * quantity, selected.currency)
       : null;
-  const addLabel = selected?.sale
-    ? "Add to cart · Check current savings"
-    : total
-      ? `Add to cart · ${total}`
-      : "Add to cart";
-  const compactAddLabel = selected?.sale ? "Add to cart" : total ? `Add · ${total}` : "Add to cart";
+  const addLabel = needsLocation
+    ? "Set delivery location"
+    : selected?.sale
+      ? "Add to cart · Check current savings"
+      : total
+        ? `Add to cart · ${total}`
+        : "Add to cart";
+  const compactAddLabel = needsLocation
+    ? "Set delivery location"
+    : selected?.sale
+      ? "Add to cart"
+      : total
+        ? `Add · ${total}`
+        : "Add to cart";
   const recommendations = (
     presentation
       ? products.filter((product) => {
@@ -244,17 +254,29 @@ export function ProductQuickView({
                 <p
                   className={cn(
                     "mt-1 flex items-center gap-1.5 text-sm leading-[22px] font-semibold",
-                    presentation.available
-                      ? "text-[var(--fm-storefront-accent)]"
-                      : "text-[var(--fm-destructive)]",
+                    needsLocation
+                      ? "text-[var(--fm-text)]"
+                      : presentation.available
+                        ? "text-[var(--fm-storefront-accent)]"
+                        : "text-[var(--fm-destructive)]",
                   )}
                 >
                   <span
                     className="inline-block size-1.5 rounded-full bg-current"
                     aria-hidden="true"
                   />
-                  {presentation.available ? "Available for delivery" : "Currently unavailable"}
+                  {needsLocation
+                    ? "Set your delivery location first"
+                    : presentation.available
+                      ? "Available for delivery"
+                      : "Currently unavailable"}
                 </p>
+                {needsLocation ? (
+                  <p className="mt-2 text-sm leading-[22px] text-[var(--fm-text-muted)]">
+                    Choose your delivery address to see prices and availability before ordering. We
+                    currently deliver only to supported areas in Cebu.
+                  </p>
+                ) : null}
                 {presentation.description ? (
                   <p className="mt-3 text-sm leading-[22px] text-[var(--fm-text-muted)]">
                     {presentation.description}
@@ -403,13 +425,21 @@ export function ProductQuickView({
               <Button
                 type="button"
                 variant="storefrontPrimary"
-                onClick={() => void add()}
+                onClick={() => {
+                  if (needsLocation) {
+                    dialogRef.current?.close();
+                    onClose();
+                    window.dispatchEvent(new Event(DELIVERY_LOCATION_REQUEST_EVENT));
+                    return;
+                  }
+                  void add();
+                }}
                 aria-label={addLabel}
                 disabled={
                   pending ||
                   !selected ||
-                  selected.priceMinor === null ||
-                  selected.availability !== "AVAILABLE"
+                  (!needsLocation &&
+                    (selected.priceMinor === null || selected.availability !== "AVAILABLE"))
                 }
                 className="h-auto min-h-11 min-w-0 flex-1 whitespace-normal px-4 py-2 text-center leading-tight font-bold max-[379px]:w-full max-[379px]:flex-none sm:flex-none sm:px-6"
               >
