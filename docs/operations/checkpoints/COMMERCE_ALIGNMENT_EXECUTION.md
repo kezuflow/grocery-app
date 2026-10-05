@@ -1,5 +1,13 @@
 # Commerce alignment — active checkpoint
 
+## Produce image conversion follow-up — PRODUCE-WEBP-20261005-R2
+
+Owner request (5 October 2026): convert the newly added PNGs in `apps/web/public/produce` again. Phase: **Static produce asset conversion**. Active checkpoint: `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner: the owner request; acceptance: all current PNGs replaced with same-basename valid WebP files preserving dimensions, transparency and decoded pixels, with unrelated work preserved.
+
+Started on `main` at `0f6c4acbc767a9a7b896e2a38eb4046ac47fe5e1`. Four new untracked PNGs had no existing WebP outputs or repository PNG references. Preserved unrelated Mobile/Mobile API deletions and the pre-existing deletion of `apps/web/public/produce/mango.webp`. Caller-to-write path remains local static PNG -> installed Pillow lossless WebP encoder -> public WebP. Prior conversion is complete at the starting commit; no application/business/interface changes.
+
+**PRODUCE-WEBP-20261005-R2 complete: 4/4 files converted**: `apple-fuji-big.webp`, `cherry-apple.webp`, `orange-mandarin.webp`, and `orange-naver.webp`. Each remains 1254 x 1254 with exact RGBA bytes. Total bytes reduced from 8,886,457 to 6,514,214 (26.7%). Original backups and safe receipt remain ignored under `.wrangler/produce-webp-20261005-r2`. Conversion verification (PowerShell here-string piped to bundled `python.exe -`, exit 0) reopened each original backup/output, checked WEBP format, dimensions and exact RGBA equality, then asserted zero PNGs remain. Repository reference search found no affected paths. Naming/diff checks and Git landing are recorded by this task; no browser/provider/application acceptance or deployment is claimed. At the file counting level, zero conversions remain; inherited commerce obligations remain open. Next action: review and commit only these four assets and this checkpoint, then push `main`.
+
 ## Produce image conversion — PRODUCE-WEBP-20261005
 
 Owner request (5 October 2026): convert PNG files in `apps/web/public/produce` to WebP. Phase: **Static produce asset conversion**. Active checkpoint: `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner: the owner request; acceptance: every remaining PNG has a valid WebP replacement with identical dimensions, transparency and decoded pixels, no broken repository references, and unrelated work preserved.
