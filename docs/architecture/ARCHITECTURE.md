@@ -6,7 +6,7 @@ Owner image-cache update (2026-09-10): Web caches successful anonymous versioned
 
 ## System Shape
 
-Mobile extension (2026-09-30, expanded 2026-10-01): `mobile/` is an Expo client. `apps/mobile-api` is a third deployment boundary, a public mobile presentation adapter bound to the same authoritative Core Worker. The adapter exposes catalog/location reads, a Better Auth Expo session proxy and thin authenticated shopping/order/feedback endpoints. Core resolves every session and owns commerce policy, D1 writes and provider integration. Mobile API never directly writes D1 or becomes another business authority. This extends the initial two-Worker deployment shape below; source authorization does not authorize deployment.
+Owner correction (2026-10-05): native Mobile and its public Mobile API adapter are deferred and their source packages removed. The active deployment shape remains Web and authoritative Core below. This supersedes the 2026-09-30/2026-10-01 Mobile extension; its source remains recoverable at commit `ac2474fc`. Shared Core contracts, customer features, authentication support and retained business data are not removed by this source cleanup. No Mobile deployment or remote resource deletion is authorized.
 
 FreshMarkets is a single monorepo with two initial Cloudflare Worker deployments:
 

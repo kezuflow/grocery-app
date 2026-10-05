@@ -59,7 +59,7 @@ The Core D1 `database_id` is an explicit development placeholder. Replace it wit
 
 ## Guidance, operations and project skills
 
-Business rules live in [PRODUCT](docs/product/PRODUCT.md); execution and subject routing start in [AGENTS](AGENTS.md). The [single checkpoint](docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) records unfinished work and acceptance levels. Use the [deployment handbook](docs/operations/DEPLOYMENT_RUNBOOK.md), [PayMongo setup](docs/operations/PAYMONGO_SETUP_RUNBOOK.md), [Maps/courier setup](docs/runbooks/MAPS_AND_DISPATCH.md) and [mobile setup](mobile/README.md) for the corresponding environment operation.
+Business rules live in [PRODUCT](docs/product/PRODUCT.md); execution and subject routing start in [AGENTS](AGENTS.md). The [single checkpoint](docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) records unfinished work and acceptance levels. Use the [deployment handbook](docs/operations/DEPLOYMENT_RUNBOOK.md), [PayMongo setup](docs/operations/PAYMONGO_SETUP_RUNBOOK.md) and [Maps/courier setup](docs/runbooks/MAPS_AND_DISPATCH.md) for the corresponding environment operation.
 
 The required Admin skill is `.agents/skills/shadcn-admin/`. Its complete references, agent metadata and assets are retained. Hermes keeps an identical `.hermes/skills/shadcn-admin/` copy until independent host discovery is verified. `pnpm skills:check` checks these complete trees; generic animation/prototyping skills are retired from this project and remain retrievable from Git if a personal installation is needed. No personal skill directories or settings were changed.
 

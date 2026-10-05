@@ -1,6 +1,11 @@
 # Web to Core Application Contracts
 
-## Mobile catalog HTTP adapter (MOB-1)
+## Deferred Mobile HTTP adapter (MOB-1)
+
+Owner correction, 2026-10-05: native Mobile and `apps/mobile-api` source are removed from the
+current workspace. The following describes the former adapter contract, recoverable at commit
+`ac2474fc`, rather than an active HTTP surface or implementation authorization. Shared Core RPC
+contracts and retained customer features remain available under their existing rules.
 
 `apps/mobile-api` exposes anonymous `GET /v1/catalog/home`, `/v1/catalog/search`, `/v1/catalog/product` and Core-backed location search/confirmation. It returns the Core `RpcResult` JSON envelope, forwards a valid `x-request-id` or creates one, and sends `Cache-Control: no-store`. Search text is limited to 120 characters and category slug to 80; unexpected query keys are rejected. Caller-provided `locationId` is never trusted; a signed Core browsing token carries location context. Forward and reverse address lookups share an edge rate limit of 30 requests per minute per client IP and fail closed if that limit binding is unavailable. `GET /health` is adapter liveness only, not Core/D1 readiness. Anonymous catalog CORS is wildcard; location writes, auth and authenticated commerce use local development browser origin control or native requests without an Origin header.
 

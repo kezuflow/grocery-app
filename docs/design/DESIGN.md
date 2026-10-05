@@ -31,7 +31,10 @@ presentation. Core owns availability and the private provider link.
 
 ## Native Mobile direction — owner approval 2026-09-30
 
-The Expo app uses a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy may adapt the Foodpanda Mobbin references linked in [the mobile plan](../../mobile/README.md), using FreshMarkets branding, original components and copy. The expanded customer journey uses rounded category/product cards, a clear delivery-address entry, full product detail, sign-in, private favorites, cart, quote-backed checkout, order progress and private post-delivery review. Show location-specific prices only with Core-confirmed browsing context; show order recommendations only when supported by real order data. Display unavailable, pending, empty and failure states honestly.
+Owner correction, 2026-10-05: native Mobile is deferred and its source removed. This section
+preserves the prior presentation direction as history, not current implementation authority.
+
+The prior Expo app used a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy referenced the Foodpanda Mobbin examples linked in [the historical mobile plan](https://github.com/kezuflow/grocery-app/blob/ac2474fcfadf3af5ef8d019175b3de9f4fa346b2/mobile/README.md), using FreshMarkets branding, original components and copy. The expanded customer journey included rounded category/product cards, delivery-address entry, product detail, sign-in, favorites, cart, quote-backed checkout, order progress and private post-delivery review. This does not change current Storefront or Admin presentation.
 
 ## Lalamove delivery tracking — owner approval 2026-09-29
 
