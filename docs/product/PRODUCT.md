@@ -21,6 +21,12 @@ are recorded separately in the active checkpoint under `ORDER-STATUS-OVERRIDE-20
 
 ## Global modes and stock
 
+Owner correction, 2026-10-05: new scheduled-cycle defaults set the order cutoff to midnight at the
+start of the day before delivery, and delivery end to midnight at the start of the day after delivery.
+Friday therefore suggests Thursday 12:00 AM cutoff and Saturday 12:00 AM delivery end. This replaces
+the earlier discussed end-of-Thursday cutoff default. Suggestions remain editable and do not mutate
+existing cycles or paid promises; accepted schedules and Core chronology govern operations.
+
 One versioned Global selling state (Open/Paused) and one active fulfillment mode govern new authenticated commerce. Instant uses exact local stock, holds and paid reservations; Scheduled uses exact paid demand with no physical-stock admission/netting or capacity. Pause before changing mode. Complete the last planned Scheduled week, receive/count Instant stock and check products/prices/location readiness before switching and reopening; there is no automatic switch date or all-history completion prerequisite. Started payments, immutable paid commitments and outstanding Scheduled goods remain recoverable. Only inspected surplus can become physical Instant stock.
 
 The initial Scheduled site receives, packs and dispatches at one location; a separate warehouse is not required for daily launch work. Multi-location records and approved transfers remain supported. Location stock reads distinguish physical, held/reserved and available quantities. Add stock/Remove stock record quantity, actor/time and an automatic movement label without an operator reason; paid movements/releases remain guarded and exactly once.

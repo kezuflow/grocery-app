@@ -44,6 +44,7 @@ import {
   instantToBusinessFields,
   shiftInstantToDeliveryDate,
   suggestedCycleSchedule,
+  suggestedDeliveryWindow,
 } from "./cycle-time";
 import { validateCycleDraft, type CycleField } from "./cycle-validation";
 
@@ -176,19 +177,18 @@ function applyDeliveryDate(
   const currentStart = instantToBusinessFields(currentWindow?.startsAt ?? "", timezone);
   const currentEnd = instantToBusinessFields(currentWindow?.endsAt ?? "", timezone);
   const sourceDate = currentStart.date;
-  const deliveryStart = businessFieldsToInstant(
-    { date: nextDate, time: currentStart.time || "09:00" },
-    timezone,
-  );
+  const suggestedWindow = suggestedDeliveryWindow(nextDate, timezone);
+  const deliveryStart = currentStart.time
+    ? businessFieldsToInstant({ date: nextDate, time: currentStart.time }, timezone)
+    : suggestedWindow.startsAt;
   const nextEndDate =
     (currentEnd.date && currentStart.date && currentEnd.date > currentStart.date) ||
     (currentEnd.time && currentStart.time && currentEnd.time <= currentStart.time)
       ? addBusinessDays(nextDate, 1)
       : nextDate;
-  const deliveryEnd = businessFieldsToInstant(
-    { date: nextEndDate, time: currentEnd.time || "12:00" },
-    timezone,
-  );
+  const deliveryEnd = currentEnd.time
+    ? businessFieldsToInstant({ date: nextEndDate, time: currentEnd.time }, timezone)
+    : suggestedWindow.endsAt;
   const next: DeliveryCycleDraft = {
     ...draft,
     name: draft.name || suggestedName(nextDate),

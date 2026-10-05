@@ -219,10 +219,13 @@ original request and idempotency identity. Historical multiple delivery ranges r
 
 Owner supplement, 2026-10-05: activated cycle details expose **Edit schedule** to authorized Global managers. The existing editor allows every ordering, procurement, preparation and delivery date/time plus name; market/locations stay fixed. Corrections allow an elapsed cutoff without silently moving other milestones. Review requires a reason and a stock confirmation dialog that explains current operational timing, preserved paid promises/charges and normal courier booking changes. Extending ordering can reopen an unpurchased early-state cycle; Core supplies purchase/payment/version rejection. The timeline displays the last accepted ordering minute and the exact exclusive cutoff separately, in the business timezone, so Thursday 11:59 PM and Friday 12:00 AM are unambiguous. Customer Storefront composition and immutable paid-order presentation remain unchanged.
 
-Owner follow-up, 2026-09-20: a newly suggested schedule opens ordering at 12:00 AM on its first day
-and uses 11:59 PM on the day before delivery as the full-day cutoff. Procurement begins at 12:00 AM
-on delivery day, exactly one minute later, with preparation at 2:00 AM. These
-are editable Web suggestions only; Core chronology and activation guards remain authoritative.
+Owner correction, 2026-10-05: new-cycle suggestions use a cutoff at 12:00 AM on the preceding
+business date and customer delivery ending at 12:00 AM on the following business date. For Friday
+delivery this means Thursday 12:00 AM (the start of Thursday) and Saturday 12:00 AM (the midnight
+ending Friday). This supersedes the earlier end-of-Thursday cutoff suggestion. Opening remains
+12:00 AM on the selected first day; other existing suggested milestone times remain editable.
+Calendar creation and the New cycle editor use the same suggestions. Saved cycles and custom
+duplicate times are preserved; Core chronology and activation guards remain authoritative.
 
 Service Areas supports clicking the map to draw up to 100 ordered boundary points, selecting a point
 to move it by dragging or clicking, undoing the last point, and clearing the unsaved boundary.

@@ -18,6 +18,8 @@ afterEach(() => {
   act(() => root.unmount());
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 function render(node: ReactNode) {
   act(() => root.render(node));
@@ -231,6 +233,52 @@ it("keeps Step 2 open when customer delivery starts before preparation or ends b
     expect(props.setStep).not.toHaveBeenCalled();
     expect(document.querySelector('[role="alert"]')).not.toBeNull();
   }
+});
+it("fills the new-cycle editor with a Thursday midnight cutoff and Saturday midnight delivery end", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-05T04:00:00Z"));
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const props = editorProps();
+  render(
+    <CycleEditor
+      {...props}
+      mode="new"
+      step={1}
+      draft={{
+        ...draft,
+        orderOpensAt: "",
+        cutoffAt: "",
+        procurementAt: "",
+        preparationAt: "",
+        windows: [],
+      }}
+    />,
+  );
+  fireEvent.click(button("Customer delivery date"));
+  const friday = [...document.querySelectorAll<HTMLButtonElement>("button[data-day]")].find(
+    (button) => button.dataset.day === new Date("2026-10-16T12:00:00").toLocaleDateString(),
+  );
+  expect(friday).toBeDefined();
+  fireEvent.click(friday!);
+  expect(props.onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      cutoffAt: "2026-10-14T16:00:00Z",
+      windows: [
+        {
+          name: "Scheduled delivery",
+          startsAt: "2026-10-16T01:00:00Z",
+          endsAt: "2026-10-16T16:00:00Z",
+        },
+      ],
+    }),
+  );
 });
 it("shows the last ordering minute on Thursday and the exclusive cutoff on Friday in business time", () => {
   const { container } = render(

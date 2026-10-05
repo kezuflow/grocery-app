@@ -6,6 +6,7 @@ import {
   instantToBusinessFields,
   shiftInstantToDeliveryDate,
   suggestedCycleSchedule,
+  suggestedDeliveryWindow,
 } from "./cycle-time";
 import { validateCycleDraft } from "./cycle-validation";
 
@@ -85,11 +86,28 @@ describe("cycle planning presentation", () => {
       ),
     ).toEqual({
       orderOpensAt: { date: "2026-09-21", time: "00:00" },
-      cutoffAt: { date: "2026-09-26", time: "00:00" },
+      cutoffAt: { date: "2026-09-25", time: "00:00" },
       procurementAt: { date: "2026-09-26", time: "01:00" },
       preparationAt: { date: "2026-09-26", time: "02:00" },
     });
   });
+
+  it.each(["2026-10-16", "2027-01-01"])(
+    "suggests previous-day midnight cutoff and following-day midnight delivery end for %s",
+    (date) => {
+      const schedule = suggestedCycleSchedule(date, timezone);
+      const window = suggestedDeliveryWindow(date, timezone);
+      expect(instantToBusinessFields(schedule.cutoffAt, timezone)).toEqual({
+        date: date === "2026-10-16" ? "2026-10-15" : "2026-12-31",
+        time: "00:00",
+      });
+      expect(instantToBusinessFields(window.endsAt, timezone)).toEqual({
+        date: date === "2026-10-16" ? "2026-10-17" : "2027-01-02",
+        time: "00:00",
+      });
+      expect(Date.parse(window.endsAt)).toBeGreaterThan(Date.parse(window.startsAt));
+    },
+  );
 
   it("shows a compact connected cycle in month and exact markers in agenda", () => {
     const month = cycleToCalendarEvents(cycle, "month");

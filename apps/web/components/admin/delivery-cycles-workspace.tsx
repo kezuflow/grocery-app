@@ -40,8 +40,8 @@ import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import {
   addBusinessDays,
-  businessFieldsToInstant,
   suggestedCycleSchedule,
+  suggestedDeliveryWindow,
 } from "./delivery-cycles/cycle-time";
 
 const failure = z.object({
@@ -139,13 +139,7 @@ function blankForDeliveryDate(
     ...blank(marketId),
     name: `${new Intl.DateTimeFormat("en-PH", { weekday: "long" }).format(value)} delivery · ${new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short" }).format(value)}`,
     ...suggestedCycleSchedule(date, timezone),
-    windows: [
-      {
-        name: "Scheduled delivery",
-        startsAt: businessFieldsToInstant({ date, time: "09:00" }, timezone),
-        endsAt: businessFieldsToInstant({ date, time: "12:00" }, timezone),
-      },
-    ],
+    windows: [suggestedDeliveryWindow(date, timezone)],
   };
 }
 
