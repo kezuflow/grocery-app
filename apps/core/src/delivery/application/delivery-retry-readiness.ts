@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 /** Current facts shared by booking admission and the queue, correlated against delivery_job job.
  * A failed provider attempt is not evidence that returned goods can be sent again.
  */
@@ -28,7 +29,7 @@ export const scheduledDeliveryDeadlineSql = `(SELECT COALESCE(
       WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),
     delivery_window.ends_at,snapshot.delivery_date)
   FROM order_fulfillment_snapshot snapshot
-  LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id
+  LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id
   WHERE snapshot.order_id=job.order_id)`;
 
 /** A closed attempt with recorded departure can be reviewed only against still-packed paid goods. */

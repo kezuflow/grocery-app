@@ -61,14 +61,14 @@ const commandResult = z.union([
   z.object({ ok: z.literal(true), requestId: z.string(), value: adminDeliveryCycleViewSchema }),
 ]);
 type Command =
-  | ({ action: "SAVE" } & DeliveryCycleDraft)
+  | ({ action: "SAVE" | "RESCHEDULE" } & DeliveryCycleDraft)
   | {
       action: "SCHEDULE" | "CANCEL" | "CLOSE_ORDERING";
       cycleId: string;
       expectedVersion: number;
       reason: string;
     };
-type EditorMode = "new" | "edit" | "duplicate";
+type EditorMode = "new" | "edit" | "duplicate" | "reschedule";
 type Range = { rangeStart: string; rangeEnd: string };
 
 const statuses: readonly DeliveryCycleState[] = [
@@ -388,13 +388,15 @@ export function DeliveryCyclesWorkspace({
       setPending(null);
       if (result.ok) {
         notifyCommandSuccess(
-          submitted.action === "CLOSE_ORDERING"
-            ? "Ordering closed for this cycle"
-            : result.value.status === "DRAFT"
-              ? "Delivery cycle draft saved"
-              : result.value.status === "CANCELED"
-                ? "Delivery cycle deactivated"
-                : "Delivery cycle activated",
+          submitted.action === "RESCHEDULE"
+            ? "Schedule updated. Delivery operations use the revised cycle window; paid order records and existing courier bookings are preserved."
+            : submitted.action === "CLOSE_ORDERING"
+              ? "Ordering closed for this cycle"
+              : result.value.status === "DRAFT"
+                ? "Delivery cycle draft saved"
+                : result.value.status === "CANCELED"
+                  ? "Delivery cycle deactivated"
+                  : "Delivery cycle activated",
         );
         setPage((current) =>
           current
@@ -410,13 +412,15 @@ export function DeliveryCyclesWorkspace({
         setDraft(null);
         setSelectedCycleId(result.value.cycleId);
         setNotice(
-          submitted.action === "CLOSE_ORDERING"
-            ? "New checkouts are closed. Existing paid-order cancellation uses the original cutoff; purchase waits for that cutoff and pending payments."
-            : result.value.status === "DRAFT"
-              ? "Draft saved. Activate it when the plan is ready for customers."
-              : result.value.status === "CANCELED"
-                ? "Cycle deactivated. Unstarted checkout quotes are no longer usable."
-                : "Cycle activated. Orders become eligible at the configured opening time.",
+          submitted.action === "RESCHEDULE"
+            ? "Schedule updated. Delivery operations use the revised window. Paid-order records and existing bookings stay unchanged."
+            : submitted.action === "CLOSE_ORDERING"
+              ? "New checkouts are closed. Existing paid-order cancellation uses the original cutoff; purchase waits for that cutoff and pending payments."
+              : result.value.status === "DRAFT"
+                ? "Draft saved. Activate it when the plan is ready for customers."
+                : result.value.status === "CANCELED"
+                  ? "Cycle deactivated. Unstarted checkout quotes are no longer usable."
+                  : "Cycle activated. Orders become eligible at the configured opening time.",
         );
       } else setNotice(result.error.message);
     } catch {
@@ -603,7 +607,11 @@ export function DeliveryCyclesWorkspace({
               }}
               onSave={(value) => {
                 const parsed = deliveryCycleDraftSchema.safeParse(value);
-                if (parsed.success) void submit({ action: "SAVE", ...parsed.data });
+                if (parsed.success)
+                  void submit({
+                    action: editorMode === "reschedule" ? "RESCHEDULE" : "SAVE",
+                    ...parsed.data,
+                  });
                 else
                   setNotice("Review the highlighted schedule, location, and planning note fields.");
               }}
@@ -620,7 +628,7 @@ export function DeliveryCyclesWorkspace({
               onClose={() => setSelectedCycleId(null)}
               onEdit={() => {
                 setDraft(draftFromCycle(selectedCycle));
-                setEditorMode("edit");
+                setEditorMode(selectedCycle.status === "DRAFT" ? "edit" : "reschedule");
                 setEditorStep(1);
                 setEditorReviewed(false);
               }}

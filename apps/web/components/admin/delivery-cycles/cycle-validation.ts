@@ -13,7 +13,11 @@ export type CycleField =
   | "deliveryEndsAt"
   | "reason";
 
-export function validateCycleDraft(draft: DeliveryCycleDraft, now = Date.now()) {
+export function validateCycleDraft(
+  draft: DeliveryCycleDraft,
+  now = Date.now(),
+  options: { requireFutureCutoff?: boolean } = {},
+) {
   const errors: Partial<Record<CycleField, string>> = {};
   const delivery = draft.windows[0];
   if (!draft.name.trim()) errors.name = "Give this cycle a clear name.";
@@ -43,7 +47,8 @@ export function validateCycleDraft(draft: DeliveryCycleDraft, now = Date.now()) 
   const deliveryStart = Date.parse(delivery!.startsAt);
   const deliveryEnd = Date.parse(delivery!.endsAt);
   if (opens >= cutoff) errors.cutoffAt = "Order cutoff must be after orders open.";
-  if (cutoff <= now) errors.cutoffAt = "This cutoff has already passed. Choose a future cutoff.";
+  if (options.requireFutureCutoff !== false && cutoff <= now)
+    errors.cutoffAt = "This cutoff has already passed. Choose a future cutoff.";
   if (procurement < cutoff)
     errors.procurementAt = "Procurement cannot start before the order cutoff.";
   if (preparation < procurement)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import type {
   AdminCycleDestinations,
@@ -10,6 +10,17 @@ import type {
 import { Calendar } from "@/components/admin/shadcn/calendar";
 import { Button } from "@/components/admin/shadcn/button";
 import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/admin/shadcn/alert-dialog";
+import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
 import { Input } from "@/components/admin/shadcn/input";
 import { Label } from "@/components/admin/shadcn/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/admin/shadcn/popover";
@@ -215,7 +226,7 @@ export function CycleEditor({
   onLoadMoreDestinations,
 }: {
   draft: DeliveryCycleDraft;
-  mode: "new" | "edit" | "duplicate";
+  mode: "new" | "edit" | "duplicate" | "reschedule";
   step: number;
   setStep: Dispatch<SetStateAction<number>>;
   reviewed: boolean;
@@ -234,7 +245,12 @@ export function CycleEditor({
   onRetry(): void;
   onLoadMoreDestinations(): void;
 }) {
-  const errors = useMemo(() => validateCycleDraft(draft), [draft]);
+  const rescheduling = mode === "reschedule";
+  const [confirming, setConfirming] = useState(false);
+  const errors = useMemo(
+    () => validateCycleDraft(draft, Date.now(), { requireFutureCutoff: !rescheduling }),
+    [draft, rescheduling],
+  );
   const delivery = draft.windows[0];
   const deliveryStart = instantToBusinessFields(delivery?.startsAt ?? "", timezone);
   const deliveryEnd = instantToBusinessFields(delivery?.endsAt ?? "", timezone);
@@ -284,6 +300,10 @@ export function CycleEditor({
         event.preventDefault();
         setReviewed(true);
         if (Object.keys(errors).length) return;
+        if (rescheduling) {
+          setConfirming(true);
+          return;
+        }
         onSave(draft);
       }}
     >
@@ -291,11 +311,13 @@ export function CycleEditor({
         <div>
           <p className="text-xs font-semibold text-primary">Step {step} of 3</p>
           <h2 className="mt-1 text-xl font-semibold">
-            {mode === "edit"
-              ? "Edit cycle"
-              : mode === "duplicate"
-                ? "Duplicate cycle"
-                : "New cycle"}
+            {rescheduling
+              ? "Edit schedule"
+              : mode === "edit"
+                ? "Edit cycle"
+                : mode === "duplicate"
+                  ? "Duplicate cycle"
+                  : "New cycle"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Plan in {timezone}</p>
         </div>
@@ -328,6 +350,7 @@ export function CycleEditor({
                 <div className="space-y-1.5">
                   <Label>Business</Label>
                   <Select
+                    disabled={rescheduling}
                     value={draft.marketId}
                     onValueChange={(marketId) =>
                       onChange({ ...draft, marketId, participation: [] })
@@ -421,6 +444,7 @@ export function CycleEditor({
                         className="flex min-h-10 items-center gap-2 rounded-md border border-border px-3 py-2"
                       >
                         <Checkbox
+                          disabled={rescheduling}
                           checked={checked}
                           onCheckedChange={(next) =>
                             onChange({
@@ -498,8 +522,9 @@ export function CycleEditor({
               <div>
                 <h3 className="text-base font-semibold">Review and save</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Saving keeps this cycle in Draft. Activate it separately after reviewing the saved
-                  plan.
+                  {rescheduling
+                    ? "Apply the revised ordering and delivery schedule. Existing paid-order promises and charges are preserved; delivery operations use this cycle's updated window. Existing courier bookings require their normal change or cancellation flow. Extending ordering reopens an unpurchased cycle."
+                    : "Saving keeps this cycle in Draft. Activate it separately after reviewing the saved plan."}
                 </p>
               </div>
               <section>
@@ -534,17 +559,21 @@ export function CycleEditor({
                     .join(", ")}
                 </p>
               </section>
-              <div className="space-y-1.5">
-                <Label htmlFor="cycle-reason">Planning note</Label>
-                <Input
-                  id="cycle-reason"
-                  maxLength={500}
-                  value={draft.reason}
-                  aria-invalid={reviewed && Boolean(errors.reason)}
-                  onChange={(event) => onChange({ ...draft, reason: event.target.value })}
-                />
-                <FieldError field="reason" errors={errors} />
-              </div>
+              <FieldGroup>
+                <Field data-invalid={Boolean(errors.reason)}>
+                  <FieldLabel htmlFor="cycle-reason">
+                    {rescheduling ? "Reason for schedule change" : "Planning note"}
+                  </FieldLabel>
+                  <Input
+                    id="cycle-reason"
+                    maxLength={500}
+                    value={draft.reason}
+                    aria-invalid={reviewed && Boolean(errors.reason)}
+                    onChange={(event) => onChange({ ...draft, reason: event.target.value })}
+                  />
+                  <FieldError field="reason" errors={errors} />
+                </Field>
+              </FieldGroup>
             </div>
           ) : null}
         </div>
@@ -568,10 +597,28 @@ export function CycleEditor({
           </Button>
         ) : (
           <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save draft"}
+            {pending ? "Saving…" : rescheduling ? "Save schedule" : "Save draft"}
           </Button>
         )}
       </footer>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apply the revised cycle schedule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ordering and delivery operations will use the revised dates and window. Original
+              paid-order promises and charges stay unchanged. Existing courier bookings must be
+              changed or canceled through their normal controls.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onSave(draft)} disabled={pending}>
+              Apply schedule
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

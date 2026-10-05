@@ -201,9 +201,11 @@ business times. The three editor stages are Delivery and
 locations, Schedule, and Review and save. Inline chronology feedback preserves the existing weak
 ordering between cutoff/procurement/preparation/pickup, keeps the future-cutoff rule, and never silently
 repairs another field. An unsaved preview is visually distinct. Draft save remains separate from
-activation. Activation explains that the schedule locks; deactivation uses the named confirmation
+activation. Activation explains the opening-time admission; deactivation uses the named confirmation
 dialog and Core-provided blocked reason. Unknown command recovery stays inside the open panel with the
 original request and idempotency identity. Historical multiple delivery ranges remain readable.
+
+Owner supplement, 2026-10-05: activated cycle details expose **Edit schedule** to authorized Global managers. The existing editor allows every ordering, procurement, preparation, pickup and delivery date/time plus name; market/locations stay fixed. Corrections allow an elapsed cutoff without silently moving other milestones. Review requires a reason and a stock confirmation dialog that explains current operational timing, preserved paid promises/charges and normal courier booking changes. Extending ordering can reopen an unpurchased early-state cycle; Core supplies purchase/payment/version rejection. The timeline displays the last accepted ordering minute and the exact exclusive cutoff separately, in the business timezone, so Thursday 11:59 PM and Friday 12:00 AM are unambiguous. Customer Storefront composition and immutable paid-order presentation remain unchanged.
 
 Owner follow-up, 2026-09-20: a newly suggested schedule opens ordering at 12:00 AM on its first day
 and uses 11:59 PM on the day before delivery as the full-day cutoff. Procurement begins at 12:00 AM

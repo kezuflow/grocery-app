@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type { CreateDeliveryRequest, DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
 import { deliveryRetryReadySql } from "./delivery-retry-readiness";
@@ -213,10 +214,10 @@ export async function requestProviderDelivery(
            AND (SELECT CASE WHEN job.fulfillment_mode='INSTANT'
              THEN COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),job.promised_at)
              ELSE COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) END
-             FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)>?
+             FROM order_fulfillment_snapshot snapshot LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)>?
            AND (job.fulfillment_mode!='INSTANT' OR ? IS NULL)
            AND (? IS NULL OR (?>? AND ?<=(SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=job.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date)
-             FROM order_fulfillment_snapshot snapshot LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
+             FROM order_fulfillment_snapshot snapshot LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=job.order_id)))
        ) AND (? IS NULL OR EXISTS (
          SELECT 1 FROM staff_identity staff JOIN staff_role sr ON sr.staff_id=staff.id
          JOIN role_permission rp ON rp.role_id=sr.role_id JOIN permission permission ON permission.id=rp.permission_id

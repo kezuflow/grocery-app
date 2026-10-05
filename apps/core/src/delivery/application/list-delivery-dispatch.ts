@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type { AdminDeliveryOperationView } from "@freshmarkets/contracts";
 import { manualDeliveryActions } from "../domain/manual-delivery";
 import {
@@ -121,7 +122,7 @@ export async function listDeliveryDispatch(
               EXISTS (SELECT 1 FROM delivery_job job WHERE job.id=d.id AND ${returnedDeliveryInspectionSql}) AS return_eligible,
               (SELECT MAX(revision.return_inspected_at) FROM delivery_promise_revision revision WHERE revision.dispatch_id=dispatch.id) AS returned_goods_inspected,
               (SELECT COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=d.id ORDER BY revision.job_version DESC LIMIT 1),delivery_window.ends_at,snapshot.delivery_date) FROM order_fulfillment_snapshot snapshot
-                LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
+                LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=snapshot.order_id WHERE snapshot.order_id=o.id) AS pickup_deadline,
               EXISTS (SELECT 1 FROM delivery_provider_command c JOIN delivery_provider_dispatch p ON p.id=c.dispatch_id
                 WHERE p.delivery_job_id=d.id AND c.operation='CANCEL' AND c.status IN ('SUBMITTING','OUTCOME_UNKNOWN','OBSERVED')) AS pending_cancel,
               EXISTS (SELECT 1 FROM staff_identity s JOIN staff_role sr ON sr.staff_id=s.id JOIN role_permission rp ON rp.role_id=sr.role_id

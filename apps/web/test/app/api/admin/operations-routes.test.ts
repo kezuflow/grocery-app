@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const coreMocks = vi.hoisted(() => ({
+  rescheduleAdminDeliveryCycle: vi.fn(),
   listProcurementRequirements: vi.fn(),
   aggregateAdminProcurementDemand: vi.fn(),
   listReceivingSessions: vi.fn(),
@@ -24,6 +25,7 @@ const coreMocks = vi.hoisted(() => ({
 vi.mock("cloudflare:workers", () => ({ env: { CORE: coreMocks } }));
 
 import { GET as procurementGet } from "@/app/api/admin/procurement/route";
+import { POST as editCycleSchedule } from "@/app/api/admin/delivery-cycles/route";
 import { POST as aggregateProcurement } from "@/app/api/admin/procurement/aggregate/route";
 import { GET as receivingGet } from "@/app/api/admin/receiving/route";
 import { POST as startReceiving } from "@/app/api/admin/receiving/start/route";
@@ -59,6 +61,41 @@ function command(url: string, body: unknown, idempotencyKey = "command-1"): Requ
 }
 
 describe("admin operations BFF routes", () => {
+  it("forwards a complete schedule correction and rejects missing review versions or reasons", async () => {
+    coreMocks.rescheduleAdminDeliveryCycle.mockResolvedValue(ok);
+    const body = {
+      action: "RESCHEDULE",
+      cycleId: "cycle-1",
+      marketId: "market-1",
+      name: "Friday delivery",
+      expectedVersion: 3,
+      orderOpensAt: "2026-10-01T16:00:00Z",
+      cutoffAt: "2026-10-08T16:00:00Z",
+      procurementAt: "2026-10-08T18:00:00Z",
+      preparationAt: "2026-10-09T05:00:00Z",
+      pickupAt: "2026-10-09T06:00:00Z",
+      windows: [
+        { name: "Delivery", startsAt: "2026-10-09T07:00:00Z", endsAt: "2026-10-09T14:00:00Z" },
+      ],
+      participation: [{ zoneId: "zone-1", locationId: "location-1" }],
+      reason: "Supplier delay",
+    };
+    const { action: _action, ...schedule } = body;
+    expect((await editCycleSchedule(command("https://app/cycles", body))).status).toBe(200);
+    expect(coreMocks.rescheduleAdminDeliveryCycle).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        ...schedule,
+        headers: expect.objectContaining(cookie),
+        idempotencyKey: "command-1",
+      }),
+    );
+    for (const invalid of [
+      { ...body, expectedVersion: 0 },
+      { ...body, reason: "" },
+    ])
+      expect((await editCycleSchedule(command("https://app/cycles", invalid))).status).toBe(400);
+    expect(coreMocks.rescheduleAdminDeliveryCycle).toHaveBeenCalledOnce();
+  });
   it("requires a WebSocket upgrade for the operational stream", () => {
     expect(streamGet().status).toBe(426);
   });

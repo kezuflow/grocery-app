@@ -9,6 +9,11 @@ import { invalid } from "../operations-route-utils";
 
 const command = z.discriminatedUnion("action", [
   deliveryCycleDraftSchema.extend({ action: z.literal("SAVE") }),
+  deliveryCycleDraftSchema.extend({
+    action: z.literal("RESCHEDULE"),
+    cycleId: identifierSchema,
+    expectedVersion: z.number().int().safe().positive(),
+  }),
   z
     .object({
       action: z.enum(["SCHEDULE", "CANCEL", "CLOSE_ORDERING"]),
@@ -52,6 +57,12 @@ export const POST = observeAdminRoute("admin.delivery-cycles.command", async (re
     requestId: webRequestId(request),
     idempotencyKey: requireIdempotencyKey(request),
   };
+  if (parsed.data.action === "RESCHEDULE") {
+    const { action: _action, ...schedule } = parsed.data;
+    return adminJson(
+      await coreClient(env.CORE).rescheduleAdminDeliveryCycle({ ...schedule, ...metadata }),
+    );
+  }
   if (parsed.data.action === "SAVE") {
     const { action: _action, ...draft } = parsed.data;
     return adminJson(

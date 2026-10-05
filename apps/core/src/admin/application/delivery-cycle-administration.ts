@@ -3,10 +3,12 @@ import type {
   AdminDeliveryCycleQuery,
   AdminCycleDestinations,
   AdminDeliveryCycleView,
+  DeliveryCycleDraft,
   AppErrorCode,
   AuthenticatedRequest,
   RpcResult,
   SaveAdminDeliveryCycleRequest,
+  RescheduleAdminDeliveryCycleRequest,
   ScheduleAdminDeliveryCycleRequest,
   CancelAdminDeliveryCycleRequest,
   CloseAdminDeliveryCycleOrderingRequest,
@@ -32,6 +34,10 @@ type Deps = OperationsAdministrationDeps & { now?: () => number };
 const saveSchema = authenticatedRequestSchema.extend({
   ...deliveryCycleDraftSchema.shape,
   idempotencyKey: idempotencyKeySchema,
+});
+const rescheduleSchema = saveSchema.extend({
+  cycleId: identifierSchema,
+  expectedVersion: z.number().int().safe().positive(),
 });
 const scheduleSchema = authenticatedRequestSchema.extend({
   cycleId: identifierSchema,
@@ -294,6 +300,7 @@ function participationGuard(
 
 type Mutation =
   | { kind: "SAVE"; request: z.infer<typeof saveSchema> }
+  | { kind: "RESCHEDULE"; request: z.infer<typeof rescheduleSchema> }
   | { kind: "SCHEDULE" | "CANCEL" | "CLOSE_ORDERING"; request: z.infer<typeof scheduleSchema> };
 async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminDeliveryCycleView>> {
   const { request } = mutation;
@@ -342,7 +349,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
     return failure("STALE_VERSION", "Cycle changed; refresh and review", request.requestId);
   if (
     current &&
-    !["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind) &&
+    !["CANCEL", "CLOSE_ORDERING", "RESCHEDULE"].includes(mutation.kind) &&
     current.status !== "DRAFT"
   )
     return failure(
@@ -352,7 +359,10 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
     );
   if (!current && request.expectedVersion !== 0)
     return failure("STALE_VERSION", "A new cycle starts at version zero", request.requestId);
-  const marketId = mutation.kind === "SAVE" ? mutation.request.marketId : current?.marketId;
+  const marketId =
+    mutation.kind === "SAVE" || mutation.kind === "RESCHEDULE"
+      ? mutation.request.marketId
+      : current?.marketId;
   if (!marketId || (current && current.marketId !== marketId))
     return failure("VALIDATION_FAILED", "The cycle market cannot change", request.requestId);
   const market = await deps.db
@@ -381,10 +391,78 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       version: current.version + 1,
       cancellationUnavailableReason: "This cycle no longer permits unpaid cancellation",
     };
-  } else if (mutation.kind === "SAVE") {
+  } else if (mutation.kind === "SAVE" || mutation.kind === "RESCHEDULE") {
     const draft = mutation.request;
-    const invalid = validateDeliveryCycleSchedule(draft, now);
+    const rescheduling = mutation.kind === "RESCHEDULE";
+    if (rescheduling) {
+      if (!current || current.status === "DRAFT")
+        return failure("ILLEGAL_TRANSITION", "Use Edit draft for a draft cycle", request.requestId);
+      const destinations = (items: DeliveryCycleDraft["participation"]) =>
+        items.map((item) => `${item.zoneId}:${item.locationId}`).sort();
+      if (
+        JSON.stringify(destinations(draft.participation)) !==
+        JSON.stringify(destinations(current.participation))
+      )
+        return failure(
+          "VALIDATION_FAILED",
+          "Schedule edits keep fulfillment locations unchanged",
+          request.requestId,
+        );
+      if (current.windows.length !== 1)
+        return failure(
+          "CONFIGURATION_ERROR",
+          "This cycle needs one configured delivery window before its schedule can be edited",
+          request.requestId,
+        );
+    }
+    const invalid = validateDeliveryCycleSchedule(draft, now, {
+      requireFutureCutoff: !rescheduling,
+    });
     if (invalid) return failure("VALIDATION_FAILED", invalid, request.requestId);
+    let status = rescheduling && current ? current.status : ("DRAFT" as const);
+    if (
+      rescheduling &&
+      current &&
+      ["SCHEDULED", "OPEN", "CUTOFF_REACHED"].includes(current.status)
+    ) {
+      status =
+        Date.parse(draft.cutoffAt) <= now
+          ? "CUTOFF_REACHED"
+          : Date.parse(draft.orderOpensAt) > now
+            ? "SCHEDULED"
+            : "OPEN";
+    }
+    if (rescheduling && current && ["OPEN", "SCHEDULED"].includes(status)) {
+      const purchased = await deps.db
+        .prepare("SELECT 1 FROM scheduled_week_completion WHERE cycle_id=? LIMIT 1")
+        .bind(current.cycleId)
+        .first();
+      if (purchased)
+        return failure(
+          "CONFLICT",
+          "Ordering cannot reopen after purchase is complete; create a separate cycle for additional orders",
+          request.requestId,
+        );
+    }
+    if (
+      rescheduling &&
+      current &&
+      Date.parse(draft.procurementAt) < Date.parse(current.procurementAt ?? "")
+    ) {
+      const pending = await deps.db
+        .prepare(`SELECT 1 FROM checkout_quote q JOIN payment_intent p
+        ON p.subject_type='checkout_quote' AND p.subject_id=q.id
+        WHERE q.delivery_cycle_id=? AND (p.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING')
+          OR EXISTS (SELECT 1 FROM payment_reaction reaction WHERE reaction.payment_intent_id=p.id AND reaction.status='PENDING')) LIMIT 1`)
+        .bind(current.cycleId)
+        .first();
+      if (pending)
+        return failure(
+          "CONFLICT",
+          "Resolve started payments before shortening their procurement deadline; other schedule changes remain available",
+          request.requestId,
+        );
+    }
     const destinations = await deps.db
       .prepare(`SELECT z.id zoneId,z.name zoneName,l.id locationId,l.name locationName
       FROM json_each(?) selected JOIN delivery_zone z ON z.id=json_extract(selected.value,'$.zoneId')
@@ -403,8 +481,9 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       marketName: market.name,
       timezone: market.timezone,
       name: draft.name,
-      status: "DRAFT",
-      cancellationUnavailableReason: null,
+      status,
+      cancellationUnavailableReason:
+        rescheduling && current ? current.cancellationUnavailableReason : null,
       version: (current?.version ?? 0) + 1,
       orderOpensAt: new Date(draft.orderOpensAt).toISOString(),
       cutoffAt: new Date(draft.cutoffAt).toISOString(),
@@ -412,13 +491,22 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       preparationAt: new Date(draft.preparationAt).toISOString(),
       pickupAt: new Date(draft.pickupAt).toISOString(),
       windows: draft.windows.map((window) => ({
-        windowId: crypto.randomUUID(),
+        windowId: rescheduling && current ? current.windows[0].windowId : crypto.randomUUID(),
         name: window.name,
         startsAt: new Date(window.startsAt).toISOString(),
         endsAt: new Date(window.endsAt).toISOString(),
       })),
       participation: destinations.results,
     };
+    if (rescheduling && current) {
+      const cancellation = await deps.db
+        .prepare(
+          `SELECT ${cancellationBlocker.replace("c.status NOT IN", "? NOT IN")} reason FROM delivery_cycle c WHERE c.id=?`,
+        )
+        .bind(next.status, current.cycleId)
+        .first<{ reason: string | null }>();
+      next.cancellationUnavailableReason = cancellation?.reason ?? null;
+    }
   } else {
     if (!current || !current.procurementAt || !current.preparationAt || !current.pickupAt)
       return failure(
@@ -453,7 +541,7 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
         market.name,
         market.timezone,
       ),
-    ...(["CANCEL", "CLOSE_ORDERING"].includes(mutation.kind)
+    ...(["CANCEL", "CLOSE_ORDERING", "RESCHEDULE"].includes(mutation.kind)
       ? []
       : [participationGuard(deps.db, marketId, next.participation)]),
     deps.db
@@ -463,21 +551,77 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       .bind(scope, idempotencyKey, hash, now, now),
     required(deps.db),
   ];
-  if (mutation.kind === "SAVE") {
+  if (mutation.kind === "RESCHEDULE" && current) {
+    const window = current.windows[0];
+    statements.push(
+      deps.db
+        .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE NOT EXISTS (
+      SELECT 1 FROM delivery_cycle c JOIN delivery_cycle_schedule s ON s.cycle_id=c.id
+      JOIN delivery_cycle_window w ON w.cycle_id=c.id
+      WHERE c.id=? AND c.version=? AND c.status=? AND c.order_opens_at=? AND c.cutoff_at=?
+      AND s.timezone=? AND s.procurement_at=? AND s.preparation_at=? AND s.pickup_at=?
+      AND w.id=? AND w.name=? AND w.starts_at=? AND w.ends_at=?)
+      OR (SELECT COUNT(*) FROM delivery_cycle_window WHERE cycle_id=?)<>1
+      OR (SELECT COUNT(*) FROM delivery_cycle_zone WHERE cycle_id=? AND status='ACTIVE')<>?
+      OR EXISTS (SELECT 1 FROM delivery_cycle_zone p WHERE p.cycle_id=? AND p.status='ACTIVE' AND NOT EXISTS (
+        SELECT 1 FROM json_each(?) expected WHERE json_extract(expected.value,'$.zoneId')=p.zone_id
+        AND json_extract(expected.value,'$.locationId')=p.location_id))`)
+        .bind(
+          current.cycleId,
+          current.version,
+          current.status,
+          Date.parse(current.orderOpensAt),
+          Date.parse(current.cutoffAt),
+          current.timezone,
+          Date.parse(current.procurementAt ?? ""),
+          Date.parse(current.preparationAt ?? ""),
+          Date.parse(current.pickupAt ?? ""),
+          window.windowId,
+          window.name,
+          Date.parse(window.startsAt),
+          Date.parse(window.endsAt),
+          current.cycleId,
+          current.cycleId,
+          current.participation.length,
+          current.cycleId,
+          JSON.stringify(current.participation),
+        ),
+    );
+    if (["OPEN", "SCHEDULED"].includes(next.status))
+      statements.push(
+        deps.db
+          .prepare(
+            "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM scheduled_week_completion WHERE cycle_id=?)",
+          )
+          .bind(current.cycleId),
+      );
+    if (Date.parse(next.procurementAt ?? "") < Date.parse(current.procurementAt ?? ""))
+      statements.push(
+        deps.db
+          .prepare(`INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (
+        SELECT 1 FROM checkout_quote q JOIN payment_intent p ON p.subject_type='checkout_quote' AND p.subject_id=q.id
+        WHERE q.delivery_cycle_id=? AND (p.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING')
+          OR EXISTS (SELECT 1 FROM payment_reaction reaction WHERE reaction.payment_intent_id=p.id AND reaction.status='PENDING')))`)
+          .bind(current.cycleId),
+      );
+  }
+  if (mutation.kind === "SAVE" || mutation.kind === "RESCHEDULE") {
     const earliest = Math.min(...next.windows.map((window) => Date.parse(window.startsAt)));
     if (current)
       statements.push(
         deps.db
           .prepare(
-            "UPDATE delivery_cycle SET name=?,order_opens_at=?,cutoff_at=?,delivery_date=?,version=version+1 WHERE id=? AND market_id=? AND status='DRAFT' AND version=?",
+            "UPDATE delivery_cycle SET name=?,order_opens_at=?,cutoff_at=?,delivery_date=?,status=?,version=version+1 WHERE id=? AND market_id=? AND status=? AND version=?",
           )
           .bind(
             next.name,
             Date.parse(next.orderOpensAt),
             Date.parse(next.cutoffAt),
             earliest,
+            next.status,
             next.cycleId,
             marketId,
+            current.status,
             request.expectedVersion,
           ),
         required(deps.db),
@@ -514,44 +658,72 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
           now,
         ),
       required(deps.db),
-      deps.db.prepare("DELETE FROM delivery_cycle_window WHERE cycle_id=?").bind(next.cycleId),
-      deps.db
-        .prepare(
-          "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_cycle_window WHERE cycle_id=?)",
-        )
-        .bind(next.cycleId),
-      deps.db.prepare("DELETE FROM delivery_cycle_zone WHERE cycle_id=?").bind(next.cycleId),
-      deps.db
-        .prepare(
-          "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_cycle_zone WHERE cycle_id=?)",
-        )
-        .bind(next.cycleId),
     );
-    for (const window of next.windows)
+    if (mutation.kind === "RESCHEDULE") {
+      const window = next.windows[0];
       statements.push(
         deps.db
           .prepare(
-            "INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at) VALUES (?,?,?,?,?,?)",
+            "UPDATE delivery_cycle_window SET name=?,starts_at=?,ends_at=? WHERE id=? AND cycle_id=?",
           )
           .bind(
-            window.windowId,
-            next.cycleId,
             window.name,
             Date.parse(window.startsAt),
             Date.parse(window.endsAt),
-            now,
+            window.windowId,
+            next.cycleId,
           ),
         required(deps.db),
       );
-    for (const item of next.participation)
+      for (const locationId of new Set(next.participation.map((item) => item.locationId)))
+        statements.push(
+          deps.db
+            .prepare(`INSERT INTO operational_revision(location_id) VALUES (?)
+              ON CONFLICT(location_id) DO UPDATE SET revision=revision+1`)
+            .bind(locationId),
+          required(deps.db),
+        );
+    } else {
       statements.push(
+        deps.db.prepare("DELETE FROM delivery_cycle_window WHERE cycle_id=?").bind(next.cycleId),
         deps.db
           .prepare(
-            "INSERT INTO delivery_cycle_zone(cycle_id,zone_id,location_id,status,version,created_at,updated_at) VALUES (?,?,?,'ACTIVE',1,?,?)",
+            "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_cycle_window WHERE cycle_id=?)",
           )
-          .bind(next.cycleId, item.zoneId, item.locationId, now, now),
-        required(deps.db),
+          .bind(next.cycleId),
+        deps.db.prepare("DELETE FROM delivery_cycle_zone WHERE cycle_id=?").bind(next.cycleId),
+        deps.db
+          .prepare(
+            "INSERT INTO admin_command_abort(id) SELECT -1 WHERE EXISTS (SELECT 1 FROM delivery_cycle_zone WHERE cycle_id=?)",
+          )
+          .bind(next.cycleId),
       );
+      for (const window of next.windows)
+        statements.push(
+          deps.db
+            .prepare(
+              "INSERT INTO delivery_cycle_window(id,cycle_id,name,starts_at,ends_at,created_at) VALUES (?,?,?,?,?,?)",
+            )
+            .bind(
+              window.windowId,
+              next.cycleId,
+              window.name,
+              Date.parse(window.startsAt),
+              Date.parse(window.endsAt),
+              now,
+            ),
+          required(deps.db),
+        );
+      for (const item of next.participation)
+        statements.push(
+          deps.db
+            .prepare(
+              "INSERT INTO delivery_cycle_zone(cycle_id,zone_id,location_id,status,version,created_at,updated_at) VALUES (?,?,?,'ACTIVE',1,?,?)",
+            )
+            .bind(next.cycleId, item.zoneId, item.locationId, now, now),
+          required(deps.db),
+        );
+    }
   } else if (mutation.kind === "SCHEDULE") {
     // Fence the exact schedule and relation sets, not only the earlier aggregate read.
     statements.push(
@@ -643,13 +815,15 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
     auditEventStatement(deps.db, {
       actorUserId: permitted.value.authUserId,
       action:
-        mutation.kind === "SAVE"
-          ? "delivery_cycle.draft_saved"
-          : mutation.kind === "SCHEDULE"
-            ? "delivery_cycle.scheduled"
-            : mutation.kind === "CLOSE_ORDERING"
-              ? "delivery_cycle.ordering_closed_early"
-              : "delivery_cycle.canceled",
+        mutation.kind === "RESCHEDULE"
+          ? "delivery_cycle.schedule_edited"
+          : mutation.kind === "SAVE"
+            ? "delivery_cycle.draft_saved"
+            : mutation.kind === "SCHEDULE"
+              ? "delivery_cycle.scheduled"
+              : mutation.kind === "CLOSE_ORDERING"
+                ? "delivery_cycle.ordering_closed_early"
+                : "delivery_cycle.canceled",
       resourceType: "delivery_cycle",
       resourceId: next.cycleId,
       marketId,
@@ -657,8 +831,13 @@ async function execute(deps: Deps, mutation: Mutation): Promise<RpcResult<AdminD
       correlationId: request.requestId,
       idempotencyKey,
       occurredAt: now,
-      before: current ? { version: current.version, status: current.status } : null,
-      after: { version: next.version, status: next.status },
+      before:
+        mutation.kind === "RESCHEDULE"
+          ? current
+          : current
+            ? { version: current.version, status: current.status }
+            : null,
+      after: mutation.kind === "RESCHEDULE" ? next : { version: next.version, status: next.status },
     }),
     required(deps.db),
     deps.db
@@ -691,6 +870,15 @@ export async function saveAdminDeliveryCycleDraft(
   return parsed.success
     ? execute(deps, { kind: "SAVE", request: parsed.data })
     : failure("VALIDATION_FAILED", "Check cycle details and schedule", input.requestId);
+}
+export async function rescheduleAdminDeliveryCycle(
+  deps: Deps,
+  input: RescheduleAdminDeliveryCycleRequest,
+): Promise<RpcResult<AdminDeliveryCycleView>> {
+  const parsed = rescheduleSchema.safeParse(input);
+  return parsed.success
+    ? execute(deps, { kind: "RESCHEDULE", request: parsed.data })
+    : failure("VALIDATION_FAILED", "Check cycle schedule, version and reason", input.requestId);
 }
 export async function scheduleAdminDeliveryCycle(
   deps: Deps,

@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type {
   AddressComponents,
   AppErrorCode,
@@ -259,7 +260,7 @@ export async function bookOrderDelivery(
        JOIN grocery_order orders ON orders.id=job.order_id
        JOIN fulfillment_record fulfillment ON fulfillment.order_id=orders.id AND fulfillment.location_id=job.location_id
        JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=orders.id
-       LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=orders.id
+       LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=orders.id
        JOIN delivery_stop stop ON stop.delivery_job_id=job.id
        JOIN fulfillment_location location ON location.id=job.location_id
        LEFT JOIN fulfillment_location_delivery_profile profile ON profile.location_id=location.id

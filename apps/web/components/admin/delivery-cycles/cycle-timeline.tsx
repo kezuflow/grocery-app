@@ -36,12 +36,28 @@ export function CycleTimeline({
             className={`fm-cycle-timeline-dot fm-cycle-timeline-dot-${item.kind} relative z-10 mt-1 size-2.5 rounded-full ring-2 ring-card`}
           />
           <div className="grid gap-0.5">
-            <span className="text-sm font-medium">{item.label}</span>
-            <time className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-sm font-medium">
+              {item.kind === "cutoff" ? "Ordering closes" : item.label}
+            </span>
+            <time
+              dateTime={
+                item.value
+                  ? new Date(
+                      Date.parse(item.value) - (item.kind === "cutoff" ? 1 : 0),
+                    ).toISOString()
+                  : undefined
+              }
+              className="text-xs tabular-nums text-muted-foreground"
+            >
               {item.value
-                ? `${formatter.format(new Date(item.value))}${item.endValue ? `–${timeFormatter.format(new Date(item.endValue))}` : ""}`
+                ? `${formatter.format(new Date(Date.parse(item.value) - (item.kind === "cutoff" ? 1 : 0)))}${item.endValue ? `–${timeFormatter.format(new Date(item.endValue))}` : ""}`
                 : "Not configured"}
             </time>
+            {item.kind === "cutoff" && item.value ? (
+              <span className="text-xs text-muted-foreground">
+                Cutoff: {formatter.format(new Date(item.value))} (ordering stops at this time)
+              </span>
+            ) : null}
           </div>
         </li>
       ))}

@@ -197,9 +197,10 @@ export function CycleDetailsPanel({
           <Button type="button" className="col-span-2" disabled={submitting} onClick={onRetry}>
             {submitting ? "Retrying…" : "Retry unconfirmed request"}
           </Button>
-        ) : editable ? (
+        ) : canManage ? (
           <Button type="button" className="col-span-2" disabled={pending} onClick={onEdit}>
-            <Pencil aria-hidden className="size-3.5" /> Edit draft
+            <Pencil aria-hidden data-icon="inline-start" />{" "}
+            {editable ? "Edit draft" : "Edit schedule"}
           </Button>
         ) : null}
         {canManage && !retryAvailable ? (
@@ -235,9 +236,9 @@ export function CycleDetailsPanel({
         scope="Global"
         consequence={
           confirmation === "activate"
-            ? "Activation makes the cycle eligible for ordering at its opening time and locks the schedule for editing."
+            ? "Activation makes the cycle eligible for ordering at its opening time. Later changes use Edit schedule with a reason and confirmation."
             : confirmation === "close-ordering"
-              ? "New checkouts stop now. Started payments may still complete within the configured settlement window. Existing paid orders keep their original cancellation cutoff. Purchase complete becomes available at Procurement starts. This cycle cannot reopen."
+              ? "New checkouts stop now. Started payments may still complete within the configured settlement window. Existing paid orders keep their original cancellation cutoff. Purchase complete becomes available at Procurement starts. Reopening requires a reviewed schedule edit before purchase is recorded."
               : "Deactivation closes unstarted checkout quotes and cannot be undone for this cycle."
         }
         reasonRequired={false}

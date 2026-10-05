@@ -65,6 +65,7 @@ import {
   listAdminDeliveryCycles,
   listAdminCycleDestinations,
   saveAdminDeliveryCycleDraft,
+  rescheduleAdminDeliveryCycle,
   scheduleAdminDeliveryCycle,
   cancelAdminDeliveryCycle,
   closeAdminDeliveryCycleOrdering,
@@ -2418,6 +2419,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     input: import("@freshmarkets/contracts").SaveAdminDeliveryCycleRequest,
   ) {
     return saveAdminDeliveryCycleDraft(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
+    );
+  }
+  async rescheduleAdminDeliveryCycle(
+    input: import("@freshmarkets/contracts").RescheduleAdminDeliveryCycleRequest,
+  ) {
+    return rescheduleAdminDeliveryCycle(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       input,
     );

@@ -13,6 +13,7 @@ export function validateDeliveryCycleSchedule(
     | "participation"
   >,
   now: number,
+  options: { requireFutureCutoff?: boolean } = {},
 ): string | null {
   const opens = Date.parse(draft.orderOpensAt);
   const cutoff = Date.parse(draft.cutoffAt);
@@ -24,13 +25,13 @@ export function validateDeliveryCycleSchedule(
   if (
     !(
       opens < cutoff &&
-      cutoff > now &&
+      (options.requireFutureCutoff === false || cutoff > now) &&
       cutoff <= procurement &&
       procurement <= preparation &&
       preparation <= pickup
     )
   )
-    return "Order opening, future cutoff, procurement, preparation and pickup must be in order";
+    return "Order opening, cutoff, procurement, preparation and pickup must be in order";
   if (draft.windows.length !== 1) return "A Scheduled cycle must have one customer delivery range";
   if (
     draft.windows.some((window) => {

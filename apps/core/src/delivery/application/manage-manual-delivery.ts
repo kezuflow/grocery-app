@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type {
   ManualDeliveryRequest,
   ManualDeliveryResult,
@@ -96,7 +97,7 @@ export async function manageManualDelivery(
     FROM delivery_job job JOIN grocery_order grocery ON grocery.id=job.order_id
     JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
     JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=job.order_id
-    LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=job.order_id
+    LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=job.order_id
     LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
     WHERE job.id=? AND job.location_id=? AND job.batch_id IS NULL AND job.rider_id IS NULL`)
     .bind(command.jobId, command.locationId)
@@ -231,7 +232,7 @@ export async function manageManualDelivery(
         EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status='FULFILLMENT_READY' AND version=? AND fulfillment_mode IN ('INSTANT','SCHEDULED'))
         AND EXISTS (SELECT 1 FROM fulfillment_record WHERE order_id=? AND location_id=? AND status='PACKED' AND version=?)
         AND EXISTS (SELECT 1 FROM delivery_job current_job JOIN order_fulfillment_snapshot current_snapshot ON current_snapshot.order_id=current_job.order_id
-        LEFT JOIN order_delivery_window_snapshot current_window ON current_window.order_id=current_job.order_id
+        LEFT JOIN (${currentOrderDeliveryWindowSql}) current_window ON current_window.order_id=current_job.order_id
         WHERE current_job.id=? AND (CASE WHEN current_job.fulfillment_mode='INSTANT' THEN current_job.promised_at ELSE
           COALESCE((SELECT revision.promised_at FROM delivery_promise_revision revision WHERE revision.delivery_job_id=current_job.id ORDER BY revision.job_version DESC LIMIT 1),current_window.ends_at,current_snapshot.delivery_date) END)>?)
       ))

@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type {
   ReviseDeliveryPromiseRequest,
   ReviseDeliveryPromiseResult,
@@ -82,7 +83,7 @@ export async function reviseDeliveryPromise(
     (${undispatchedDeliveryAgreementReadySql}) AS undispatched_eligible
     FROM delivery_job job JOIN order_fulfillment_snapshot snapshot ON snapshot.order_id=job.order_id
     JOIN grocery_order grocery ON grocery.id=job.order_id JOIN fulfillment_record fulfillment ON fulfillment.order_id=job.order_id AND fulfillment.location_id=job.location_id
-    LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=job.order_id
+    LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=job.order_id
     LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
     WHERE job.id=? AND job.location_id=?`)
     .bind(command.jobId, command.locationId)

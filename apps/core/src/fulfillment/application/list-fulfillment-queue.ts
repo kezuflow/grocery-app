@@ -1,3 +1,4 @@
+import { currentOrderDeliveryWindowSql } from "../../commerce/application/current-order-delivery-window";
 import type {
   FulfillmentQueueFilter,
   FulfillmentQueueItem,
@@ -141,7 +142,7 @@ export async function listFulfillmentQueue(
          WHERE job.order_id=f.order_id AND attempt.method='MANUAL' AND attempt.status='ACTIVE') AS manual_custody
        FROM fulfillment_record f JOIN grocery_order o ON o.id=f.order_id
        LEFT JOIN delivery_cycle cycle ON cycle.id=o.cycle_id
-       LEFT JOIN order_delivery_window_snapshot delivery_window ON delivery_window.order_id=o.id
+       LEFT JOIN (${currentOrderDeliveryWindowSql}) delivery_window ON delivery_window.order_id=o.id
        LEFT JOIN delivery_job job ON job.order_id=o.id
        LEFT JOIN delivery_provider_dispatch attempt ON attempt.id=(
          SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=job.id

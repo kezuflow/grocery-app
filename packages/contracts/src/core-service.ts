@@ -256,6 +256,7 @@ export const coreServiceMethodNames = [
   "listAdminDeliveryCycles",
   "listAdminCycleDestinations",
   "saveAdminDeliveryCycleDraft",
+  "rescheduleAdminDeliveryCycle",
   "scheduleAdminDeliveryCycle",
   "cancelAdminDeliveryCycle",
   "closeAdminDeliveryCycleOrdering",

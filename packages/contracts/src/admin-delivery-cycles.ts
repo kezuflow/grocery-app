@@ -58,6 +58,9 @@ export type AdminCycleDestinations = {
 };
 export type SaveAdminDeliveryCycleRequest = AuthenticatedRequest &
   DeliveryCycleDraft & { idempotencyKey: string };
+export type RescheduleAdminDeliveryCycleRequest = SaveAdminDeliveryCycleRequest & {
+  cycleId: string;
+};
 export type ScheduleAdminDeliveryCycleRequest = AuthenticatedRequest & {
   cycleId: string;
   expectedVersion: number;
@@ -91,6 +94,9 @@ export interface AdminDeliveryCyclesService {
   ): Promise<RpcResult<AdminDeliveryCyclePage>>;
   saveAdminDeliveryCycleDraft(
     request: SaveAdminDeliveryCycleRequest,
+  ): Promise<RpcResult<AdminDeliveryCycleView>>;
+  rescheduleAdminDeliveryCycle(
+    request: RescheduleAdminDeliveryCycleRequest,
   ): Promise<RpcResult<AdminDeliveryCycleView>>;
   scheduleAdminDeliveryCycle(
     request: ScheduleAdminDeliveryCycleRequest,

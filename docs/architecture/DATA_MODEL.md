@@ -165,6 +165,8 @@ The retained-baseline implementation adds `delivery_cycle_schedule` (one timezon
 
 Lalamove quotations are the checkout delivery-price authority in both modes. The approved selected courier/service must be bound to accepted quotation/Order evidence under PRODUCT GD-D03; do not invent a new persisted representation without updating the owning contracts and command path. Actual external/manual cost is separate and nullable; unknown cost/variance is never zero. Legacy fee/capacity structures do not participate in new commerce.
 
+Activated schedule correction (owner supplement 2026-10-05) updates the existing cycle, schedule and single window in place; composite window references and immutable paid snapshots remain valid. The atomic `delivery_cycle.schedule_edited` audit is the recorded opt-in to the current operational cycle window in Fulfillment/Delivery read and write guards. Customer Order reads retain original paid evidence; per-order delivery agreement evidence keeps priority. The edit also increments each participating location's `operational_revision` atomically. No Order/payment/provider attempt is rewritten and no schema migration is required.
+
 ## Cart and Checkout Attempts
 
 - `carts(id PK, customer_id FK, market_id FK, status, version, created_at, updated_at)`
