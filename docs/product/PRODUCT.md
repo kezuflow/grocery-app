@@ -266,6 +266,16 @@ Disclose the missed-delivery condition before payment. No automatic additional c
 
 ## Delivery tracking and contact
 
+Owner supplement, 2026-10-06: delivery proof is supporting evidence, not a mandatory
+customer completion gate. Retain provider-supplied photos, signatures and proof status
+when available. An absent photo does not mean proof is absent if a signature or other
+provider evidence exists. If proof is missing, record that internally in the backend;
+do not show a customer warning, block a verified delivery completion, fabricate a
+delivery failure or automatically cancel/refund the Order. Pending or unavailable
+evidence remains distinct from an explicit provider report of failed delivery, which
+continues to follow the existing failed-delivery policy. This supplement approves the
+rule; implementation and acceptance are tracked separately in the active checkpoint.
+
 Admin
 Delivery and Customer Order detail open the active Lalamove map through Track Delivery rather than
 loading it during the ordinary page view. The opened desktop view places map left and Order
