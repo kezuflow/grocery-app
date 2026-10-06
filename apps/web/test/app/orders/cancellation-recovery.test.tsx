@@ -5,10 +5,26 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import { CancelOrderAction } from "@/components/storefront/orders/cancel-order-action";
 const fetchMock = vi.fn<typeof fetch>();
 let root: Root, container: HTMLDivElement;
+const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "close");
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: {
+      configurable: true,
+      value() {
+        this.open = true;
+      },
+    },
+    close: {
+      configurable: true,
+      value() {
+        this.open = false;
+      },
+    },
+  });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -17,6 +33,11 @@ afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  if (originalShowModal)
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", originalShowModal);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+  if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, "close", originalClose);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
 });
 function render(version: number) {
   return act(() =>
@@ -86,9 +107,15 @@ it("preserves the original customer reason, version and key after an invalid res
     );
     reason.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await click("Confirm cancellation");
+  await click("Yes, cancel order");
   expect(container.textContent).toContain("result is unknown");
   expect(reason.disabled).toBe(true);
+  const dialog = container.querySelector("dialog");
+  expect(dialog?.open).toBe(true);
+  await act(() => {
+    expect(dialog?.dispatchEvent(new Event("cancel", { cancelable: true }))).toBe(false);
+  });
+  expect(dialog?.open).toBe(true);
   await render(9);
   await click("Retry saved cancellation");
   expect(writes).toHaveLength(2);

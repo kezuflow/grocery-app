@@ -1,7 +1,7 @@
 "use client";
 
 import { customerCancellationResponse } from "../../../lib/order-cancellation-response";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   CustomerOrderDetailView,
   OrderCancellationView,
@@ -58,6 +58,19 @@ export function CancelOrderAction({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogId = useId();
+
+  useEffect(() => {
+    if (!confirming) return;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+      triggerRef.current?.focus();
+    };
+  }, [confirming]);
 
   async function submit() {
     if (busy || accepted) return;
@@ -150,17 +163,52 @@ export function CancelOrderAction({
           </div>
         ) : null}
       </dl>
-      {!confirming ? (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="mt-3 min-h-11 rounded-[var(--fm-radius-control)] border border-red-700 px-4 font-bold text-red-800"
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="mt-3 min-h-11 rounded-[var(--fm-radius-control)] border border-red-700 px-4 font-bold text-red-800"
+      >
+        Cancel order
+      </button>
+      {confirming ? (
+        <dialog
+          ref={dialogRef}
+          aria-labelledby={`${dialogId}-title`}
+          aria-describedby={`${dialogId}-description`}
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!busy && !unresolved) setConfirming(false);
+          }}
+          onClick={(event) => {
+            if (event.target === dialogRef.current && !busy && !unresolved) setConfirming(false);
+          }}
+          className="fm-storefront m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-[var(--fm-radius-overlay)] border border-[var(--fm-border)] bg-white p-5 text-[var(--fm-text)] shadow-[var(--fm-shadow-overlay)] backdrop:bg-black/55 sm:p-6"
         >
-          Cancel order
-        </button>
-      ) : (
-        <div className="mt-4 space-y-3">
-          <label className="block font-semibold" htmlFor={`cancel-reason-${orderId}`}>
+          <h2 id={`${dialogId}-title`} className="text-xl font-bold">
+            Cancel this order?
+          </h2>
+          <p id={`${dialogId}-description`} className="mt-2 text-[var(--fm-text-muted)]">
+            This cancels the whole order and requests a refund. The refund is complete only after
+            the payment provider confirms it.
+          </p>
+          <dl className="mt-4 flex flex-col gap-2">
+            <div className="flex justify-between gap-3">
+              <dt>Refund if canceled now</dt>
+              <dd className="font-semibold tabular-nums">
+                {money(cancellation.requiredRefundMinor, cancellation.currency)}
+              </dd>
+            </div>
+            {cancellation.retainedServiceFeeMinor > 0 ? (
+              <div className="flex justify-between gap-3 text-[var(--fm-text-muted)]">
+                <dt>FreshMarkets service fee retained</dt>
+                <dd className="tabular-nums">
+                  {money(cancellation.retainedServiceFeeMinor, cancellation.currency)}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+          <label className="mt-4 block font-semibold" htmlFor={`cancel-reason-${orderId}`}>
             Reason for cancellation
           </label>
           <textarea
@@ -170,20 +218,22 @@ export function CancelOrderAction({
             onChange={(event) => setReason(event.target.value)}
             maxLength={500}
             rows={3}
-            className="w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3"
+            required
+            autoFocus
+            className="mt-2 w-full rounded-[var(--fm-radius-control)] border border-[var(--fm-border)] p-3"
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={submit}
-              disabled={busy}
+              disabled={busy || (!unresolved && !reason.trim())}
               className="min-h-11 rounded-[var(--fm-radius-control)] bg-red-700 px-4 font-bold text-white disabled:opacity-50"
             >
               {busy
                 ? "Requesting cancellation…"
                 : unresolved
                   ? "Retry saved cancellation"
-                  : "Confirm cancellation"}
+                  : "Yes, cancel order"}
             </button>
             <button
               type="button"
@@ -191,13 +241,16 @@ export function CancelOrderAction({
               disabled={busy || unresolved}
               className="min-h-11 rounded-[var(--fm-radius-control)] px-4 font-semibold underline"
             >
-              Keep order
+              No, keep order
             </button>
           </div>
-        </div>
-      )}
+          <div aria-live="polite" className="mt-3">
+            {message ? <p>{message}</p> : null}
+          </div>
+        </dialog>
+      ) : null}
       <div aria-live="polite" className="mt-3">
-        {message ? <p>{message}</p> : null}
+        {!confirming && message ? <p>{message}</p> : null}
       </div>
     </div>
   );

@@ -392,6 +392,8 @@ Order detail uses immutable number/date/items/financial/address/promise snapshot
 
 Owner follow-up, 2026-09-24: keep Order progress in its own card, then present Items, Delivery, Order options or follow-up, any additions or issues, Totals and Payment inside one bordered card with section dividers at every viewport width.
 
+Owner correction, 2026-10-06: the Customer's Cancel order action opens a focused confirmation popup containing the required cancellation reason and Core-provided refund/retained-fee amounts. Yes, cancel order submits the existing cancellation command; No, keep order dismisses without a write. Preserve keyboard dismissal/focus restoration before submission and keep the popup locked during pending or unknown outcomes, with the original-request retry. This is Customer confirmation before submission; eligible cancellation remains automatic and does not add staff approval.
+
 Owner supplement, 2026-09-21: the draggable customer-entrance and fulfillment-location map pin uses
 the owner-supplied looping location-pin animation. Reduced-motion preference or animation-player
 failure keeps a static pin at the same coordinate; animation never changes coordinate or drag
