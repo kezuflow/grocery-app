@@ -225,6 +225,8 @@ workspaces, where currently scoped staff use the existing guarded state commands
 
 ## Staff preparation
 
+Owner supplement, 2026-10-07: the Admin Fulfillment workspace and its shared Picking & packing queue exclude canceled Orders and Orders with any completed refund, including partial refunds and refunds on retained committed paid additions. Apply this rule to all views, History and direct Order links before pagination. Canceled fulfillment records are also absent when the owning Order has not caught up. Requested, processing, failed or rejected refunds alone do not hide an Order; accepted cancellation still suppresses preparation actions under the existing lifecycle policy. Order and financial history remain in their owning workspaces.
+
 Point of Sale in the Admin Sales channels group opens a
 location-scoped paid-order preparation station for staff tablets. Its first version uses the
 existing Fulfillment status actions and ordered quantities; it does not create in-person

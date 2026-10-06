@@ -79,7 +79,21 @@ export async function listFulfillmentQueue(
 > {
   const limit = query.limit ?? 200;
   const now = query.now ?? Date.now();
-  const clauses = ["f.location_id=?"];
+  // Apply visibility before every view and cursor limit, including direct Order links.
+  const clauses = [
+    "f.location_id=?",
+    "f.status<>'CANCELED'",
+    "o.status NOT IN ('CANCELED','REFUNDED')",
+    `NOT EXISTS (SELECT 1 FROM payment_attempt payment WHERE payment.id=o.payment_id
+      AND payment.status IN ('PARTIALLY_REFUNDED','REFUNDED'))`,
+    `NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.id IN (
+      SELECT payment_intent_id FROM payment_attempt WHERE id=o.payment_id
+      UNION ALL SELECT payment_intent_id FROM order_payment_reaction WHERE order_id=o.id
+      UNION ALL SELECT payment_intent_id FROM paid_order_amendment WHERE order_id=o.id AND status='COMMITTED'
+    ) AND (payment.status IN ('PARTIALLY_REFUNDED','REFUNDED') OR EXISTS (
+      SELECT 1 FROM payment_refund refund WHERE refund.payment_intent_id=payment.id AND refund.status='SUCCEEDED'
+    )))`,
+  ];
   const binds: unknown[] = [query.locationId];
   if (query.orderId) {
     clauses.push("f.order_id=?");
@@ -98,7 +112,7 @@ export async function listFulfillmentQueue(
       binds.push(now);
       break;
     case "HISTORY":
-      clauses.push("f.status IN ('COMPLETED','CANCELED','HANDED_OFF')");
+      clauses.push("f.status IN ('COMPLETED','HANDED_OFF')");
       break;
     case "READY_FOR_DISPATCH":
       clauses.push("f.status='PACKED'");

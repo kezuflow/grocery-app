@@ -121,7 +121,212 @@ async function runBatches(statements: D1PreparedStatement[]) {
 }
 
 describe("Admin operational read correctness", () => {
-  it.each(["CANCELLATION_REQUESTED", "CANCELED", "EXCEPTION", "EXPIRED"])(
+  it("excludes canceled and refunded Orders from every fulfillment view before pagination", async () => {
+    const prefix = `fulfillment-visible-${crypto.randomUUID()}`;
+    const locationId = await seedLocation(prefix);
+    const cookie = await seedStaff(["fulfillment.read"], locationId);
+    const customerId = await seedCustomer(prefix);
+    const statements: D1PreparedStatement[] = [];
+    const excluded: string[] = [];
+    for (let index = 0; index < 60; index += 1) {
+      const id = `${prefix}-hidden-${index}`;
+      excluded.push(id);
+      statements.push(
+        ...orderStatements({
+          id,
+          customerId,
+          locationId,
+          status: "NOT_STARTED",
+          committedAt: 100 + index,
+        }),
+      );
+      const kind = index % 10;
+      if (kind === 0 || kind === 1) {
+        statements.push(
+          env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?").bind(
+            kind === 0 ? "CANCELED" : "REFUNDED",
+            id,
+          ),
+        );
+      } else if (kind === 2) {
+        statements.push(
+          env.DB.prepare("UPDATE fulfillment_record SET status='CANCELED' WHERE order_id=?").bind(
+            id,
+          ),
+        );
+      } else if (kind === 3 || kind === 4) {
+        statements.push(
+          env.DB.prepare("UPDATE payment_attempt SET status=? WHERE id=?").bind(
+            kind === 3 ? "REFUNDED" : "PARTIALLY_REFUNDED",
+            `${id}-payment`,
+          ),
+        );
+      } else {
+        const intentId = `${id}-intent`;
+        statements.push(
+          env.DB.prepare(
+            "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','ORDER',?,?,100,'PHP',?,?,1,1)",
+          ).bind(
+            intentId,
+            id,
+            customerId,
+            kind === 5 ? "REFUNDED" : kind === 6 ? "PARTIALLY_REFUNDED" : "SUCCEEDED",
+            intentId,
+          ),
+        );
+        if (kind === 8) {
+          statements.push(
+            env.DB.prepare(
+              "INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at) VALUES (?,?,'COMMITTED','PHP',100,?,?,1,1)",
+            ).bind(`${id}-addition`, id, intentId, `${id}-addition`),
+          );
+        } else if (kind === 9) {
+          statements.push(
+            env.DB.prepare(
+              "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,1)",
+            ).bind(`${id}-reaction`, intentId, `${id}-reaction`, id),
+          );
+        } else {
+          statements.push(
+            env.DB.prepare("UPDATE payment_attempt SET payment_intent_id=? WHERE id=?").bind(
+              intentId,
+              `${id}-payment`,
+            ),
+          );
+        }
+        if (kind === 7 || kind === 8 || kind === 9) {
+          statements.push(
+            env.DB.prepare(
+              "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,1,'PHP','SUCCEEDED',?,1,1)",
+            ).bind(`${id}-refund`, intentId, `${id}-refund`),
+          );
+        }
+      }
+    }
+    const visible = [`${prefix}-active`, `${prefix}-history`];
+    statements.push(
+      ...orderStatements({
+        id: visible[0],
+        customerId,
+        locationId,
+        status: "NOT_STARTED",
+        committedAt: 2,
+      }),
+    );
+    statements.push(
+      ...orderStatements({
+        id: visible[1],
+        customerId,
+        locationId,
+        status: "COMPLETED",
+        committedAt: 1,
+      }),
+    );
+    await runBatches(statements);
+    const request = { requestId: crypto.randomUUID(), headers: { cookie }, locationId };
+    const first = await core.listFulfillmentQueue({ ...request, filter: "ALL", limit: 1 });
+    if (!first.ok) throw new Error(JSON.stringify(first.error));
+    expect(first.value.items.map((item) => item.orderId)).toEqual([visible[0]]);
+    expect(first.value.nextCursor).not.toBeNull();
+    const second = await core.listFulfillmentQueue({
+      ...request,
+      filter: "ALL",
+      limit: 1,
+      cursor: first.value.nextCursor!,
+    });
+    if (!second.ok) throw new Error(JSON.stringify(second.error));
+    expect(second.value.items.map((item) => item.orderId)).toEqual([visible[1]]);
+    expect(second.value.nextCursor).toBeNull();
+    for (const filter of [
+      "ALL",
+      "ACTIVE",
+      "NEW",
+      "PREPARING",
+      "READY_FOR_DISPATCH",
+      "UPCOMING",
+      "HISTORY",
+    ] as const) {
+      const result = await core.listFulfillmentQueue({ ...request, filter, limit: 50 });
+      if (!result.ok) throw new Error(JSON.stringify(result.error));
+      expect(result.value.items.map((item) => item.orderId)).toEqual(
+        filter === "ALL"
+          ? visible
+          : filter === "HISTORY"
+            ? [visible[1]]
+            : filter === "ACTIVE" || filter === "NEW"
+              ? [visible[0]]
+              : [],
+      );
+    }
+    for (const orderId of excluded.slice(0, 10)) {
+      const result = await core.listFulfillmentQueue({ ...request, orderId });
+      if (!result.ok) throw new Error(JSON.stringify(result.error));
+      expect(result.value.items).toEqual([]);
+      expect(result.value.nextCursor).toBeNull();
+    }
+  });
+
+  it("keeps Orders visible for unfinished or failed refunds and unrelated refunded Payments", async () => {
+    const prefix = `fulfillment-refund-pending-${crypto.randomUUID()}`;
+    const locationId = await seedLocation(prefix);
+    const cookie = await seedStaff(["fulfillment.read"], locationId);
+    const customerId = await seedCustomer(prefix);
+    const visible: string[] = [];
+    const statements: D1PreparedStatement[] = [];
+    for (const [index, status] of [
+      "REQUESTED",
+      "APPROVED",
+      "PROCESSING",
+      "ESCALATED",
+      "REJECTED",
+      "FAILED",
+    ].entries()) {
+      const id = `${prefix}-${status}`;
+      const intentId = `${id}-intent`;
+      visible.unshift(id);
+      statements.push(
+        ...orderStatements({
+          id,
+          customerId,
+          locationId,
+          status: "NOT_STARTED",
+          committedAt: index + 1,
+        }),
+      );
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','ORDER',?,?,100,'PHP','SUCCEEDED',?,1,1)",
+        ).bind(intentId, id, customerId, intentId),
+      );
+      statements.push(
+        env.DB.prepare("UPDATE payment_attempt SET payment_intent_id=? WHERE id=?").bind(
+          intentId,
+          `${id}-payment`,
+        ),
+      );
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,1,'PHP',?,?,1,1)",
+        ).bind(`${id}-refund`, intentId, status, `${id}-refund`),
+      );
+    }
+    statements.push(
+      env.DB.prepare(
+        "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','ORDER','unrelated',?,100,'PHP','REFUNDED',?,1,1)",
+      ).bind(`${prefix}-unrelated`, customerId, `${prefix}-unrelated`),
+    );
+    await runBatches(statements);
+    const result = await core.listFulfillmentQueue({
+      requestId: crypto.randomUUID(),
+      headers: { cookie },
+      locationId,
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+    expect(result.value.items.map((item) => item.orderId)).toEqual(visible);
+    expect(result.value.nextCursor).toBeNull();
+  });
+
+  it.each(["CANCELLATION_REQUESTED", "EXCEPTION", "EXPIRED"])(
     "offers no preparation action for an Order in %s even before fulfillment cleanup",
     async (orderStatus) => {
       const prefix = `blocked-${crypto.randomUUID()}`;
