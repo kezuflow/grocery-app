@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { AdminOverviewView, RpcResult } from "@freshmarkets/contracts";
 import { expect, test } from "./admin-authenticated-fixture";
+import { homeOverviewFixture } from "./home-overview-fixture";
 
 const viewports = [
   { name: "desktop", width: 1440, height: 1200 },
@@ -21,6 +22,7 @@ async function installDeterministicReads(page: Page) {
     ok: true,
     requestId: "visual-overview",
     value: {
+      commerce: homeOverviewFixture,
       generatedAt: "2026-08-31T08:00:00.000Z",
       selectedScope: { kind: "GLOBAL" },
       timezone: "Asia/Manila",
@@ -111,6 +113,9 @@ async function installDeterministicReads(page: Page) {
       deniedSections: [],
     },
   } satisfies RpcResult<AdminOverviewView>;
+  await page.route("**/api/admin/overview?**", (route) =>
+    route.fulfill(json(deterministicOverview)),
+  );
   await page.route("**/api/admin/bootstrap?**", async (route) => {
     const response = await route.fetch();
     const payload = (await response.json()) as {

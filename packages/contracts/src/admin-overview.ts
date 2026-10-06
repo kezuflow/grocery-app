@@ -27,6 +27,8 @@ export type AdminOverviewException = OperationalExceptionItem & {
 };
 
 export type AdminOverviewView = {
+  /** Only requested by Home; the shell's notification read stays lightweight. */
+  commerce?: AdminCommerceOverview | null;
   notifications: ReadonlyArray<AdminDashboardNotification>;
   generatedAt: string;
   selectedScope: AdminSelectedScope;
@@ -54,8 +56,71 @@ export type AdminDashboardNotification = {
 };
 
 export type AdminOverviewRequest = AuthenticatedRequest & {
+  commercePeriod?: "7d" | "30d" | "90d";
   selectedScope: AdminSelectedScope;
   timezone: string;
+};
+
+export type AdminCommerceMetric = {
+  value: number | null;
+  previousValue: number | null;
+  unavailableReason: string | null;
+};
+
+export type AdminCommerceOverview = {
+  definitionVersion: 1;
+  period: "7d" | "30d" | "90d";
+  startAt: string;
+  endAt: string;
+  timezone: string;
+  currency: "PHP";
+  computedAt: string;
+  revenue: AdminCommerceMetric;
+  monthlyRevenue: AdminCommerceMetric;
+  yearlyRevenue: AdminCommerceMetric;
+  orders: AdminCommerceMetric;
+  users: AdminCommerceMetric;
+  userGrowth: AdminCommerceMetric;
+  purchasingCustomers: AdminCommerceMetric;
+  returningRate: AdminCommerceMetric;
+  refunds: AdminCommerceMetric;
+  series: ReadonlyArray<{
+    date: string;
+    receivedMinor: number | null;
+    refundedMinor: number | null;
+    orders: number | null;
+    customers: number | null;
+    returningCustomers: number | null;
+    newUsers: number | null;
+  }>;
+  products: ReadonlyArray<{
+    skuId: string;
+    productName: string;
+    variantName: string;
+    unit: string;
+    quantity: number;
+    grossSalesMinor: number;
+  }>;
+  productsUnavailableReason: string | null;
+  recentOrders: ReadonlyArray<{
+    orderId: string;
+    orderNumber: string | null;
+    customerName: string | null;
+    status: string;
+    totalMinor: number;
+    currency: string;
+    createdAt: string;
+  }>;
+  recentTransactions: ReadonlyArray<{
+    paymentIntentId: string;
+    orderId: string | null;
+    orderNumber: string | null;
+    status: string;
+    amountMinor: number;
+    currency: string;
+    confirmedAt: string;
+  }>;
+  deniedSections: ReadonlyArray<string>;
 };
 
 export type AdminBootstrapRequest = AuthenticatedRequest & {

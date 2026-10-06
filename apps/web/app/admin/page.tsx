@@ -1,18 +1,11 @@
 "use client";
-
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
+import type { AdminCommerceOverview } from "@freshmarkets/contracts";
 import { AdminPageState } from "@/components/admin/admin-page-state";
 import { Button } from "@/components/admin/shadcn/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/admin/shadcn/card";
 import { useAdminContext } from "./admin-context-provider";
 import { useAdminOverview } from "./admin-overview-provider";
+import { AdminCommerceOverviewSection } from "@/components/admin/admin-commerce-overview";
 
 const AdminOverviewViewContent = lazy(() =>
   import("@/components/admin/admin-overview-view").then((module) => ({
@@ -21,6 +14,7 @@ const AdminOverviewViewContent = lazy(() =>
 );
 
 export default function AdminPage() {
+  const [period, setPeriod] = useState<AdminCommerceOverview["period"]>("30d");
   const { state: context, selectScope } = useAdminContext();
   const { result: visibleOverview, refresh } = useAdminOverview();
   const selectedScope = context.phase === "ready" ? context.selectedScope : null;
@@ -30,23 +24,23 @@ export default function AdminPage() {
       className="fm-admin-overview min-h-[calc(100svh-3.5rem)] p-4 sm:p-6"
       aria-labelledby="admin-page-title"
     >
-      <Card className="gap-0 border-border py-0 shadow-none">
-        <CardHeader className="gap-1 px-4 pt-6 pb-5 sm:px-6 sm:pt-8 sm:pb-7">
-          <CardTitle>
+      <div className="flex min-w-0 flex-col gap-6">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
             <h1 id="admin-page-title" className="text-2xl font-semibold tracking-tight">
               Overview
             </h1>
-          </CardTitle>
-          <CardDescription>Operational work and attention for the selected scope.</CardDescription>
+            <p className="text-sm text-muted-foreground">
+              Your store’s performance and daily operations in one place.
+            </p>
+          </div>
           {selectedScope ? (
-            <CardAction>
-              <Button onClick={refresh} size="sm" variant="outline">
-                Refresh
-              </Button>
-            </CardAction>
+            <Button onClick={refresh} size="sm" variant="outline">
+              Refresh
+            </Button>
           ) : null}
-        </CardHeader>
-        <CardContent className="px-4 pb-6 sm:px-6 sm:pb-8">
+        </header>
+        <div className="flex min-w-0 flex-col gap-8">
           {context.phase === "ready" && selectedScope === null ? (
             <AdminPageState
               state="unavailable"
@@ -64,17 +58,31 @@ export default function AdminPage() {
             />
           ) : null}
           {visibleOverview?.ok ? (
-            <Suspense fallback={<AdminPageState state="loading" />}>
-              <AdminOverviewViewContent
-                overview={visibleOverview.value}
-                navigation={context.phase === "ready" ? context.context.navigation : []}
-                scopeOptions={context.phase === "ready" ? context.scopes : []}
-                onSelectScope={selectScope}
+            <>
+              <AdminCommerceOverviewSection
+                period={period}
+                onPeriodChange={setPeriod}
+                scope={visibleOverview.value.selectedScope}
+                timezone={visibleOverview.value.timezone}
+                refreshKey={JSON.stringify([
+                  visibleOverview.value.generatedAt,
+                  context.phase === "ready" ? context.context.staffId : null,
+                  context.phase === "ready" ? context.context.scopes : [],
+                  context.phase === "ready" ? context.context.capabilities : [],
+                ])}
               />
-            </Suspense>
+              <Suspense fallback={<AdminPageState state="loading" />}>
+                <AdminOverviewViewContent
+                  overview={visibleOverview.value}
+                  navigation={context.phase === "ready" ? context.context.navigation : []}
+                  scopeOptions={context.phase === "ready" ? context.scopes : []}
+                  onSelectScope={selectScope}
+                />
+              </Suspense>
+            </>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </section>
   );
 }

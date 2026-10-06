@@ -690,6 +690,7 @@ const adminSelectedScopeSchema = validationSchema.discriminatedUnion("kind", [
 ]);
 
 const adminOverviewSchema = authenticatedRequestSchema.extend({
+  commercePeriod: validationSchema.enum(["7d", "30d", "90d"]).optional(),
   selectedScope: adminSelectedScopeSchema,
   timezone: validationSchema.string().trim().min(1).max(100),
 });

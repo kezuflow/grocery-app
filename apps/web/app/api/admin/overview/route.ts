@@ -12,12 +12,21 @@ async function GETHandler(request: Request) {
   if (selectedScope instanceof Response) return selectedScope;
   const timezone = params.get("timezone")?.trim() ?? "";
   if (!timezone) return invalid(request, "An explicit timezone is required");
+  const commercePeriod = params.get("commercePeriod");
+  if (
+    commercePeriod !== null &&
+    commercePeriod !== "7d" &&
+    commercePeriod !== "30d" &&
+    commercePeriod !== "90d"
+  )
+    return invalid(request, "Choose a supported overview period");
   return adminJson(
     await coreClient(env.CORE).getAdminOverview({
       requestId: webRequestId(request),
       headers: requestHeaders(request),
       selectedScope,
       timezone,
+      commercePeriod: commercePeriod ?? undefined,
     }),
   );
 }

@@ -878,3 +878,10 @@ html:has(.fm-admin) ::selection {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Stock shadcn base border rule, isolated to Home commerce. */
+@layer base {
+  .fm-admin .fm-admin-commerce * {
+    @apply border-border outline-ring/50;
+  }
+}

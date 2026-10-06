@@ -360,6 +360,18 @@ Every report uses the selected period and explicit market timezone, current auth
 - Delivery: compare accepted customer delivery charges with recorded courier/manual costs for the same Orders; unknown cost is unavailable.
 - New customers: customers making their first purchase in the period. Unique purchasing customers: distinct customers who purchased in the period. Repeat customers/orders: returning purchasers and their repeat purchases. These are purchase metrics, not registration counts or automatic ordering.
 
+## Home commerce overview — owner approval 2026-10-07
+
+The owner requests the ecommerce KPI/chart/table hierarchy on Admin Home and explicitly confirms **Monthly revenue** and **Yearly revenue** mean calendar month/year-to-date grocery receipts, not MRR/ARR or new subscription scope. Canonical Home definition version 1:
+
+- Total revenue: provider-confirmed PHP grocery checkout and paid-addition receipts within a rolling 7/30/90-day window, before refunds. Monthly/yearly revenue use the same receipts within the reporting timezone's calendar month/year. Refunds remain a separate confirmed-date amount. These are receipts, not profit, net sales or tax recognition. Historical Membership money remains in the existing report where approved and is excluded from grocery-only Home.
+- Total orders: immutable paid commitments in the selected period, including later canceled/refunded purchases; paid additions are not additional Orders. Returning rate is returning purchasers divided by unique purchasing customers, using the approved prior-purchase definition. No purchasers means unavailable.
+- Total users: registered Customer records across all time, distinct from staff/auth accounts and purchasers. User growth is registrations in the window divided by accounts at its start; no starting accounts means unavailable. These figures require Global Customer read authority; local views do not imply account-location attribution.
+- Sales by product / best sellers: gross PHP committed product line totals before discounts/delivery/refunds, including paid additions once. Rank at most eight product/selling-option/snapshot-name/unit combinations by gross sales. Keep quantities separate by option/unit. Missing scoped evidence or inexact totals remain unavailable.
+- Daily revenue/refunds use confirmation dates; purchases use paid commitment dates; registrations use Customer creation dates, all in the stated timezone. Comparisons use the preceding rolling window. Recent Orders use creation dates and recent grocery transactions use confirmation dates, at most six each with their existing Global Orders/Payments read authority.
+
+Current analytics.read and validated selected scope gate Home performance. Existing operational attention remains below it; no new writes, financial authority, provider actions or Storefront/auth scope are introduced.
+
 ## Configuration and record retention
 
 The 14-day window, terminal-close eligibility and legal/operational holds apply as specified in the Order messaging rule; message metadata remains retained. This exception does not authorize deleting Orders, Payments or other business/customer history. Account closure preserves business history; irreversible erasure or personal-information removal needs separate handling and is not authorized by this decision. This records the owner's retention requirement, not a claim of legal compliance or completed implementation acceptance. Official invoice/tax/seller details remain factual accounting inputs.

@@ -18,6 +18,7 @@ import { iamSchema } from "../../iam/schema";
 import { setD1SpanAttributes, traceOperation } from "../../observability";
 import { readAdminNotifications } from "./admin-notifications";
 import { listAdminPaymentAttention } from "./finance-reads";
+import { readCommerceOverview } from "../../analytics/application/commerce-overview";
 
 export type AdminOverviewDeps = {
   auth: AuthInstance;
@@ -309,9 +310,19 @@ export async function getAdminOverview(
     : null;
   const recentOperations = recent?.ok ? recent.value.items : [];
   const generatedAt = new Date().toISOString();
+  const commerce =
+    request.commercePeriod && capabilities.includes("analytics.read")
+      ? await readCommerceOverview(deps.db, {
+          scope: selected,
+          timezone: request.timezone,
+          period: request.commercePeriod,
+          capabilities,
+        })
+      : null;
   return {
     ok: true,
     value: {
+      ...(request.commercePeriod ? { commerce } : {}),
       generatedAt,
       notifications,
       selectedScope: selected,

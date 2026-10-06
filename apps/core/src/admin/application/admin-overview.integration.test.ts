@@ -76,6 +76,51 @@ async function seedStaff(options: {
 }
 
 describe("Admin operational overview", () => {
+  it("gates requested commerce data independently and validates the period at RPC ingress", async () => {
+    const request = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: await seedStaff({ capabilities: ["catalog.read"], scope: "global" }) },
+      selectedScope: { kind: "GLOBAL" as const },
+      timezone: "Asia/Manila",
+      commercePeriod: "7d" as const,
+    };
+    expect(await core.getAdminOverview(request)).toMatchObject({
+      ok: true,
+      value: { commerce: null },
+    });
+    expect(
+      await core.getAdminOverview({ ...request, commercePeriod: "bogus" as "7d" }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    const allowed = await core.getAdminOverview({
+      ...request,
+      headers: { cookie: await seedStaff({ capabilities: ["analytics.read"], scope: "location" }) },
+      selectedScope: {
+        kind: "LOCATION",
+        marketId: "market-metro-cebu",
+        locationId: "location-cebu-central",
+      },
+    });
+    expect(allowed).toMatchObject({
+      ok: true,
+      value: {
+        commerce: {
+          period: "7d",
+          users: { value: null },
+          recentOrders: [],
+          recentTransactions: [],
+          deniedSections: expect.arrayContaining(["users", "recentOrders", "recentTransactions"]),
+        },
+      },
+    });
+    expect(
+      await core.getAdminOverview({
+        ...request,
+        headers: {
+          cookie: await seedStaff({ capabilities: ["analytics.read"], scope: "location" }),
+        },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
   it("requires authentication and a valid timezone", async () => {
     expect(
       await core.getAdminOverview({
