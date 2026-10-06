@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Owner acceptance of the legacy checklist — COMMERCE-CHECKLIST-ACCEPTANCE-20261006
+
+Phase **Retire the repeated nine-group backlog count**; active checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner current "this is all already good though", responding to the explained nine legacy checklist categories. Started `main / ee8028cd2c97ded30a94d45bfe8609e0463ba8a0`; preserve the unrelated untracked Scratch project without editing/staging it. Record the owner's acceptance and stop presenting this inherited checklist as current outstanding work. Mobile remains deferred under its later approved decision. Earlier actual test/provider evidence and recorded verification failures retain their factual scope; this correction does not invent additional executed tests or authorize new implementation, financial/provider operations, messages or deployment.
+
+**COMMERCE-CHECKLIST-ACCEPTANCE-20261006 complete: 9/9 legacy groups accepted by the owner for current planning; zero inherited checklist groups carried forward as open work.** The historical table below is provenance only and cannot initiate work. The customer cancellation popup is source/UI-complete and has not been deployed. Documentation-only verification: review the correction against this conversation and the existing Mobile deferral, then naming/diff checks and authorized main commit/push. Next action: follow the next explicit owner request; do not repeat the superseded nine-group count or reopen those groups from historical receipts.
+
 ## Customer cancellation confirmation — CUSTOMER-CANCEL-POPUP-20261006
 
 Phase **Customer confirms cancellation in a Yes/No popup**; active checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner asks for cancellation message/popup, selects reason popup with Yes/No, then explicitly clarifies "Customer confirms before submitting". Started `main / 5c7d659c2fd14181c00731c702d9a003a80fe1ae`; preserve the unrelated untracked Scratch project under `apps/web/public/produce` without editing/staging it. Acceptance: eligible Customer Cancel order opens a reason/refund confirmation; Yes submits once after a required reason, No/Escape dismiss without writing and restore focus, pending/unknown outcomes retain original command/retry and prevent dismissal, mobile popup remains readable. Core eligibility/refund/state/authorization and automatic cancellation policy remain unchanged. No Admin presentation, real refund/provider action, outbound message, data mutation or deployment is requested; no delegation.
@@ -438,9 +444,9 @@ This is inherited repository evidence, not a fresh production probe. Release sou
 
 `CA-7.RULES-AUDIT-1` and `.RELEASE` completed: 13/13 source/guidance findings, 2/2 production Workers released. Local focused tests: Core payment 46/46, fulfillment/delivery 102/102, Web 40/40, Maps boundary 3/3. Executed managed local browser 7/7 used disposable D1 and intercepted PayMongo, not actual provider acceptance. Final aggregate at that source passed Core 1,772, Web 737, shared 27 and harness 38 plus static/types/builds. These dated receipts do not accept overall Phase 7 and are not checks rerun by cleanup.
 
-## Unfinished work and acceptance
+## Historical checklist — superseded by owner acceptance on 2026-10-06
 
-Counting level: nine acceptance/work groups below, including four distinct HSPA obligations within their group. Source completion, local/browser evidence, actual provider/native evidence and launch inputs are separate. Dependency order and enduring acceptance families are in ENGINEERING; current business corrections in PRODUCT override historical examples. Resolve prerequisite eligibility/identity/setup before the connected payment, preparation and provider journeys. Do not restart completed source slices or restore stale next actions.
+The following nine-category table preserves the earlier checkpoint's bookkeeping. The owner's 2026-10-06 acceptance above supersedes its open-work wording; do not report these groups as outstanding or initiate work from them. In particular, its Mobile implementation/testing description predates the approved Mobile deferral and source removal. Historical local/browser/provider observations remain evidence at their recorded scope, while current authority comes from the owner request and owning specifications.
 
 | Group / stable IDs | Evidence and observable acceptance still needed |
 | --- | --- |
@@ -456,7 +462,7 @@ Counting level: nine acceptance/work groups below, including four distinct HSPA 
 
 ## Next commerce action and authority
 
-Current work is Phase 7 acceptance above. The separate Admin reason-field request remains group 2 and is not silently added to this slice. Actual provider journeys use the owner's current request, controlled Order/session and factual payment/delivery inputs. Keep Core suites separate from managed browser stacks. Revalidate exact disposable directories and process/session state; historical reset permissions do not identify current data as disposable.
+Follow the current owner request. The nine legacy groups are accepted for current planning and no longer form an active Phase 7/Admin reason-field/Mobile backlog. Any newly requested provider journey still requires its concrete current inputs and authorization; acceptance of the old checklist is not a request to execute one. Keep Core suites separate from managed browser stacks. Revalidate exact disposable directories and process/session state; historical reset permissions do not identify current data as disposable.
 
 ## Historical evidence retrieval
 
