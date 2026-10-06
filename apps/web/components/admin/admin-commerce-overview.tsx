@@ -18,7 +18,17 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { AdminPageState } from "./admin-page-state";
 import { Empty as EmptyState, EmptyHeader, EmptyDescription } from "./shadcn/empty";
 import { Badge } from "./shadcn/badge";
@@ -150,49 +160,56 @@ function number(value: number) {
 function status(value: string) {
   return value.toLowerCase().replaceAll("_", " ");
 }
-function Change({ metric, rate = false }: { metric: AdminCommerceMetric; rate?: boolean }) {
-  if (metric.value === null || metric.previousValue === null)
-    return (
-      <span className="text-xs text-muted-foreground">
-        {metric.unavailableReason ?? "Current period"}
-      </span>
-    );
-  if (!metric.previousValue && !rate)
-    return (
-      <span className="text-xs text-muted-foreground">
-        {metric.value ? "No activity in the previous period" : "No change from previous period"}
-      </span>
-    );
+function Change({
+  metric,
+  rate = false,
+  lowerIsBetter = false,
+}: {
+  metric: AdminCommerceMetric;
+  rate?: boolean;
+  lowerIsBetter?: boolean;
+}) {
+  if (metric.value === null || metric.previousValue === null || (!metric.previousValue && !rate))
+    return null;
   const change = rate
     ? metric.value - metric.previousValue
     : ((metric.value - metric.previousValue) / metric.previousValue) * 100;
   const Icon = change < 0 ? ArrowDownRight : ArrowUpRight;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Badge variant="secondary">
-        <Icon aria-hidden />
-        {change > 0 ? "+" : ""}
-        {number(change)}
-        {rate ? " pp" : "%"}
-      </Badge>
-      <span className="text-xs text-muted-foreground">vs previous period</span>
-    </div>
+    <Badge
+      variant="outline"
+      className="fm-commerce-change"
+      data-tone={change === 0 ? "neutral" : change > 0 !== lowerIsBetter ? "positive" : "negative"}
+      aria-label={`${change > 0 ? "+" : ""}${number(change)} ${rate ? "percentage points" : "percent"} compared with the previous period`}
+    >
+      <Icon aria-hidden />
+      {change > 0 ? "+" : ""}
+      {number(change)}
+      {rate ? " pp" : "%"}
+    </Badge>
   );
 }
 function Metric({
   title,
   metric,
   format = number,
-  detail,
   icon: Icon,
   rate,
+  lowerIsBetter,
+  sparkline,
 }: {
   title: string;
   metric: AdminCommerceMetric;
   format?: (value: number) => string;
-  detail: string;
   icon: typeof Wallet;
   rate?: boolean;
+  lowerIsBetter?: boolean;
+  sparkline?: {
+    label: string;
+    points: { label: string; value: number | null }[];
+    format: (value: number) => string;
+    color: string;
+  };
 }) {
   return (
     <Card className="min-w-0">
@@ -201,16 +218,51 @@ function Metric({
         <CardAction>
           <Icon className="size-4 text-muted-foreground" aria-hidden />
         </CardAction>
-        <CardTitle className="text-2xl tabular-nums lg:text-3xl">
-          {metric.value === null ? "—" : format(metric.value)}
+        <CardTitle className="col-span-2 flex flex-wrap items-center gap-2 text-2xl tabular-nums">
+          <span title={metric.unavailableReason ?? undefined}>
+            {metric.value === null ? "—" : format(metric.value)}
+            {metric.value === null && metric.unavailableReason ? (
+              <span className="sr-only">{metric.unavailableReason}</span>
+            ) : null}
+          </span>
+          <Change metric={metric} rate={rate} lowerIsBetter={lowerIsBetter} />
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <Change metric={metric} rate={rate} />
-      </CardContent>
-      <CardFooter>
-        <p className="text-xs text-muted-foreground">{detail}</p>
-      </CardFooter>
+      {sparkline &&
+      metric.value !== null &&
+      sparkline.points.some((point) => point.value !== null) ? (
+        <CardContent className="mt-auto">
+          <ChartContainer
+            aria-label={sparkline.label}
+            className="h-16 w-full"
+            config={{ value: { label: sparkline.label, color: sparkline.color } }}
+          >
+            <LineChart
+              accessibilityLayer
+              data={sparkline.points}
+              margin={{ top: 4, bottom: 4, left: 2, right: 2 }}
+            >
+              <XAxis dataKey="label" hide />
+              <YAxis hide domain={["auto", "auto"]} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => <span>{sparkline.format(Number(value))}</span>}
+                  />
+                }
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="value"
+                stroke="var(--color-value)"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
@@ -232,16 +284,28 @@ export function AdminCommerceDashboard({ data }: { data: AdminCommerceOverview }
       timeZone: "UTC",
     }).format(new Date(`${date}T00:00:00Z`));
   const periodLabel = `${new Date(data.startAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", timeZone: data.timezone })} – ${new Date(data.endAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: data.timezone })}`;
-  const rows = data.series.map((point) => ({
-    ...point,
-    label: displayDate(point.date),
-    received: point.receivedMinor === null ? null : point.receivedMinor / 100,
-    refunded: point.refundedMinor === null ? null : point.refundedMinor / 100,
-    returningRate:
-      point.customers && point.returningCustomers !== null
-        ? (point.returningCustomers / point.customers) * 100
-        : null,
-  }));
+  let addedUsers: number | null = 0;
+  const rows = data.series.map((point) => {
+    addedUsers =
+      addedUsers !== null && point.newUsers !== null ? addedUsers + point.newUsers : null;
+    return {
+      ...point,
+      label: displayDate(point.date),
+      received: point.receivedMinor === null ? null : point.receivedMinor / 100,
+      refunded: point.refundedMinor === null ? null : point.refundedMinor / 100,
+      userGrowth:
+        addedUsers !== null &&
+        data.users.previousValue !== null &&
+        data.users.previousValue > 0 &&
+        data.userGrowth.value !== null
+          ? (addedUsers / data.users.previousValue) * 100
+          : null,
+      returningRate:
+        point.customers && point.returningCustomers !== null
+          ? (point.returningCustomers / point.customers) * 100
+          : null,
+    };
+  });
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div aria-label="Commerce metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -249,48 +313,53 @@ export function AdminCommerceDashboard({ data }: { data: AdminCommerceOverview }
           title="Total revenue"
           metric={data.revenue}
           format={money}
-          detail="Confirmed grocery payments in this period · before refunds"
           icon={Wallet}
+          sparkline={
+            data.deniedSections.includes("moneySeries")
+              ? undefined
+              : {
+                  label: "Daily revenue",
+                  points: rows.map((point) => ({ label: point.label, value: point.received })),
+                  format: (value) => money(value * 100),
+                  color: "var(--fm-admin-chart-1)",
+                }
+          }
         />
-        <Metric
-          title="Total orders"
-          metric={data.orders}
-          detail="Paid orders in this period"
-          icon={ShoppingBag}
-        />
-        <Metric
-          title="Total users"
-          metric={data.users}
-          detail="Registered Customer accounts · all time"
-          icon={Users}
-        />
+        <Metric title="Total orders" metric={data.orders} icon={ShoppingBag} />
+        <Metric title="Total users" metric={data.users} icon={Users} />
         <Metric
           title="User growth"
           metric={data.userGrowth}
           format={(value) => `${number(value)}%`}
-          detail="New Customer accounts ÷ accounts at period start"
           icon={ArrowUpRight}
           rate
+          sparkline={
+            data.deniedSections.includes("userSeries")
+              ? undefined
+              : {
+                  label: "Cumulative user growth",
+                  points: rows.map((point) => ({ label: point.label, value: point.userGrowth })),
+                  format: (value) => `${number(value)}%`,
+                  color: "var(--fm-commerce-positive)",
+                }
+          }
         />
         <Metric
           title="Monthly revenue"
           metric={data.monthlyRevenue}
           format={money}
-          detail="Calendar month to date · confirmed grocery payments"
           icon={CalendarDays}
         />
         <Metric
           title="Yearly revenue"
           metric={data.yearlyRevenue}
           format={money}
-          detail="Calendar year to date · confirmed grocery payments"
           icon={CalendarDays}
         />
         <Metric
           title="Returning rate"
           metric={data.returningRate}
           format={(value) => `${number(value)}%`}
-          detail="Returning purchasers ÷ purchasing customers"
           icon={Users}
           rate
         />
@@ -298,8 +367,8 @@ export function AdminCommerceDashboard({ data }: { data: AdminCommerceOverview }
           title="Refunded"
           metric={data.refunds}
           format={money}
-          detail="Confirmed grocery refunds in this period"
           icon={CreditCard}
+          lowerIsBetter
         />
       </div>
       <div className="grid min-w-0 gap-6 xl:grid-cols-3">

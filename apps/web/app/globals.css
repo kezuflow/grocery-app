@@ -880,6 +880,29 @@ html:has(.fm-admin) ::selection {
 }
 
 /* Stock shadcn base border rule, isolated to Home commerce. */
+.fm-admin .fm-admin-commerce {
+  --fm-commerce-positive: oklch(0.448 0.119 151.328);
+  --fm-commerce-negative: oklch(0.505 0.213 27.518);
+}
+
+html.fm-admin-dark .fm-admin .fm-admin-commerce {
+  --fm-commerce-positive: oklch(0.792 0.209 151.711);
+  --fm-commerce-negative: oklch(0.808 0.114 19.571);
+}
+
+.fm-admin .fm-admin-commerce .fm-commerce-change {
+  border-color: transparent;
+  background: transparent;
+}
+
+.fm-admin .fm-admin-commerce .fm-commerce-change[data-tone="positive"] {
+  color: var(--fm-commerce-positive);
+}
+
+.fm-admin .fm-admin-commerce .fm-commerce-change[data-tone="negative"] {
+  color: var(--fm-commerce-negative);
+}
+
 @layer base {
   .fm-admin .fm-admin-commerce * {
     @apply border-border outline-ring/50;
