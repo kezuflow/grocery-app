@@ -1,4 +1,8 @@
-import { adminProductCreateBodySchema, idempotencyKeySchema } from "@freshmarkets/validation";
+import {
+  adminProductCreateBodySchema,
+  adminProductPageNumberSchema,
+  idempotencyKeySchema,
+} from "@freshmarkets/validation";
 import { readBoundedJson } from "@/lib/http/bounded-body";
 import { adminJson, observeAdminRoute } from "@/lib/http/admin-route-observability";
 import { webRequestId } from "@/lib/http/request-context";
@@ -31,6 +35,24 @@ async function GETHandler(request: Request) {
   const params = new URL(request.url).searchParams;
   const limit = parseLimit(params, webRequestId(request));
   if (limit instanceof Response) return limit;
+  const pageRaw = params.get("page");
+  const page = pageRaw === null ? undefined : Number(pageRaw);
+  if (
+    page !== undefined &&
+    (!adminProductPageNumberSchema.safeParse(page).success || params.has("cursor"))
+  ) {
+    return adminJson(
+      {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_FAILED" as const,
+          message: "page must be a positive safe integer and cannot be combined with cursor",
+          requestId: webRequestId(request),
+        },
+      },
+      { status: 400 },
+    );
+  }
   const status = params.get("status");
   if (status !== null && status !== "active" && status !== "inactive") {
     return adminJson(
@@ -73,6 +95,7 @@ async function GETHandler(request: Request) {
     query: params.get("query") ?? undefined,
     status: status ?? undefined,
     cursor: params.get("cursor") ?? undefined,
+    page,
     limit,
   });
   return adminJson(result);

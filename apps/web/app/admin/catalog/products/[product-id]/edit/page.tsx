@@ -37,6 +37,7 @@ export default function EditProductPage() {
   const categories = useCategoryOptions();
   const [value, setValue] = useState<ProductFormValue | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const [reload, setReload] = useState(0);
   const loadedScope = useRef("");
@@ -71,6 +72,7 @@ export default function EditProductPage() {
       setValue(null);
       editVersion.current = null;
       initialValue.current = null;
+      setSaveError(null);
     }
     setError(null);
     void fetch(`/api/admin/catalog/products/${productId}?${scopeParams}`)
@@ -119,7 +121,7 @@ export default function EditProductPage() {
   }, [productId, selectedScope, reload, imageBusy, intent.pending, intent.uncertain]);
   async function save(retry = false) {
     if (!retry && (!detail || !value)) return;
-    setError(null);
+    setSaveError(null);
     try {
       const result = retry
         ? await intent.retry()
@@ -133,9 +135,9 @@ export default function EditProductPage() {
           : null;
       if (!result) return;
       if (!result.ok) {
-        setError(
+        setSaveError(
           result.error.code === "STALE_VERSION"
-            ? "Product changed. Refresh before retrying."
+            ? `Product changed. Refresh before retrying. Request reference: ${result.error.requestId}`
             : `${result.error.message} Request reference: ${result.error.requestId}`,
         );
         return;
@@ -146,7 +148,7 @@ export default function EditProductPage() {
         `/admin/catalog/products/${result.value.productId}?updated=1${from ? `&from=${encodeURIComponent(from)}` : ""}`,
       );
     } catch {
-      setError("Connection lost. Retry to safely reuse this request.");
+      setSaveError("Connection lost. Retry to safely reuse this request.");
     }
   }
   async function submit(event: React.FormEvent) {
@@ -158,7 +160,7 @@ export default function EditProductPage() {
       <div className="space-y-4">
         <Alert>
           <AlertDescription>
-            {error ?? "The previous response was lost. Recover the saved product request."}
+            {saveError ?? "The previous response was lost. Recover the saved product request."}
           </AlertDescription>
         </Alert>
         <Button disabled={intent.pending} onClick={() => void save(true)}>
@@ -276,32 +278,40 @@ export default function EditProductPage() {
             {categories.error ? "Retry categories" : "More categories"}
           </Button>
         ) : null}
-        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={intent.pending || intent.uncertain || imageBusy}
-            onClick={() => {
-              if (dirty && !window.confirm("Discard this unsaved product?")) return;
-              router.push(detailHref);
-            }}
-          >
-            Cancel
-          </Button>
-          {intent.uncertain ? (
-            <Button disabled={intent.pending} onClick={() => void save(true)}>
-              Retry saved product
-            </Button>
-          ) : (
+        <div className="sticky bottom-0 z-20 -mx-4 flex flex-col gap-3 border-t border-border bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          {saveError ? (
+            <Alert variant="destructive" id="edit-product-save-error">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="flex items-center justify-between gap-3">
             <Button
-              type="submit"
-              form={EDIT_PRODUCT_FORM_ID}
-              className=""
-              disabled={intent.pending || imageBusy || !dirty}
+              type="button"
+              variant="outline"
+              disabled={intent.pending || intent.uncertain || imageBusy}
+              onClick={() => {
+                if (dirty && !window.confirm("Discard this unsaved product?")) return;
+                router.push(detailHref);
+              }}
             >
-              {intent.pending ? "Saving…" : "Save changes"}
+              Cancel
             </Button>
-          )}
+            {intent.uncertain ? (
+              <Button disabled={intent.pending} onClick={() => void save(true)}>
+                Retry saved product
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                form={EDIT_PRODUCT_FORM_ID}
+                aria-describedby={saveError ? "edit-product-save-error" : undefined}
+                className=""
+                disabled={intent.pending || imageBusy || !dirty}
+              >
+                {intent.pending ? "Saving…" : "Save changes"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </>

@@ -4,6 +4,8 @@ A pnpm monorepo with vinext Web and authoritative Core Workers. Start with [AGEN
 
 ## Setup and validation
 
+The [repository layout](docs/architecture/ENGINEERING.md#repository-layout) explains source, test and generated directories. Web test fixtures are grouped under `tests/unit` and `tests/e2e`; browser traces and run screenshots go to root `.wrangler/playwright-results`. The committed E2E visual baselines are expected images used by screenshot assertions.
+
 ```sh
 pnpm install
 pnpm check

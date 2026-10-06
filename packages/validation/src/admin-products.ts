@@ -62,6 +62,7 @@ export const adminProductSummarySchema = z.object({
   version: z.number().int().safe().positive(),
 });
 const integer = z.number().int().safe();
+export const adminProductPageNumberSchema = integer.positive();
 const status = z.enum(["active", "inactive"]);
 const baseCode = z.enum(["GRAM", "PIECE", "MILLILITER"]);
 export const adminUnitCreateBodySchema = z.object({
@@ -186,4 +187,42 @@ export const adminProductDetailSchema = adminProductSummarySchema.omit({ skuCoun
   allowedActions: z.array(z.enum(["UPDATE", "SET_STATUS"])),
   recentAudit: adminCategoryDetailSchema.shape.recentAudit,
   skus: z.array(adminCatalogSkuSummarySchema),
+});
+
+export const adminProductPaginationSchema = z.object({
+  page: adminProductPageNumberSchema,
+  pageSize: integer.min(1).max(100),
+  totalItems: integer.nonnegative(),
+  totalPages: integer.positive(),
+});
+
+export const adminNumberedProductPageSchema = z.object({
+  items: z.array(
+    adminProductSummarySchema.extend({
+      activeSkuCount: integer.nonnegative(),
+      pricedSkuCount: integer.nonnegative(),
+      availableSkuCount: integer.nonnegative(),
+      primaryMedia: z
+        .object({ mediaId: id, altText: z.string(), version: integer.positive() })
+        .nullable(),
+      priceRange: z
+        .object({
+          minimumMinor: integer.nonnegative(),
+          maximumMinor: integer.nonnegative(),
+          currency: z.string(),
+        })
+        .nullable(),
+      inventoryPosition: adminProductDetailSchema.shape.inventoryPool.shape.position,
+    }),
+  ),
+  readiness: z.object({
+    activeProducts: integer.nonnegative(),
+    inactiveProducts: integer.nonnegative(),
+    missingPrimaryMedia: integer.nonnegative(),
+    missingPrices: integer.nonnegative(),
+    unavailableSkus: integer.nonnegative(),
+  }),
+  scope: adminProductDetailSchema.shape.scope,
+  nextCursor: z.null(),
+  pagination: adminProductPaginationSchema,
 });

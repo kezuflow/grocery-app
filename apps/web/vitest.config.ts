@@ -13,10 +13,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    // App Router unit tests mirror app/ under test/app so vinext's app-source
+    // App Router unit tests mirror app/ under tests/unit/app so vinext's app-source
     // optimizer crawl never sees Vitest or jsdom as runtime dependencies.
-    // Playwright operational specs live in tests/ and run via `test:e2e`
+    // Playwright operational specs live in tests/e2e/ and run via `test:e2e`
     // against a provisioned stack, never under vitest.
-    exclude: ["**/node_modules/**", "dist/**", "tests/**"],
+    exclude: ["**/node_modules/**", "dist/**", "tests/e2e/**"],
   },
 });

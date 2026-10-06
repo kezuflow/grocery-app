@@ -49,6 +49,7 @@ import {
   adminCategoryUpdateBodySchema,
   adminCategoryStatusBodySchema,
   adminProductCreateBodySchema,
+  adminProductPageNumberSchema,
   adminProductUpdateBodySchema,
   adminProductStatusBodySchema,
   adminProductCategoriesBodySchema,
@@ -658,6 +659,7 @@ const catalogProductListFields = {
   query: validationSchema.string().trim().min(1).max(100).optional(),
   status: validationSchema.enum(["active", "inactive"]).optional(),
   cursor: validationSchema.string().min(1).max(512).optional(),
+  page: adminProductPageNumberSchema.optional(),
   limit: validationSchema.number().int().min(1).max(100).optional(),
 };
 const catalogProductListSchema = validationSchema.discriminatedUnion("scopeKind", [

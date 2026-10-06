@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AdminCursorPagination, useAdminUrlPagination } from "@/components/admin/admin-controls";
+import { ProductPagination, useProductPagination } from "@/components/admin/product-pagination";
 import {
   ProductListView,
   type BulkProductDeactivationResult,
@@ -47,6 +47,7 @@ type ProductsPageClientProps = {
   initialScopeTarget: AdminProductScopeTarget | null;
   initialQuery: string;
   initialStatus: string;
+  initialPage: number;
 };
 
 type ProductListItem = AdminProductPage["items"][number];
@@ -72,6 +73,7 @@ export function ProductsPageClient({
   initialScopeTarget,
   initialQuery,
   initialStatus,
+  initialPage,
 }: ProductsPageClientProps) {
   const searchParams = useSearchParams();
   const query = searchParams.get("query") ?? "";
@@ -93,7 +95,7 @@ export function ProductsPageClient({
   const [panelMode, setPanelMode] = useState<"create" | "detail">("detail");
   const [priceRecoveryActive, setPriceRecoveryActive] = useState(false);
   const [workspaceScopeKey, setWorkspaceScopeKey] = useState<string | null>(null);
-  const pagination = useAdminUrlPagination("/admin/catalog/products");
+  const pagination = useProductPagination();
   const adminContext = useAdminContext();
   const epoch = useQueryEpoch();
   const queryClient = useQueryClient();
@@ -123,7 +125,11 @@ export function ProductsPageClient({
     setPanelOpen(false);
     setPanelMode("detail");
     setWorkspaceScopeKey(null);
-    if (searchParams.has("cursor") || searchParams.has("cursorHistory")) {
+    if (
+      searchParams.has("page") ||
+      searchParams.has("cursor") ||
+      searchParams.has("cursorHistory")
+    ) {
       const next = new URLSearchParams(searchParams.toString());
       pagination.reset(next);
       window.history.replaceState(
@@ -135,7 +141,7 @@ export function ProductsPageClient({
   }, [scopeKey, searchParams, pagination]);
   const serverPayloadMatches =
     initialPayload !== null &&
-    !pagination.cursor &&
+    pagination.page === initialPage &&
     query === initialQuery &&
     status === initialStatus &&
     sameScopeTarget(scopeTarget, initialScopeTarget) &&
@@ -144,7 +150,7 @@ export function ProductsPageClient({
     queryKey: queryKeys.admin(
       epoch,
       scopeKey,
-      adminProductListResource(query, status, pagination.cursor),
+      adminProductListResource(query, status, pagination.page),
     ),
     queryFn: ({ signal }) => {
       if (!scopeTarget) throw new Error("Select an Admin Product scope");
@@ -152,7 +158,7 @@ export function ProductsPageClient({
         scope: scopeTarget,
         query,
         status,
-        cursor: pagination.cursor,
+        page: pagination.page,
         signal,
       });
     },
@@ -171,6 +177,17 @@ export function ProductsPageClient({
           },
         }
       : null);
+  const resolvedPage = payload?.ok ? payload.value.pagination?.page : undefined;
+  useEffect(() => {
+    if (resolvedPage === undefined) return;
+    if (
+      resolvedPage !== pagination.page ||
+      searchParams.has("cursor") ||
+      searchParams.has("cursorHistory")
+    ) {
+      window.history.replaceState(null, "", pagination.href(resolvedPage));
+    }
+  }, [resolvedPage, pagination, searchParams]);
   const previewQuery = useQuery({
     queryKey: queryKeys.admin(
       epoch,
@@ -344,14 +361,14 @@ export function ProductsPageClient({
                 singular="product"
                 plural="products"
               />
-              <AdminCursorPagination
-                compact
-                pageNumber={pagination.pageNumber}
-                nextCursor={payload.value.nextCursor}
-                onPrevious={pagination.previous}
-                onNext={pagination.next}
-                onPage={pagination.goToPage}
-              />
+              {payload.value.pagination ? (
+                <ProductPagination
+                  page={payload.value.pagination.page}
+                  totalPages={payload.value.pagination.totalPages}
+                  pending={listQuery.isFetching}
+                  href={pagination.href}
+                />
+              ) : null}
             </>
           ) : undefined
         }

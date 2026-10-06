@@ -1,6 +1,6 @@
 import type { AdminProductDetail, AdminProductPage, RpcResult } from "@freshmarkets/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import { adminProductDetailSchema } from "@freshmarkets/validation";
+import { adminProductDetailSchema, adminNumberedProductPageSchema } from "@freshmarkets/validation";
 import { catalogResultSchema } from "../../components/admin/catalog-command-state";
 import { readJson } from "../http/read-deadline";
 import type { AdminProductScopeTarget } from "../admin/product-scope-target";
@@ -38,8 +38,8 @@ function scopeParams(scope: AdminProductScopeTarget): URLSearchParams {
   return params;
 }
 
-export function adminProductListResource(query: string, status: string, cursor: string | null) {
-  return JSON.stringify(["products", "list", query.trim(), status, cursor]);
+export function adminProductListResource(query: string, status: string, page: number) {
+  return JSON.stringify(["products", "list", query.trim(), status, page]);
 }
 
 export function adminProductDetailResource(productId: string) {
@@ -76,21 +76,22 @@ export async function fetchAdminProducts({
   scope,
   query,
   status,
-  cursor,
+  page,
   signal,
 }: {
   scope: AdminProductScopeTarget;
   query: string;
   status: string;
-  cursor: string | null;
+  page: number;
   signal?: AbortSignal;
 }): Promise<RpcResult<AdminProductPage>> {
   const params = scopeParams(scope);
   params.set("limit", "50");
   if (query.trim()) params.set("query", query.trim());
   if (status !== "all") params.set("status", status);
-  if (cursor) params.set("cursor", cursor);
-  return readJson(`/api/admin/catalog/products?${params}`, { signal });
+  params.set("page", String(page));
+  const payload = await readJson<unknown>(`/api/admin/catalog/products?${params}`, { signal });
+  return catalogResultSchema(adminNumberedProductPageSchema).parse(payload);
 }
 
 export async function fetchAdminProductDetail({

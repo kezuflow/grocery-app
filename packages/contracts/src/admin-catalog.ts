@@ -104,6 +104,8 @@ export type AdminProductPage = {
   };
   scope: AdminProductScope;
   nextCursor: string | null;
+  /** Present for numbered requests; legacy pickers can continue cursor reads. */
+  pagination?: { page: number; pageSize: number; totalItems: number; totalPages: number };
 };
 
 export type AdminCatalogSkuSummary = {
@@ -280,6 +282,7 @@ export type AdminProductListRequest = AuthenticatedRequest &
     query?: string;
     status?: CatalogStatus;
     cursor?: string;
+    page?: number;
     limit?: number;
   };
 

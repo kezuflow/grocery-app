@@ -8,10 +8,10 @@ import { spawnSync } from "node:child_process";
 test("E2E setup isolates the selected directory and rejects unsafe names", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "freshmarkets-e2e-state-"));
   try {
-    const script = resolve(root, "apps/web/tests/prepare-admin-e2e-state.mjs");
+    const script = resolve(root, "apps/web/tests/e2e/prepare-admin-e2e-state.mjs");
     await mkdir(dirname(script), { recursive: true });
     await copyFile(
-      new URL("../apps/web/tests/prepare-admin-e2e-state.mjs", import.meta.url),
+      new URL("../apps/web/tests/e2e/prepare-admin-e2e-state.mjs", import.meta.url),
       script,
     );
     const retained = resolve(root, "apps/core/.wrangler/e2e-state/retained.txt");

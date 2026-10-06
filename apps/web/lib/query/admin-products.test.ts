@@ -21,20 +21,20 @@ describe("admin product query identity", () => {
     ).toBe("LOCATION:market-a:location-b");
   });
 
-  it("keys list filters, cursor, and detail independently", () => {
-    expect(adminProductListResource(" apple ", "active", "next")).toBe(
-      '["products","list","apple","active","next"]',
+  it("keys list filters, page, and detail independently", () => {
+    expect(adminProductListResource(" apple ", "active", 3)).toBe(
+      '["products","list","apple","active",3]',
     );
     expect(adminProductDetailResource("product-1")).toBe('["products","detail","product-1"]');
   });
 
   it("invalidates product lists across scopes and only affected detail previews", async () => {
     const client = new QueryClient();
-    const globalList = queryKeys.admin(0, "GLOBAL", adminProductListResource("", "all", null));
+    const globalList = queryKeys.admin(0, "GLOBAL", adminProductListResource("", "all", 1));
     const locationList = queryKeys.admin(
       0,
       "LOCATION:market:location",
-      adminProductListResource("", "active", null),
+      adminProductListResource("", "active", 2),
     );
     const changedDetail = queryKeys.admin(0, "GLOBAL", adminProductDetailResource("changed"));
     const otherDetail = queryKeys.admin(0, "GLOBAL", adminProductDetailResource("other"));

@@ -2,6 +2,24 @@
 
 Authoritative implementation and verification requirements. [AGENTS.md](../../AGENTS.md) owns execution and routing; [PRODUCT.md](../product/PRODUCT.md) owns business intent. These requirements apply to the changed scope, not a mandate for unrelated refactoring.
 
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `apps/web/app` | Vinext pages, layouts and thin same-origin route adapters. |
+| `apps/web/components`, `apps/web/lib` | Consumed UI and Web orchestration; source-adjacent small unit tests are allowed. |
+| `apps/web/tests/unit`, `apps/web/tests/e2e` | Route/unit fixtures and isolated browser journeys, respectively; baselines belong to E2E. |
+| `apps/core/src/<context>` | Context-owned application/domain/ports/infrastructure; create a subfolder only when it contains real code. |
+| `apps/core/tests` | Explicit E2E Worker ingress, distinct from source-adjacent Worker/D1 integration tests. |
+| `apps/core/migrations`, `apps/core/seeds` | Retained schema history and deterministic local/catalog inputs. Applied migrations are not disposable clutter. |
+| `packages` | Consumed shared contracts, structural validation, configuration and domain primitives. |
+| `scripts`, `.githooks` | Executed repository checks, migration generators and development entrypoints. |
+| `docs` | Owning guides, focused specifications, provider runbooks and the one active checkpoint with referenced evidence. |
+| `.agents/skills/shadcn-admin`, `.hermes/skills/shadcn-admin` | Required project skill and verified host mirror. |
+| `.wrangler`, `dist`, `.vinext`, `node_modules` | Ignored runtime state, receipts, generated builds/cache and installed dependencies. Keep them outside source classification; preserve credentials and needed local state. |
+
+Audit removals against imports, route/build/config discovery, scripts, tests and owning references. Framework entrypoints, CSS imports, generated binding declarations and compiler-only contract assertions can look unused to a generic dependency scan. Confirm those boundaries before removal. Archive disposable local output under the existing ignored artifact area when deletion is unavailable; do not spread generated output into nested `apps/web/apps/web` trees.
+
 ## Readability and module design
 
 - Prefer straightforward code with clear inputs, outputs, and ownership. Name functions after the operation they perform and values after their domain meaning; use explicit units such as `amountMinor`, `quantityBase`, and `expiresAt`.
@@ -189,6 +207,7 @@ For a changed critical command, select every applicable case:
 
 ## Fixtures and test boundaries
 
+- Web route/unit fixtures live under `apps/web/tests/unit`; operational/browser fixtures and screenshot references live under `apps/web/tests/e2e`. Small component/domain unit tests may remain beside their source. Keep test code outside Web `app/` so Vinext does not crawl Vitest/jsdom as runtime dependencies. Playwright runs only `tests/e2e`, Vitest excludes that directory, and generated Playwright traces/screenshots go to ignored root `.wrangler/playwright-results`. Tracked `tests/e2e/visual-baselines` are assertion inputs, not generated run output. Never delete retained migrations, active test fixtures, source asset mappings or operational receipts as generic folder cleanup.
 - Keep policy tests small and deterministic. Inject time, IDs, and provider/integration ports where nondeterminism matters.
 - Use realistic integer quantities, currencies, distinct locations, and multi-line examples. Single-item happy paths are insufficient for batched commerce effects.
 - Use real migrations and database constraints for persistence claims. A mocked repository returning success cannot prove atomicity or uniqueness.

@@ -245,7 +245,7 @@ export async function listAdminUnits(
   return { ok: true, value: rows.results, requestId: request.requestId };
 }
 
-/** Bounded keyset product listing with SKU counts and optional name search. */
+/** Bounded Product pages or legacy keyset reads, with authorized scope and filters. */
 export async function listAdminProducts(
   deps: CatalogAdministrationDeps,
   request: AdminProductListRequest,
@@ -292,6 +292,19 @@ export async function listAdminProducts(
     };
   }
 
+  if (
+    request.page !== undefined &&
+    (!Number.isSafeInteger(request.page) || request.page < 1 || request.cursor !== undefined)
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "page must be a positive safe integer and cannot be combined with cursor",
+        requestId: request.requestId,
+      },
+    };
+  }
   const limit = boundListLimit(request.limit);
   if (limit === "invalid") {
     return {
@@ -344,6 +357,25 @@ export async function listAdminProducts(
     binds.push(request.status);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  // Count only after Core has authorized the exact requested context. Clamp stale
+  // bookmarks when filtering or deleting products has shortened the list.
+  let pagination: AdminProductPage["pagination"];
+  if (request.page !== undefined) {
+    const count = await deps.db
+      .prepare(
+        `SELECT COUNT(*) AS totalItems FROM product p JOIN category c ON c.id=p.category_id ${where}`,
+      )
+      .bind(...binds)
+      .first<{ totalItems: number }>();
+    const totalItems = count?.totalItems ?? 0;
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    pagination = {
+      page: Math.min(request.page, totalPages),
+      pageSize: limit,
+      totalItems,
+      totalPages,
+    };
+  }
   const now = Date.now();
   const rows = await traceOperation(
     "db.admin.products.list",
@@ -358,7 +390,7 @@ export async function listAdminProducts(
              FROM product p JOIN category c ON c.id=p.category_id
              ${where}
              ORDER BY p.created_at DESC, p.id DESC
-             LIMIT ?
+             LIMIT ? OFFSET ?
            ), current_prices AS (
              SELECT pv.sku_id AS skuId, pv.amount_minor AS amountMinor,
                     ROW_NUMBER() OVER (
@@ -417,6 +449,7 @@ export async function listAdminProducts(
         .bind(
           ...binds,
           limit + 1,
+          pagination ? (pagination.page - 1) * limit : 0,
           locationId,
           marketId,
           locationId ?? "",
@@ -554,6 +587,7 @@ export async function listAdminProducts(
     value: {
       items,
       nextCursor,
+      ...(pagination ? { pagination, nextCursor: null } : {}),
       scope: target ? { kind: "LOCATION" as const, ...target } : { kind: "GLOBAL" as const },
       readiness: {
         activeProducts: readiness?.activeProducts ?? 0,

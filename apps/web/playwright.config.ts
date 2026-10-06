@@ -9,7 +9,7 @@ if (!Number.isInteger(managedPort) || managedPort < 1024 || managedPort > 65_535
 // Only this opt-in test ingress exposes the local Core webhook alongside Web.
 const providerGateway =
   process.env.E2E_PROVIDER_GATEWAY === "1"
-    ? "-c apps/web/tests/wrangler.provider-gateway.jsonc "
+    ? "-c apps/web/tests/e2e/wrangler.provider-gateway.jsonc "
     : "";
 const baseURL = managedStack
   ? `http://localhost:${managedPort}`
@@ -35,7 +35,8 @@ const baseURL = managedStack
  * repository's current Wrangler version.
  */
 export default defineConfig({
-  testDir: "./tests",
+  testDir: "./tests/e2e",
+  outputDir: "../../.wrangler/playwright-results",
   timeout: 30_000,
   retries: managedStack ? 1 : 0,
   workers: managedStack ? 1 : undefined,
@@ -43,7 +44,7 @@ export default defineConfig({
   snapshotPathTemplate: "{testDir}/visual-baselines/{arg}{ext}",
   webServer: managedStack
     ? {
-        command: `pnpm --filter @freshmarkets/web build && node apps/web/tests/prepare-admin-e2e-state.mjs && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js d1 migrations apply DB --config apps/core/wrangler.e2e.jsonc --local --persist-to apps/core/.wrangler/${e2eStateName} && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev ${providerGateway}-c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/${e2eStateName} --port ${managedPort}`,
+        command: `pnpm --filter @freshmarkets/web build && node apps/web/tests/e2e/prepare-admin-e2e-state.mjs && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js d1 migrations apply DB --config apps/core/wrangler.e2e.jsonc --local --persist-to apps/core/.wrangler/${e2eStateName} && node apps/web/node_modules/wrangler-e2e/bin/wrangler.js dev ${providerGateway}-c apps/web/dist/server/wrangler.json -c apps/core/wrangler.e2e.jsonc --persist-to apps/core/.wrangler/${e2eStateName} --port ${managedPort}`,
         cwd: "../..",
         env: { ...process.env, E2E_AUTHENTICATED: "1" },
         port: managedPort,

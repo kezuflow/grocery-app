@@ -894,6 +894,68 @@ describe("catalog administration", () => {
       cursor: productFirst.value.nextCursor!,
     });
     expect(productSecond).toMatchObject({ ok: true, value: { items: { length: 20 } } });
+    const numberedRequest = {
+      requestId: crypto.randomUUID(),
+      headers: { cookie: manager.cookie },
+      scopeKind: "LOCATION" as const,
+      marketId: "market-metro-cebu",
+      locationId: "location-cebu-central",
+      query: "Paged product",
+      status: "inactive" as const,
+      limit: 20,
+    };
+    // Jump straight to the unvisited final page, without fetching preceding cursors.
+    const third = await core.listAdminProducts({ ...numberedRequest, page: 3 });
+    expect(third).toMatchObject({
+      ok: true,
+      value: {
+        items: { length: 12 },
+        nextCursor: null,
+        pagination: { page: 3, pageSize: 20, totalItems: 52, totalPages: 3 },
+      },
+    });
+    const numberedFirst = await core.listAdminProducts({ ...numberedRequest, page: 1 });
+    expect(numberedFirst.ok).toBe(true);
+    if (!numberedFirst.ok || !third.ok || !productSecond.ok) return;
+    expect(numberedFirst.value.items).toEqual(productFirst.value.items);
+    const combined = [
+      ...numberedFirst.value.items,
+      ...productSecond.value.items,
+      ...third.value.items,
+    ];
+    expect(new Set(combined.map((item) => item.productId)).size).toBe(52);
+    expect(combined.every((item) => item.status === "inactive")).toBe(true);
+    const beyond = await core.listAdminProducts({
+      ...numberedRequest,
+      page: Number.MAX_SAFE_INTEGER,
+    });
+    expect(beyond).toMatchObject({
+      ok: true,
+      value: { items: third.value.items, pagination: { page: 3 } },
+    });
+    expect(
+      await core.listAdminProducts({
+        ...numberedRequest,
+        page: 99,
+        query: "No matching numbered product",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { items: [], pagination: { page: 1, totalItems: 0, totalPages: 1 } },
+    });
+    for (const page of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(await core.listAdminProducts({ ...numberedRequest, page })).toMatchObject({
+        ok: false,
+        error: { code: "VALIDATION_FAILED" },
+      });
+    }
+    expect(
+      await core.listAdminProducts({
+        ...numberedRequest,
+        page: 2,
+        cursor: productFirst.value.nextCursor ?? "",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
   });
 
   it("resolves Product readiness only in an explicit valid pricing context", async () => {

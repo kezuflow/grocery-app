@@ -11,6 +11,7 @@ import { ProductsPageClient } from "./products-page-client";
 type ProductSearchParams = {
   query?: string;
   status?: string;
+  page?: string;
 };
 
 function invalidProductStatus(requestId: string): RpcResult<AdminProductPage> {
@@ -32,6 +33,7 @@ const loadInitialProductPage = cache(
   async (
     query: string,
     status: string,
+    page: number,
   ): Promise<{
     payload: RpcResult<AdminProductPage> | null;
     scopeTarget: AdminProductScopeTarget | null;
@@ -59,6 +61,7 @@ const loadInitialProductPage = cache(
       query: query || undefined,
       status: status === "all" ? undefined : status,
       limit: 50,
+      page,
     });
     return { payload: plainResult(result), scopeTarget };
   },
@@ -73,15 +76,21 @@ export default async function ProductsPage({
   const params = await searchParams;
   const query = params.query?.trim() ?? "";
   const status = params.status ?? "all";
-  const { payload: initialPayload, scopeTarget } = await loadInitialProductPage(query, status);
+  const page = params.page === undefined ? 1 : Number(params.page);
+  const { payload: initialPayload, scopeTarget } = await loadInitialProductPage(
+    query,
+    status,
+    page,
+  );
 
   return (
     <ProductsPageClient
-      key={`${scopeTarget?.kind ?? "pending"}:${scopeTarget?.kind === "LOCATION" ? scopeTarget.locationId : "global"}:${query}:${status}`}
+      key={`${scopeTarget?.kind ?? "pending"}:${scopeTarget?.kind === "LOCATION" ? scopeTarget.locationId : "global"}:${query}:${status}:${page}`}
       initialPayload={initialPayload}
       initialScopeTarget={scopeTarget}
       initialQuery={query}
       initialStatus={status}
+      initialPage={page}
     />
   );
 }
