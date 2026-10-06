@@ -16,7 +16,7 @@ export const catalogErrorSchema = z.object({
 type Intent = {
   url: string;
   body: string;
-  method: "POST" | "PATCH" | "DELETE";
+  method: "POST" | "PATCH" | "PUT" | "DELETE";
   key: string;
   successFeedback?: AdminSuccessFeedback;
 };

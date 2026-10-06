@@ -409,6 +409,18 @@ export type AdminSkuAvailabilityRequest = AuthenticatedRequest & {
   idempotencyKey: string;
 };
 
+export type AdminSkuOrderRequest = AuthenticatedRequest & {
+  productId: string;
+  expectedProductVersion: number;
+  variants: ReadonlyArray<{ skuId: string; expectedVersion: number }>;
+  idempotencyKey: string;
+};
+
+export type AdminSkuOrderResult = {
+  productId: string;
+  variants: ReadonlyArray<{ skuId: string; sortOrder: number; version: number }>;
+};
+
 export type AdminSkuPriceRequest = AuthenticatedRequest & {
   skuId: string;
   marketId: string;
@@ -477,6 +489,7 @@ export type AdminCatalogService = {
     request: AdminProductMediaContentRequest,
   ): Promise<RpcResult<AdminProductMediaContent>>;
   createAdminSku(request: AdminSkuCreateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
+  reorderAdminSkus(request: AdminSkuOrderRequest): Promise<RpcResult<AdminSkuOrderResult>>;
   updateAdminSku(request: AdminSkuUpdateRequest): Promise<RpcResult<AdminCatalogSkuSummary>>;
   setAdminSkuAvailability(
     request: AdminSkuAvailabilityRequest,

@@ -267,6 +267,7 @@ import {
   setAdminSkuAvailability as setAdminSkuAvailabilityCommand,
   setAdminSkuPrice as setAdminSkuPriceCommand,
 } from "./admin/application/catalog-commands";
+import { reorderAdminSkus as reorderAdminSkusCommand } from "./admin/application/reorder-skus";
 import {
   uploadAdminProductMedia as uploadAdminProductMediaCommand,
   updateAdminProductMedia as updateAdminProductMediaCommand,
@@ -2302,6 +2303,12 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
     return createAdminSkuCommand(
       { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
       validation.data,
+    );
+  }
+  async reorderAdminSkus(input: import("@freshmarkets/contracts").AdminSkuOrderRequest) {
+    return reorderAdminSkusCommand(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
     );
   }
   async updateAdminSku(input: import("@freshmarkets/contracts").AdminSkuUpdateRequest) {

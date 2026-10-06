@@ -63,6 +63,25 @@ export const adminProductSummarySchema = z.object({
 });
 const integer = z.number().int().safe();
 export const adminProductPageNumberSchema = integer.positive();
+export const adminSkuOrderBodySchema = z
+  .object({
+    expectedProductVersion: integer.positive(),
+    variants: z
+      .array(z.object({ skuId: id, expectedVersion: integer.positive() }))
+      .min(1)
+      .max(100)
+      .refine(
+        (variants) => new Set(variants.map((variant) => variant.skuId)).size === variants.length,
+        "Variants must be unique",
+      ),
+  })
+  .strict();
+export const adminSkuOrderResultSchema = z.object({
+  productId: id,
+  variants: z.array(
+    z.object({ skuId: id, sortOrder: integer.nonnegative(), version: integer.positive() }),
+  ),
+});
 const status = z.enum(["active", "inactive"]);
 const baseCode = z.enum(["GRAM", "PIECE", "MILLILITER"]);
 export const adminUnitCreateBodySchema = z.object({

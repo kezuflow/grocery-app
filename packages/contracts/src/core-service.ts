@@ -248,6 +248,7 @@ export const coreServiceMethodNames = [
   "getAdminProductMediaContent",
   "getPublishedProductMedia",
   "createAdminSku",
+  "reorderAdminSkus",
   "updateAdminSku",
   "setAdminSkuAvailability",
   "setAdminSkuPrice",

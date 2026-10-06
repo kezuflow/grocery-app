@@ -11,14 +11,6 @@ import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/admin/shadcn/table";
-import {
   PageHeader,
   ListPageSection,
   StatusBadge,
@@ -26,7 +18,7 @@ import {
 import { useAdminCommand } from "@/components/admin/use-admin-command";
 import { ConfirmCommandDialog } from "../../../../../components/admin/admin-controls";
 import { ProductImagesEditor } from "@/components/admin/product-images-editor";
-import { SkuVariantEditor } from "@/components/admin/sku-variant-editor";
+import { ProductVariantsTable } from "@/components/admin/product-variants-table";
 import { ProductDetailSummary } from "../../../../../components/admin/product-detail-summary";
 import { useAdminContext, useAdminScopeGuard } from "../../../admin-context-provider";
 import { useAdminRouteGuard } from "@/components/admin/use-admin-route-guard";
@@ -51,17 +43,6 @@ type LoadState =
 
 const BASE = "/api/admin/catalog";
 
-type VariantCommandConfirmation = {
-  kind: "AVAILABILITY";
-  skuId: string;
-  skuCode: string;
-  availabilityStatus: "AVAILABLE" | "UNAVAILABLE";
-  expectedVersion: number;
-  locationId: string;
-  targetLabel: string;
-  readIdentity: string;
-};
-
 export default function ProductDetailPage({
   params,
 }: {
@@ -85,7 +66,7 @@ export default function ProductDetailPage({
     sellingLabel: "Piece",
     estimatedShippingWeightGrams: "",
   });
-  const [variantCommand, setVariantCommand] = useState<VariantCommandConfirmation | null>(null);
+  const [variantBusy, setVariantBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(
     searchParams.get("created")
       ? "Product created."
@@ -95,10 +76,9 @@ export default function ProductDetailPage({
   );
   const command = useAdminCommand();
   const skuCommand = useAdminCommand();
-  const commandIntent = {
-    pending:
-      imageBusy || command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain,
-  };
+  const otherPending =
+    imageBusy || command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain;
+  const commandIntent = { pending: otherPending || variantBusy };
   const dirty =
     reason.trim() !== "" ||
     newSku.code.trim() !== "" ||
@@ -107,7 +87,7 @@ export default function ProductDetailPage({
     newSku.sellQuantity.trim() !== "" ||
     newSku.sellingLabel !== "Piece" ||
     newSku.estimatedShippingWeightGrams.trim() !== "";
-  const locked = commandIntent.pending || confirmingStatus !== null || variantCommand !== null;
+  const locked = commandIntent.pending || confirmingStatus !== null;
   useAdminScopeGuard(dirty, locked, () => {
     setReason("");
     setNewSku({
@@ -123,19 +103,11 @@ export default function ProductDetailPage({
   const variantNotice = skuCommand.uncertain
     ? "The variant could not be confirmed. Select Add variant to try again."
     : skuCommand.notice;
-  const targetOptions = adminContext.state.phase === "ready" ? adminContext.state.scopes : [];
   const selectedScope =
     adminContext.state.phase === "ready" ? adminContext.state.selectedScope : null;
   const productScopeTarget = resolveAdminProductScopeTarget(selectedScope);
-  const selectedTarget =
-    selectedScope?.kind === "LOCATION"
-      ? targetOptions.find(
-          (option) => option.kind === "location" && option.locationId === selectedScope.locationId,
-        )
-      : null;
-
   const load = useCallback(() => {
-    if (commandIntent.pending) return;
+    if (otherPending) return;
     if (selectedScope?.kind !== "GLOBAL" && selectedScope?.kind !== "LOCATION") return;
     const readIdentity = adminProductReadIdentity(productId, selectedScope);
     const requestNumber = loadRequest.current + 1;
@@ -196,7 +168,7 @@ export default function ProductDetailPage({
         });
       }
     })();
-  }, [productId, selectedScope, commandIntent.pending]);
+  }, [productId, selectedScope, otherPending]);
 
   useEffect(() => load(), [load]);
   const acceptedProductChange = () => {
@@ -279,11 +251,6 @@ export default function ProductDetailPage({
     confirmingStatus,
     state.readIdentity,
   );
-  const variantCommandCurrent = isAdminProductTransientCurrent(
-    recordCurrent,
-    variantCommand?.readIdentity ?? null,
-    state.readIdentity,
-  );
   const from = searchParams.get("from");
   const returnQuery = from ? new URLSearchParams(from).toString() : "";
   const listHref = `/admin/catalog/products${returnQuery ? `?${returnQuery}` : ""}`;
@@ -294,7 +261,7 @@ export default function ProductDetailPage({
     product.scope.kind === "LOCATION" &&
     adminContext.state.phase === "ready" &&
     adminContext.state.context.capabilities.includes("catalog.manage");
-  const canManageTarget = canManageLocation;
+
   const detailSections =
     product.scope.kind === "LOCATION"
       ? [
@@ -382,9 +349,7 @@ export default function ProductDetailPage({
 
       <div id="product-media" className="scroll-mt-32">
         {canManageProduct ? (
-          <fieldset
-            disabled={command.busy || command.uncertain || skuCommand.busy || skuCommand.uncertain}
-          >
+          <fieldset disabled={commandIntent.pending}>
             <ProductImagesEditor
               productId={productId}
               version={product.version}
@@ -636,7 +601,9 @@ export default function ProductDetailPage({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={imageBusy || command.busy || command.uncertain || skuCommand.busy}
+                  disabled={
+                    imageBusy || command.busy || command.uncertain || skuCommand.busy || variantBusy
+                  }
                   className="sm:col-span-2 lg:col-span-1"
                 >
                   {skuCommand.busy ? "Adding variant…" : "Add variant"}
@@ -648,157 +615,14 @@ export default function ProductDetailPage({
               </p>
             </form>
           ) : null}
-          {product.skus.length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">No sell variants defined.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU code</TableHead>
-                  <TableHead>Display name</TableHead>
-                  <TableHead>Inventory consumed</TableHead>
-                  <TableHead>Shipping weight</TableHead>
-                  <TableHead>Catalog status</TableHead>
-                  {canManageProduct ? <TableHead>Actions</TableHead> : null}
-                  {product.scope.kind === "LOCATION" ? <TableHead>Price</TableHead> : null}
-                  {product.scope.kind === "LOCATION" ? <TableHead>Selling status</TableHead> : null}
-                  {product.scope.kind === "LOCATION" ? <TableHead>Stock status</TableHead> : null}
-                  {product.scope.kind === "LOCATION" ? (
-                    <TableHead>Location commands</TableHead>
-                  ) : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {product.skus.map((sku) => (
-                  <TableRow key={sku.skuId}>
-                    <TableCell className="font-mono text-xs">{sku.code}</TableCell>
-                    <TableCell>
-                      {sku.name}
-                      {sku.merchandisingLabel ? (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          ({sku.merchandisingLabel})
-                        </span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {sku.consumptionBaseQuantity.toLocaleString()}{" "}
-                      {countedSizes ? "pieces/packs" : product.inventoryPool.baseUnitSymbol}
-                    </TableCell>
-                    <TableCell>
-                      {variantBaseUnitCode === "GRAM"
-                        ? `${sku.consumptionBaseQuantity.toLocaleString()} g`
-                        : sku.estimatedShippingWeightGrams === null
-                          ? "Not configured"
-                          : `${sku.estimatedShippingWeightGrams.toLocaleString()} g each`}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge tone={sku.status === "active" ? "success" : "neutral"}>
-                        {sku.status === "active" ? "Active" : "Inactive"}
-                      </StatusBadge>
-                    </TableCell>
-                    {canManageProduct ? (
-                      <TableCell>
-                        <SkuVariantEditor
-                          sku={sku}
-                          baseUnitCode={variantBaseUnitCode}
-                          disabled={commandIntent.pending}
-                          onSaved={() => {
-                            setNotice("Variant saved.");
-                            acceptedProductChange();
-                          }}
-                        />
-                      </TableCell>
-                    ) : null}
-                    {product.scope.kind === "LOCATION" ? (
-                      <TableCell className="text-xs">
-                        {sku.priceMinor === null || !sku.currency
-                          ? "—"
-                          : `${new Intl.NumberFormat(undefined, {
-                              style: "currency",
-                              currency: sku.currency,
-                            }).format(sku.priceMinor / 100)} (v${sku.priceVersion})`}
-                      </TableCell>
-                    ) : null}
-                    {product.scope.kind === "LOCATION" ? (
-                      <TableCell>
-                        <StatusBadge
-                          tone={sku.availability === "AVAILABLE" ? "success" : "neutral"}
-                        >
-                          {sku.availability === "AVAILABLE"
-                            ? "Selling"
-                            : sku.availability === "UNAVAILABLE"
-                              ? "Not selling"
-                              : "Not configured"}
-                        </StatusBadge>
-                        <span className="block text-xs text-muted-foreground">
-                          {product.scope.locationName}
-                        </span>
-                      </TableCell>
-                    ) : null}
-                    {product.scope.kind === "LOCATION" ? (
-                      <TableCell>
-                        {product.inventoryPool.position ? (
-                          <StatusBadge
-                            tone={
-                              (sku.availableBase ?? product.inventoryPool.position.availableBase) >=
-                              sku.consumptionBaseQuantity
-                                ? "success"
-                                : "neutral"
-                            }
-                          >
-                            {(sku.availableBase ?? product.inventoryPool.position.availableBase) >=
-                            sku.consumptionBaseQuantity
-                              ? "In stock"
-                              : "Insufficient stock"}
-                          </StatusBadge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No stock recorded</span>
-                        )}
-                      </TableCell>
-                    ) : null}
-                    {product.scope.kind === "LOCATION" ? (
-                      <TableCell>
-                        {canManageTarget ? (
-                          <span className="flex flex-wrap items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={selectedTarget?.kind !== "location"}
-                              onClick={() => {
-                                if (selectedTarget?.kind !== "location") {
-                                  setNotice(
-                                    "A location context is required to change selling status.",
-                                  );
-                                  return;
-                                }
-                                setVariantCommand({
-                                  kind: "AVAILABILITY",
-                                  skuId: sku.skuId,
-                                  skuCode: sku.code,
-                                  locationId: selectedTarget.locationId,
-                                  availabilityStatus:
-                                    sku.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE",
-                                  expectedVersion: sku.availabilityVersion ?? 0,
-                                  targetLabel: selectedTarget.locationName,
-                                  readIdentity: state.readIdentity,
-                                });
-                              }}
-                            >
-                              {sku.availability === "AVAILABLE"
-                                ? "Review stop selling"
-                                : "Review start selling"}
-                            </Button>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Read only</span>
-                        )}
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <ProductVariantsTable
+            product={product}
+            canManageGlobal={canManageProduct}
+            canManageLocation={canManageLocation}
+            disabled={otherPending || confirmingStatus !== null}
+            onInteractionChange={setVariantBusy}
+            onSaved={acceptedProductChange}
+          />
         </ListPageSection>
       </div>
       <div id="product-audit" className="scroll-mt-32">
@@ -844,37 +668,6 @@ export default function ProductDetailPage({
             reason: confirmedReason,
             expectedVersion: product.version,
           });
-        }}
-      />
-      <ConfirmCommandDialog
-        open={variantCommand !== null && variantCommandCurrent}
-        title="Change selling status?"
-        resource={variantCommand?.skuCode ?? "Sell variant"}
-        scope={variantCommand?.targetLabel ?? "Catalog target"}
-        consequence={`This sets ${variantCommand?.availabilityStatus ?? "selling status"} for this location.`}
-        reasonRequired={false}
-        confirmLabel="Confirm selling status"
-        pending={commandIntent.pending}
-        onCancel={() => setVariantCommand(null)}
-        onConfirm={() => {
-          const pendingCommand = variantCommand;
-          if (
-            !pendingCommand ||
-            pendingCommand.readIdentity !== state.readIdentity ||
-            !recordCurrent
-          )
-            return;
-          setVariantCommand(null);
-          void run(
-            `${BASE}/skus/${encodeURIComponent(pendingCommand.skuId)}/availability`,
-            "PUT",
-            {
-              locationId: pendingCommand.locationId,
-              availabilityStatus: pendingCommand.availabilityStatus,
-              expectedVersion: pendingCommand.expectedVersion,
-            },
-            "Availability updated.",
-          );
         }}
       />
     </section>

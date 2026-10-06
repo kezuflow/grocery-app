@@ -35,6 +35,8 @@ Bulk weight and actual counted Small/Medium/Large pieces or packs describe the s
 
 ## Catalog, prices and promotions
 
+Owner correction, 2026-10-06: Product detail shows a selling switch for each variant and numbered SKU positions with drag-and-drop ordering instead of editing a Display order number. Global staff manage variant lifecycle and the order used by storefront projections; location staff manage only their exact location's selling availability. Global activation, local availability, price and physical stock remain independently authoritative.
+
 Owner correction, 2026-10-06: Promotion Codes follow deactivate -> edit -> reactivate after their first activation. Authorized Global managers may change campaign details and audience while INACTIVE; ACTIVE and ARCHIVED definitions remain locked. Code identity and benefit type stay fixed, usage/grants/redemptions and immutable paid discounts remain preserved, and saving never reactivates the code automatically. Inactive code edits cannot convert it into a selected-product sale; those sales retain draft-only definition/audience editing and existing allowance safeguards.
 
 promotion and inventory-sale activation, deactivation and archiving do not require an operator-entered reason. Normal lifecycle permissions, current-version checks and automatic actor/status audit remain required.

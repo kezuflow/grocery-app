@@ -1,24 +1,21 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { AdminCatalogSkuSummary } from "@freshmarkets/contracts";
 import { adminCatalogSkuSummarySchema, adminSkuUpdateBodySchema } from "@freshmarkets/validation";
 import { Button } from "@/components/admin/shadcn/button";
 import { Input } from "@/components/admin/shadcn/input";
 import {
-  AlertDialog as Dialog,
-  AlertDialogContent as DialogContent,
-  AlertDialogTrigger as DialogTrigger,
-  AlertDialogTitle as DialogTitle,
-  AlertDialogDescription as DialogDescription,
-} from "@/components/admin/shadcn/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/admin/shadcn/select";
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DialogTitle,
+  DialogDescription,
+  DialogHeader,
+  DialogFooter,
+} from "@/components/admin/shadcn/dialog";
+import { Alert, AlertDescription } from "@/components/admin/shadcn/alert";
+import { Field, FieldGroup, FieldLabel } from "@/components/admin/shadcn/field";
 import { useCatalogCommand } from "./catalog-command-state";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
@@ -27,8 +24,6 @@ function fields(sku: AdminCatalogSkuSummary) {
   return {
     name: sku.name,
     label: sku.merchandisingLabel ?? "",
-    sortOrder: String(sku.sortOrder),
-    status: sku.status,
     shippingGrams:
       sku.estimatedShippingWeightGrams === null ? "" : String(sku.estimatedShippingWeightGrams),
   };
@@ -39,17 +34,23 @@ export function SkuVariantEditor({
   baseUnitCode,
   disabled,
   onSaved,
+  onInteractionChange,
 }: {
   sku: AdminCatalogSkuSummary;
   baseUnitCode: "GRAM" | "PIECE" | "MILLILITER";
   disabled?: boolean;
   onSaved: () => void;
+  onInteractionChange?: (active: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(() => fields(sku));
   const [notice, setNotice] = useState<string | null>(null);
   const command = useCatalogCommand(adminCatalogSkuSummarySchema);
   const frozen = command.pending || command.uncertain;
+  useEffect(() => {
+    onInteractionChange?.(open || frozen);
+    return () => onInteractionChange?.(false);
+  }, [open, frozen, onInteractionChange]);
   const dirty = open && JSON.stringify(value) !== JSON.stringify(fields(sku));
   useAdminScopeGuard(dirty, frozen, () => {
     setOpen(false);
@@ -62,17 +63,13 @@ export function SkuVariantEditor({
     const parsed = adminSkuUpdateBodySchema.safeParse({
       name: value.name,
       merchandisingLabel: value.label.trim() || null,
-      sortOrder: Number(value.sortOrder),
-      status: value.status,
       expectedVersion: sku.version,
       ...(baseUnitCode === "PIECE" && value.shippingGrams.trim() !== ""
         ? { estimatedShippingWeightGrams: Number(value.shippingGrams) }
         : {}),
     });
     if (!parsed.success) {
-      setNotice(
-        "Enter a name, a whole display order, and a positive shipping weight where required.",
-      );
+      setNotice("Enter a name and a positive shipping weight where required.");
       return;
     }
     setNotice(null);
@@ -118,92 +115,69 @@ export function SkuVariantEditor({
           Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
-        <div className="space-y-2">
+      <DialogContent
+        showCloseButton={!frozen}
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
+        <DialogHeader>
           <DialogTitle>Edit variant</DialogTitle>
           <DialogDescription>
             {sku.name} consumes {sku.consumptionBaseQuantity.toLocaleString()}{" "}
             {baseUnitCode.toLowerCase()} from{" "}
             {sku.stockPoolId ? "this size’s counted stock" : "the shared product inventory"}.
           </DialogDescription>
-        </div>
-        <form className="space-y-4" onSubmit={(event) => void save(event)}>
-          <fieldset disabled={frozen} className="space-y-4">
-            <label className="grid gap-1 text-sm font-medium">
-              Display name
-              <Input
-                aria-label="Variant display name"
-                value={value.name}
-                maxLength={120}
-                required
-                onChange={(event) => setValue({ ...value, name: event.target.value })}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Merchandising label (optional)
-              <Input
-                aria-label="Variant merchandising label"
-                value={value.label}
-                maxLength={60}
-                placeholder="Small bag"
-                onChange={(event) => setValue({ ...value, label: event.target.value })}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Display order
-              <Input
-                aria-label="Variant display order"
-                type="number"
-                min={0}
-                max={10000}
-                step={1}
-                required
-                value={value.sortOrder}
-                onChange={(event) => setValue({ ...value, sortOrder: event.target.value })}
-              />
-            </label>
-            <div className="space-y-1 text-sm font-medium">
-              Catalog status
-              <Select
-                value={value.status}
-                disabled={frozen}
-                onValueChange={(status) => {
-                  if (status === "active" || status === "inactive") setValue({ ...value, status });
-                }}
-              >
-                <SelectTrigger aria-label="Variant catalog status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs font-normal text-muted-foreground">
-                Inactive variants are unavailable at every location. Local selling status is managed
-                separately.
-              </p>
-            </div>
-            {baseUnitCode === "PIECE" ? (
-              <label className="grid gap-1 text-sm font-medium">
-                Shipping weight for one sold unit (grams)
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
+          <fieldset disabled={frozen}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor={`variant-name-${sku.skuId}`}>Display name</FieldLabel>
                 <Input
-                  aria-label="Variant shipping weight"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={value.shippingGrams}
-                  onChange={(event) => setValue({ ...value, shippingGrams: event.target.value })}
+                  id={`variant-name-${sku.skuId}`}
+                  aria-label="Variant display name"
+                  value={value.name}
+                  maxLength={120}
+                  required
+                  onChange={(event) => setValue({ ...value, name: event.target.value })}
                 />
-              </label>
-            ) : null}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`variant-label-${sku.skuId}`}>
+                  Merchandising label (optional)
+                </FieldLabel>
+                <Input
+                  id={`variant-label-${sku.skuId}`}
+                  aria-label="Variant merchandising label"
+                  value={value.label}
+                  maxLength={60}
+                  placeholder="Small bag"
+                  onChange={(event) => setValue({ ...value, label: event.target.value })}
+                />
+              </Field>
+              {baseUnitCode === "PIECE" ? (
+                <Field>
+                  <FieldLabel htmlFor={`variant-weight-${sku.skuId}`}>
+                    Shipping weight for one sold unit (grams)
+                  </FieldLabel>
+                  <Input
+                    id={`variant-weight-${sku.skuId}`}
+                    aria-label="Variant shipping weight"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={value.shippingGrams}
+                    onChange={(event) => setValue({ ...value, shippingGrams: event.target.value })}
+                  />
+                </Field>
+              ) : null}
+            </FieldGroup>
           </fieldset>
           {notice ? (
-            <p role="alert" className="text-sm">
-              {notice}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
           ) : null}
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -215,7 +189,7 @@ export function SkuVariantEditor({
             <Button type="submit" disabled={command.pending}>
               {command.pending ? "Saving…" : "Save"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

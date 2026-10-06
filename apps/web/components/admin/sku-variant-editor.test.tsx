@@ -73,6 +73,8 @@ it("keeps an unconfirmed complete edit frozen and reuses it from Save", async ()
     .mockRejectedValueOnce(new Error("lost response"))
     .mockRejectedValueOnce(new Error("lost retry"));
   await open();
+  expect(document.querySelector('[aria-label="Variant display order"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Variant catalog status"]')).toBeNull();
   await fill("Variant display name", "Family bunch");
   await fill("Variant merchandising label", "");
   await fill("Variant shipping weight", "850");
@@ -106,6 +108,8 @@ it("keeps an unconfirmed complete edit frozen and reuses it from Save", async ()
     estimatedShippingWeightGrams: 850,
     expectedVersion: 3,
   });
+  expect(JSON.parse(String(requests[0]?.body))).not.toHaveProperty("sortOrder");
+  expect(JSON.parse(String(requests[0]?.body))).not.toHaveProperty("status");
   expect(onSaved).toHaveBeenCalledTimes(1);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
