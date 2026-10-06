@@ -14,6 +14,8 @@ import {
 import { z } from "@freshmarkets/validation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { FulfillmentOrderPrint } from "@/components/admin/fulfillment-order-print";
 import {
   Table,
   TableBody,
@@ -157,6 +159,10 @@ export function FulfillmentWorkspace({
   const [unresolved, setUnresolved] = useState<FrozenFulfillmentIntent | null>(null);
   const [reason, setReason] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
+  const [printSelection, setPrintSelection] = useState<{ key: string; ids: string[] }>({
+    key: "",
+    ids: [],
+  });
   const [view, setView] = useState<FulfillmentQueueFilter>(
     presentation === "station" ? "ACTIVE" : "ALL",
   );
@@ -174,6 +180,7 @@ export function FulfillmentWorkspace({
   const pageKeyRef = useRef<string | null>(null);
   const observedRefreshRevision = useRef(operationalRefresh.revision);
   const queryKey = `${locationId}:${orderId}:${cycleId}:${view}:${pagination.cursor}`;
+  useEffect(() => setPrintSelection({ key: queryKey, ids: [] }), [queryKey]);
   const load = useCallback(
     async (cursor: string | null, background = false, confirmedCommand = false) => {
       if (background && !confirmedCommand && commandLockedRef.current) return;
@@ -240,6 +247,22 @@ export function FulfillmentWorkspace({
   }, [operationalRefresh.revision, load, locationId, pagination.cursor]);
   const currentPage = pageKey === queryKey ? page : null;
   const selected = currentPage?.items.find((item) => item.orderId === selectedOrderId) ?? null;
+  const printOrderIds =
+    printSelection.key === queryKey
+      ? (currentPage?.items
+          .filter((item) => printSelection.ids.includes(item.orderId))
+          .map((item) => item.orderId) ?? [])
+      : [];
+  const canPrintOrders =
+    admin.state.phase === "ready" &&
+    admin.state.context.capabilities.includes("orders.read") &&
+    admin.state.context.scopes.some((scope) => scope.kind === "global");
+  const printTimezone =
+    admin.state.phase === "ready"
+      ? (admin.state.scopes.find(
+          (scope) => scope.kind === "location" && scope.locationId === locationId,
+        )?.timezone ?? "Asia/Manila")
+      : "Asia/Manila";
 
   async function submitIntent(intent: FrozenFulfillmentIntent) {
     if (!canManage || actionIntent.pending || locationId !== intent.locationId) return;
@@ -596,10 +619,24 @@ export function FulfillmentWorkspace({
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]">
           <ListPageSection
             title="Order status"
-            description={`${label} · ${currentPage.items.length} ${currentPage.items.length === 1 ? "order" : "orders"} on this page`}
+            description={`${label} · ${currentPage.items.length} ${currentPage.items.length === 1 ? "order" : "orders"} on this page · 50 orders per page`}
           >
-            <div className="flex min-h-8 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
-              <span>Showing Core-filtered paid orders for the selected location</span>
+            <div className="flex min-h-8 flex-wrap items-center gap-3 border-b px-4 py-2 text-sm">
+              <FulfillmentOrderPrint
+                key={queryKey}
+                orderIds={printOrderIds}
+                queueUrl={`/api/admin/fulfillment?${new URLSearchParams({ locationId, limit: "50", filter: view, ...(orderId ? { orderId } : {}), ...(cycleId ? { cycleId } : {}), ...(pagination.cursor ? { cursor: pagination.cursor } : {}) })}`}
+                locationId={locationId}
+                locationLabel={label}
+                timezone={printTimezone}
+                disabled={commandLocked || !canPrintOrders}
+                onClear={() => setPrintSelection({ key: queryKey, ids: [] })}
+              />
+              {!canPrintOrders ? (
+                <span className="text-xs text-muted-foreground">
+                  Printing receipts requires Global Orders access.
+                </span>
+              ) : null}
               {operationalRefresh.refreshing ? <span role="status">Updating…</span> : null}
               {operationalRefresh.stale ? (
                 <span role="status" className="text-muted-foreground">
@@ -625,6 +662,28 @@ export function FulfillmentWorkspace({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          aria-label="Select all orders on this page"
+                          disabled={commandLocked}
+                          checked={
+                            printOrderIds.length === currentPage.items.length
+                              ? true
+                              : printOrderIds.length > 0
+                                ? "indeterminate"
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setPrintSelection({
+                              key: queryKey,
+                              ids:
+                                checked === true
+                                  ? currentPage.items.map((item) => item.orderId)
+                                  : [],
+                            })
+                          }
+                        />
+                      </TableHead>
                       <TableHead>Order</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Items</TableHead>
@@ -645,6 +704,22 @@ export function FulfillmentWorkspace({
                           selectOrder(item.orderId);
                         }}
                       >
+                        <TableCell>
+                          <Checkbox
+                            aria-label={`Select order ${item.operational?.orderNumber ?? item.orderId} for printing`}
+                            disabled={commandLocked}
+                            checked={printOrderIds.includes(item.orderId)}
+                            onCheckedChange={(checked) =>
+                              setPrintSelection({
+                                key: queryKey,
+                                ids:
+                                  checked === true
+                                    ? [...printOrderIds, item.orderId]
+                                    : printOrderIds.filter((id) => id !== item.orderId),
+                              })
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           <button
                             type="button"

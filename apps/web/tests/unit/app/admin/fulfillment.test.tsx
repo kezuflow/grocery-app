@@ -18,7 +18,11 @@ vi.mock("@/app/admin/admin-context-provider", () => ({
     state: {
       phase: "ready",
       selectedScope: { kind: "LOCATION", marketId: "market", locationId: "cebu" },
-      context: { capabilities: ["fulfillment.read", "fulfillment.manage"] },
+      scopes: [{ kind: "location", locationId: "cebu", timezone: "Asia/Manila" }],
+      context: {
+        capabilities: ["fulfillment.read", "fulfillment.manage", "orders.read"],
+        scopes: [{ kind: "global" }],
+      },
     },
   }),
   useAdminScopeGuard: () => undefined,
@@ -120,6 +124,7 @@ describe("Fulfillment queue filters", () => {
     await act(async () => root.render(<FulfillmentPage />));
     await flushPage();
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("filter=ALL");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("limit=50");
     expect(container.innerHTML).toContain("new-order");
 
     const next = [...container.querySelectorAll("button")].find(
@@ -144,5 +149,52 @@ describe("Fulfillment queue filters", () => {
     expect(container.querySelector('tr[aria-selected="true"]')?.textContent).toContain(
       "preparing-order",
     );
+  });
+
+  it("selects single/multiple Orders independently of the preview and clears selection on page/view changes", async () => {
+    fetchMock.mockImplementation(async (url) => {
+      const params = new URL(String(url), "https://app.example").searchParams;
+      return response({
+        ok: true,
+        requestId: "test",
+        value: params.has("cursor")
+          ? { items: [item("third", "NEW")], nextCursor: null }
+          : { items: [item("first", "NEW"), item("second", "NEW")], nextCursor: "next" },
+      });
+    });
+    await act(async () => root.render(<FulfillmentPage />));
+    await flushPage();
+    const checkbox = (label: string) => {
+      const control = container.querySelector<HTMLElement>(
+        `[role="checkbox"][aria-label="${label}"]`,
+      );
+      if (!control) throw new Error(`Missing ${label}`);
+      return control;
+    };
+    await act(async () => checkbox("Select order second for printing").click());
+    expect(container.querySelector('tr[aria-selected="true"]')?.textContent).toContain("first");
+    expect(checkbox("Select all orders on this page").getAttribute("aria-checked")).toBe("mixed");
+    expect(container.textContent).toContain("1 selected");
+    await act(async () => checkbox("Select all orders on this page").click());
+    expect(container.textContent).toContain("2 selected");
+    expect(checkbox("Select all orders on this page").getAttribute("aria-checked")).toBe("true");
+    await act(async () => checkbox("Select order first for printing").click());
+    expect(container.textContent).toContain("1 selected");
+    const next = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Next",
+    )!;
+    await act(async () => next.click());
+    await flushPage();
+    expect(container.textContent).toContain("0 selected");
+    expect(checkbox("Select order third for printing").getAttribute("aria-checked")).toBe("false");
+    await act(async () => checkbox("Select all orders on this page").click());
+    const preparing = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+      (tab) => tab.textContent === "Preparing",
+    )!;
+    await act(async () =>
+      preparing.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await flushPage();
+    expect(container.textContent).toContain("0 selected");
   });
 });
