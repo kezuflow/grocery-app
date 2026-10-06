@@ -656,6 +656,13 @@ textarea {
   color: var(--fm-primary-dark);
 }
 
+/* Keep Admin text selection readable, including controls and body-mounted portals. */
+html:has(.fm-admin)::selection,
+html:has(.fm-admin) ::selection {
+  background: var(--fm-primary-dark);
+  color: var(--fm-primary-foreground);
+}
+
 .fm-shine-text {
   background-image: linear-gradient(
     105deg,
