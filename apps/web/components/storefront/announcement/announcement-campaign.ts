@@ -1,5 +1,5 @@
 export const WELCOME_CAMPAIGN_ID = "welcome-freshmarkets";
-export const WELCOME_CAMPAIGN_REVISION = "3";
+export const WELCOME_CAMPAIGN_REVISION = "4";
 
 export type AnnouncementBodySegment = {
   text: string;
@@ -19,11 +19,21 @@ export function welcomeAnnouncementPages(): readonly AnnouncementPage[] {
       id: "welcome",
       title: "Welcome to FreshMarkets",
       body: [
-        { text: "We're accepting scheduled orders " },
-        { text: "Monday - Friday", emphasis: true },
+        { text: "Order cutoff is " },
+        { text: "Thursday", emphasis: true },
         { text: " for delivery on " },
-        { text: "Saturday -Sunday", emphasis: true },
+        { text: "Friday", emphasis: true },
         { text: ". Stay tuned for updates on instant delivery." },
+      ],
+      actionLabel: "Shop fresh picks",
+    },
+    {
+      id: "delivery-address",
+      title: "Set your delivery address",
+      body: [
+        {
+          text: "Make sure to set your delivery address to use the app and place an order. Tap Deliver to at the top to get started.",
+        },
       ],
       actionLabel: "Shop fresh picks",
     },

@@ -28,7 +28,7 @@ export function AnnouncementPopup() {
   }, [open]);
 
   useEffect(() => {
-    if (pageIndex > 0) headingRef.current?.focus({ preventScroll: true });
+    headingRef.current?.focus({ preventScroll: true });
   }, [pageIndex]);
 
   function dismiss(shop: boolean) {

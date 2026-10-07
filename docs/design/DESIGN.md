@@ -519,14 +519,24 @@ Use the combined [market scene](../../apps/web/public/announcements/welcome-mark
 | Element | Approved copy |
 | --- | --- |
 | Headline | Welcome to FreshMarkets |
-| Body | We're accepting scheduled orders **Monday - Friday** for delivery on **Saturday -Sunday**. Stay tuned for updates on instant delivery. The two bold day ranges render in red. |
+| Body | Order cutoff is **Thursday** for delivery on **Friday**. Stay tuned for updates on instant delivery. The two bold days render in red. |
+| Primary action | Next |
+
+### Page 2 copy
+
+Owner correction, 2026-10-08: replace the earlier weekly cadence with Thursday cutoff/Friday delivery and add an address reminder on the second page. This changes the general welcome announcement; exact cutoff times remain Core-backed cycle facts.
+
+| Element | Approved copy |
+| --- | --- |
+| Headline | Set your delivery address |
+| Body | Make sure to set your delivery address to use the app and place an order. Tap Deliver to at the top to get started. |
 | Primary action | Shop fresh picks |
 
 The earlier “Fresh goodness, on your schedule” eyebrow, promotional body and small factual note are removed. This is a general launch announcement, not an order-specific promise or checkout authority. Checkout continues to show the currently available Core-backed Scheduled cycle, delivery window and fee; the published weekly cadence and announcement must be revised before the underlying public offer changes. PRODUCT GD-D14 keeps cycle dates configurable.
 
 ### Separate announcement system
 
-Keep the announcement in its own storefront module, separate from Featured banners, promotions, notifications and commerce state. A campaign has a stable identity and revision, with ordered pages. A page carries its own title, body and action label. The shell supports later second and third pages with explicit Next/Back and a restrained page count; it never auto-advances. There is one approved page today, so no progress control appears. Do not repurpose Admin Banners or add a content-management write path without a separate owner request.
+Keep the announcement in its own storefront module, separate from Featured banners, promotions, notifications and commerce state. A campaign has a stable identity and revision, with ordered pages. A page carries its own title, body and action label. There are two approved pages; show Next on the first, Back on the second and a restrained page count on both; never auto-advance. Move focus to the current heading in either direction. The final Shop fresh picks action dismisses to the catalog, where the existing Deliver to control remains available. Do not repurpose Admin Banners or add a content-management write path without a separate owner request.
 
 The owner explicitly replaced remembered dismissal with always showing the popup on an eligible home visit. No cookie or storage key suppresses a later visit. Closing it permits the current visit to continue; opening the home route again remounts it.
 
