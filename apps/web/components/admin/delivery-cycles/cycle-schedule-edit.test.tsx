@@ -234,7 +234,7 @@ it("keeps Step 2 open when customer delivery starts before preparation or ends b
     expect(document.querySelector('[role="alert"]')).not.toBeNull();
   }
 });
-it("fills the new-cycle editor with a Thursday midnight cutoff and Saturday midnight delivery end", () => {
+it("fills the new-cycle editor with a Friday midnight cutoff and Saturday midnight delivery end", () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-05T04:00:00Z"));
   vi.stubGlobal(
@@ -269,7 +269,7 @@ it("fills the new-cycle editor with a Thursday midnight cutoff and Saturday midn
   fireEvent.click(friday!);
   expect(props.onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
-      cutoffAt: "2026-10-14T16:00:00Z",
+      cutoffAt: "2026-10-15T16:00:00Z",
       windows: [
         {
           name: "Scheduled delivery",

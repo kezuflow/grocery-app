@@ -75,7 +75,7 @@ describe("cycle planning presentation", () => {
     ).toBe("2026-09-28T00:00:00Z");
   });
 
-  it("suggests a full ordering day followed by spaced fulfillment milestones", () => {
+  it("keeps the day before delivery open until midnight followed by spaced fulfillment milestones", () => {
     const schedule = suggestedCycleSchedule("2026-09-26", timezone, "2026-09-21");
     expect(
       Object.fromEntries(
@@ -86,23 +86,28 @@ describe("cycle planning presentation", () => {
       ),
     ).toEqual({
       orderOpensAt: { date: "2026-09-21", time: "00:00" },
-      cutoffAt: { date: "2026-09-25", time: "00:00" },
+      cutoffAt: { date: "2026-09-26", time: "00:00" },
       procurementAt: { date: "2026-09-26", time: "01:00" },
       preparationAt: { date: "2026-09-26", time: "02:00" },
     });
   });
 
-  it.each(["2026-10-16", "2027-01-01"])(
-    "suggests previous-day midnight cutoff and following-day midnight delivery end for %s",
+  it.each(["2026-10-09", "2026-10-16", "2027-01-01"])(
+    "keeps Thursday ordering open until Friday midnight and ends delivery the next midnight for %s",
     (date) => {
       const schedule = suggestedCycleSchedule(date, timezone);
       const window = suggestedDeliveryWindow(date, timezone);
       expect(instantToBusinessFields(schedule.cutoffAt, timezone)).toEqual({
-        date: date === "2026-10-16" ? "2026-10-15" : "2026-12-31",
+        date,
         time: "00:00",
       });
       expect(instantToBusinessFields(window.endsAt, timezone)).toEqual({
-        date: date === "2026-10-16" ? "2026-10-17" : "2027-01-02",
+        date:
+          date === "2026-10-09"
+            ? "2026-10-10"
+            : date === "2026-10-16"
+              ? "2026-10-17"
+              : "2027-01-02",
         time: "00:00",
       });
       expect(Date.parse(window.endsAt)).toBeGreaterThan(Date.parse(window.startsAt));

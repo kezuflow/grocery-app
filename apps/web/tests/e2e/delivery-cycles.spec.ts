@@ -99,6 +99,13 @@ for (const width of [1440, 390]) {
 
     await expect(editor.getByRole("heading", { name: "Build the schedule" })).toBeVisible();
     await expect(editor.getByLabel("Orders open time", { exact: true })).not.toHaveValue("");
+    const arrivalDate = await editor
+      .getByRole("button", { name: "Customer delivery starts date", exact: true })
+      .innerText();
+    await expect(editor.getByRole("button", { name: "Order cutoff date", exact: true })).toHaveText(
+      arrivalDate,
+    );
+    await expect(editor.getByLabel("Order cutoff time", { exact: true })).toHaveValue("00:00");
     if (width >= 1280) {
       await expect(editor.getByRole("button", { name: "Orders open date" })).toContainText(
         displayDate(openingDate),
@@ -130,11 +137,15 @@ for (const width of [1440, 390]) {
 
     await editor.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(editor.getByLabel("Planning note", { exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Previous calendar period" })).toBeDisabled();
     await expect(
-      page.getByRole("button", { name: "Refresh visible calendar range" }),
+      page.getByRole("button", { name: "Previous calendar period", includeHidden: true }),
     ).toBeDisabled();
-    await expect(page.getByRole("button", { name: "month", exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Refresh visible calendar range", includeHidden: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "month", exact: true, includeHidden: true }),
+    ).toBeDisabled();
     await editor.getByRole("button", { name: "Retry unconfirmed request" }).click();
     const details =
       width >= 1280
@@ -147,7 +158,10 @@ for (const width of [1440, 390]) {
 
     await details.getByRole("button", { name: "Activate cycle", exact: true }).click();
     const activate = page.getByRole("alertdialog");
-    await expect(activate).toContainText("locks the schedule for editing");
+    await expect(activate).toContainText("eligible for ordering at its opening time");
+    await expect(activate).toContainText(
+      "Later changes use Edit schedule with a reason and confirmation",
+    );
     await activate.getByRole("button", { name: "Activate cycle", exact: true }).click();
     await expect(details.getByRole("button", { name: "Close cycle details" })).toBeDisabled();
     await details.getByRole("button", { name: "Retry unconfirmed request" }).click();
@@ -166,6 +180,7 @@ for (const width of [1440, 390]) {
     await expect(details).toContainText("Canceled");
     expect(attempts).toHaveLength(6);
     expect(attempts[5]).toEqual(attempts[4]);
+    if (width === 390) await details.getByRole("button", { name: "Close cycle details" }).click();
 
     await page.route("**/api/admin/delivery-cycles?**", async (route) => {
       const requestUrl = new URL(route.request().url());
@@ -178,7 +193,12 @@ for (const width of [1440, 390]) {
       await route.fulfill({ response, json: body });
     });
     await page.getByRole("button", { name: "Refresh visible calendar range" }).click();
+    if (width === 390) {
+      await page.getByText(`${name} · Customer delivery`, { exact: true }).click();
+      await expect(details.getByRole("heading", { name, exact: true })).toBeVisible();
+    }
     await expect(details.getByRole("button", { name: "Duplicate" })).toHaveCount(0);
+    if (width === 390) await details.getByRole("button", { name: "Close cycle details" }).click();
     await page.getByRole("combobox", { name: "Status" }).click();
     await page.getByRole("option", { name: "draft", exact: true }).click();
     await expect(page.getByRole("region", { name: "Scheduled cycle calendar" })).toContainText(

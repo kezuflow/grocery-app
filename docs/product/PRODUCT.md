@@ -174,7 +174,8 @@ events still tracked for each Order. Instant stock and courier safeguards remain
 
 Scheduled Order cutoff and Procurement starts are both
 editable cycle schedule fields. The date picker defaults the exclusive Order cutoff to
-12:00 AM after the advertised 11:59 PM closing minute and Procurement starts to 1:00 AM
+12:00 AM on the selected customer delivery date, after the previous day's advertised
+11:59 PM closing minute, and Procurement starts to 1:00 AM
 in the cycle's market timezone. These are defaults, not a fixed one-hour policy. No new
 checkout/payment admission or QR generation/renewal for that cycle occurs at or after
 the order cutoff. A QR issued before cutoff may complete within its individual provider
@@ -200,6 +201,8 @@ This is a separate action from Deactivate, which remains unavailable when the cy
 Owner supplement, 2026-10-05: Global administrators may use **Edit schedule** on an activated cycle to change its name, ordering opening/cutoff, procurement, preparation and customer delivery range, with an audit reason and confirmation. Chronology remains valid; market and fulfillment-location participation stay fixed. A historical cutoff may remain unchanged while a late delivery window is extended. Scheduled/Open/Cutoff-reached cycles follow the revised ordering interval; reopening or continuing order admission is blocked once any destination purchase is recorded. Later operational/terminal states are preserved. Shortening Procurement starts is blocked while started or unreconciled Payments remain; extending it does not fabricate payment success or revive expired Quotes. Original paid Order promises, cancellation cutoffs and charges remain immutable. Delivery operations for those Orders use the explicitly edited cycle window, while recorded individual delivery agreements retain priority and existing courier bookings require their normal change/cancellation flow. This supersedes the prior activated-schedule lock and unconditional prohibition on reopening after early closure.
 
 The supplier timing reported by the owner on 2026-10-05 is end-of-Thursday cutoff, Friday 2 AM order submission, goods available from Friday noon and preparation from Friday 1 PM. A Friday afternoon/evening delivery range was proposed for review; no live cycle or default time is changed by that discussion.
+
+Owner supplement, 2026-10-08: default new-cycle Order cutoff to midnight at the start of the customer delivery date. For Friday delivery, ordering stays open through Thursday and stops Friday at 12:00 AM (for example, Oct 9 rather than Oct 8). This authorizes correcting the editor's previous-day-midnight suggestion. Other suggested milestone times remain as recorded above; saved cycles and deliberately edited or duplicated schedules retain their chosen times. No production schedule update is implied by this default correction.
 
 one Scheduled cycle publishes one ordering period, one procurement/preparation plan and one customer delivery range for its participating fulfillment locations. Global administrators choose the locations; each customer Order is executed only by the location Core assigns from the confirmed address. Market and delivery-zone identities remain internal. Multiple named customer slots inside one cycle are excluded; a materially different arrival plan is a separate cycle. Existing committed snapshots remain unchanged.
 
