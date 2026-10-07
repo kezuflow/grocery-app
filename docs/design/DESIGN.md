@@ -514,6 +514,8 @@ The visual hierarchy follows the attached [X announcement modal](https://mobbin.
 
 Use the combined [market scene](../../apps/web/public/announcements/welcome-market-scene.webp): a smiling fictional Filipina shopper on the left, enlarged and cropped around mid-thigh, holding the clearly branded FreshMarkets produce tote. The small wooden vegetable boxes recede in the softly blurred supermarket background on the right. This replaces compositing a separate shopper cutout over a background in the popup. The original [transparent shopper](../../apps/web/public/announcements/welcome-shopper.png) remains a source asset. Owner follow-up, 2026-09-28: remove the separate grass mascot from the popup and assets.
 
+Owner approval, 2026-10-08: page two uses the generated [delivery-address scene](../../apps/web/public/announcements/welcome-delivery-address-v1.webp), a fictional Filipina shopper selecting a green home pin on her smartphone beside a green produce tote. Keep the first-page market scene. The address scene has no real customer address and is illustrative, not the app's exact map interface.
+
 ### Page 1 copy
 
 | Element | Approved copy |
@@ -529,16 +531,16 @@ Owner correction, 2026-10-08: replace the earlier weekly cadence with Thursday c
 | Element | Approved copy |
 | --- | --- |
 | Headline | Set your delivery address |
-| Body | Make sure to set your delivery address to use the app and place an order. Tap Deliver to at the top to get started. |
-| Primary action | Shop fresh picks |
+| Body | Set your address to see local prices and place an order. |
+| Primary action | Set delivery address |
 
 The earlier “Fresh goodness, on your schedule” eyebrow, promotional body and small factual note are removed. This is a general launch announcement, not an order-specific promise or checkout authority. Checkout continues to show the currently available Core-backed Scheduled cycle, delivery window and fee; the published weekly cadence and announcement must be revised before the underlying public offer changes. PRODUCT GD-D14 keeps cycle dates configurable.
 
 ### Separate announcement system
 
-Keep the announcement in its own storefront module, separate from Featured banners, promotions, notifications and commerce state. A campaign has a stable identity and revision, with ordered pages. A page carries its own title, body and action label. There are two approved pages; show Next on the first, Back on the second and a restrained page count on both; never auto-advance. Move focus to the current heading in either direction. The final Shop fresh picks action dismisses to the catalog, where the existing Deliver to control remains available. Do not repurpose Admin Banners or add a content-management write path without a separate owner request.
+Keep the announcement in its own storefront module, separate from Featured banners, promotions, notifications and commerce state. A campaign has a stable identity and revision, with ordered pages. A page carries its own title, body, image and action. There are two approved pages; show Next on the first, Back on the second and a restrained page count on both; never auto-advance. Move focus to the current heading in either direction. The final Set delivery address action dismisses the announcement and opens the existing Deliver to selector. Establish its header trigger as the focus-return target before opening, and retain the selector's heading focus and ordinary cancellation behavior. Do not repurpose Admin Banners or add a content-management write path without a separate owner request.
 
 The owner explicitly replaced remembered dismissal with always showing the popup on an eligible home visit. No cookie or storage key suppresses a later visit. Closing it permits the current visit to continue; opening the home route again remounts it.
 
 
-The popup must pass Close/Escape/CTA focus, repeated-home-visit, mobile reachability, image-failure and no-mascot checks. Keep checkout/auth/Admin unobstructed. The approved shopper/scene and retained source image remain assets, not new image-generation work.
+The popup must pass Close/Escape/CTA focus, repeated-home-visit, mobile reachability, image-failure and no-mascot checks. Keep checkout/auth/Admin unobstructed. Reuse the approved first-page scene and second-page address image; no additional image generation is needed.

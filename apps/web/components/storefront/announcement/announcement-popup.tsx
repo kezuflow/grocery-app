@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FreshMarketsMark } from "../../brand/freshmarkets-mark";
 import { welcomeAnnouncementPages } from "./announcement-campaign";
+import { DELIVERY_LOCATION_REQUEST_EVENT } from "../../../lib/storefront/browsing-location";
 import "./announcement-popup.css";
 
 export function AnnouncementPopup() {
@@ -31,18 +32,26 @@ export function AnnouncementPopup() {
     headingRef.current?.focus({ preventScroll: true });
   }, [pageIndex]);
 
-  function dismiss(shop: boolean) {
+  function dismiss(destination: "home" | "catalog" | "delivery-address") {
     dialogRef.current?.close();
     setOpen(false);
     requestAnimationFrame(() => {
-      const destination = shop
+      if (destination === "delivery-address") {
+        document
+          .querySelector<HTMLButtonElement>('header button[aria-label="Choose delivery address"]')
+          ?.focus({ preventScroll: true });
+        window.dispatchEvent(new Event(DELIVERY_LOCATION_REQUEST_EVENT));
+        return;
+      }
+      const shop = destination === "catalog";
+      const target = shop
         ? document.getElementById("catalog")
         : document.querySelector<HTMLAnchorElement>('header a[href="/"]');
-      if (destination instanceof HTMLElement) {
-        if (shop) destination.setAttribute("tabindex", "-1");
-        destination.focus({ preventScroll: true });
+      if (target instanceof HTMLElement) {
+        if (shop) target.setAttribute("tabindex", "-1");
+        target.focus({ preventScroll: true });
         if (shop)
-          destination.scrollIntoView({
+          target.scrollIntoView({
             behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
               ? "auto"
               : "smooth",
@@ -66,7 +75,7 @@ export function AnnouncementPopup() {
         className="fm-announcement-dialog"
         onCancel={(event) => {
           event.preventDefault();
-          dismiss(false);
+          dismiss("home");
         }}
       >
         <div className="fm-announcement-topbar">
@@ -79,15 +88,15 @@ export function AnnouncementPopup() {
             type="button"
             className="fm-announcement-close"
             aria-label="Close welcome announcement"
-            onClick={() => dismiss(false)}
+            onClick={() => dismiss("home")}
           >
             <X aria-hidden="true" size={18} />
           </button>
         </div>
         <div className="fm-announcement-media">
           <img
-            src="/announcements/welcome-market-scene.webp"
-            alt="Smiling FreshMarkets shopper holding a branded produce bag in a supermarket"
+            src={page.image.src}
+            alt={page.image.alt}
             width={1536}
             height={1024}
             className="fm-announcement-scene"
@@ -122,7 +131,7 @@ export function AnnouncementPopup() {
             type="button"
             className="fm-announcement-action"
             onClick={() => {
-              if (lastPage) dismiss(true);
+              if (lastPage) dismiss(page.action);
               else setPageIndex(pageIndex + 1);
             }}
           >

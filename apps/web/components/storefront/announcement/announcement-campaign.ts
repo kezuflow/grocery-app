@@ -1,5 +1,5 @@
 export const WELCOME_CAMPAIGN_ID = "welcome-freshmarkets";
-export const WELCOME_CAMPAIGN_REVISION = "4";
+export const WELCOME_CAMPAIGN_REVISION = "5";
 
 export type AnnouncementBodySegment = {
   text: string;
@@ -11,6 +11,8 @@ export type AnnouncementPage = {
   title: string;
   body: readonly AnnouncementBodySegment[];
   actionLabel: string;
+  action: "catalog" | "delivery-address";
+  image: { src: string; alt: string };
 };
 
 export function welcomeAnnouncementPages(): readonly AnnouncementPage[] {
@@ -26,16 +28,26 @@ export function welcomeAnnouncementPages(): readonly AnnouncementPage[] {
         { text: ". Stay tuned for updates on instant delivery." },
       ],
       actionLabel: "Shop fresh picks",
+      action: "catalog",
+      image: {
+        src: "/announcements/welcome-market-scene.webp",
+        alt: "Smiling FreshMarkets shopper holding a branded produce bag in a supermarket",
+      },
     },
     {
       id: "delivery-address",
       title: "Set your delivery address",
       body: [
         {
-          text: "Make sure to set your delivery address to use the app and place an order. Tap Deliver to at the top to get started.",
+          text: "Set your address to see local prices and place an order.",
         },
       ],
-      actionLabel: "Shop fresh picks",
+      actionLabel: "Set delivery address",
+      action: "delivery-address",
+      image: {
+        src: "/announcements/welcome-delivery-address-v1.webp",
+        alt: "FreshMarkets shopper setting a delivery location on a phone with a green home pin",
+      },
     },
   ];
 }

@@ -78,6 +78,12 @@ beforeEach(() => {
       this.open = true;
     },
   });
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.open = false;
+    },
+  });
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -109,6 +115,9 @@ it.each(["escape", "backdrop"])("dismisses the selector with %s", async (method)
       dialog?.dispatchEvent(new Event("cancel", { bubbles: true, cancelable: true }));
     else if (method === "backdrop") dialog?.click();
   });
+  expect(document.activeElement).toBe(
+    document.querySelector('[aria-label="Choose delivery address"]'),
+  );
   mocks.pathname = "/products/abiu";
   await render();
   expect(document.querySelector("dialog")).toBeNull();

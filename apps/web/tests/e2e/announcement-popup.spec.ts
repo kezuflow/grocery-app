@@ -38,14 +38,27 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await dialog.getByRole("button", { name: "Next", exact: true }).click();
   const addressDialog = page.getByRole("dialog", { name: "Set your delivery address" });
   await expect(addressDialog).toContainText(
-    "Make sure to set your delivery address to use the app and place an order. Tap Deliver to at the top to get started.",
+    "Set your address to see local prices and place an order.",
   );
   await expect(addressDialog).toContainText("2 of 2");
   await expect(addressDialog.getByRole("heading")).toBeFocused();
+  await expect(addressDialog.getByRole("img")).toHaveAttribute(
+    "src",
+    "/announcements/welcome-delivery-address-v1.webp",
+  );
+  await expect
+    .poll(() =>
+      addressDialog.getByRole("img").evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath("popup-address-desktop.png") });
   await addressDialog.getByRole("button", { name: "Back", exact: true }).click();
   await expect(dialog.getByRole("heading")).toBeFocused();
   await expect(dialog).toContainText("1 of 2");
+  await expect(dialog.getByRole("img")).toHaveAttribute(
+    "src",
+    "/announcements/welcome-market-scene.webp",
+  );
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -53,12 +66,23 @@ test("welcome announcement opens on every home visit with the scheduled delivery
 
   await page.reload();
   await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Next", exact: true }).click();
+  await addressDialog.getByRole("button", { name: "Set delivery address", exact: true }).click();
+  await expect(addressDialog).toHaveCount(0);
+  const selector = page.getByRole("dialog", { name: "Choose delivery address" });
+  await expect(selector).toBeVisible();
+  await expect(selector.getByRole("heading", { name: "Deliver to", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(selector).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Choose delivery address", exact: true }),
+  ).toBeFocused();
 });
 
 test("popup action and storefront buttons use the rounded action shape", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator(".fm-announcement-dialog");
   const next = dialog.getByRole("button", { name: "Next", exact: true });
   await expect(dialog).toBeVisible();
   await expect(next).toBeInViewport();
@@ -66,8 +90,11 @@ test("popup action and storefront buttons use the rounded action shape", async (
   await page.screenshot({ path: test.info().outputPath("popup-schedule-mobile.png") });
   await next.click();
   await expect(dialog.getByRole("heading", { name: "Set your delivery address" })).toBeFocused();
-  const action = dialog.getByRole("button", { name: "Shop fresh picks" });
+  const action = dialog.getByRole("button", { name: "Set delivery address", exact: true });
   await expect(action).toBeInViewport();
+  await expect
+    .poll(() => dialog.getByRole("img").evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
   const imageBounds = await dialog.locator("img.fm-announcement-scene").boundingBox();
   const visualBounds = await dialog.locator(".fm-announcement-media").boundingBox();
   expect(imageBounds!.height).toBeLessThanOrEqual(visualBounds!.height + 1);
@@ -75,10 +102,25 @@ test("popup action and storefront buttons use the rounded action shape", async (
   await page.screenshot({ path: test.info().outputPath("popup-address-mobile.png") });
   await action.click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator("#catalog")).toBeInViewport();
+  const selector = page.getByRole("dialog", { name: "Choose delivery address" });
+  await expect(selector).toBeVisible();
+  await expect(selector.getByRole("heading", { name: "Deliver to", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(selector).toHaveCount(0);
   const locationAction = page.getByRole("button", { name: "Set delivery location" });
   await expect(locationAction).toBeVisible();
   await expect
     .poll(() => locationAction.evaluate((element) => getComputedStyle(element).borderRadius))
     .toBe("9999px");
+});
+
+test("address action remains usable when the second-page image fails", async ({ page }) => {
+  await page.route("**/announcements/welcome-delivery-address-v1.webp", (route) => route.abort());
+  await page.goto("/");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Set your delivery address" });
+  await expect(dialog).toContainText("Set your address to see local prices and place an order.");
+  await dialog.getByRole("button", { name: "Set delivery address", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Choose delivery address" })).toBeVisible();
 });

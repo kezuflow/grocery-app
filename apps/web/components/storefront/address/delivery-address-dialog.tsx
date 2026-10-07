@@ -83,7 +83,9 @@ export function DeliveryAddressDialog() {
   }, [open]);
 
   function dismiss(): void {
+    dialogRef.current?.close();
     setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
   }
 
   function chooseAddress(
