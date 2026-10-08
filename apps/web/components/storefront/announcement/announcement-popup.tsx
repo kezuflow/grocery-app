@@ -154,25 +154,58 @@ export function AnnouncementPopup() {
           ) : null}
         </div>
         <div className="fm-announcement-content">
-          <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
-            {page.title}
-          </h2>
-          <DialogDescription className="fm-announcement-body">
-            {page.body.map((segment, index) =>
-              segment.emphasis ? (
-                <strong key={index} className="fm-announcement-emphasis">
-                  {segment.text}
-                </strong>
-              ) : (
-                <span key={index}>{segment.text}</span>
-              ),
-            )}
-          </DialogDescription>
+          <div className="fm-announcement-copy">
+            <div className="fm-announcement-page">
+              <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
+                {page.title}
+              </h2>
+              <DialogDescription className="fm-announcement-body">
+                {page.body.map((segment, index) =>
+                  segment.emphasis ? (
+                    <strong key={index} className="fm-announcement-emphasis">
+                      {segment.text}
+                    </strong>
+                  ) : (
+                    <span key={index}>{segment.text}</span>
+                  ),
+                )}
+              </DialogDescription>
+            </div>
+            {pages.map((announcement) => (
+              <div key={announcement.id} className="fm-announcement-page" aria-hidden="true">
+                <h2>{announcement.title}</h2>
+                <p className="fm-announcement-body">
+                  {announcement.body.map((segment, index) =>
+                    segment.emphasis ? (
+                      <strong key={index} className="fm-announcement-emphasis">
+                        {segment.text}
+                      </strong>
+                    ) : (
+                      <span key={index}>{segment.text}</span>
+                    ),
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
           {pages.length > 1 ? (
-            <div className="fm-announcement-pagination">
-              <span role="status" aria-live="off" aria-label="Announcement page">
-                {pageIndex + 1} of {pages.length}
-              </span>
+            <div
+              className="fm-announcement-pagination"
+              role="group"
+              aria-label="Choose announcement page"
+            >
+              {pages.map((announcement, index) => (
+                <button
+                  key={announcement.id}
+                  type="button"
+                  className="fm-announcement-dot"
+                  aria-label={`Show announcement page ${index + 1}`}
+                  aria-current={index === pageIndex ? "true" : undefined}
+                  onClick={() => selectPage(index)}
+                >
+                  <span aria-hidden="true" />
+                </button>
+              ))}
             </div>
           ) : null}
           <button

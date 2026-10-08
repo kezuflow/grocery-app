@@ -45,6 +45,7 @@
 
 .fm-announcement-close:focus-visible,
 .fm-announcement-action:focus-visible,
+.fm-announcement-dot:focus-visible,
 .fm-announcement-arrow:focus-visible {
   outline: 2px solid var(--fm-focus);
   outline-offset: 2px;
@@ -106,6 +107,19 @@
   padding: 20px;
 }
 
+.fm-announcement-copy {
+  display: grid;
+}
+
+.fm-announcement-page {
+  grid-area: 1 / 1;
+}
+
+.fm-announcement-page[aria-hidden="true"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .fm-announcement-content h2 {
   color: var(--fm-text);
   font-size: clamp(22px, 5vw, 26px);
@@ -130,8 +144,26 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-top: 12px;
-  font-size: 12px;
+}
+
+.fm-announcement-dot {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+}
+
+.fm-announcement-dot span {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--fm-disabled);
+}
+
+.fm-announcement-dot[aria-current="true"] span,
+.fm-announcement-dot:hover span {
+  background: var(--fm-storefront-accent);
 }
 
 .fm-announcement-action {
@@ -148,6 +180,10 @@
 
 .fm-announcement-action:hover {
   background: var(--fm-storefront-action-hover);
+}
+
+.fm-announcement-pagination + .fm-announcement-action {
+  margin-top: 6px;
 }
 
 @media (max-width: 400px) {

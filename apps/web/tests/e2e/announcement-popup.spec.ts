@@ -1,9 +1,9 @@
 import { expect, test, type Locator } from "@playwright/test";
 
 async function expectPage(popover: Locator, number: number) {
-  await expect(popover.getByRole("status", { name: "Announcement page" })).toHaveText(
-    `${number} of 2`,
-  );
+  await expect(
+    popover.getByRole("button", { name: `Show announcement page ${number}`, exact: true }),
+  ).toHaveAttribute("aria-current", "true");
 }
 
 test("welcome announcement opens on every home visit with the scheduled delivery message", async ({
@@ -19,7 +19,9 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await expect(dialog).toContainText(
     "Order cutoff is Thursday for delivery on Friday. Stay tuned for updates on instant delivery.",
   );
-  const highlights = dialog.locator(".fm-announcement-emphasis");
+  const highlights = dialog.locator(
+    ".fm-announcement-page:not([aria-hidden]) .fm-announcement-emphasis",
+  );
   await expect(highlights).toHaveText(["Thursday", "Friday"]);
   for (const highlight of await highlights.all()) {
     expect(await highlight.evaluate((element) => getComputedStyle(element).color)).toBe(
@@ -32,7 +34,9 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   const pageButtons = dialog.getByRole("group", { name: "Announcement pages" }).getByRole("button");
   await expect(pageButtons).toHaveCount(2);
   const cardBounds = await dialog.boundingBox();
-  const pagesBounds = await dialog.getByRole("status", { name: "Announcement page" }).boundingBox();
+  const pagesBounds = await dialog
+    .getByRole("button", { name: "Show announcement page 1", exact: true })
+    .boundingBox();
   const frameBounds = await dialog.locator(".fm-announcement-media").boundingBox();
   if (!frameBounds) throw new Error("Announcement image frame is not visible");
   expect(pagesBounds!.x).toBeGreaterThan(cardBounds!.x + cardBounds!.width / 2);
