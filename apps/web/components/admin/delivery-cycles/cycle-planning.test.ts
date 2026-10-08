@@ -3,6 +3,7 @@ import type { AdminDeliveryCycleView, DeliveryCycleDraft } from "@freshmarkets/c
 import { cycleToCalendarEvents } from "./cycle-calendar-adapter";
 import {
   businessFieldsToInstant,
+  deliveryDateForPlanningRange,
   instantToBusinessFields,
   shiftInstantToDeliveryDate,
   suggestedCycleSchedule,
@@ -75,8 +76,11 @@ describe("cycle planning presentation", () => {
     ).toBe("2026-09-28T00:00:00Z");
   });
 
-  it("keeps the day before delivery open until midnight followed by spaced fulfillment milestones", () => {
-    const schedule = suggestedCycleSchedule("2026-09-26", timezone, "2026-09-21");
+  it("defaults an October 9–16 drag to Friday cutoff and Saturday–Sunday delivery", () => {
+    // FullCalendar's end is exclusive: dragging through October 16 gives October 17.
+    const deliveryDate = deliveryDateForPlanningRange("2026-10-09", "2026-10-17");
+    const schedule = suggestedCycleSchedule(deliveryDate, timezone, "2026-10-09");
+    const window = suggestedDeliveryWindow(deliveryDate, timezone);
     expect(
       Object.fromEntries(
         Object.entries(schedule).map(([field, instant]) => [
@@ -85,34 +89,61 @@ describe("cycle planning presentation", () => {
         ]),
       ),
     ).toEqual({
-      orderOpensAt: { date: "2026-09-21", time: "00:00" },
-      cutoffAt: { date: "2026-09-26", time: "00:00" },
-      procurementAt: { date: "2026-09-26", time: "01:00" },
-      preparationAt: { date: "2026-09-26", time: "02:00" },
+      orderOpensAt: { date: "2026-10-09", time: "00:00" },
+      cutoffAt: { date: "2026-10-16", time: "00:00" },
+      procurementAt: { date: "2026-10-16", time: "00:00" },
+      preparationAt: { date: "2026-10-16", time: "00:00" },
     });
+    expect(instantToBusinessFields(window.startsAt, timezone)).toEqual({
+      date: "2026-10-17",
+      time: "00:00",
+    });
+    expect(instantToBusinessFields(window.endsAt, timezone)).toEqual({
+      date: "2026-10-18",
+      time: "23:59",
+    });
+    expect(
+      validateCycleDraft(
+        { ...draft(), ...schedule, windows: [window] },
+        Date.parse("2026-10-08T00:00:00Z"),
+      ),
+    ).toEqual({});
   });
 
-  it.each(["2026-10-09", "2026-10-16", "2027-01-01"])(
-    "keeps Thursday ordering open until Friday midnight and ends delivery the next midnight for %s",
-    (date) => {
+  it.each([
+    ["2026-10-17", "2026-10-09", "2026-10-16", "2026-10-18"],
+    ["2026-11-01", "2026-10-24", "2026-10-31", "2026-11-02"],
+    ["2027-01-01", "2026-12-24", "2026-12-31", "2027-01-02"],
+  ])(
+    "uses a seven-day ordering period and two delivery dates across calendar boundaries for %s",
+    (date, openingDate, cutoffDate, endDate) => {
       const schedule = suggestedCycleSchedule(date, timezone);
       const window = suggestedDeliveryWindow(date, timezone);
-      expect(instantToBusinessFields(schedule.cutoffAt, timezone)).toEqual({
-        date,
+      expect(instantToBusinessFields(schedule.orderOpensAt, timezone)).toEqual({
+        date: openingDate,
+        time: "00:00",
+      });
+      for (const instant of [schedule.cutoffAt, schedule.procurementAt, schedule.preparationAt])
+        expect(instantToBusinessFields(instant, timezone)).toEqual({
+          date: cutoffDate,
+          time: "00:00",
+        });
+      expect(instantToBusinessFields(window.startsAt, timezone)).toEqual({
+        date: date,
         time: "00:00",
       });
       expect(instantToBusinessFields(window.endsAt, timezone)).toEqual({
-        date:
-          date === "2026-10-09"
-            ? "2026-10-10"
-            : date === "2026-10-16"
-              ? "2026-10-17"
-              : "2027-01-02",
-        time: "00:00",
+        date: endDate,
+        time: "23:59",
       });
       expect(Date.parse(window.endsAt)).toBeGreaterThan(Date.parse(window.startsAt));
     },
   );
+
+  it("keeps a single-day calendar selection as delivery day", () => {
+    expect(deliveryDateForPlanningRange("2026-10-17", "2026-10-18")).toBe("2026-10-17");
+    expect(deliveryDateForPlanningRange("2026-10-30", "2026-11-01")).toBe("2026-11-01");
+  });
 
   it("shows a compact connected cycle in month and exact markers in agenda", () => {
     const month = cycleToCalendarEvents(cycle, "month");

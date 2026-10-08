@@ -184,7 +184,7 @@ export function CycleCalendar({
       >
         <p className="mb-2 px-1 text-xs text-muted-foreground">
           {view === "month" && canCreate
-            ? "Drag from the order-opening date to the customer-delivery date, or select one day."
+            ? "Drag from orders open to order cutoff. Delivery starts the next day and ends the following day at 11:59 PM. Select one day to choose delivery day."
             : "Select a cycle to inspect its complete schedule."}
         </p>
         <FullCalendar

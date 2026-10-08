@@ -39,7 +39,7 @@ import { CycleEditor } from "./delivery-cycles/cycle-editor";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
 import {
-  addBusinessDays,
+  deliveryDateForPlanningRange,
   suggestedCycleSchedule,
   suggestedDeliveryWindow,
 } from "./delivery-cycles/cycle-time";
@@ -149,7 +149,7 @@ function blankForPlanningRange(
   endDateExclusive: string,
   timezone: string,
 ): DeliveryCycleDraft {
-  const deliveryDateValue = addBusinessDays(endDateExclusive, -1);
+  const deliveryDateValue = deliveryDateForPlanningRange(startDate, endDateExclusive);
   if (deliveryDateValue <= startDate) return blankForDeliveryDate(marketId, startDate, timezone);
   const draft = blankForDeliveryDate(marketId, deliveryDateValue, timezone);
   return {

@@ -234,7 +234,7 @@ it("keeps Step 2 open when customer delivery starts before preparation or ends b
     expect(document.querySelector('[role="alert"]')).not.toBeNull();
   }
 });
-it("fills the new-cycle editor with a Friday midnight cutoff and Saturday midnight delivery end", () => {
+it("fills a selected Saturday delivery with Friday cutoff and Sunday 11:59 PM end", () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-05T04:00:00Z"));
   vi.stubGlobal(
@@ -262,19 +262,22 @@ it("fills the new-cycle editor with a Friday midnight cutoff and Saturday midnig
     />,
   );
   fireEvent.click(button("Customer delivery date"));
-  const friday = [...document.querySelectorAll<HTMLButtonElement>("button[data-day]")].find(
-    (button) => button.dataset.day === new Date("2026-10-16T12:00:00").toLocaleDateString(),
+  const saturday = [...document.querySelectorAll<HTMLButtonElement>("button[data-day]")].find(
+    (button) => button.dataset.day === new Date("2026-10-17T12:00:00").toLocaleDateString(),
   );
-  expect(friday).toBeDefined();
-  fireEvent.click(friday!);
+  expect(saturday).toBeDefined();
+  fireEvent.click(saturday!);
   expect(props.onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
       cutoffAt: "2026-10-15T16:00:00Z",
+      orderOpensAt: "2026-10-08T16:00:00Z",
+      procurementAt: "2026-10-15T16:00:00Z",
+      preparationAt: "2026-10-15T16:00:00Z",
       windows: [
         {
           name: "Scheduled delivery",
-          startsAt: "2026-10-16T01:00:00Z",
-          endsAt: "2026-10-16T16:00:00Z",
+          startsAt: "2026-10-16T16:00:00Z",
+          endsAt: "2026-10-18T15:59:00Z",
         },
       ],
     }),

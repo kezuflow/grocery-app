@@ -48,25 +48,29 @@ for (const width of [1440, 390]) {
         "true",
       );
     const openingDate = manilaDate(4);
-    const deliveryDate = manilaDate(6);
+    const cutoffDate = manilaDate(6);
+    const deliveryDate = manilaDate(7);
     if (width >= 1280) {
       const startCell = page.getByRole("gridcell", {
         name: calendarDate(openingDate),
         exact: true,
       });
       const endCell = page.getByRole("gridcell", {
-        name: calendarDate(deliveryDate),
+        name: calendarDate(cutoffDate),
         exact: true,
       });
       await expect(startCell).toBeVisible();
       await expect(endCell).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Refresh visible calendar range" }),
+      ).toBeEnabled();
       const startBox = await startCell.boundingBox();
       const endBox = await endCell.boundingBox();
       expect(startBox).not.toBeNull();
       expect(endBox).not.toBeNull();
-      await page.mouse.move(startBox!.x + startBox!.width / 2, startBox!.y + startBox!.height / 2);
+      await page.mouse.move(startBox!.x + startBox!.width / 2, startBox!.y + startBox!.height - 8);
       await page.mouse.down();
-      await page.mouse.move(endBox!.x + endBox!.width / 2, endBox!.y + endBox!.height / 2, {
+      await page.mouse.move(endBox!.x + endBox!.width / 2, endBox!.y + endBox!.height - 8, {
         steps: 12,
       });
       await page.mouse.up();
@@ -99,11 +103,8 @@ for (const width of [1440, 390]) {
 
     await expect(editor.getByRole("heading", { name: "Build the schedule" })).toBeVisible();
     await expect(editor.getByLabel("Orders open time", { exact: true })).not.toHaveValue("");
-    const arrivalDate = await editor
-      .getByRole("button", { name: "Customer delivery starts date", exact: true })
-      .innerText();
     await expect(editor.getByRole("button", { name: "Order cutoff date", exact: true })).toHaveText(
-      arrivalDate,
+      displayDate(cutoffDate),
     );
     await expect(editor.getByLabel("Order cutoff time", { exact: true })).toHaveValue("00:00");
     if (width >= 1280) {
@@ -236,13 +237,14 @@ test("Global closes new ordering early without moving the planned cutoff", async
     await scope.click();
     await page.getByRole("option", { name: "Global", exact: true }).click();
   }
-  await page
-    .getByRole("button", { name: new RegExp(name) })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "agenda", exact: true }).click();
+  await page.getByText(`${name} · Customer delivery`, { exact: true }).first().click();
   const details = page.getByRole("complementary", { name: "Cycle workspace panel" });
   await expect(details.getByRole("heading", { name, exact: true })).toBeVisible();
-  const cutoffBefore = await details.locator("li").filter({ hasText: "Order cutoff" }).innerText();
+  const cutoffBefore = await details
+    .locator("li")
+    .filter({ hasText: "Ordering closes" })
+    .innerText();
   await expect(details.getByRole("button", { name: "Close ordering now" })).toBeVisible();
   await details.getByRole("button", { name: "Close ordering now" }).click();
   const confirmation = page.getByRole("alertdialog");
@@ -253,7 +255,7 @@ test("Global closes new ordering early without moving the planned cutoff", async
   await expect(details).toContainText("Cutoff Reached");
   await expect(details).toContainText("New ordering was closed early");
   await expect(details.getByRole("button", { name: "Close ordering now" })).toHaveCount(0);
-  expect(await details.locator("li").filter({ hasText: "Order cutoff" }).innerText()).toBe(
+  expect(await details.locator("li").filter({ hasText: "Ordering closes" }).innerText()).toBe(
     cutoffBefore,
   );
 });

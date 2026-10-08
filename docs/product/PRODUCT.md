@@ -173,10 +173,8 @@ is Payment, Packed, Out for delivery, and Delivered, with actual dispatch and de
 events still tracked for each Order. Instant stock and courier safeguards remain unchanged.
 
 Scheduled Order cutoff and Procurement starts are both
-editable cycle schedule fields. The date picker defaults the exclusive Order cutoff to
-12:00 AM on the selected customer delivery date, after the previous day's advertised
-11:59 PM closing minute, and Procurement starts to 1:00 AM
-in the cycle's market timezone. These are defaults, not a fixed one-hour policy. No new
+editable cycle schedule fields. New-cycle suggestions use the finalized default plan
+below in the cycle's market timezone. These are editable defaults, not fixed gaps between milestones. No new
 checkout/payment admission or QR generation/renewal for that cycle occurs at or after
 the order cutoff. A QR issued before cutoff may complete within its individual provider
 expiry of at most 30 minutes. Core may commit verified paid Orders from admitted attempts
@@ -202,7 +200,7 @@ Owner supplement, 2026-10-05: Global administrators may use **Edit schedule** on
 
 The supplier timing reported by the owner on 2026-10-05 is end-of-Thursday cutoff, Friday 2 AM order submission, goods available from Friday noon and preparation from Friday 1 PM. A Friday afternoon/evening delivery range was proposed for review; no live cycle or default time is changed by that discussion.
 
-Owner supplement, 2026-10-08: default new-cycle Order cutoff to midnight at the start of the customer delivery date. For Friday delivery, ordering stays open through Thursday and stops Friday at 12:00 AM (for example, Oct 9 rather than Oct 8). This authorizes correcting the editor's previous-day-midnight suggestion. Other suggested milestone times remain as recorded above; saved cycles and deliberately edited or duplicated schedules retain their chosen times. No production schedule update is implied by this default correction.
+Owner finalized plan, 2026-10-08: dragging across multiple calendar dates selects Orders open on the first date and Order cutoff on the last date. The default cutoff, Procurement starts and Preparation starts are all midnight on that last date. Customer delivery starts at midnight the next day and ends at 11:59 PM the following day. Thus dragging Friday Oct 9 through Friday Oct 16, 2026 suggests opening Oct 9; cutoff/procurement/preparation Oct 16; delivery Oct 17 through Oct 18 at 11:59 PM. A single-day selection or the New cycle delivery-date picker chooses delivery start; it suggests cutoff/procurement/preparation one day earlier and orders opening seven days before cutoff. All six milestones remain independently editable. This supersedes the earlier same-delivery-day cutoff, 1 AM procurement, 2 AM preparation and single-day delivery suggestions. Saved cycles and deliberately edited or duplicated schedules retain their chosen times; no live cycle is updated by changing defaults. The exclusive cutoff stops orders at the start of Oct 16 in the example, with no payment-settlement gap when procurement shares that instant.
 
 one Scheduled cycle publishes one ordering period, one procurement/preparation plan and one customer delivery range for its participating fulfillment locations. Global administrators choose the locations; each customer Order is executed only by the location Core assigns from the confirmed address. Market and delivery-zone identities remain internal. Multiple named customer slots inside one cycle are excluded; a materially different arrival plan is a separate cycle. Existing committed snapshots remain unchanged.
 

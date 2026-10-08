@@ -30,25 +30,33 @@ export function addBusinessDays(date: string, days: number): string {
 export function suggestedCycleSchedule(
   deliveryDate: string,
   timezone: string,
-  orderOpeningDate = addBusinessDays(deliveryDate, -5),
+  orderOpeningDate = addBusinessDays(deliveryDate, -8),
 ) {
+  const cutoffDate = addBusinessDays(deliveryDate, -1);
+  const cutoffAt = businessFieldsToInstant({ date: cutoffDate, time: "00:00" }, timezone);
   return {
     orderOpensAt: businessFieldsToInstant({ date: orderOpeningDate, time: "00:00" }, timezone),
-    cutoffAt: businessFieldsToInstant({ date: deliveryDate, time: "00:00" }, timezone),
-    procurementAt: businessFieldsToInstant({ date: deliveryDate, time: "01:00" }, timezone),
-    preparationAt: businessFieldsToInstant({ date: deliveryDate, time: "02:00" }, timezone),
+    cutoffAt,
+    procurementAt: cutoffAt,
+    preparationAt: cutoffAt,
   };
 }
 
 export function suggestedDeliveryWindow(deliveryDate: string, timezone: string) {
   return {
     name: "Scheduled delivery",
-    startsAt: businessFieldsToInstant({ date: deliveryDate, time: "09:00" }, timezone),
+    startsAt: businessFieldsToInstant({ date: deliveryDate, time: "00:00" }, timezone),
     endsAt: businessFieldsToInstant(
-      { date: addBusinessDays(deliveryDate, 1), time: "00:00" },
+      { date: addBusinessDays(deliveryDate, 1), time: "23:59" },
       timezone,
     ),
   };
+}
+
+export function deliveryDateForPlanningRange(startDate: string, endDateExclusive: string): string {
+  // FullCalendar ends selections after the last selected date. Multi-day drags
+  // end on the cutoff date; a single-day selection still chooses delivery day.
+  return endDateExclusive > addBusinessDays(startDate, 1) ? endDateExclusive : startDate;
 }
 
 export function shiftInstantToDeliveryDate(
