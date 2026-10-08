@@ -34,12 +34,15 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   const pageButtons = dialog.getByRole("group", { name: "Announcement pages" }).getByRole("button");
   await expect(pageButtons).toHaveCount(2);
   const cardBounds = await dialog.boundingBox();
-  const pagesBounds = await dialog
-    .getByRole("button", { name: "Show announcement page 1", exact: true })
-    .boundingBox();
+
   const frameBounds = await dialog.locator(".fm-announcement-media").boundingBox();
   if (!frameBounds) throw new Error("Announcement image frame is not visible");
-  expect(pagesBounds!.x).toBeGreaterThan(cardBounds!.x + cardBounds!.width / 2);
+  const paginationBounds = await dialog.locator(".fm-announcement-pagination").boundingBox();
+  expect(
+    Math.abs(
+      paginationBounds!.x + paginationBounds!.width / 2 - (cardBounds!.x + cardBounds!.width / 2),
+    ),
+  ).toBeLessThan(2);
   for (const button of await pageButtons.all()) {
     const bounds = await button.boundingBox();
     expect(bounds!.width).toBeGreaterThanOrEqual(44);

@@ -140,7 +140,7 @@ export function AnnouncementPopup() {
                 aria-label="Previous announcement page"
                 onClick={() => selectPage((pageIndex - 1 + pages.length) % pages.length)}
               >
-                <ChevronLeft aria-hidden="true" size={22} />
+                <ChevronLeft aria-hidden="true" size={18} />
               </button>
               <button
                 type="button"
@@ -148,7 +148,7 @@ export function AnnouncementPopup() {
                 aria-label="Next announcement page"
                 onClick={() => selectPage((pageIndex + 1) % pages.length)}
               >
-                <ChevronRight aria-hidden="true" size={22} />
+                <ChevronRight aria-hidden="true" size={18} />
               </button>
             </div>
           ) : null}
