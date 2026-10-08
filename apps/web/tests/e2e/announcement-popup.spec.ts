@@ -16,7 +16,8 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await expect(dialog).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(false);
-  await dialog.getByRole("button", { name: "Pause announcements" }).click();
+  await expect(dialog.getByRole("button", { name: /^(Play|Pause) announcements$/ })).toHaveCount(0);
+  await dialog.getByRole("heading").focus();
   await expect(dialog).toContainText(
     "Order cutoff is Thursday for delivery on Friday. Stay tuned for updates on instant delivery.",
   );
@@ -32,6 +33,9 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await expectPage(dialog, 1);
   const pageButtons = dialog.getByRole("group", { name: "Announcement pages" }).getByRole("button");
   await expect(pageButtons).toHaveCount(2);
+  const cardBounds = await dialog.boundingBox();
+  const pagesBounds = await dialog.getByRole("group", { name: "Announcement pages" }).boundingBox();
+  expect(pagesBounds!.x).toBeGreaterThan(cardBounds!.x + cardBounds!.width / 2);
   for (const button of await pageButtons.all()) {
     const bounds = await button.boundingBox();
     expect(bounds!.width).toBeGreaterThanOrEqual(44);
@@ -111,7 +115,9 @@ test("welcome popover autoplays both pages, pauses on hover and focus, and allow
   await page.goto("/");
   const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
   await expect(popover).toBeVisible();
-  await expect(popover.getByRole("button", { name: "Pause announcements" })).toBeVisible();
+  await expect(popover.getByRole("button", { name: /^(Play|Pause) announcements$/ })).toHaveCount(
+    0,
+  );
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
   await page.clock.runFor(6_100);
   await expect(popover.getByRole("heading")).toHaveText("Set your delivery address");
@@ -126,14 +132,17 @@ test("welcome popover autoplays both pages, pauses on hover and focus, and allow
   await page.clock.runFor(6_100);
   await expectPage(popover, 2);
 
-  await popover.getByRole("button", { name: "Pause announcements" }).click();
+  await popover
+    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
+    .focus();
   await page.mouse.move(0, 0);
   await page.clock.runFor(12_100);
   await expectPage(popover, 2);
-  await popover.getByRole("button", { name: "Play announcements" }).click();
-  await page.mouse.move(0, 0);
+  const search = page.getByRole("textbox", { name: "Search groceries", exact: true });
+  await search.focus();
   await page.clock.runFor(6_100);
   await expectPage(popover, 1);
+  await expect(search).toBeFocused();
 
   await popover.getByRole("button", { name: "Next", exact: true }).focus();
   await page.clock.runFor(12_100);
@@ -148,24 +157,32 @@ test("welcome popover autoplays both pages, pauses on hover and focus, and allow
   await expect(page.getByRole("dialog", { name: "Choose delivery address" })).toBeVisible();
 });
 
-test("reduced motion starts with manual pages and explicit Play can resume", async ({ page }) => {
+test("reduced motion keeps onboarding pages manual without playback controls", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const now = new Date("2026-10-08T04:00:00Z");
   await page.clock.install({ time: now });
   await page.goto("/");
   const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
-  await expect(popover.getByRole("button", { name: "Play announcements" })).toBeVisible();
+  await expect(popover).toBeVisible();
+  await expect(popover.getByRole("button", { name: /^(Play|Pause) announcements$/ })).toHaveCount(
+    0,
+  );
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
   await page.clock.runFor(12_100);
   await expectPage(popover, 1);
-  await popover.getByRole("button", { name: "Play announcements" }).click();
-  await page.mouse.move(0, 0);
-  await page.clock.runFor(6_100);
-  await expectPage(popover, 2);
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await popover
+    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
+    .click();
   await page.clock.runFor(12_100);
   await expectPage(popover, 2);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.getByRole("textbox", { name: "Search groceries", exact: true }).focus();
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(6_100);
+  await expectPage(popover, 1);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 1);
   await page.keyboard.press("Escape");
   await expect(popover).toHaveCount(0);
 });
@@ -177,7 +194,7 @@ test("popup action and storefront buttons use the rounded action shape", async (
   const next = dialog.getByRole("button", { name: "Next", exact: true });
   await expect(dialog).toBeVisible();
   await expect(next).toBeInViewport();
-  await dialog.getByRole("button", { name: "Pause announcements" }).click();
+  await next.focus();
   await expect(dialog.getByRole("button", { name: "Close welcome announcement" })).toBeInViewport();
   await page.screenshot({ path: test.info().outputPath("popup-schedule-mobile.png") });
   await next.click();
@@ -225,16 +242,18 @@ test.describe("touch welcome popover", () => {
     await page.clock.install();
     await page.goto("/");
     const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
-    await expect(popover.getByRole("button", { name: "Pause announcements" })).toBeVisible();
+    await expect(popover).toBeVisible();
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
     await popover.getByRole("img").tap();
     await page.clock.runFor(6_100);
     await expectPage(popover, 2);
     await page.clock.runFor(6_100);
     await expectPage(popover, 1);
-    await popover.getByRole("button", { name: "Pause announcements" }).tap();
+    await popover
+      .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
+      .tap();
     await page.clock.runFor(12_100);
-    await expectPage(popover, 1);
+    await expectPage(popover, 2);
   });
 });
 

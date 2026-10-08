@@ -13,9 +13,9 @@ export function AnnouncementPopup() {
   const [open, setOpen] = useState(true);
   const popoverRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const playbackRef = useRef<HTMLButtonElement>(null);
-  const [playing, setPlaying] = useState(false);
+  const [motionAllowed, setMotionAllowed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(true);
   const page = pages[pageIndex];
 
@@ -29,7 +29,7 @@ export function AnnouncementPopup() {
 
   useEffect(() => {
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateMotion = () => setPlaying(!motion.matches);
+    const updateMotion = () => setMotionAllowed(!motion.matches);
     const updateVisibility = () => setVisible(!document.hidden);
     updateMotion();
     updateVisibility();
@@ -41,7 +41,7 @@ export function AnnouncementPopup() {
     };
   }, []);
 
-  const autoplay = open && playing && !hovered && visible;
+  const autoplay = open && motionAllowed && !hovered && !focused && visible;
   useEffect(() => {
     if (!autoplay || pages.length < 2) return;
     const timer = window.setTimeout(
@@ -52,7 +52,6 @@ export function AnnouncementPopup() {
   }, [autoplay, pageIndex, pages.length]);
 
   function selectPage(index: number) {
-    setPlaying(false);
     setPageIndex(index);
     requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
   }
@@ -110,8 +109,9 @@ export function AnnouncementPopup() {
         if (event.pointerType !== "touch") setHovered(true);
       }}
       onPointerLeave={() => setHovered(false)}
-      onFocusCapture={(event) => {
-        if (!playbackRef.current?.contains(event.target)) setPlaying(false);
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}
     >
       <div className="fm-announcement-topbar">
@@ -169,14 +169,6 @@ export function AnnouncementPopup() {
                 </button>
               ))}
             </div>
-            <button
-              ref={playbackRef}
-              type="button"
-              aria-label={playing ? "Pause announcements" : "Play announcements"}
-              onClick={() => setPlaying(!playing)}
-            >
-              {playing ? "Pause" : "Play"}
-            </button>
           </div>
         ) : null}
         <button

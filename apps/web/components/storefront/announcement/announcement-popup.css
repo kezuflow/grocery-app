@@ -95,21 +95,16 @@
 }
 
 .fm-announcement-pagination {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   margin-top: 12px;
   font-size: 12px;
 }
 
 .fm-announcement-pages {
-  grid-column: 2;
   display: flex;
   align-items: center;
-}
-
-.fm-announcement-pagination > button {
-  justify-self: end;
 }
 
 .fm-announcement-pages .fm-announcement-page {
@@ -121,14 +116,14 @@
 }
 
 .fm-announcement-page span {
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--fm-text-muted);
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--fm-text-muted);
 }
 
 .fm-announcement-page[aria-current="true"] span {
-  border-color: var(--fm-storefront-action);
+  width: 20px;
   background: var(--fm-storefront-action);
 }
 
