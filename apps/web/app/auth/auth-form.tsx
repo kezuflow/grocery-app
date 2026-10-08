@@ -1,6 +1,11 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import Link from "next/link";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
 
 type Mode = "register" | "forgot";
 
@@ -45,43 +50,55 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex max-w-md flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-    >
-      {mode === "register" ? (
-        <label className="flex flex-col gap-1 text-sm">
-          Name
-          <input name="name" required className="rounded border p-2" />
-        </label>
-      ) : null}
-      <label className="flex flex-col gap-1 text-sm">
-        Email
-        <input name="email" type="email" required className="rounded border p-2" />
-      </label>
-      {mode === "register" ? (
-        <label className="flex flex-col gap-1 text-sm">
-          Password
-          <input
-            name="password"
-            type="password"
-            minLength={8}
-            required
-            className="rounded border p-2"
-          />
-        </label>
-      ) : null}
-      <button
-        disabled={busy}
-        className="rounded bg-slate-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        {busy ? "Working..." : mode === "register" ? "Create account" : "Send reset instructions"}
-      </button>
-      {status ? (
-        <p role="status" className="text-sm text-slate-600">
-          {status}
-        </p>
-      ) : null}
-    </form>
+    <Card className="w-full fm-login-card">
+      <CardContent>
+        <form onSubmit={submit}>
+          <FieldGroup>
+            {mode === "register" ? (
+              <Field>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
+                <Input id="name" name="name" autoComplete="name" required />
+              </Field>
+            ) : null}
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input id="email" name="email" type="email" autoComplete="email" required />
+            </Field>
+            {mode === "register" ? (
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </Field>
+            ) : null}
+            <Button type="submit" disabled={busy}>
+              {busy
+                ? "Working..."
+                : mode === "register"
+                  ? "Create account"
+                  : "Send reset instructions"}
+            </Button>
+            {status ? (
+              <p role="status" className="text-sm text-[var(--fm-text-muted)]">
+                {status}
+              </p>
+            ) : null}
+          </FieldGroup>
+        </form>
+        <div className="flex flex-col gap-3 items-center w-full mt-4">
+          <FieldDescription className="text-center">
+            <Link href="/auth/login" className="underline underline-offset-4">
+              {mode === "register" ? "Log in" : "Back to log in"}
+            </Link>
+          </FieldDescription>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

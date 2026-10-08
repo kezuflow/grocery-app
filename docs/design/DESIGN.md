@@ -449,6 +449,8 @@ Functional icons use Lucide with accessible labels/tooltips. Category illustrati
 
 Owner-approved login direction, 2026-09-10: adapt the supplied Tana sign-in reference as a centered, shadow-free rounded card with FreshMarkets branding and heading above it. Keep email and password together, followed by the primary sign-in action, OR divider, outlined Google sign-in, recovery and registration links. Use existing auth behavior and storefront tokens; do not add unsupported providers or an email-first step.
 
+Owner follow-up, 2026-10-08: standalone registration and forgot-password pages share the login page's centered branding/heading, 448px content width, shadow-free rounded card, field/button sizing, spacing and mobile treatment. Put the return-to-login link inside the card. Preserve each form's existing fields, auth submissions, validation and response states; this visual alignment does not add provider options or change authentication policy.
+
 ## States, accessibility and verification
 
 Every changed surface needs appropriate loading skeleton, empty/filtered-empty, denied, unavailable, error with safe request reference, stale/conflict, pending and terminal-result states. Labels/icons supplement color. Preserve row identity/actions when tables become cards or scroll; tablet/mobile keep actions reachable. Use semantic headings/tables/labels/error associations, visible focus, keyboard menus/dialogs, focus return, live status announcements, contrast and reduced-motion behavior.
