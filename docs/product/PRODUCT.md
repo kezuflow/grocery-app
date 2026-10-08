@@ -245,6 +245,8 @@ Order, Payment or fulfillment authority.
 
 ## Courier dispatch
 
+Owner supplement, 2026-10-08: for the proposed staff-selected Scheduled shared Lalamove booking from one fulfillment location to multiple customers, the owner selects a maximum of **five customer Orders/drop-offs per booking**, in addition to the single pickup (six total provider stops), and authorizes Sandbox capability testing. This is the shared-booking design target; the current individual dispatch implementation is not changed or accepted as supporting it by this decision or provider-only testing. Individual paid promises/charges and Order outcomes remain separate. The combined physical load must fit the verified vehicle limits; five individually eligible Orders do not imply five times the vehicle's capacity. Instant automatic Start packing booking retains its current behavior. Implementation and application acceptance remain tracked in the active checkpoint.
+
 Instant and Scheduled have different first-dispatch workflows. Payment
 creates paid fulfillment work but never summons a rider. For Instant, the authorized `START_PACKING`
 transition automatically submits the first Lalamove booking using the immutable customer-selected
