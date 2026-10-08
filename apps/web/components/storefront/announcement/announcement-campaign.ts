@@ -1,5 +1,5 @@
 export const WELCOME_CAMPAIGN_ID = "welcome-freshmarkets";
-export const WELCOME_CAMPAIGN_REVISION = "5";
+export const WELCOME_CAMPAIGN_REVISION = "6";
 
 export type AnnouncementBodySegment = {
   text: string;

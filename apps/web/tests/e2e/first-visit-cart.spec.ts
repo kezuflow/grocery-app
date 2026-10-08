@@ -151,7 +151,7 @@ for (const width of [1440, 390]) {
     });
     await page.goto("/");
     await page
-      .getByRole("dialog", { name: "Welcome to FreshMarkets" })
+      .getByRole("region", { name: "FreshMarkets welcome" })
       .getByRole("button", { name: "Close welcome announcement" })
       .click();
     const locationDialog = page.getByRole("dialog", {

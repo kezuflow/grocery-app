@@ -1,11 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+async function expectPage(popover: Locator, number: number) {
+  const pages = popover.getByRole("group", { name: "Announcement pages" });
+  await expect(
+    pages.getByRole("button", { name: new RegExp(`^Show page ${number}:`) }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect(pages.locator('[aria-current="true"]')).toHaveCount(1);
+}
 
 test("welcome announcement opens on every home visit with the scheduled delivery message", async ({
   page,
 }) => {
   await page.goto("/");
-  const dialog = page.getByRole("dialog", { name: "Welcome to FreshMarkets" });
+  const dialog = page.getByRole("region", { name: "FreshMarkets welcome" });
   await expect(dialog).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(false);
+  await dialog.getByRole("button", { name: "Pause announcements" }).click();
   await expect(dialog).toContainText(
     "Order cutoff is Thursday for delivery on Friday. Stay tuned for updates on instant delivery.",
   );
@@ -18,7 +29,14 @@ test("welcome announcement opens on every home visit with the scheduled delivery
     expect(await highlight.evaluate((element) => getComputedStyle(element).fontWeight)).toBe("700");
   }
   await expect(dialog.getByRole("button", { name: "Next", exact: true })).toBeVisible();
-  await expect(dialog).toContainText("1 of 2");
+  await expectPage(dialog, 1);
+  const pageButtons = dialog.getByRole("group", { name: "Announcement pages" }).getByRole("button");
+  await expect(pageButtons).toHaveCount(2);
+  for (const button of await pageButtons.all()) {
+    const bounds = await button.boundingBox();
+    expect(bounds!.width).toBeGreaterThanOrEqual(44);
+    expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  }
   const scene = dialog.locator("img.fm-announcement-scene");
   await expect(scene).toBeVisible();
   await expect
@@ -34,13 +52,16 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   const visualBounds = await dialog.locator(".fm-announcement-media").boundingBox();
   expect(imageBounds!.height).toBeLessThanOrEqual(visualBounds!.height + 1);
   await page.screenshot({ path: test.info().outputPath("popup-schedule-desktop.png") });
+  await dialog.screenshot({ path: test.info().outputPath("welcome-gallery-card-desktop.png") });
 
-  await dialog.getByRole("button", { name: "Next", exact: true }).click();
-  const addressDialog = page.getByRole("dialog", { name: "Set your delivery address" });
+  await dialog
+    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
+    .click();
+  const addressDialog = page.getByRole("region", { name: "FreshMarkets welcome" });
   await expect(addressDialog).toContainText(
     "Set your address to see local prices and place an order.",
   );
-  await expect(addressDialog).toContainText("2 of 2");
+  await expectPage(addressDialog, 2);
   await expect(addressDialog.getByRole("heading")).toBeFocused();
   await expect(addressDialog.getByRole("img")).toHaveAttribute(
     "src",
@@ -52,9 +73,12 @@ test("welcome announcement opens on every home visit with the scheduled delivery
     )
     .toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath("popup-address-desktop.png") });
-  await addressDialog.getByRole("button", { name: "Back", exact: true }).click();
+  await addressDialog
+    .getByRole("button", { name: "Show page 1: Welcome to FreshMarkets", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
   await expect(dialog.getByRole("heading")).toBeFocused();
-  await expect(dialog).toContainText("1 of 2");
+  await expectPage(dialog, 1);
   await expect(dialog.getByRole("img")).toHaveAttribute(
     "src",
     "/announcements/welcome-market-scene.webp",
@@ -79,13 +103,81 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   ).toBeFocused();
 });
 
+test("welcome popover autoplays both pages, pauses on hover and focus, and allows browsing", async ({
+  page,
+}) => {
+  const now = new Date("2026-10-08T04:00:00Z");
+  await page.clock.install({ time: now });
+  await page.goto("/");
+  const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
+  await expect(popover).toBeVisible();
+  await expect(popover.getByRole("button", { name: "Pause announcements" })).toBeVisible();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.runFor(6_100);
+  await expect(popover.getByRole("heading")).toHaveText("Set your delivery address");
+  expect(await popover.evaluate((element) => element.contains(document.activeElement))).toBe(false);
+  await page.clock.runFor(6_100);
+  await expect(popover.getByRole("heading")).toHaveText("Welcome to FreshMarkets");
+
+  await popover.hover();
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 1);
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(6_100);
+  await expectPage(popover, 2);
+
+  await popover.getByRole("button", { name: "Pause announcements" }).click();
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 2);
+  await popover.getByRole("button", { name: "Play announcements" }).click();
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(6_100);
+  await expectPage(popover, 1);
+
+  await popover.getByRole("button", { name: "Next", exact: true }).focus();
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 1);
+  await expect(popover.getByRole("button", { name: "Next", exact: true })).toBeFocused();
+
+  // The storefront remains interactive. Outside activation dismisses the guide
+  // and opens the existing address selector in the same click.
+  await page.getByRole("button", { name: "Choose delivery address", exact: true }).click();
+  await page.clock.runFor(100);
+  await expect(popover).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Choose delivery address" })).toBeVisible();
+});
+
+test("reduced motion starts with manual pages and explicit Play can resume", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const now = new Date("2026-10-08T04:00:00Z");
+  await page.clock.install({ time: now });
+  await page.goto("/");
+  const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
+  await expect(popover.getByRole("button", { name: "Play announcements" })).toBeVisible();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 1);
+  await popover.getByRole("button", { name: "Play announcements" }).click();
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(6_100);
+  await expectPage(popover, 2);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.clock.runFor(12_100);
+  await expectPage(popover, 2);
+  await page.keyboard.press("Escape");
+  await expect(popover).toHaveCount(0);
+});
+
 test("popup action and storefront buttons use the rounded action shape", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const dialog = page.locator(".fm-announcement-dialog");
+  const dialog = page.getByRole("region", { name: "FreshMarkets welcome" });
   const next = dialog.getByRole("button", { name: "Next", exact: true });
   await expect(dialog).toBeVisible();
   await expect(next).toBeInViewport();
+  await dialog.getByRole("button", { name: "Pause announcements" }).click();
   await expect(dialog.getByRole("button", { name: "Close welcome announcement" })).toBeInViewport();
   await page.screenshot({ path: test.info().outputPath("popup-schedule-mobile.png") });
   await next.click();
@@ -100,6 +192,17 @@ test("popup action and storefront buttons use the rounded action shape", async (
   expect(imageBounds!.height).toBeLessThanOrEqual(visualBounds!.height + 1);
   expect(await action.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("9999px");
   await page.screenshot({ path: test.info().outputPath("popup-address-mobile.png") });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect(action).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole("button", { name: "Close welcome announcement" })).toBeInViewport({
+    ratio: 1,
+  });
+  const popoverBounds = await dialog.boundingBox();
+  expect(popoverBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(popoverBounds!.x + popoverBounds!.width).toBeLessThanOrEqual(320);
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  await page.screenshot({ path: test.info().outputPath("popup-address-small-mobile.png") });
   await action.click();
   await expect(dialog).toHaveCount(0);
   const selector = page.getByRole("dialog", { name: "Choose delivery address" });
@@ -107,6 +210,7 @@ test("popup action and storefront buttons use the rounded action shape", async (
   await expect(selector.getByRole("heading", { name: "Deliver to", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(selector).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(documentWidth);
   const locationAction = page.getByRole("button", { name: "Set delivery location" });
   await expect(locationAction).toBeVisible();
   await expect
@@ -114,11 +218,31 @@ test("popup action and storefront buttons use the rounded action shape", async (
     .toBe("9999px");
 });
 
+test.describe("touch welcome popover", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("touching the image does not leave autoplay paused", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
+    await expect(popover.getByRole("button", { name: "Pause announcements" })).toBeVisible();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+    await popover.getByRole("img").tap();
+    await page.clock.runFor(6_100);
+    await expectPage(popover, 2);
+    await page.clock.runFor(6_100);
+    await expectPage(popover, 1);
+    await popover.getByRole("button", { name: "Pause announcements" }).tap();
+    await page.clock.runFor(12_100);
+    await expectPage(popover, 1);
+  });
+});
+
 test("address action remains usable when the second-page image fails", async ({ page }) => {
   await page.route("**/announcements/welcome-delivery-address-v1.webp", (route) => route.abort());
   await page.goto("/");
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Set your delivery address" });
+  const dialog = page.getByRole("region", { name: "FreshMarkets welcome" });
   await expect(dialog).toContainText("Set your address to see local prices and place an order.");
   await dialog.getByRole("button", { name: "Set delivery address", exact: true }).click();
   await expect(dialog).toHaveCount(0);
