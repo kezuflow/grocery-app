@@ -19,7 +19,7 @@ const totals = {
   destinationCount: 2,
 };
 
-const items = [
+const options = [
   {
     skuId: "abiu",
     inventoryPoolId: "abiu-pool",
@@ -57,6 +57,33 @@ const items = [
     destinationCount: 1,
   },
 ];
+const items = options.map((option) => ({
+  productId: option.skuId,
+  productName: option.productName,
+  paidOrderCount: option.paidOrderCount,
+  destinationCount: option.destinationCount,
+  quantities: [
+    {
+      inventoryPoolId: option.inventoryPoolId,
+      baseUnit: option.baseUnit,
+      totalQuantityBase: option.totalQuantityBase,
+      sellingOptionNames: [option.variantName],
+    },
+  ],
+  sellingOptions: [
+    {
+      ...option,
+      destinations: [
+        {
+          locationId: "location-a",
+          locationName: "Central Cebu",
+          soldUnitCount: option.soldUnitCount,
+          totalQuantityBase: option.totalQuantityBase,
+        },
+      ],
+    },
+  ],
+}));
 
 describe("ScheduledOrderSummary", () => {
   it("renders exact human-readable quantities, totals, and Global destinations", () => {
@@ -94,5 +121,29 @@ describe("ScheduledOrderSummary", () => {
       ),
     );
     expect(container.textContent).toContain("No paid products are recorded for this cycle.");
+  });
+
+  it("keeps breakdowns collapsed and exposes accessible selling-option and destination details", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root.render(<ScheduledOrderSummary items={items} totals={totals} global />));
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'table button[aria-label="Selling options for Carrots"]',
+    )!;
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      container.querySelector('table ul[aria-label="Selling options for Carrots"]'),
+    ).toBeNull();
+    act(() => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    const breakdown = container.querySelector(
+      'table ul[aria-label="Selling options for Carrots"]',
+    )!;
+    expect(breakdown.textContent).toContain("1 kg");
+    expect(breakdown.textContent).toContain("12 sold units");
+    expect(breakdown.textContent).toContain("Central Cebu");
+    act(() => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 });

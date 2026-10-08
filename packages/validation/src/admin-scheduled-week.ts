@@ -2,6 +2,26 @@ import { z } from "zod";
 const identifierSchema = z.string().trim().min(1).max(200);
 const integer = z.number().int().safe().nonnegative();
 const cursorSchema = z.string().trim().min(1).max(4096);
+const sellingOptionSummarySchema = z.object({
+  skuId: identifierSchema,
+  inventoryPoolId: identifierSchema,
+  productName: z.string(),
+  variantName: z.string(),
+  unitName: z.string(),
+  baseUnit: z.enum(["GRAM", "MILLILITER", "PIECE"]),
+  paidOrderCount: integer,
+  soldUnitCount: integer,
+  totalQuantityBase: integer,
+  destinationCount: integer,
+  destinations: z.array(
+    z.object({
+      locationId: identifierSchema,
+      locationName: z.string(),
+      soldUnitCount: integer,
+      totalQuantityBase: integer,
+    }),
+  ),
+});
 export const scheduledWeekQuerySchema = z.object({
   locationId: identifierSchema.optional(),
   cycleId: identifierSchema.optional(),
@@ -51,16 +71,21 @@ export const scheduledWeekViewSchema = z.object({
       }),
       items: z.array(
         z.object({
-          skuId: identifierSchema,
-          inventoryPoolId: identifierSchema,
+          productId: identifierSchema,
           productName: z.string(),
-          variantName: z.string(),
-          unitName: z.string(),
-          baseUnit: z.enum(["GRAM", "MILLILITER", "PIECE"]),
           paidOrderCount: integer,
-          soldUnitCount: integer,
-          totalQuantityBase: integer,
           destinationCount: integer,
+          quantities: z
+            .array(
+              z.object({
+                inventoryPoolId: identifierSchema,
+                baseUnit: z.enum(["GRAM", "MILLILITER", "PIECE"]),
+                totalQuantityBase: integer,
+                sellingOptionNames: z.array(z.string()),
+              }),
+            )
+            .min(1),
+          sellingOptions: z.array(sellingOptionSummarySchema).min(1),
         }),
       ),
     }),

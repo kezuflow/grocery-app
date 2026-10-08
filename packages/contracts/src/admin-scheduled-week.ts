@@ -45,7 +45,7 @@ export type ScheduledDemandItem = {
   receivingStatus: string | null;
   canConfirmPurchase: boolean;
 };
-export type ScheduledOrderSummaryItem = {
+export type ScheduledSellingOptionSummaryItem = {
   skuId: string;
   inventoryPoolId: string;
   productName: string;
@@ -56,6 +56,26 @@ export type ScheduledOrderSummaryItem = {
   soldUnitCount: number;
   totalQuantityBase: number;
   destinationCount: number;
+  destinations: readonly {
+    locationId: string;
+    locationName: string;
+    soldUnitCount: number;
+    totalQuantityBase: number;
+  }[];
+};
+export type ScheduledOrderSummaryItem = {
+  productId: string;
+  productName: string;
+  paidOrderCount: number;
+  destinationCount: number;
+  /** Independent stock identities remain separate even when they use the same unit. */
+  quantities: readonly {
+    inventoryPoolId: string;
+    baseUnit: ScheduledSellingOptionSummaryItem["baseUnit"];
+    totalQuantityBase: number;
+    sellingOptionNames: readonly string[];
+  }[];
+  sellingOptions: readonly ScheduledSellingOptionSummaryItem[];
 };
 export type ScheduledOrderSummaryTotals = {
   paidOrderCount: number;

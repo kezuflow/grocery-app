@@ -45,16 +45,46 @@ describe("Scheduled week order summary", () => {
           },
           items: [
             {
-              skuId: "sku-carrot-1kg",
-              inventoryPoolId: "pool-carrot",
+              productId: "product-carrot",
               productName: "Carrots",
-              variantName: "1 kg",
-              unitName: "GRAM",
-              baseUnit: "GRAM",
               paidOrderCount: 2,
-              soldUnitCount: 12,
-              totalQuantityBase: 12000,
               destinationCount: 2,
+              quantities: [
+                {
+                  inventoryPoolId: "pool-carrot",
+                  baseUnit: "GRAM",
+                  totalQuantityBase: 12000,
+                  sellingOptionNames: ["1 kg"],
+                },
+              ],
+              sellingOptions: [
+                {
+                  skuId: "sku-carrot-1kg",
+                  inventoryPoolId: "pool-carrot",
+                  productName: "Carrots",
+                  variantName: "1 kg",
+                  unitName: "GRAM",
+                  baseUnit: "GRAM",
+                  paidOrderCount: 2,
+                  soldUnitCount: 12,
+                  totalQuantityBase: 12000,
+                  destinationCount: 2,
+                  destinations: [
+                    {
+                      locationId: "location-a",
+                      locationName: "Destination A",
+                      soldUnitCount: 10,
+                      totalQuantityBase: 10000,
+                    },
+                    {
+                      locationId: "location-b",
+                      locationName: "Destination B",
+                      soldUnitCount: 2,
+                      totalQuantityBase: 2000,
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },

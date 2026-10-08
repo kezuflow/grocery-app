@@ -6,6 +6,7 @@ import { selectDeliveryWeek } from "./select-delivery-week";
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
 for (const width of [1440, 390])
   test(`Scheduled cycle paid Order summary at ${width}px`, async ({ adminPage: page }) => {
+    test.setTimeout(90000);
     const id = crypto.randomUUID();
     const now = Date.now();
     executeAdminE2eSql(`
@@ -36,6 +37,10 @@ for (const width of [1440, 390])
         ('summary-demand-abiu-add-${id}','summary-order-${id}','${id}','location-cebu-central','pool-abiu',4,'OPEN','EXACT_PAID_LINE',NULL,'summary-abiu-add-${id}','sku-abiu-1pc',4,4,'PIECE',${now}),
         ('summary-demand-carrot-${id}','summary-order-${id}','${id}','location-cebu-central','pool-carrot',12000,'OPEN','EXACT_PAID_LINE','summary-carrot-${id}',NULL,'sku-carrot-1kg',12,12000,'GRAM',${now}),
         ('summary-demand-cucumber-${id}','summary-order-${id}','${id}','location-cebu-central','pool-cucumber',30000,'OPEN','EXACT_PAID_LINE','summary-cucumber-${id}',NULL,'sku-cucumber-1kg',30,30000,'GRAM',${now});
+      INSERT INTO order_item(id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot)
+        VALUES ('summary-carrot-small-${id}','summary-order-${id}','sku-carrot-1kg','Carrots','250 g','GRAM',1,1,1,250,'GRAM');
+      INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,committed_at)
+        VALUES ('summary-demand-carrot-small-${id}','summary-order-${id}','${id}','location-cebu-central','pool-carrot',250,'OPEN','EXACT_PAID_LINE','summary-carrot-small-${id}','sku-carrot-1kg',1,250,'GRAM',${now});
     `);
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1200 });
     await page.goto("/admin/procurement");
@@ -50,23 +55,41 @@ for (const width of [1440, 390])
       await expect(summary).toBeVisible();
       await expect(summary).toContainText("Abiu");
       await expect(summary).toContainText("10 pcs");
-      await expect(summary).toContainText("12 kg");
+      await expect(summary).toContainText("12.25 kg");
+      await expect(summary.locator("tbody")).toHaveCount(3);
       await expect(summary).toContainText("30 kg");
     } else {
       await expect(page.getByRole("article")).toHaveCount(3);
       await expect(page.getByRole("article").filter({ hasText: "Abiu" })).toContainText("10 pcs");
-      await expect(page.getByRole("article").filter({ hasText: "Carrots" })).toContainText("12 kg");
+      await expect(page.getByRole("article").filter({ hasText: "Carrots" })).toContainText(
+        "12.25 kg",
+      );
       await expect(page.getByRole("article").filter({ hasText: "Cucumber" })).toContainText(
         "30 kg",
       );
     }
+    const options = page.getByRole("button", { name: "Selling options for Carrots", exact: true });
+    await expect(options).toHaveAttribute("aria-expanded", "false");
+    await options.focus();
+    await page.keyboard.press("Enter");
+    await expect(options).toHaveAttribute("aria-expanded", "true");
+    const breakdown = page.getByRole("list", { name: "Selling options for Carrots", exact: true });
+    await expect(breakdown).toContainText("250 g");
+    await expect(breakdown).toContainText("12 sold units");
+    await expect(breakdown).toContainText("Central Cebu");
+    await page.screenshot({
+      path: `../../.wrangler/procurement-product-summary-${width}.png`,
+      fullPage: true,
+    });
+    await page.keyboard.press("Space");
+    await expect(options).toHaveAttribute("aria-expanded", "false");
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await page.getByRole("button", { name: "Quantities to buy", exact: true }).click();
+    await page.getByRole("tab", { name: "Quantities to buy", exact: true }).click();
     const demand = page.getByRole("table", { name: "Paid quantities to buy" });
     await expect(demand).toContainText("Recorded shipping weight: Not recorded");
-    await expect(demand).toContainText("12,000 g");
+    await expect(demand).toContainText("12,250 g");
   });
 
 for (const width of [1440, 390])

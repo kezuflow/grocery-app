@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Product-level Scheduled Order summary — owner approval 2026-10-08
+
+Order summary uses one collapsed row/card per stable Product and immutable paid Product label. Show exact paid quantities, unique paid Orders and authorized destination count. Compatible pack sizes share one quantity; separate stock identities and unlike units show separately labeled quantities. A stock shadcn Collapsible trigger exposes original selling-option labels, sold units, exact quantities and per-option paid Order counts; Global also sees named destination quantities. Keep Sold units in the breakdown so mixed pack sizes do not look like interchangeable pieces. Desktop uses stock Table/Button/Collapsible composition and mobile uses the same disclosure inside stacked product cards. Preserve keyboard activation, expansion state and narrow-screen wrapping. Core owns totals and groups before pagination; Web never sums partial pages. Quantities to buy and purchase/packing commands retain their existing behavior.
+
 ## Home ecommerce overview — owner approval 2026-10-07
 
 Owner presentation correction, 2026-10-07: KPI cards omit visible comparison prose and metric-definition footnotes. Put the change indicator beside the main value, with green increases (and green refund decreases), red unfavorable changes, and an accessible comparison label. Total revenue has a bottom daily-revenue line chart; User growth has a bottom cumulative registration-growth line chart using the period-start registered-user denominator. Retain Core-derived values, missing/denied-data protection and accessible unavailable reasons; do not fabricate trends or percentages for zero denominators. These accents are scoped to Home Admin cards in both appearances.

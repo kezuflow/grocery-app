@@ -270,18 +270,32 @@ describe("Scheduled cycle order summary", () => {
       destinationCount: 2,
     });
     expect(
-      globalResult.value.page.items.map((item) => [
-        item.productName,
-        item.paidOrderCount,
-        item.soldUnitCount,
-        item.totalQuantityBase,
-        item.destinationCount,
-      ]),
+      globalResult.value.page.items
+        .flatMap((product) => product.sellingOptions)
+        .map((item) => [
+          item.productName,
+          item.paidOrderCount,
+          item.soldUnitCount,
+          item.totalQuantityBase,
+          item.destinationCount,
+        ]),
     ).toEqual([
       ["Abiu", 1, 10, 10, 1],
       ["Abiu", 1, 1, 1000, 1],
       ["Carrots", 2, 12, 12000, 2],
       ["Cucumber", 1, 30, 30000, 1],
+    ]);
+    const abiu = globalResult.value.page.items.find((item) => item.productName === "Abiu")!;
+    expect(abiu.paidOrderCount).toBe(2);
+    expect(abiu.destinationCount).toBe(2);
+    expect(
+      abiu.quantities.map((quantity) => [quantity.baseUnit, quantity.totalQuantityBase]),
+    ).toEqual([
+      ["PIECE", 10],
+      ["GRAM", 1000],
+    ]);
+    expect(abiu.sellingOptions[0]!.destinations).toMatchObject([
+      { locationId: "location-cebu-central", soldUnitCount: 10, totalQuantityBase: 10 },
     ]);
 
     const localResult = await core.getAdminScheduledWeek({
@@ -300,9 +314,15 @@ describe("Scheduled cycle order summary", () => {
       destinationCount: 1,
     });
     expect(
-      localResult.value.page.items.find((item) => item.productName === "Carrots")
+      localResult.value.page.items.find((item) => item.productName === "Carrots")?.quantities[0]
         ?.totalQuantityBase,
     ).toBe(10000);
+    expect(
+      localResult.value.page.items
+        .flatMap((item) => item.sellingOptions)
+        .flatMap((option) => option.destinations)
+        .every((destination) => destination.locationId === "location-cebu-central"),
+    ).toBe(true);
     expect(
       await core.getAdminScheduledWeek({
         headers: local.headers,
@@ -313,7 +333,7 @@ describe("Scheduled cycle order summary", () => {
     ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 
-  it("keeps labels, options, pools and units distinct and totals stable across pages", async () => {
+  it("merges all compatible selling options before pagination and preserves historical paid labels", async () => {
     const cycleId = crypto.randomUUID();
     await seedTestCycle(env.DB, cycleId);
     const global = await locationManager("global");
@@ -348,12 +368,122 @@ describe("Scheduled cycle order summary", () => {
       section: "ORDER_SUMMARY" as const,
     };
     const first = await core.getAdminScheduledWeek(query);
-    if (!first.ok || first.value.page.kind !== "ORDER_SUMMARY" || !first.value.page.nextCursor)
+    if (!first.ok || first.value.page.kind !== "ORDER_SUMMARY")
       throw new Error("Missing first summary page");
-    expect(first.value.page.items).toHaveLength(50);
+    expect(first.value.page.items).toHaveLength(2);
+    expect(first.value.page.nextCursor).toBeNull();
     expect(first.value.page.totals).toEqual({
       paidOrderCount: 1,
       productCount: 1,
+      sellingOptionCount: 51,
+      destinationCount: 1,
+    });
+    expect(first.value.page.items[0]).toMatchObject({
+      productName: "Carrots",
+      paidOrderCount: 1,
+      destinationCount: 1,
+      quantities: [{ inventoryPoolId: "pool-carrot", baseUnit: "GRAM", totalQuantityBase: 50000 }],
+    });
+    expect(first.value.page.items[0]!.sellingOptions).toHaveLength(50);
+    expect(first.value.page.items[1]).toMatchObject({
+      productName: "Historic carrots",
+      quantities: [{ totalQuantityBase: 1000 }],
+    });
+  });
+
+  it("combines pack sizes without adding overlapping Order counts or independent stock pools", async () => {
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    const global = await locationManager("global");
+    await grantProcurementRead(global.id);
+    const orderId = `order-${cycleId}`;
+    await seedOrder(cycleId, orderId);
+    for (const [variantName, soldUnits, baseQuantity, poolId] of [
+      ["500 g", 2, 1000, "pool-carrot"],
+      ["250 g", 1, 250, "pool-carrot"],
+      ["Separate grade", 1, 500, "pool-cucumber"],
+    ] as const) {
+      await seedPaidLine({
+        cycleId,
+        orderId,
+        locationId: "location-cebu-central",
+        skuId: "sku-carrot-1kg",
+        poolId,
+        productName: "Carrots",
+        variantName,
+        unitName: "GRAM",
+        baseUnit: "GRAM",
+        soldUnits,
+        baseQuantity,
+      });
+    }
+    const result = await core.getAdminScheduledWeek({
+      headers: global.headers,
+      requestId: crypto.randomUUID(),
+      cycleId,
+      section: "ORDER_SUMMARY",
+    });
+    if (!result.ok || result.value.page.kind !== "ORDER_SUMMARY")
+      throw new Error("Missing summary");
+    expect(result.value.page.items).toHaveLength(1);
+    expect(result.value.page.items[0]).toMatchObject({
+      paidOrderCount: 1,
+      destinationCount: 1,
+      quantities: [
+        { inventoryPoolId: "pool-carrot", totalQuantityBase: 1250 },
+        { inventoryPoolId: "pool-cucumber", totalQuantityBase: 500 },
+      ],
+    });
+    expect(result.value.page.items[0]!.sellingOptions).toHaveLength(3);
+  });
+
+  it("pages complete Products by identity, even when their paid names are identical", async () => {
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    const global = await locationManager("global");
+    await grantProcurementRead(global.id);
+    const orderId = `order-${cycleId}`;
+    await seedOrder(cycleId, orderId);
+    for (let index = 0; index < 51; index++) {
+      const id = `summary-product-${String(index).padStart(2, "0")}-${cycleId}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO inventory_pool(id,base_unit_id,sourcing_mode,created_at,updated_at) SELECT ?,base_unit_id,sourcing_mode,1,1 FROM inventory_pool WHERE id='pool-carrot'",
+        ).bind(id),
+        env.DB.prepare(
+          "INSERT INTO product(id,category_id,inventory_pool_id,slug,name,status,created_at,updated_at) SELECT ?,category_id,?,?,'Same name','active',1,1 FROM product WHERE inventory_pool_id='pool-carrot'",
+        ).bind(id, id, id),
+        env.DB.prepare(
+          "INSERT INTO sku(id,product_id,code,name,sellable_unit_id,sell_quantity,consumption_base_quantity,status,sort_order,version,created_at,updated_at) SELECT ?,?,?,name,sellable_unit_id,sell_quantity,consumption_base_quantity,status,sort_order,version,created_at,updated_at FROM sku WHERE id='sku-carrot-1kg'",
+        ).bind(id, id, id),
+      ]);
+      await seedPaidLine({
+        cycleId,
+        orderId,
+        locationId: "location-cebu-central",
+        skuId: id,
+        poolId: id,
+        productName: "Same name",
+        variantName: "1 kg",
+        unitName: "GRAM",
+        baseUnit: "GRAM",
+        soldUnits: 1,
+        baseQuantity: 1000,
+      });
+    }
+    const query = {
+      headers: global.headers,
+      requestId: crypto.randomUUID(),
+      cycleId,
+      section: "ORDER_SUMMARY" as const,
+    };
+    const first = await core.getAdminScheduledWeek(query);
+    if (!first.ok || first.value.page.kind !== "ORDER_SUMMARY" || !first.value.page.nextCursor)
+      throw new Error("Missing first page");
+    expect(first.value.page.items).toHaveLength(50);
+    expect(first.value.page.totals).toEqual({
+      paidOrderCount: 1,
+      productCount: 51,
       sellingOptionCount: 51,
       destinationCount: 1,
     });
@@ -362,12 +492,12 @@ describe("Scheduled cycle order summary", () => {
       cursor: first.value.page.nextCursor,
     });
     if (!second.ok || second.value.page.kind !== "ORDER_SUMMARY")
-      throw new Error("Missing second summary page");
+      throw new Error("Missing second page");
     expect(second.value.page.items).toHaveLength(1);
     expect(second.value.page.nextCursor).toBeNull();
     expect(second.value.page.totals).toEqual(first.value.page.totals);
     expect(
-      new Set([...first.value.page.items, ...second.value.page.items].map((item) => item.skuId))
+      new Set([...first.value.page.items, ...second.value.page.items].map((item) => item.productId))
         .size,
     ).toBe(51);
   });

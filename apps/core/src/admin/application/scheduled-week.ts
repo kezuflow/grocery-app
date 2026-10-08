@@ -4,6 +4,7 @@ import type {
   ScheduledWeekView,
   ScheduledDemandItem,
   ScheduledOrderSummaryItem,
+  ScheduledSellingOptionSummaryItem,
   ScheduledOrderSummaryTotals,
 } from "@freshmarkets/contracts";
 import { scheduledWeekQuerySchema, scheduledWeekViewSchema } from "@freshmarkets/validation";
@@ -161,27 +162,60 @@ export async function getAdminScheduledWeek(
   };
   if (query.section === "ORDER_SUMMARY") {
     const paidLines = `SELECT d.order_id,d.location_id,d.inventory_pool_id,d.sku_id,d.quantity_sellable,d.quantity_base_total,d.base_unit_code,
-      s.product_id,
+      s.product_id,l.name locationName,
       COALESCE(oi.product_name_snapshot,al.product_name_snapshot) productName,
       COALESCE(oi.variant_name_snapshot,al.variant_name_snapshot) variantName,
       COALESCE(oi.unit_snapshot,al.unit_snapshot) unitName
       FROM committed_demand d JOIN sku s ON s.id=d.sku_id
+      JOIN fulfillment_location l ON l.id=d.location_id
       LEFT JOIN order_item oi ON oi.id=d.order_item_id
       LEFT JOIN paid_order_amendment_line al ON al.id=d.amendment_line_id
       WHERE d.delivery_cycle_id=? AND (? IS NULL OR d.location_id=?)
         AND d.status='OPEN' AND d.demand_basis='EXACT_PAID_LINE'`;
     const [rows, totals] = await Promise.all([
       deps.db
-        .prepare(`WITH paid_lines AS (${paidLines}), grouped AS (
-          SELECT sku_id skuId,inventory_pool_id inventoryPoolId,productName,variantName,unitName,base_unit_code baseUnit,
-            COUNT(DISTINCT order_id) paidOrderCount,SUM(quantity_sellable) soldUnitCount,
-            SUM(quantity_base_total) totalQuantityBase,COUNT(DISTINCT location_id) destinationCount,
-            json_array(sku_id,inventory_pool_id,base_unit_code,productName,variantName,unitName) rowCursor
-          FROM paid_lines
-          GROUP BY sku_id,inventory_pool_id,base_unit_code,productName,variantName,unitName
-        ) SELECT * FROM grouped WHERE rowCursor>? ORDER BY rowCursor LIMIT 51`)
+        .prepare(`WITH source_lines AS (${paidLines}), paid_lines AS (
+          SELECT *,json_array(sku_id,inventory_pool_id,base_unit_code,productName,variantName,unitName) optionKey
+          FROM source_lines
+        ), products AS (
+          SELECT product_id productId,productName,COUNT(DISTINCT order_id) paidOrderCount,
+            COUNT(DISTINCT location_id) destinationCount,json_array(product_id,productName) rowCursor
+          FROM paid_lines GROUP BY product_id,productName
+        ), page_products AS (
+          SELECT * FROM products WHERE rowCursor>? ORDER BY rowCursor LIMIT 51
+        ), selected_lines AS (
+          SELECT l.* FROM paid_lines l JOIN page_products p ON p.productId=l.product_id AND p.productName=l.productName
+        ), destinations AS (
+          SELECT optionKey,location_id locationId,locationName,SUM(quantity_sellable) soldUnitCount,
+            SUM(quantity_base_total) totalQuantityBase
+          FROM selected_lines GROUP BY optionKey,location_id,locationName
+        ), options AS (
+          SELECT product_id productId,productName,optionKey,sku_id skuId,inventory_pool_id inventoryPoolId,
+            variantName,unitName,base_unit_code baseUnit,COUNT(DISTINCT order_id) paidOrderCount,
+            SUM(quantity_sellable) soldUnitCount,SUM(quantity_base_total) totalQuantityBase,
+            COUNT(DISTINCT location_id) destinationCount
+          FROM selected_lines GROUP BY product_id,productName,optionKey
+        ) SELECT p.*,(SELECT json_group_array(json(optionJson)) FROM (
+          SELECT json_object('skuId',o.skuId,'inventoryPoolId',o.inventoryPoolId,'productName',o.productName,
+            'variantName',o.variantName,'unitName',o.unitName,'baseUnit',o.baseUnit,'paidOrderCount',o.paidOrderCount,
+            'soldUnitCount',o.soldUnitCount,'totalQuantityBase',o.totalQuantityBase,'destinationCount',o.destinationCount,
+            'destinations',json((SELECT json_group_array(json(destinationJson)) FROM (
+              SELECT json_object('locationId',d.locationId,'locationName',d.locationName,
+                'soldUnitCount',d.soldUnitCount,'totalQuantityBase',d.totalQuantityBase) destinationJson
+              FROM destinations d WHERE d.optionKey=o.optionKey ORDER BY d.locationName,d.locationId
+            )))) optionJson
+          FROM options o WHERE o.productId=p.productId AND o.productName=p.productName ORDER BY o.optionKey
+        )) sellingOptionsJson FROM page_products p ORDER BY p.rowCursor`)
         .bind(query.cycleId, query.locationId ?? null, query.locationId ?? null, query.cursor ?? "")
-        .all<ScheduledOrderSummaryItem & { rowCursor: string }>(),
+        .all<
+          Pick<
+            ScheduledOrderSummaryItem,
+            "productId" | "productName" | "paidOrderCount" | "destinationCount"
+          > & {
+            rowCursor: string;
+            sellingOptionsJson: string;
+          }
+        >(),
       deps.db
         .prepare(`WITH paid_lines AS (${paidLines}) SELECT
           COUNT(DISTINCT order_id) paidOrderCount,
@@ -194,7 +228,35 @@ export async function getAdminScheduledWeek(
     ]);
     result.page = {
       kind: "ORDER_SUMMARY",
-      items: rows.results.slice(0, 50).map(({ rowCursor: _rowCursor, ...row }) => row),
+      items: rows.results
+        .slice(0, 50)
+        .map(({ rowCursor: _rowCursor, sellingOptionsJson, ...row }) => {
+          const sellingOptions: ScheduledSellingOptionSummaryItem[] =
+            JSON.parse(sellingOptionsJson);
+          const quantities = new Map<
+            string,
+            {
+              inventoryPoolId: string;
+              baseUnit: ScheduledSellingOptionSummaryItem["baseUnit"];
+              totalQuantityBase: number;
+              sellingOptionNames: string[];
+            }
+          >();
+          for (const option of sellingOptions) {
+            const key = JSON.stringify([option.inventoryPoolId, option.baseUnit]);
+            const quantity = quantities.get(key) ?? {
+              inventoryPoolId: option.inventoryPoolId,
+              baseUnit: option.baseUnit,
+              totalQuantityBase: 0,
+              sellingOptionNames: [],
+            };
+            quantity.totalQuantityBase += option.totalQuantityBase;
+            if (!quantity.sellingOptionNames.includes(option.variantName))
+              quantity.sellingOptionNames.push(option.variantName);
+            quantities.set(key, quantity);
+          }
+          return { ...row, quantities: [...quantities.values()], sellingOptions };
+        }),
       totals: totals ?? {
         paidOrderCount: 0,
         productCount: 0,
