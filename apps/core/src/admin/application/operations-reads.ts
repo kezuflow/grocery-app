@@ -377,11 +377,13 @@ export async function listAdminDeliveryOperations(
             actualCostMinor: row.externalActualCostMinor,
             costCurrency: row.externalCostCurrency,
             version: row.externalVersion,
+            sharedBooking: row.sharedBooking,
           }
         : null,
     manualDelivery: row.manualDelivery,
     manualActions: row.manualActions,
     courierPickup: row.courierPickup,
+    sharedBookingEligible: row.sharedBookingEligible,
     canRevisePromise: row.canRevisePromise,
     canInspectReturnedGoods: row.canInspectReturnedGoods,
     deliveredAtIso: row.deliveredAtIso,

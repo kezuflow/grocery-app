@@ -25,4 +25,6 @@ export type ProviderEvent = {
   previousProviderDeliveryId?: string;
   replacementCheck?: boolean;
   evidence?: { kind: ProviderEvidenceKind; value: unknown }[];
+  observedStops?: readonly import("./delivery-provider").ObservedDeliveryStop[];
+  merchantOrderId?: string;
 };

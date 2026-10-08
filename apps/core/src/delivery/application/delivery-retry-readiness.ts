@@ -6,6 +6,8 @@ export const deliveryRetryReadySql = `job.status IN ('UNASSIGNED','RETRY_SCHEDUL
   AND EXISTS (SELECT 1 FROM delivery_provider_dispatch previous
     WHERE previous.id=(SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=job.id ORDER BY latest.attempt_sequence DESC LIMIT 1)
       AND previous.status IN ('CANCELED','FAILED','RETURNED')
+      AND (previous.shared_booking_id IS NULL OR EXISTS (SELECT 1 FROM delivery_shared_booking shared WHERE shared.id=previous.shared_booking_id
+        AND shared.status IN ('CANCELED','FAILED','COMPLETED') AND shared.cancel_pending=0 AND shared.route_review_required=0 AND shared.replacement_pending=0))
       AND ((previous.status!='RETURNED' AND previous.handed_over_at IS NULL) OR EXISTS (
         SELECT 1 FROM delivery_promise_revision revision WHERE revision.dispatch_id=previous.id AND revision.return_inspected_at IS NOT NULL)))
   AND EXISTS (SELECT 1 FROM grocery_order grocery JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id
@@ -39,6 +41,8 @@ export const returnedDeliveryInspectionSql = `job.status='FAILED' AND job.batch_
     JOIN fulfillment_record fulfillment ON fulfillment.order_id=grocery.id AND fulfillment.location_id=job.location_id
     WHERE previous.id=(SELECT id FROM delivery_provider_dispatch WHERE delivery_job_id=job.id ORDER BY attempt_sequence DESC LIMIT 1)
       AND previous.status IN ('CANCELED','FAILED','RETURNED')
+      AND (previous.shared_booking_id IS NULL OR EXISTS (SELECT 1 FROM delivery_shared_booking shared WHERE shared.id=previous.shared_booking_id
+        AND shared.status IN ('CANCELED','FAILED','COMPLETED') AND shared.cancel_pending=0 AND shared.route_review_required=0 AND shared.replacement_pending=0))
       AND (previous.handed_over_at IS NOT NULL OR previous.status='RETURNED' OR grocery.status='OUT_FOR_DELIVERY')
       AND grocery.status IN ('FULFILLMENT_READY','OUT_FOR_DELIVERY') AND fulfillment.status IN ('PACKED','HANDED_OFF')
       AND NOT EXISTS (SELECT 1 FROM delivery_promise_revision revision WHERE revision.dispatch_id=previous.id AND revision.return_inspected_at IS NOT NULL))

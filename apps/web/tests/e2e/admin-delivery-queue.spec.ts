@@ -1085,3 +1085,100 @@ test("A successful reply with unresolved provider status still locks the saved b
   expect(requests[1]).toEqual(requests[0]);
   await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
 });
+
+test("shared booking limits selection, reviews ordered stops, and recovers one confirmation identity", async ({
+  page,
+}) => {
+  await installDeliveryScopes(page);
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    ...deliveryItem(firstLocation, `shared0${index + 1}`, "SCHEDULED"),
+    sharedBookingEligible: true,
+    courierPickup: { allowedKinds: ["IMMEDIATE"], unavailableReason: null },
+  }));
+  await page.route("**/api/admin/delivery?**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: { ...deliveryPage(firstLocation, "shared01").value, items, totalOpenJobs: 6 },
+      }),
+    }),
+  );
+  const confirms: { key: string | undefined; body: unknown }[] = [];
+  await page.route("**/api/admin/shared-deliveries", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.jobs).toEqual(
+      items.slice(0, 5).map((item) => ({ jobId: item.jobId, expectedVersion: 1 })),
+    );
+    expect(body.pickup).toEqual({ kind: "IMMEDIATE" });
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        value: {
+          bookingId: "shared-review",
+          version: 3,
+          status: "PREPARED",
+          memberCount: 5,
+          quoteAmountMinor: 7100,
+          currency: "PHP",
+          expiresAt: new Date(Date.now() + 300000).toISOString(),
+          pickup: { kind: "IMMEDIATE" },
+          optimized: false,
+          stops: items.slice(0, 5).map((item, index) => ({
+            jobId: item.jobId,
+            orderId: item.orderId,
+            orderNumber: item.orderId,
+            position: index + 1,
+            recipientName: `Recipient ${index + 1}`,
+            destinationLabel: `Synthetic stop ${index + 1}`,
+          })),
+        },
+      }),
+    });
+  });
+  await page.route("**/api/admin/shared-deliveries/confirm", async (route) => {
+    confirms.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postDataJSON(),
+    });
+    if (confirms.length === 1) return route.abort("failed");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, value: { bookingId: "shared-review", status: "ACTIVE" } }),
+    });
+  });
+  await page.goto("/admin/delivery");
+  const reviewButton = page.getByRole("button", { name: "Review shared booking" });
+  await expect(reviewButton).toBeDisabled();
+  for (let index = 1; index <= 5; index++)
+    await page
+      .getByRole("checkbox", { name: `Select Order shared0${index} for shared booking` })
+      .check();
+  await expect(
+    page.getByRole("checkbox", { name: "Select Order shared06 for shared booking" }),
+  ).toBeDisabled();
+  await reviewButton.click();
+  const sheet = page.getByRole("dialog", { name: "Book one rider" });
+  await sheet.getByRole("button", { name: "Get combined quote" }).click();
+  await expect(sheet).toContainText("PHP 71.00");
+  await expect(sheet.getByRole("listitem")).toHaveCount(5);
+  await expect(sheet).toContainText("Customer delivery charges stay unchanged");
+  await page.screenshot({ path: test.info().outputPath("shared-review.png") });
+  const confirmButton = sheet.getByRole("button", { name: "Confirm shared booking" });
+  await expect(confirmButton).toBeDisabled();
+  expect(confirms).toHaveLength(0);
+  await sheet.getByRole("checkbox", { name: "All Orders fit together on one Motorcycle" }).check();
+  await confirmButton.click();
+  await expect(sheet).toContainText("Booking outcome is unknown");
+  await sheet.getByRole("button", { name: "Retry saved confirmation" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(confirms).toHaveLength(2);
+  expect(confirms[1]).toEqual(confirms[0]);
+  expect(confirms[0].body).toEqual({
+    locationId: firstLocation,
+    bookingId: "shared-review",
+    expectedVersion: 3,
+    combinedLoadFits: true,
+  });
+});

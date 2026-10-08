@@ -1,6 +1,7 @@
 import { providerEvidenceStatements } from "./provider-evidence-statements";
 import { applyProviderObservation } from "./apply-provider-observation";
 import type { ProviderEvent } from "../ports/provider-event";
+import { applySharedDeliveryEvent } from "./apply-shared-delivery-event";
 
 type Dispatch = {
   id: string;
@@ -43,6 +44,13 @@ export async function applyProviderEvent(
     return { outcome: "APPLIED" as const };
   }
   const lookupId = event.previousProviderDeliveryId ?? event.providerDeliveryId;
+  const shared = await database
+    .prepare(`SELECT id FROM delivery_shared_booking WHERE provider_delivery_id=?
+    OR id IN (SELECT booking_id FROM delivery_shared_booking_identity WHERE provider_delivery_id=?)
+    OR (merchant_order_id=? AND provider_delivery_id IS NULL AND status IN ('CREATING','OUTCOME_UNKNOWN','RECONCILIATION_REQUIRED'))`)
+    .bind(lookupId, lookupId, event.merchantOrderId ?? "")
+    .first<{ id: string }>();
+  if (shared) return applySharedDeliveryEvent(database, shared.id, event, inboxId);
   const dispatch = await database
     .prepare(
       `SELECT id,merchant_order_id,provider_delivery_id,version,handed_over_at,provider_status FROM delivery_provider_dispatch WHERE provider='lalamove' AND (provider_delivery_id=? OR id IN (SELECT dispatch_id FROM delivery_provider_identity WHERE provider='lalamove' AND provider_delivery_id=?))`,

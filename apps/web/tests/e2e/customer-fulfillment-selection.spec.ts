@@ -201,11 +201,14 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("alert")).toContainText(
       "Delivery partner quotation is temporarily unavailable. Retry the delivery quotation.",
     );
+    await expect(page.getByRole("main").last()).not.toContainText("Lalamove");
     await page.getByRole("button", { name: "Try quotation again" }).click();
     await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText(
       "₱330.00",
     );
-    await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Choose a payment method" })).toBeDisabled();
+    await page.getByRole("radio", { name: "QR Ph", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Continue with QR Ph" })).toBeEnabled();
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -347,10 +350,12 @@ test("quotes the current Scheduled delivery option and keeps the cutoff notice v
   );
   await expect(page.getByText("Order cutoff", { exact: false })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText("₱325.00");
-  await expect(page.getByRole("button", { name: "Continue to payment" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Choose a payment method" })).toBeDisabled();
+  await page.getByRole("radio", { name: "QR Ph", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Continue with QR Ph" })).toBeEnabled();
   const cutoffNotice = page.getByRole("complementary", { name: "Scheduled delivery cutoff" });
-  await expect(cutoffNotice).toContainText("Friday, 11:59 PM");
-  await expect(cutoffNotice).toContainText("following Saturday or Sunday");
+  await expect(cutoffNotice).toContainText("Sep 25, 2099, 11:59 PM");
+  await expect(cutoffNotice).toContainText("After closing, choose another available delivery week");
   expect(await cutoffNotice.evaluate((element) => getComputedStyle(element).position)).toBe(
     "fixed",
   );

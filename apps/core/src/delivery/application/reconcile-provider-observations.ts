@@ -3,6 +3,8 @@ import { parseLalamoveEvent } from "../infrastructure/lalamove/lalamove-event";
 import { applyProviderObservation } from "./apply-provider-observation";
 import type { ProviderDeliveryStatus } from "../ports/delivery-provider";
 import { expireUnsubmittedBookings } from "./expire-unsubmitted-bookings";
+import { applySharedDeliveryEvent } from "./apply-shared-delivery-event";
+import type { ProviderEvent } from "../ports/provider-event";
 
 function status(value: string): ProviderDeliveryStatus | null {
   switch (value) {
@@ -46,7 +48,7 @@ export async function reconcileProviderObservations(database: D1Database, now: n
   ]);
   const pending = await database
     .prepare(`SELECT inbox.id,inbox.provider_status,inbox.observed_at,inbox.raw_payload,
-    inbox.recovery_attempts,inbox.provider,dispatch.id AS dispatch_id
+    inbox.recovery_attempts,inbox.provider,dispatch.id AS dispatch_id,inbox.shared_booking_id,inbox.normalized_event_json
     FROM delivery_provider_event_inbox inbox LEFT JOIN delivery_provider_dispatch dispatch
       ON dispatch.provider=inbox.provider AND dispatch.provider_delivery_id=inbox.provider_delivery_id
     WHERE inbox.processing_status!='APPLIED' AND inbox.recovery_attempts<5 AND inbox.next_recovery_at<=?
@@ -60,6 +62,8 @@ export async function reconcileProviderObservations(database: D1Database, now: n
       raw_payload: string;
       recovery_attempts: number;
       dispatch_id: string | null;
+      shared_booking_id: string | null;
+      normalized_event_json: string | null;
     }>();
   let attempted = 0;
   let applied = 0;
@@ -72,6 +76,18 @@ export async function reconcileProviderObservations(database: D1Database, now: n
       .run();
     if (claim.meta.changes !== 1) continue;
     attempted += 1;
+    if (row.shared_booking_id && row.normalized_event_json) {
+      const event = JSON.parse(row.normalized_event_json) as ProviderEvent;
+      const outcome = await applySharedDeliveryEvent(
+        database,
+        row.shared_booking_id,
+        event,
+        row.id,
+      );
+      if (outcome.outcome !== "RECONCILIATION_REQUIRED") applied++;
+      else deferred++;
+      continue;
+    }
     let failure: string | null = null;
     const normalized = status(row.provider_status);
     let raw: Record<string, unknown> | null = null;

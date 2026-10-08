@@ -1,4 +1,5 @@
-import { lalamoveCost, lalamoveProofs } from "./lalamove-event";
+import { lalamoveCost, lalamoveProofs, lalamoveObservedStops } from "./lalamove-event";
+import { providerCoordinatesMatch } from "../../domain/provider-stop-identity";
 import type {
   DeliveryContact,
   DeliveryProvider,
@@ -7,6 +8,8 @@ import type {
   DeliveryProviderRequest,
   DeliveryProviderResult,
   DeliveryQuote,
+  DeliveryRouteRequest,
+  DeliveryRouteQuote,
   ProviderDelivery,
   ProviderDeliveryStatus,
 } from "../../ports/delivery-provider";
@@ -247,6 +250,7 @@ function parseDelivery(
     ],
     replacementCheck:
       data.status === "CANCELED" && data.cancelParty === "LALAMOVE_CUSTOMER_SUPPORT",
+    observedStops: lalamoveObservedStops(data),
   };
 }
 
@@ -274,6 +278,45 @@ function quotationBody(request: DeliveryProviderRequest, language: string) {
       ...(request.schedule ? { scheduleAt: request.schedule.pickupFrom } : {}),
     },
   };
+}
+
+function routePickup(request: DeliveryRouteRequest) {
+  const pickup = stop(request.origin);
+  const instructions = request.origin.instructions.deliveryInstructions?.trim();
+  return {
+    ...pickup,
+    address: instructions
+      ? `${pickup.address}\r\nPickup instructions: ${instructions}`
+      : pickup.address,
+  };
+}
+
+function sameStop(value: JsonObject | null | undefined, expected: ReturnType<typeof stop>) {
+  const coordinates = object(value?.coordinates);
+  return (
+    value?.address === expected.address &&
+    providerCoordinatesMatch(
+      { latitude: Number(coordinates?.lat), longitude: Number(coordinates?.lng) },
+      { latitude: Number(expected.coordinates.lat), longitude: Number(expected.coordinates.lng) },
+    )
+  );
+}
+
+function validRoute(request: DeliveryRouteRequest, now: number) {
+  return (
+    request.destinations.length >= 2 &&
+    request.destinations.length <= 5 &&
+    new Set(request.destinations.map((destination) => destination.reference)).size ===
+      request.destinations.length &&
+    request.destinations.every(
+      (destination) =>
+        destination.reference.trim().length > 0 &&
+        validRequest(
+          { ...request, destination: destination.address, recipient: destination.recipient },
+          now,
+        ),
+    )
+  );
 }
 
 function contact(value: DeliveryContact, stopId: string, deliveryRemarks?: string) {
@@ -512,6 +555,128 @@ export function createLalamoveProvider(
       cancelDelivery: true,
       signedStatusWebhooks: true,
       requiresPackageDimensions: false,
+    },
+    quoteRoute(request) {
+      return observed("LALAMOVE_QUOTE", async () => {
+        if (!validRoute(request, now())) return resultError("LALAMOVE_INVALID_REQUEST");
+        const pickup = routePickup(request);
+        const response = await api(
+          "/v3/quotations",
+          "POST",
+          JSON.stringify({
+            data: {
+              serviceType: request.serviceType,
+              language: configuration.language,
+              stops: [
+                pickup,
+                ...request.destinations.map((destination) => stop(destination.address)),
+              ],
+              isRouteOptimized: request.optimize,
+              ...(request.schedule ? { scheduleAt: request.schedule.pickupFrom } : {}),
+            },
+          }),
+          false,
+        );
+        if (!response.ok) return response;
+        const data = object(object(response.value)?.data);
+        const quote = parseQuote(response.value, request.currencyExponent);
+        const quotationId = nonemptyString(data?.quotationId);
+        const returned = Array.isArray(data?.stops) ? data.stops.map(object) : [];
+        const pickupStopId = nonemptyString(returned[0]?.stopId);
+        const remaining = request.destinations.map((destination) => ({
+          reference: destination.reference,
+          wire: stop(destination.address),
+        }));
+        const mapped: DeliveryRouteQuote["stops"][number][] = [];
+        for (let position = 1; position < returned.length; position++) {
+          const candidate = returned[position];
+          const stopId = nonemptyString(candidate?.stopId);
+          const source = remaining.findIndex((destination) =>
+            sameStop(candidate, destination.wire),
+          );
+          if (!stopId || source < 0)
+            return resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true });
+          const [destination] = remaining.splice(source, 1);
+          mapped.push({ reference: destination!.reference, stopId, position });
+        }
+        if (
+          !quote ||
+          quote.currency !== request.currencyCode ||
+          !quotationId ||
+          !pickupStopId ||
+          !quote.expiresAt ||
+          Date.parse(quote.expiresAt) <= now() ||
+          !sameStop(returned[0], pickup) ||
+          remaining.length !== 0 ||
+          returned.length !== request.destinations.length + 1 ||
+          new Set([pickupStopId, ...mapped.map((item) => item.stopId)]).size !== returned.length ||
+          (typeof data?.isRouteOptimized === "boolean" &&
+            data.isRouteOptimized !== request.optimize)
+        )
+          return resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true });
+        return {
+          ok: true,
+          value: { quote, quotationId, pickupStopId, stops: mapped },
+          ...(response.providerRequestId ? { providerRequestId: response.providerRequestId } : {}),
+        };
+      });
+    },
+    createRoute({ route, quotation: quoted, merchantOrderId }) {
+      return observed("LALAMOVE_CREATE", async () => {
+        if (
+          !validRoute(route, now()) ||
+          !merchantOrderId.trim() ||
+          !quoted.quote.expiresAt ||
+          Date.parse(quoted.quote.expiresAt) <= now() + 10_000 ||
+          quoted.stops.length !== route.destinations.length ||
+          new Set(quoted.stops.map((item) => item.reference)).size !== route.destinations.length
+        )
+          return resultError("LALAMOVE_INVALID_REQUEST");
+        const recipients = quoted.stops.map((item) => {
+          const destination = route.destinations.find(
+            (candidate) => candidate.reference === item.reference,
+          );
+          return destination
+            ? contact(
+                destination.recipient,
+                item.stopId,
+                destination.address.instructions.deliveryInstructions?.trim() || undefined,
+              )
+            : null;
+        });
+        if (recipients.some((recipient) => recipient === null))
+          return resultError("LALAMOVE_INVALID_REQUEST");
+        const response = await api(
+          "/v3/orders",
+          "POST",
+          JSON.stringify({
+            data: {
+              quotationId: quoted.quotationId,
+              sender: contact(route.sender, quoted.pickupStopId),
+              recipients,
+              isPODEnabled: true,
+              metadata: { merchantOrderId },
+            },
+          }),
+          true,
+        );
+        if (!response.ok) return response;
+        const value = parseDelivery(
+          response.value,
+          route.currencyExponent,
+          merchantOrderId,
+          quoted.quote,
+        );
+        return value
+          ? {
+              ok: true,
+              value,
+              ...(response.providerRequestId
+                ? { providerRequestId: response.providerRequestId }
+                : {}),
+            }
+          : resultError("LALAMOVE_INVALID_RESPONSE", { retryable: true, outcomeUnknown: true });
+      });
     },
     quote(request) {
       return observed("LALAMOVE_QUOTE", async () => {

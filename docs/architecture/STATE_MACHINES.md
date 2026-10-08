@@ -1,5 +1,11 @@
 # FreshMarkets State Machines
 
+## Shared Scheduled courier lifecycle — 2026-10-08
+
+Prepare persists `PREPARED` review evidence without claiming Orders or booking. Confirmation atomically revalidates scope, every packed eligible member/version, timing and expiry, records physical fit, creates all individual `CREATING` attempts and changes the parent to `CREATING` before one provider create. Definite rejection becomes `FAILED`; transport/lost persistence remains `OUTCOME_UNKNOWN` and cannot resubmit. Verified accepted identity becomes `ACTIVE`; receipt replay remains immutable after progress. Exact signed merchant evidence or authenticated GET against the saved identity recovers uncertainty.
+
+Authenticated pickup advances each applicable packed Order to Out for delivery atomically. Provider positions map proof success/explicit failure to individual member outcomes. Verified aggregate Completed closes pending stops under the non-gating-photo rule, preserving explicit failures and successful deliveries. Duplicates/older evidence cannot repeat notification effects or regress terminal outcomes. Edited/replaced routes set `RECONCILIATION_REQUIRED`; a complete current matching observation is required to resume progress. Rematching preserves custody and normal review. Whole-group cancellation records intent before mutation and stays unknown until verified closure; unresolved parent flags block replacements. Shared payable facts never change paid charges or invent member variance.
+
 Focused technical reference; load the sections affected by the current command or data change. Business meaning is in [PRODUCT.md](../product/PRODUCT.md); technique and verification are in [ENGINEERING.md](ENGINEERING.md). The decision reconciliation in PRODUCT identifies approved intent still needing implementation. This specification does not certify the current code. Historical source and requirement accounting are in [the GD-1 audit](../product/PRODUCT.md#source-provenance).
 
 ## Enforcement Rules

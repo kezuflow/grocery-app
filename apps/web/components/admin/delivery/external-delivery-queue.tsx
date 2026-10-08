@@ -10,6 +10,8 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/admin/shadcn/alert";
 import { Button } from "@/components/admin/shadcn/button";
+import { Checkbox } from "@/components/admin/shadcn/checkbox";
+import { SharedDeliveryBooking } from "./shared-delivery-booking";
 import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { ProviderDeliveryEvidence } from "./provider-delivery-evidence";
@@ -100,6 +102,13 @@ export function ExternalDeliveryQueue() {
     null,
   );
   const summary = loaded?.key === readKey ? loaded.value : null;
+  const [sharedSelection, setSharedSelection] = useState<{
+    key: string;
+    jobs: Record<string, number>;
+  }>({ key: "", jobs: {} });
+  const selectedJobs = sharedSelection.key === readKey ? sharedSelection.jobs : {};
+  const selectedCount = Object.keys(selectedJobs).length;
+  const [sharedOpen, setSharedOpen] = useState(false);
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -142,7 +151,7 @@ export function ExternalDeliveryQueue() {
   const pendingPageMove = useRef<(() => void) | null>(null);
   const pendingPageReadKey = useRef<string | null>(null);
   const restoreDialogFocus = useRef<HTMLElement | null>(null);
-  const dirty = Object.values(interactionStates).some((state) => state.dirty);
+  const dirty = selectedCount > 0 || Object.values(interactionStates).some((state) => state.dirty);
   const locked =
     providerLocked ||
     cancelTarget !== null ||
@@ -319,6 +328,32 @@ export function ExternalDeliveryQueue() {
           title="Delivery queue"
           description="Track each order and its current delivery progress."
         >
+          {canManage ? (
+            <div className="flex flex-wrap items-center gap-3 border-b p-4">
+              <p className="flex-1 text-sm text-muted-foreground">
+                Select two to five packed Scheduled Orders for one rider. {selectedCount}/5
+                selected.
+              </p>
+              <Button
+                variant="outline"
+                disabled={selectedCount === 0 || locked}
+                onClick={() => setSharedSelection({ key: readKey, jobs: {} })}
+              >
+                Clear selection
+              </Button>
+              <Button
+                disabled={
+                  selectedCount < 2 ||
+                  selectedCount > 5 ||
+                  locked ||
+                  Object.values(interactionStates).some((state) => state.dirty)
+                }
+                onClick={() => setSharedOpen(true)}
+              >
+                Review shared booking
+              </Button>
+            </div>
+          ) : null}
           {summary.items.length === 0 ? (
             <p className="p-5 text-sm text-muted-foreground">No open courier work.</p>
           ) : (
@@ -340,6 +375,27 @@ export function ExternalDeliveryQueue() {
                       className="grid grid-cols-2 gap-3 border-b border-border p-4 lg:table-row lg:p-0 [&>td]:min-w-0 [&>td]:align-top [&>td]:p-0 lg:[&>td]:px-4 lg:[&>td]:py-3"
                     >
                       <TableCell className="col-span-2 whitespace-normal">
+                        {canManage ? (
+                          <Checkbox
+                            aria-label={`Select Order ${item.orderId.slice(0, 8)} for shared booking`}
+                            className="mr-3"
+                            checked={item.jobId in selectedJobs}
+                            disabled={
+                              locked ||
+                              !item.sharedBookingEligible ||
+                              (!(item.jobId in selectedJobs) && selectedCount >= 5) ||
+                              Object.values(interactionStates).some((state) => state.dirty)
+                            }
+                            onCheckedChange={(value) =>
+                              setSharedSelection((current) => {
+                                const jobs = current.key === readKey ? { ...current.jobs } : {};
+                                if (value === true) jobs[item.jobId] = item.version;
+                                else delete jobs[item.jobId];
+                                return { key: readKey, jobs };
+                              })
+                            }
+                          />
+                        ) : null}
                         <Link
                           className="font-medium underline underline-offset-2"
                           href={`/admin/orders/${encodeURIComponent(item.orderId)}`}
@@ -378,6 +434,20 @@ export function ExternalDeliveryQueue() {
                               · {externalStatusLabel(item.externalDispatch)}
                             </p>
                             <ProviderDeliveryEvidence dispatch={item.externalDispatch} />
+                            {item.externalDispatch.sharedBooking ? (
+                              <p>
+                                Shared rider · {item.externalDispatch.sharedBooking.memberCount}{" "}
+                                Orders. Shared total: PHP{" "}
+                                {(
+                                  (item.externalDispatch.sharedBooking.actualCostMinor ??
+                                    item.externalDispatch.sharedBooking.quoteAmountMinor) / 100
+                                ).toFixed(2)}
+                                {item.externalDispatch.sharedBooking.actualCostMinor === null
+                                  ? " (quote)"
+                                  : ""}
+                                . Per-Order cost allocation unavailable.
+                              </p>
+                            ) : null}
                             {item.externalDispatch.quoteAmountMinor != null &&
                             item.externalDispatch.quoteCurrency ? (
                               <p>
@@ -544,6 +614,25 @@ export function ExternalDeliveryQueue() {
           />
         </ListPageSection>
       ) : null}
+      {locationId && summary ? (
+        <SharedDeliveryBooking
+          key={readKey}
+          locationId={locationId}
+          open={sharedOpen}
+          selected={summary.items
+            .filter((item) => item.jobId in selectedJobs)
+            .map((item) => ({ ...item, version: selectedJobs[item.jobId]! }))}
+          onClose={() => {
+            setSharedOpen(false);
+            setSharedSelection({ key: readKey, jobs: {} });
+          }}
+          onChanged={() => {
+            refreshDeferred.current = true;
+            void load();
+          }}
+          onInteractionState={(draft, command) => setInteraction("shared-booking", draft, command)}
+        />
+      ) : null}
       {locationId &&
       trackingItem?.externalDispatch?.provider === "lalamove" &&
       trackingItem.externalDispatch.status === "ACTIVE" ? (
@@ -561,10 +650,18 @@ export function ExternalDeliveryQueue() {
       ) : null}
       <AdminConfirmationDialog
         open={cancelTarget !== null}
-        title="Cancel Lalamove delivery?"
+        title={
+          cancelTarget?.dispatch.sharedBooking
+            ? "Cancel shared Lalamove booking?"
+            : "Cancel Lalamove delivery?"
+        }
         resource={cancelTarget ? `Order ${cancelTarget.orderId}` : "Delivery"}
         scope={label}
-        consequence="Request cancellation of this active courier delivery. Wait for provider confirmation before assigning a replacement."
+        consequence={
+          cancelTarget?.dispatch.sharedBooking
+            ? `Request cancellation of the entire shared booking for all ${cancelTarget.dispatch.sharedBooking.memberCount} Orders. Wait for provider confirmation before assigning replacements.`
+            : "Request cancellation of this active courier delivery. Wait for provider confirmation before assigning a replacement."
+        }
         reasonRequired={false}
         confirmLabel="Request cancellation"
         cancelLabel="Keep delivery"

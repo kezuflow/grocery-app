@@ -48,6 +48,44 @@ export function createMockDeliveryProvider(now: () => number = Date.now): Delive
         },
       };
     },
+    async quoteRoute(request) {
+      const quotationId = `mock-shared-quote-${now()}`;
+      return {
+        ok: true,
+        value: {
+          quotationId,
+          pickupStopId: "mock-pickup",
+          quote: {
+            providerQuotationId: quotationId,
+            serviceType: request.serviceType,
+            amountMinor: 7100,
+            currency: request.currencyCode,
+            expiresAt: new Date(now() + 300000).toISOString(),
+            estimatedPickupAt: null,
+            estimatedDropoffAt: null,
+            distanceMeters: 5000,
+          },
+          stops: request.destinations.map((destination, index) => ({
+            reference: destination.reference,
+            stopId: `mock-stop-${index + 1}`,
+            position: index + 1,
+          })),
+        },
+      };
+    },
+    async createRoute(request) {
+      return {
+        ok: true,
+        value: {
+          providerDeliveryId: `mock-delivery-${request.merchantOrderId}`,
+          merchantOrderId: request.merchantOrderId,
+          status: "ALLOCATING",
+          trackingUrl: null,
+          pickupPin: null,
+          quote: request.quotation.quote,
+        },
+      };
+    },
     async get() {
       return { ok: true, value: null };
     },

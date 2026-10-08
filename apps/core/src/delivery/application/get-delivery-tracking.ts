@@ -16,6 +16,8 @@ type TrackingRow = {
   provider_delivery_id: string | null;
   driver_id: string | null;
   driver_evidence: string | null;
+  shared_booking_id: string | null;
+  shared_route_review: number | null;
 };
 
 function coordinate(latitude: unknown, longitude: unknown): Coordinate | null {
@@ -79,7 +81,9 @@ export async function getDeliveryTracking(
       job.location_id,o.address_snapshot_json,stop.latitude AS stop_latitude,
       stop.longitude AS stop_longitude,dispatch.id AS dispatch_id,dispatch.method,
       dispatch.provider,dispatch.status AS dispatch_status,
-      dispatch.provider_delivery_id,dispatch.driver_id,
+      COALESCE(shared.provider_delivery_id,dispatch.provider_delivery_id) AS provider_delivery_id,
+      CASE WHEN shared.id IS NOT NULL THEN shared.driver_id ELSE dispatch.driver_id END AS driver_id,dispatch.shared_booking_id,
+      shared.route_review_required AS shared_route_review,
       (SELECT evidence_json FROM delivery_provider_evidence WHERE dispatch_id=dispatch.id AND kind='DRIVER' AND json_extract(evidence_json,'$.driverId')=dispatch.driver_id AND observed_at>=COALESCE(dispatch.driver_observed_at,0)) AS driver_evidence
      FROM grocery_order o
      LEFT JOIN delivery_job job ON job.order_id=o.id
@@ -88,6 +92,7 @@ export async function getDeliveryTracking(
      LEFT JOIN delivery_provider_dispatch dispatch ON dispatch.id=(
        SELECT d.id FROM delivery_provider_dispatch d WHERE d.delivery_job_id=job.id
        ORDER BY d.attempt_sequence DESC LIMIT 1)
+     LEFT JOIN delivery_shared_booking shared ON shared.id=dispatch.shared_booking_id
      WHERE o.id=?`,
   )
     .bind(input.orderId)
@@ -135,6 +140,12 @@ export async function getDeliveryTracking(
       requestId: input.requestId,
     };
   const startedAt = Date.now();
+  if (row.shared_route_review === 1)
+    return {
+      ok: true,
+      value: view("UNAVAILABLE", null, null, pin, row.dispatch_id),
+      requestId: input.requestId,
+    };
   let savedContact: DeliveryTrackingView["riderContact"] = null;
   if (row.driver_evidence) {
     const evidence = JSON.parse(row.driver_evidence) as {
@@ -151,7 +162,12 @@ export async function getDeliveryTracking(
   try {
     const hub = env.DELIVERY_TRACKING_HUB.getByName(env.LALAMOVE_MARKET || "PH");
     const observation = await hub.snapshot(row.provider_delivery_id, row.driver_id);
-    if (observation.driverId && observation.driverId !== row.driver_id && row.dispatch_id) {
+    if (
+      observation.driverId &&
+      observation.driverId !== row.driver_id &&
+      row.dispatch_id &&
+      !row.shared_booking_id
+    ) {
       try {
         await env.DB.prepare(
           `UPDATE delivery_provider_dispatch SET driver_id=?,driver_observed_at=?,version=version+1 WHERE id=? AND provider_delivery_id=?

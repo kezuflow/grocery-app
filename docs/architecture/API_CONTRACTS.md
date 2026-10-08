@@ -1,5 +1,11 @@
 # Web to Core Application Contracts
 
+## Shared Scheduled courier commands — 2026-10-08
+
+`prepareSharedDelivery(PrepareSharedDeliveryRequest)` takes authorized `locationId`, two through five unique `{jobId, expectedVersion}` members, immediate or explicit future `pickup`, Boolean `optimize`, optional bounded `lateDispatchReason`, and stable idempotency key. `POST /api/admin/shared-deliveries` forwards authenticated context through the Service Binding. Core returns `SharedDeliveryBookingView`: booking/version/state, combined PHP quote/optional actual total, expiry and provider-ordered recipient/Order summaries within the authorized location. Preparation never books a rider. `POST /api/admin/shared-deliveries/confirm` forwards `bookingId`, reviewed `expectedVersion`, literal `combinedLoadFits:true` and a separate stable key. Changed/expired terms require new review; Core never silently refreshes a confirmed quotation. Replays return immutable success receipts; uncertainty never authorizes another create.
+
+Existing dispatch refresh/cancel commands route shared members to the parent and compare its displayed version. Cancellation means the entire booking; a candidate identity for unknown create requires exact saved merchant metadata. Admin projections include optional `sharedBooking` totals explicitly labeled shared, with per-member actual cost/variance unavailable. Customer tracking DTOs contain no shared route/other recipient/provider share link. DTOs remain storage/provider independent.
+
 ## Deferred Mobile HTTP adapter (MOB-1)
 
 Owner correction, 2026-10-05: native Mobile and `apps/mobile-api` source are removed from the

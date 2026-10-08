@@ -192,6 +192,7 @@ export type AdminDeliveryOperationView = {
     deadlineAt?: string | null;
     isLate?: boolean;
   };
+  sharedBookingEligible?: boolean;
   manualDelivery: {
     dispatchId: string;
     personName: string;
@@ -223,6 +224,7 @@ export type AdminDeliveryOperationView = {
     actualCostMinor?: number | null;
     costCurrency?: string | null;
     version: number;
+    sharedBooking?: SharedDeliverySummary;
   } | null;
   deliveredAtIso: string | null;
   version: number;
@@ -276,6 +278,52 @@ export type RequestExternalDeliveryRequest = AdminOperationsLocationRequest & {
   pickup: { kind: "IMMEDIATE" } | { kind: "SCHEDULED"; pickupAt: string };
   lateDispatchReason?: string;
   idempotencyKey: string;
+};
+
+export type PrepareSharedDeliveryRequest = AdminOperationsLocationRequest & {
+  jobs: readonly { jobId: string; expectedVersion: number }[];
+  pickup: RequestExternalDeliveryRequest["pickup"];
+  optimize: boolean;
+  lateDispatchReason?: string;
+  idempotencyKey: string;
+};
+
+export type ConfirmSharedDeliveryRequest = AdminOperationsLocationRequest & {
+  bookingId: string;
+  expectedVersion: number;
+  combinedLoadFits: true;
+  idempotencyKey: string;
+};
+
+export type SharedDeliveryBookingView = {
+  bookingId: string;
+  locationId: string;
+  status:
+    | "PREPARED"
+    | "CREATING"
+    | "ACTIVE"
+    | "COMPLETED"
+    | "CANCELED"
+    | "FAILED"
+    | "OUTCOME_UNKNOWN"
+    | "RECONCILIATION_REQUIRED";
+  version: number;
+  providerStatus: string | null;
+  pickup: RequestExternalDeliveryRequest["pickup"];
+  optimized: boolean;
+  quoteAmountMinor: number;
+  actualCostMinor: number | null;
+  currency: "PHP";
+  expiresAt: string;
+  stops: readonly {
+    jobId: string;
+    orderId: string;
+    orderNumber: string;
+    recipientName: string;
+    destinationLabel: string;
+    position: number;
+    status: string;
+  }[];
 };
 
 export type ReviseDeliveryPromiseRequest = AdminOperationsLocationRequest & {
@@ -343,6 +391,15 @@ export type ExternalDeliveryDispatchView = {
   attemptCount: number;
   lastErrorCode: string | null;
   version: number;
+  sharedBooking?: SharedDeliverySummary;
+};
+
+export type SharedDeliverySummary = {
+  bookingId: string;
+  memberCount: number;
+  quoteAmountMinor: number;
+  actualCostMinor: number | null;
+  currency: "PHP";
 };
 
 export type OperationalExceptionPage = {
@@ -521,6 +578,12 @@ export type AdminOperationsService = {
   requestExternalDelivery(
     request: RequestExternalDeliveryRequest,
   ): Promise<RpcResult<ExternalDeliveryDispatchView>>;
+  prepareSharedDelivery(
+    input: PrepareSharedDeliveryRequest,
+  ): Promise<RpcResult<SharedDeliveryBookingView>>;
+  confirmSharedDelivery(
+    input: ConfirmSharedDeliveryRequest,
+  ): Promise<RpcResult<SharedDeliveryBookingView>>;
   reviseDeliveryPromise(
     request: ReviseDeliveryPromiseRequest,
   ): Promise<RpcResult<ReviseDeliveryPromiseResult>>;

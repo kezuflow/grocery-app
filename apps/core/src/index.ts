@@ -190,6 +190,10 @@ import {
   requestExternalDelivery as requestExternalDeliveryCommand,
   upsertLocationDeliveryProfile as upsertLocationDeliveryProfileCommand,
 } from "./admin/application/delivery-provider-operations";
+import {
+  prepareSharedDelivery as prepareSharedDeliveryCommand,
+  confirmSharedDelivery as confirmSharedDeliveryCommand,
+} from "./delivery/application/shared-delivery-booking";
 import { getAdminContext as getAdminContextQuery } from "./admin/application/get-admin-context";
 import { reviseDeliveryPromise } from "./delivery/application/revise-delivery-promise";
 import { manageManualDelivery } from "./delivery/application/manage-manual-delivery";
@@ -865,6 +869,27 @@ const requestExternalDeliverySchema = adminOperationsLocationSchema.extend({
   ]),
   idempotencyKey: idempotencyKeySchema,
 });
+const prepareSharedDeliverySchema = adminOperationsLocationSchema.extend({
+  jobs: validationSchema
+    .array(
+      validationSchema.object({
+        jobId: validationSchema.string().trim().min(1).max(200),
+        expectedVersion: validationSchema.number().int().positive(),
+      }),
+    )
+    .min(2)
+    .max(5),
+  pickup: requestExternalDeliverySchema.shape.pickup,
+  optimize: validationSchema.boolean(),
+  lateDispatchReason: validationSchema.string().trim().min(1).max(1000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+const confirmSharedDeliverySchema = adminOperationsLocationSchema.extend({
+  bookingId: validationSchema.string().trim().min(1).max(200),
+  expectedVersion: validationSchema.number().int().positive(),
+  combinedLoadFits: validationSchema.literal(true),
+  idempotencyKey: idempotencyKeySchema,
+});
 const externalDeliveryMutationSchema = adminOperationsLocationSchema.extend({
   dispatchId: validationSchema.string().trim().min(1).max(200),
   expectedVersion: validationSchema.number().int().min(1),
@@ -1046,6 +1071,24 @@ export { buildHealthResponse, buildReadinessResponse } from "./runtime/readiness
 export { OperationalHub };
 export { MessageHub };
 export { DeliveryTrackingHub };
+
+function sharedDeliveryDependencies(
+  env: Env,
+  provider: import("./delivery/ports/delivery-provider").DeliveryProvider | undefined,
+  now: () => number,
+) {
+  const configuredServiceType = configuredInstantDeliveryPartners(env).find(
+    (partner) => partner.providerCode === "lalamove",
+  )?.serviceType;
+  if (!provider || !configuredServiceType) throw new Error("DELIVERY_PROVIDER_UNCONFIGURED");
+  return {
+    auth: createAuth(env as Env & AuthEnvironment),
+    db: env.DB,
+    provider,
+    configuredServiceType,
+    now,
+  };
+}
 
 /**
  * Worker transport and dependency composition only. Every RPC validates its
@@ -2868,6 +2911,50 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         validation.data,
       ),
     );
+  }
+  async prepareSharedDelivery(
+    input: import("@freshmarkets/contracts").PrepareSharedDeliveryRequest,
+  ) {
+    const validation = prepareSharedDeliverySchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    let deps: ReturnType<typeof sharedDeliveryDependencies>;
+    try {
+      deps = sharedDeliveryDependencies(
+        this.env,
+        this.rpcContext.deliveryProviders().get("lalamove"),
+        () => this.context.now(),
+      );
+    } catch {
+      return fail(
+        "CONFIGURATION_ERROR",
+        "Shared Lalamove delivery is not configured",
+        input.requestId,
+      );
+    }
+    return this.withOperationalPublication(prepareSharedDeliveryCommand(deps, validation.data));
+  }
+  async confirmSharedDelivery(
+    input: import("@freshmarkets/contracts").ConfirmSharedDeliveryRequest,
+  ) {
+    const validation = confirmSharedDeliverySchema.safeParse(input);
+    if (!validation.success)
+      return fail("VALIDATION_FAILED", validationMessage(validation.error), input.requestId);
+    let deps: ReturnType<typeof sharedDeliveryDependencies>;
+    try {
+      deps = sharedDeliveryDependencies(
+        this.env,
+        this.rpcContext.deliveryProviders().get("lalamove"),
+        () => this.context.now(),
+      );
+    } catch {
+      return fail(
+        "CONFIGURATION_ERROR",
+        "Shared Lalamove delivery is not configured",
+        input.requestId,
+      );
+    }
+    return this.withOperationalPublication(confirmSharedDeliveryCommand(deps, validation.data));
   }
   async refreshExternalDelivery(
     input: import("@freshmarkets/contracts").RefreshExternalDeliveryRequest,

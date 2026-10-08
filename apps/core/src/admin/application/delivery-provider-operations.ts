@@ -15,6 +15,7 @@ import { locationDeliveryProfileViewSchema, locationAddressSchema } from "@fresh
 import { bookOrderDelivery } from "../../delivery/application/book-order-delivery";
 import type { DeliveryProvider } from "../../delivery/ports/delivery-provider";
 import type { ProviderDelivery } from "../../delivery/ports/delivery-provider";
+import { mutateSharedDelivery } from "../../delivery/application/shared-delivery-mutations";
 import {
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
@@ -439,6 +440,13 @@ async function providerMutation(
   request: RefreshExternalDeliveryRequest,
   operation: "REFRESH" | "CANCEL",
 ): Promise<RpcResult<ExternalDeliveryDispatchView>> {
+  const shared = await deps.db
+    .prepare(
+      "SELECT shared_booking_id FROM delivery_provider_dispatch WHERE id=? AND shared_booking_id IS NOT NULL",
+    )
+    .bind(request.dispatchId)
+    .first();
+  if (shared) return mutateSharedDelivery(deps, request, operation);
   const access = await resolveOperationsAdministrationAccess(
     deps,
     request,

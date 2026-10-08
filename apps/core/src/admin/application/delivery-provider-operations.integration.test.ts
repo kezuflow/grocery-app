@@ -1,4 +1,13 @@
 import { seedRetainedScheduledPicking } from "../../test-commerce-fixtures";
+import {
+  prepareSharedDelivery,
+  confirmSharedDelivery,
+  loadSharedBooking,
+  type SharedBookingSnapshot,
+} from "../../delivery/application/shared-delivery-booking";
+import { applyProviderEvent } from "../../delivery/application/apply-provider-event";
+import { getDeliveryTracking } from "../../delivery/application/get-delivery-tracking";
+import type { ProviderEvent } from "../../delivery/ports/provider-event";
 import { projectDomainNotifications } from "../../notifications/application/project-domain-notifications";
 import { reviseDeliveryPromise } from "../../delivery/application/revise-delivery-promise";
 import { bookAutomaticInstantDeliveries } from "../../delivery/application/book-automatic-instant-deliveries";
@@ -3145,4 +3154,445 @@ describe("inspected physical-return recovery", () => {
       expect(await stockAndMoney()).toEqual(unchanged);
     },
   );
+});
+
+describe("shared Scheduled courier", () => {
+  async function fixture(count = 5) {
+    const now = Date.now();
+    const deps = {
+      ...dependencies(["delivery.read", "delivery.manage"]),
+      provider: createMockDeliveryProvider(() => now),
+      configuredServiceType: "MOTORCYCLE",
+      now: () => now,
+    };
+    expect((await upsertLocationDeliveryProfile(deps, profileRequest(0))).ok).toBe(true);
+    const deliveries = [];
+    for (let index = 0; index < count; index++) {
+      const delivery = await seedScheduledDelivery(now);
+      await preparePackedDelivery(delivery, "SCHEDULED", now);
+      deliveries.push(delivery);
+    }
+    const prepare = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      idempotencyKey: crypto.randomUUID(),
+      optimize: false,
+      jobs: deliveries.map((item) => ({ jobId: item.jobId, expectedVersion: 1 })),
+      pickup: { kind: "IMMEDIATE" as const },
+    };
+    const prepared = await prepareSharedDelivery(deps, prepare);
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) throw new Error(prepared.error.message);
+    const confirm = {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      idempotencyKey: crypto.randomUUID(),
+      bookingId: prepared.value.bookingId,
+      expectedVersion: prepared.value.version,
+      combinedLoadFits: true as const,
+    };
+    return { deps, deliveries, prepare, prepared: prepared.value, confirm, now };
+  }
+  async function observe(bookingId: string, event: Partial<ProviderEvent>) {
+    const row = (await loadSharedBooking(env.DB, bookingId))!;
+    const value: ProviderEvent = {
+      eventId: crypto.randomUUID(),
+      kind: "STATUS",
+      providerDeliveryId: row.provider_delivery_id,
+      observedAt: Date.now(),
+      ...event,
+    };
+    await env.DB.prepare(`INSERT INTO delivery_provider_event_inbox(id,provider,provider_event_id,provider_delivery_id,merchant_order_id,observed_at,provider_status,payload_hash,raw_payload,processing_status,received_at)
+      VALUES (?,'lalamove',?,?,?,?,?,'fixture','{}','RECEIVED',?)`)
+      .bind(
+        value.eventId,
+        value.eventId,
+        value.providerDeliveryId,
+        row.merchant_order_id,
+        value.observedAt,
+        value.status ?? "UNKNOWN",
+        Date.now(),
+      )
+      .run();
+    return { event: value, result: await applyProviderEvent(env.DB, value, value.eventId) };
+  }
+  async function memberRows(bookingId: string) {
+    return (
+      await env.DB.prepare(`SELECT m.provider_position,m.outcome,d.id AS dispatch_id,d.status AS dispatch_status,d.final_payable_minor,d.courier_variance_minor,d.handed_over_at,
+      job.status AS job_status,job.version AS job_version,orders.status AS order_status FROM delivery_shared_booking_member m JOIN delivery_provider_dispatch d ON d.id=m.dispatch_id
+      JOIN delivery_job job ON job.id=m.job_id JOIN grocery_order orders ON orders.id=job.order_id WHERE m.booking_id=? ORDER BY m.provider_position`)
+        .bind(bookingId)
+        .all<{
+          provider_position: number;
+          outcome: string;
+          dispatch_id: string;
+          dispatch_status: string;
+          final_payable_minor: number | null;
+          courier_variance_minor: number | null;
+          handed_over_at: number | null;
+          job_status: string;
+          job_version: number;
+          order_status: string;
+        }>()
+    ).results;
+  }
+  it("admits five members once, freezes receipts, and counts the payable once", async () => {
+    const f = await fixture();
+    const create = vi.spyOn(f.deps.provider, "createRoute");
+    expect(await prepareSharedDelivery(f.deps, f.prepare)).toMatchObject({
+      ok: true,
+      value: f.prepared,
+    });
+    const booked = await confirmSharedDelivery(f.deps, f.confirm);
+    expect(booked).toMatchObject({
+      ok: true,
+      value: {
+        status: "ACTIVE",
+        actualCostMinor: null,
+        stops: expect.arrayContaining([{ ...f.prepared.stops[0], status: "PENDING" }]),
+      },
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(
+      (await memberRows(f.prepared.bookingId)).map((row) => [
+        row.dispatch_status,
+        row.final_payable_minor,
+        row.courier_variance_minor,
+      ]),
+    ).toEqual(Array.from({ length: 5 }, () => ["ACTIVE", null, null]));
+    expect(
+      (
+        await observe(f.prepared.bookingId, {
+          status: "IN_DELIVERY",
+          observedAt: f.now + 10,
+          evidence: [{ kind: "COST", value: { currency: "PHP", amountMinor: 7100 } }],
+        })
+      ).result.outcome,
+    ).toBe("APPLIED");
+    expect(await confirmSharedDelivery(f.deps, f.confirm)).toMatchObject(booked);
+    expect(create).toHaveBeenCalledTimes(1);
+    const operations = await listAdminDeliveryOperations(f.deps, {
+      headers: {},
+      requestId: crypto.randomUUID(),
+      locationId: LOCATION,
+      limit: 100,
+    });
+    expect(operations).toMatchObject({
+      ok: true,
+      value: {
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            externalDispatch: expect.objectContaining({
+              sharedBooking: {
+                bookingId: f.prepared.bookingId,
+                memberCount: 5,
+                quoteAmountMinor: 7100,
+                actualCostMinor: 7100,
+                currency: "PHP",
+              },
+            }),
+          }),
+        ]),
+      },
+    });
+  });
+  it("rolls back every member when a selected version changes and never calls create", async () => {
+    const f = await fixture(2);
+    const create = vi.spyOn(f.deps.provider, "createRoute");
+    await env.DB.prepare("UPDATE delivery_job SET version=version+1 WHERE id=?")
+      .bind(f.deliveries[1]!.jobId)
+      .run();
+    expect(await confirmSharedDelivery(f.deps, f.confirm)).toMatchObject({
+      ok: false,
+      error: { code: "STALE_VERSION" },
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(await memberRows(f.prepared.bookingId)).toEqual([]);
+    expect(await loadSharedBooking(env.DB, f.prepared.bookingId)).toMatchObject({
+      status: "PREPARED",
+      version: 1,
+      confirm_key: null,
+    });
+    expect(
+      await env.DB.prepare("SELECT version FROM delivery_job WHERE id=?")
+        .bind(f.deliveries[0]!.jobId)
+        .first(),
+    ).toEqual({ version: 1 });
+  });
+  it("revalidates current permissions after quotation and rejects changed idempotency intent", async () => {
+    const f = await fixture(2);
+    expect(await prepareSharedDelivery(f.deps, { ...f.prepare, optimize: true })).toMatchObject({
+      ok: false,
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    const quote = f.deps.provider.quoteRoute!;
+    f.deps.provider.quoteRoute = async (request) => {
+      const result = await quote(request);
+      await env.DB.prepare("DELETE FROM role_permission WHERE role_id='role-delivery-test'").run();
+      return result;
+    };
+    const key = crypto.randomUUID();
+    expect(
+      await prepareSharedDelivery(f.deps, { ...f.prepare, idempotencyKey: key }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM delivery_shared_booking WHERE prepare_key=?")
+        .bind(key)
+        .first(),
+    ).toEqual({ n: 0 });
+  });
+  it("blocks expired quotes, a sixth member, and a missing physical-fit confirmation", async () => {
+    const f = await fixture(2);
+    const create = vi.spyOn(f.deps.provider, "createRoute");
+    expect(
+      await prepareSharedDelivery(f.deps, {
+        ...f.prepare,
+        idempotencyKey: crypto.randomUUID(),
+        jobs: Array.from({ length: 6 }, (_, i) => ({ jobId: `job-${i}`, expectedVersion: 1 })),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await confirmSharedDelivery(f.deps, { ...f.confirm, combinedLoadFits: false as never }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await confirmSharedDelivery({ ...f.deps, now: () => f.now + 300000 }, f.confirm),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(create).not.toHaveBeenCalled();
+  });
+  it("preserves uncertain submissions and recovers the same identity from authenticated merchant evidence", async () => {
+    const f = await fixture(2);
+    f.deps.provider.createRoute = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: "TRANSPORT_FAILURE", retryable: true, outcomeUnknown: true },
+    }));
+    expect(await confirmSharedDelivery(f.deps, f.confirm)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(await confirmSharedDelivery(f.deps, f.confirm)).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+    expect(f.deps.provider.createRoute).toHaveBeenCalledTimes(1);
+    expect((await memberRows(f.prepared.bookingId)).map((row) => row.dispatch_status)).toEqual([
+      "OUTCOME_UNKNOWN",
+      "OUTCOME_UNKNOWN",
+    ]);
+    expect(
+      await prepareSharedDelivery(f.deps, {
+        ...f.prepare,
+        idempotencyKey: crypto.randomUUID(),
+        jobs: f.prepare.jobs.map((job) => ({ ...job, expectedVersion: 2 })),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "ILLEGAL_TRANSITION" } });
+    const row = (await loadSharedBooking(env.DB, f.prepared.bookingId))!;
+    expect(
+      (
+        await observe(row.id, {
+          providerDeliveryId: "recovered-group",
+          merchantOrderId: row.merchant_order_id,
+          status: "PENDING_PICKUP",
+        })
+      ).result.outcome,
+    ).toBe("APPLIED");
+    expect(await confirmSharedDelivery(f.deps, f.confirm)).toMatchObject({
+      ok: true,
+      value: { status: "ACTIVE" },
+    });
+    expect(f.deps.provider.createRoute).toHaveBeenCalledTimes(1);
+  });
+  it("keeps a failed stop separate from successes and completes missing photos without duplicate effects", async () => {
+    const f = await fixture();
+    expect((await confirmSharedDelivery(f.deps, f.confirm)).ok).toBe(true);
+    expect(
+      (await observe(f.prepared.bookingId, { status: "IN_DELIVERY", observedAt: f.now + 10 }))
+        .result.outcome,
+    ).toBe("APPLIED");
+    const proof = await observe(f.prepared.bookingId, {
+      kind: "EVIDENCE",
+      observedAt: f.now + 20,
+      evidence: [
+        {
+          kind: "DELIVERY_PROOF",
+          value: [
+            { stopIndex: 1, status: "SIGNED", imageUrls: [], occurredAt: null },
+            { stopIndex: 2, status: "FAILED", imageUrls: [], occurredAt: null },
+          ],
+        },
+      ],
+    });
+    expect(proof.result.outcome).toBe("APPLIED");
+    const completed = await observe(f.prepared.bookingId, {
+      status: "COMPLETED",
+      observedAt: f.now + 30,
+      evidence: [{ kind: "COST", value: { currency: "PHP", amountMinor: 8200 } }],
+    });
+    expect(completed.result.outcome).toBe("APPLIED");
+    expect(
+      (await memberRows(f.prepared.bookingId)).map((row) => [
+        row.outcome,
+        row.job_status,
+        row.order_status,
+      ]),
+    ).toEqual([
+      ["DELIVERED", "DELIVERED", "DELIVERED"],
+      ["FAILED", "FAILED", "OUT_FOR_DELIVERY"],
+      ["DELIVERED", "DELIVERED", "DELIVERED"],
+      ["DELIVERED", "DELIVERED", "DELIVERED"],
+      ["DELIVERED", "DELIVERED", "DELIVERED"],
+    ]);
+    const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM notification_outbox").first();
+    expect(
+      (await applyProviderEvent(env.DB, completed.event, completed.event.eventId)).outcome,
+    ).toBe("DUPLICATE");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM notification_outbox").first()).toEqual(
+      before,
+    );
+    expect(await loadSharedBooking(env.DB, f.prepared.bookingId)).toMatchObject({
+      final_payable_minor: 8200,
+    });
+    expect(
+      (await memberRows(f.prepared.bookingId)).every((row) => row.final_payable_minor === null),
+    ).toBe(true);
+  });
+  it("pauses unexpected route edits and resumes only after a full matching route observation", async () => {
+    const f = await fixture(2);
+    expect((await confirmSharedDelivery(f.deps, f.confirm)).ok).toBe(true);
+    expect(
+      (
+        await observe(f.prepared.bookingId, {
+          status: "IN_DELIVERY",
+          observedAt: f.now + 10,
+          evidence: [{ kind: "EDIT", value: { changed: true } }],
+        })
+      ).result.outcome,
+    ).toBe("APPLIED");
+    expect(await loadSharedBooking(env.DB, f.prepared.bookingId)).toMatchObject({
+      status: "RECONCILIATION_REQUIRED",
+      route_review_required: 1,
+    });
+    expect(
+      (await memberRows(f.prepared.bookingId)).every((row) => row.job_status === "UNASSIGNED"),
+    ).toBe(true);
+    const parent = (await loadSharedBooking(env.DB, f.prepared.bookingId))!;
+    const saved = JSON.parse(parent.request_snapshot_json) as SharedBookingSnapshot;
+    const map = f.prepared.stops;
+    const observed = [
+      {
+        position: 0,
+        coordinate: saved.route.origin.coordinate,
+        formattedAddress: `${saved.route.origin.formattedAddress}\r\nPickup instructions: ${saved.route.origin.instructions.deliveryInstructions}`,
+        name: saved.route.sender.name,
+        phone: saved.route.sender.phoneE164,
+      },
+      ...map.map((stop) => {
+        const d = saved.route.destinations.find((d) => d.reference === stop.jobId)!;
+        return {
+          position: stop.position,
+          coordinate: d.address.coordinate,
+          formattedAddress: d.address.formattedAddress,
+          name: d.recipient.name,
+          phone: d.recipient.phoneE164,
+        };
+      }),
+    ];
+    expect(
+      (
+        await observe(parent.id, {
+          status: "IN_DELIVERY",
+          observedAt: f.now + 20,
+          observedStops: observed,
+        })
+      ).result.outcome,
+    ).toBe("APPLIED");
+    expect(await loadSharedBooking(env.DB, parent.id)).toMatchObject({
+      status: "ACTIVE",
+      route_review_required: 0,
+    });
+    expect((await memberRows(parent.id)).every((row) => row.job_status === "EN_ROUTE")).toBe(true);
+  });
+  it("cancels the whole booking, preserves the frozen command result, and keeps custody guarded", async () => {
+    const f = await fixture(2);
+    expect((await confirmSharedDelivery(f.deps, f.confirm)).ok).toBe(true);
+    const row = (await loadSharedBooking(env.DB, f.prepared.bookingId))!;
+    const members = await memberRows(row.id);
+    f.deps.provider.get = vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        providerDeliveryId: row.provider_delivery_id!,
+        merchantOrderId: row.merchant_order_id,
+        status: "CANCELED" as const,
+        trackingUrl: null,
+        pickupPin: null,
+        quote: null,
+      },
+    }));
+    const cancel = vi.spyOn(f.deps.provider, "cancel");
+    const request = {
+      ...f.confirm,
+      dispatchId: members[0]!.dispatch_id,
+      expectedVersion: row.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const canceled = await cancelExternalDelivery(f.deps, request);
+    expect(canceled).toMatchObject({ ok: true, value: { status: "CANCELED" } });
+    expect((await memberRows(row.id)).map((member) => member.dispatch_status)).toEqual([
+      "CANCELED",
+      "CANCELED",
+    ]);
+    expect(await cancelExternalDelivery(f.deps, request)).toMatchObject(canceled);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+  it("tracks the shared rider using only the authorized customer's own destination", async () => {
+    const f = await fixture(2);
+    expect((await confirmSharedDelivery(f.deps, f.confirm)).ok).toBe(true);
+    expect(
+      (
+        await observe(f.prepared.bookingId, {
+          status: "IN_DELIVERY",
+          driverId: "shared-driver",
+          observedAt: f.now + 10,
+        })
+      ).result.outcome,
+    ).toBe("APPLIED");
+    const snapshot = vi.fn(async () => ({
+      driverId: "shared-driver",
+      position: null,
+      contact: null,
+      unavailable: true,
+    }));
+    const runtime = {
+      ...env,
+      DELIVERY_TRACKING_HUB: { getByName: () => ({ snapshot }) },
+    } as unknown as Env;
+    const first = f.deliveries[0]!;
+    const customer = await env.DB.prepare("SELECT customer_id FROM grocery_order WHERE id=?")
+      .bind(first.orderId)
+      .first<{ customer_id: string }>();
+    expect(
+      await getDeliveryTracking(runtime, {
+        orderId: first.orderId,
+        requestId: crypto.randomUUID(),
+        customerId: "another-customer",
+      }),
+    ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(snapshot).not.toHaveBeenCalled();
+    const result = await getDeliveryTracking(runtime, {
+      orderId: first.orderId,
+      requestId: crypto.randomUUID(),
+      customerId: customer!.customer_id,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { availability: "UNAVAILABLE", destination: { latitude: 10.33, longitude: 123.91 } },
+    });
+    expect(JSON.stringify(result)).not.toContain(f.deliveries[1]!.orderId);
+    expect(JSON.stringify(result)).not.toContain("shareLink");
+    expect(snapshot).toHaveBeenCalledWith(
+      (await loadSharedBooking(env.DB, f.prepared.bookingId))!.provider_delivery_id,
+      "shared-driver",
+    );
+  });
 });

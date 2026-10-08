@@ -1,5 +1,8 @@
 import type { DeliveryProvider } from "../ports/delivery-provider";
 import { applyProviderObservation } from "./apply-provider-observation";
+import { applySharedDeliveryEvent } from "./apply-shared-delivery-event";
+import { requestHash } from "../../idempotency";
+import type { ProviderEvent } from "../ports/provider-event";
 
 /** Bounded read repair for missing callbacks; uncertain mutations are never resubmitted. */
 export async function lookupProviderDeliveries(
@@ -9,7 +12,7 @@ export async function lookupProviderDeliveries(
 ) {
   const due = await database
     .prepare(`SELECT id,provider,provider_delivery_id,version,lookup_attempts FROM delivery_provider_dispatch
-    WHERE method='EXTERNAL' AND provider_delivery_id IS NOT NULL AND lookup_attempts<5 AND next_lookup_at<=?
+    WHERE method='EXTERNAL' AND shared_booking_id IS NULL AND provider_delivery_id IS NOT NULL AND lookup_attempts<5 AND next_lookup_at<=?
       AND (status IN ('ACTIVE','OUTCOME_UNKNOWN','RECONCILIATION_REQUIRED') OR (provider_status='COMPLETED' AND missing_delivery_proof=1))
       AND NOT EXISTS (SELECT 1 FROM delivery_provider_dispatch newer WHERE newer.delivery_job_id=delivery_provider_dispatch.delivery_job_id AND newer.attempt_sequence>delivery_provider_dispatch.attempt_sequence)
     ORDER BY next_lookup_at,id LIMIT 5`)
@@ -105,5 +108,83 @@ export async function lookupProviderDeliveries(
         .run();
     }
   }
+  const shared = await database
+    .prepare(`SELECT id,provider_delivery_id,lookup_attempts,merchant_order_id FROM delivery_shared_booking
+    WHERE provider_delivery_id IS NOT NULL AND lookup_attempts<5 AND next_lookup_at<=? AND status IN ('ACTIVE','OUTCOME_UNKNOWN','RECONCILIATION_REQUIRED')
+    ORDER BY next_lookup_at,id LIMIT 5`)
+    .bind(now)
+    .all<{
+      id: string;
+      provider_delivery_id: string;
+      lookup_attempts: number;
+      merchant_order_id: string;
+    }>();
+  const provider = providers.get("lalamove");
+  if (provider)
+    for (const booking of shared.results) {
+      const claim = await database
+        .prepare(
+          "UPDATE delivery_shared_booking SET next_lookup_at=?,lookup_attempts=lookup_attempts+1 WHERE id=? AND lookup_attempts=? AND next_lookup_at<=? AND provider_delivery_id=?",
+        )
+        .bind(
+          now + 60000 * 2 ** booking.lookup_attempts,
+          booking.id,
+          booking.lookup_attempts,
+          now,
+          booking.provider_delivery_id,
+        )
+        .run();
+      if (claim.meta.changes !== 1) continue;
+      attempted++;
+      const result = await provider.get(booking.provider_delivery_id);
+      if (
+        !result.ok ||
+        !result.value ||
+        result.value.providerDeliveryId !== booking.provider_delivery_id ||
+        (result.value.merchantOrderId !== null &&
+          result.value.merchantOrderId !== booking.merchant_order_id)
+      )
+        continue;
+      const event: ProviderEvent = {
+        eventId: `shared-lookup:${booking.id}:${now}`,
+        kind: "STATUS",
+        providerDeliveryId: booking.provider_delivery_id,
+        merchantOrderId: booking.merchant_order_id,
+        observedAt: now,
+        status: result.value.status,
+        driverId: result.value.driverId,
+        trackingUrl: result.value.trackingUrl,
+        evidence: result.value.evidence,
+        observedStops: result.value.observedStops,
+        replacementCheck: result.value.replacementCheck,
+      };
+      await database
+        .prepare(`INSERT OR IGNORE INTO delivery_provider_event_inbox(id,provider,provider_event_id,shared_booking_id,provider_delivery_id,merchant_order_id,observed_at,provider_status,payload_hash,raw_payload,normalized_event_json,processing_status,received_at)
+      VALUES (?,'lalamove',?,?,?,?,?,?,?,?,?,'RECEIVED',?)`)
+        .bind(
+          event.eventId,
+          event.eventId,
+          booking.id,
+          booking.provider_delivery_id,
+          booking.merchant_order_id,
+          now,
+          result.value.status,
+          await requestHash(event),
+          JSON.stringify(result.value),
+          JSON.stringify(event),
+          now,
+        )
+        .run();
+      const outcome = await applySharedDeliveryEvent(database, booking.id, event, event.eventId);
+      if (outcome.outcome !== "RECONCILIATION_REQUIRED") {
+        applied++;
+        await database
+          .prepare(
+            "UPDATE delivery_shared_booking SET lookup_attempts=0 WHERE id=? AND provider_delivery_id=?",
+          )
+          .bind(booking.id, booking.provider_delivery_id)
+          .run();
+      }
+    }
   return { attempted, applied };
 }

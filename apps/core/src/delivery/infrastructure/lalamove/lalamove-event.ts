@@ -1,5 +1,40 @@
 import type { ProviderEvent, ProviderProof } from "../../ports/provider-event";
 import type { ProviderDeliveryStatus } from "../../ports/delivery-provider";
+import type { ObservedDeliveryStop } from "../../ports/delivery-provider";
+
+export function lalamoveObservedStops(
+  order: Record<string, unknown>,
+): ObservedDeliveryStop[] | undefined {
+  if (!Array.isArray(order.stops) || order.stops.length < 2 || order.stops.length > 16)
+    return undefined;
+  const result: ObservedDeliveryStop[] = [];
+  for (const [position, value] of order.stops.entries()) {
+    const stop = providerObject(value);
+    const coordinates = providerObject(stop?.coordinates);
+    const latitude = Number(coordinates?.lat);
+    const longitude = Number(coordinates?.lng);
+    const formattedAddress = providerString(stop?.address, 3000);
+    if (
+      !coordinates ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180 ||
+      !formattedAddress
+    )
+      return undefined;
+    result.push({
+      position,
+      coordinate: { latitude, longitude },
+      formattedAddress,
+      name: providerString(stop?.name, 200),
+      phone: providerString(stop?.phone, 32),
+    });
+  }
+  return result;
+}
 
 export function providerObject(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -125,7 +160,13 @@ export function parseLalamoveEvent(payload: unknown): ProviderEvent | null {
   )
     return null;
   const providerDeliveryId = providerString(order?.orderId, 64);
-  const base = { eventId, providerDeliveryId, observedAt };
+  const merchantOrderId = providerString(providerObject(order?.metadata)?.merchantOrderId, 200);
+  const base = {
+    eventId,
+    providerDeliveryId,
+    observedAt,
+    ...(merchantOrderId ? { merchantOrderId } : {}),
+  };
   if (type === "WALLET_BALANCE_CHANGED") return { ...base, kind: "WALLET" };
   if (!providerDeliveryId) return { ...base, kind: "UNKNOWN" };
   if (type === "ORDER_REPLACED") {
@@ -157,6 +198,7 @@ export function parseLalamoveEvent(payload: unknown): ProviderEvent | null {
       : { ...base, kind: "UNKNOWN" };
   }
   const proofs = order ? lalamoveProofs(order) : [];
+  const observedStops = order ? lalamoveObservedStops(order) : undefined;
   if (type === "ORDER_STATUS_CHANGED" || type === "ORDER_CREATED") {
     const status = lalamoveStatus(order?.status);
     return status
@@ -172,6 +214,7 @@ export function parseLalamoveEvent(payload: unknown): ProviderEvent | null {
           ],
           replacementCheck:
             status === "CANCELED" && order?.cancelParty === "LALAMOVE_CUSTOMER_SUPPORT",
+          ...(observedStops ? { observedStops } : {}),
         }
       : { ...base, kind: "UNKNOWN" };
   }
@@ -185,7 +228,7 @@ export function parseLalamoveEvent(payload: unknown): ProviderEvent | null {
     return { ...base, kind: "EVIDENCE", evidence: [{ kind: "EDIT", value: { changed: true } }] };
   if (["POD_STATUS_CHANGED", "POP_STATUS_CHANGED", "DELIVERY_CODE_STATUS_CHANGED"].includes(type))
     return proofs?.length
-      ? { ...base, kind: "EVIDENCE", evidence: proofs }
+      ? { ...base, kind: "EVIDENCE", evidence: proofs, ...(observedStops ? { observedStops } : {}) }
       : { ...base, kind: "UNKNOWN" };
   return { ...base, kind: "UNKNOWN" };
 }

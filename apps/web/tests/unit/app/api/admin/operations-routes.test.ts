@@ -14,6 +14,8 @@ const coreMocks = vi.hoisted(() => ({
   listDeliveryOperations: vi.fn(),
   refreshExternalDelivery: vi.fn(),
   requestExternalDelivery: vi.fn(),
+  prepareSharedDelivery: vi.fn(),
+  confirmSharedDelivery: vi.fn(),
   manageManualDelivery: vi.fn(),
   advanceFulfillment: vi.fn(),
   getGlobalCommerceConfiguration: vi.fn(),
@@ -39,6 +41,8 @@ import {
 } from "@/app/api/admin/fulfillment/route";
 import { POST as refreshDelivery } from "@/app/api/admin/external-deliveries/[dispatch-id]/refresh/route";
 import { POST as bookDelivery } from "@/app/api/admin/external-deliveries/route";
+import { POST as prepareShared } from "@/app/api/admin/shared-deliveries/route";
+import { POST as confirmShared } from "@/app/api/admin/shared-deliveries/confirm/route";
 import { POST as assignManualDelivery } from "@/app/api/admin/manual-deliveries/route";
 import { GET as deliveryGet } from "@/app/api/admin/delivery/route";
 import { GET as activityGet } from "@/app/api/admin/operations-activity/route";
@@ -65,6 +69,107 @@ function command(url: string, body: unknown, idempotencyKey = "command-1"): Requ
 }
 
 describe("admin operations BFF routes", () => {
+  it("forwards the exact reviewed shared selection and authenticated context", async () => {
+    coreMocks.prepareSharedDelivery.mockResolvedValue(ok);
+    const body = {
+      locationId: "location-1",
+      jobs: [
+        { jobId: "job-1", expectedVersion: 3 },
+        { jobId: "job-2", expectedVersion: 2 },
+      ],
+      pickup: { kind: "IMMEDIATE" },
+      optimize: true,
+    };
+    expect(
+      (
+        await prepareShared(
+          command("https://app/api/admin/shared-deliveries", body, "shared-review"),
+        )
+      ).status,
+    ).toBe(200);
+    expect(coreMocks.prepareSharedDelivery).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        ...body,
+        idempotencyKey: "shared-review",
+        headers: expect.objectContaining(cookie),
+      }),
+    );
+  });
+  it("requires fit, a bounded selection and command identity before forwarding", async () => {
+    expect(
+      (
+        await confirmShared(
+          command("https://app/shared/confirm", {
+            locationId: "location-1",
+            bookingId: "booking-1",
+            expectedVersion: 1,
+            combinedLoadFits: false,
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await prepareShared(
+          command("https://app/shared", {
+            locationId: "location-1",
+            jobs: Array.from({ length: 6 }, (_, i) => ({ jobId: `job-${i}`, expectedVersion: 1 })),
+            pickup: { kind: "IMMEDIATE" },
+            optimize: false,
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await confirmShared(
+          new Request("https://app/shared/confirm", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              locationId: "location-1",
+              bookingId: "booking-1",
+              expectedVersion: 1,
+              combinedLoadFits: true,
+            }),
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(coreMocks.confirmSharedDelivery).not.toHaveBeenCalled();
+    expect(coreMocks.prepareSharedDelivery).not.toHaveBeenCalled();
+  });
+  it("forwards confirmation without deciding provider success in Web", async () => {
+    coreMocks.confirmSharedDelivery.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "CONFLICT",
+        message: "Await provider confirmation",
+        requestId: "shared-request",
+      },
+    });
+    const response = await confirmShared(
+      command(
+        "https://app/shared/confirm",
+        {
+          locationId: "location-1",
+          bookingId: "booking-1",
+          expectedVersion: 1,
+          combinedLoadFits: true,
+        },
+        "shared-confirm",
+      ),
+    );
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(coreMocks.confirmSharedDelivery).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        bookingId: "booking-1",
+        expectedVersion: 1,
+        combinedLoadFits: true,
+        idempotencyKey: "shared-confirm",
+      }),
+    );
+  });
   it.each(["courier", "manual"])(
     "forwards a bounded late %s reason without deciding eligibility in Web",
     async (method) => {

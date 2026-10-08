@@ -50,6 +50,23 @@ export type CreateDeliveryRequest = DeliveryProviderRequest &
     merchantOrderId: string;
   }>;
 
+export type DeliveryRouteRequest = Omit<DeliveryProviderRequest, "recipient" | "destination"> &
+  Readonly<{
+    optimize: boolean;
+    destinations: readonly Readonly<{
+      reference: string;
+      address: DeliveryProviderAddress;
+      recipient: DeliveryContact;
+    }>[];
+  }>;
+
+export type DeliveryRouteQuote = Readonly<{
+  quote: DeliveryQuote;
+  quotationId: string;
+  pickupStopId: string;
+  stops: readonly Readonly<{ reference: string; stopId: string; position: number }>[];
+}>;
+
 export type DeliveryProviderError = Readonly<{
   code: string;
   /** Bounded provider error identifier; never its message, details or raw payload. */
@@ -122,6 +139,15 @@ export type ProviderDelivery = Readonly<{
   quote: DeliveryQuote | null;
   evidence?: import("./provider-event").ProviderEvent["evidence"];
   replacementCheck?: boolean;
+  observedStops?: readonly ObservedDeliveryStop[];
+}>;
+
+export type ObservedDeliveryStop = Readonly<{
+  position: number;
+  coordinate: Coordinate;
+  formattedAddress: string;
+  name: string | null;
+  phone: string | null;
 }>;
 
 /** Provider-specific vocabulary stops at this boundary. */
@@ -132,6 +158,16 @@ export interface DeliveryProvider {
     request: DeliveryProviderRequest,
   ): Promise<DeliveryProviderResult<readonly DeliveryQuote[]>>;
   create(request: CreateDeliveryRequest): Promise<DeliveryProviderResult<ProviderDelivery>>;
+  quoteRoute?: (
+    request: DeliveryRouteRequest,
+  ) => Promise<DeliveryProviderResult<DeliveryRouteQuote>>;
+  createRoute?: (
+    request: Readonly<{
+      route: DeliveryRouteRequest;
+      quotation: DeliveryRouteQuote;
+      merchantOrderId: string;
+    }>,
+  ) => Promise<DeliveryProviderResult<ProviderDelivery>>;
   get(providerDeliveryId: string): Promise<DeliveryProviderResult<ProviderDelivery | null>>;
   getDriverLocation?: (
     providerDeliveryId: string,

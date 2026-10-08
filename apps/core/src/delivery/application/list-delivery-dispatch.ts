@@ -17,6 +17,8 @@ type DispatchRow = {
   canInspectReturnedGoods: boolean;
   courierPickup: AdminDeliveryOperationView["courierPickup"];
   manualDelivery: AdminDeliveryOperationView["manualDelivery"];
+  sharedBookingEligible: boolean;
+  sharedBooking: NonNullable<AdminDeliveryOperationView["externalDispatch"]>["sharedBooking"];
   jobId: string;
   orderId: string;
   status: string;
@@ -131,9 +133,11 @@ export async function listDeliveryDispatch(
               dispatch.custody_review_required,dispatch.route_review_required,dispatch.replacement_pending,
               (SELECT json_group_array(json_object('kind',CASE evidence.kind WHEN 'PICKUP_PROOF' THEN 'PICKUP' ELSE 'DELIVERY' END,'status',json_extract(proof.value,'$.status'),'imageUrls',json_extract(proof.value,'$.imageUrls'))) FROM delivery_provider_evidence evidence,json_each(evidence.evidence_json) proof WHERE evidence.dispatch_id=dispatch.id AND evidence.kind IN ('PICKUP_PROOF','DELIVERY_PROOF')) AS provider_proofs,
               dispatch.id AS external_dispatch_id,dispatch.provider AS external_provider,
-              dispatch.provider_delivery_id AS external_provider_delivery_id,
-              dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,dispatch.tracking_url AS external_tracking_url,
-              dispatch.version AS external_version,dispatch.quote_amount_minor AS external_quote_amount_minor,
+              COALESCE(shared.provider_delivery_id,dispatch.provider_delivery_id) AS external_provider_delivery_id,
+              dispatch.status AS external_status,dispatch.provider_status AS external_provider_status,COALESCE(shared.tracking_url,dispatch.tracking_url) AS external_tracking_url,
+              COALESCE(shared.version,dispatch.version) AS external_version,dispatch.quote_amount_minor AS external_quote_amount_minor,
+              shared.id AS shared_booking_id,shared.quote_amount_minor AS shared_quote_amount,shared.final_payable_minor AS shared_actual_cost,
+              (SELECT COUNT(*) FROM delivery_shared_booking_member WHERE booking_id=shared.id) AS shared_member_count,
               dispatch.quote_currency AS external_quote_currency,dispatch.final_payable_minor AS external_actual_cost_minor,
               dispatch.delivery_currency AS external_cost_currency,dispatch.method,dispatch.manual_person_name,dispatch.manual_phone_e164,
               dispatch.manual_reason,json_extract(dispatch.request_snapshot_json,'$.note') AS manual_note,
@@ -155,10 +159,15 @@ export async function listDeliveryDispatch(
          SELECT latest.id FROM delivery_provider_dispatch latest WHERE latest.delivery_job_id=d.id
          ORDER BY latest.attempt_sequence DESC LIMIT 1
        )
+       LEFT JOIN delivery_shared_booking shared ON shared.id=dispatch.shared_booking_id
        WHERE ${clauses.join(" AND ")} ORDER BY d.created_at DESC,d.id DESC LIMIT ?`,
     )
     .bind(query.actorAuthUserId ?? null, ...binds, limit)
     .all<{
+      shared_booking_id: string | null;
+      shared_quote_amount: number | null;
+      shared_actual_cost: number | null;
+      shared_member_count: number;
       custody_review_required: number | null;
       route_review_required: number | null;
       replacement_pending: number | null;
@@ -204,6 +213,17 @@ export async function listDeliveryDispatch(
       sort_at: number;
     }>();
   return rows.results.map((r) => ({
+    sharedBookingEligible:
+      r.fulfillment_mode === "SCHEDULED" && courierPickupDecision(r).allowedKinds.length > 0,
+    sharedBooking: r.shared_booking_id
+      ? {
+          bookingId: r.shared_booking_id,
+          memberCount: r.shared_member_count,
+          quoteAmountMinor: r.shared_quote_amount!,
+          actualCostMinor: r.shared_actual_cost,
+          currency: "PHP" as const,
+        }
+      : undefined,
     courierPickup: courierPickupDecision(r),
     canRevisePromise: Boolean(
       r.can_manage &&

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CreateDeliveryRequest } from "../../ports/delivery-provider";
+import type { CreateDeliveryRequest, DeliveryRouteRequest } from "../../ports/delivery-provider";
 import type { DeliveryProviderTelemetryEvent } from "../delivery-provider-telemetry";
 import { createLalamoveProvider } from "./lalamove-provider";
 
@@ -109,6 +109,161 @@ async function expectedSignature(secret: string, value: string) {
     "",
   );
 }
+
+describe("Lalamove shared routes", () => {
+  const now = Date.parse("2026-10-08T04:00:00Z");
+  function route(): DeliveryRouteRequest {
+    return {
+      ...request,
+      optimize: true,
+      destinations: Array.from({ length: 5 }, (_, index) => ({
+        reference: `job-${index + 1}`,
+        address: {
+          ...request.destination,
+          formattedAddress: `Synthetic stop ${index + 1}`,
+          coordinate: { latitude: 10.3 + index / 100, longitude: 123.9 },
+          instructions: { deliveryInstructions: `Instructions ${index + 1}` },
+        },
+        recipient: {
+          ...request.recipient,
+          name: `Recipient ${index + 1}`,
+          phoneE164: `+63900000000${index + 1}`,
+          smsEnabled: false,
+        },
+      })),
+    };
+  }
+  function provider(fetcher: typeof fetch) {
+    return createLalamoveProvider({
+      apiKey: "pk_test_fixture",
+      apiSecret: "sk_test_fixture",
+      market: "PH",
+      language: "en_PH",
+      environment: "sandbox",
+      now: () => now,
+      fetcher,
+    });
+  }
+  function quotes(
+    change?: (
+      stops: { stopId: string; address: string; coordinates: { lat: string; lng: string } }[],
+    ) => void,
+  ) {
+    return vi.fn<typeof fetch>(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        data: { stops: { address: string; coordinates: { lat: string; lng: string } }[] };
+      };
+      const source = body.data.stops;
+      const stops = [source[0]!, source[3]!, source[5]!, source[1]!, source[4]!, source[2]!].map(
+        (stop, index) => ({ ...stop, stopId: `stop-${index}` }),
+      );
+      change?.(stops);
+      return Response.json({
+        data: {
+          quotationId: "accepted-shared-quote",
+          expiresAt: new Date(now + 300000).toISOString(),
+          isRouteOptimized: true,
+          serviceType: "MOTORCYCLE",
+          stops,
+          priceBreakdown: { total: "71.00", currency: "PHP" },
+        },
+      });
+    });
+  }
+  it("preserves optimized recipient identities and books the exact reviewed quote without re-quoting", async () => {
+    const fetcher = quotes();
+    const adapter = provider(fetcher);
+    const r = route();
+    const quotation = await adapter.quoteRoute!(r);
+    expect(quotation).toMatchObject({
+      ok: true,
+      value: {
+        quote: { amountMinor: 7100 },
+        stops: [
+          { reference: "job-3", stopId: "stop-1", position: 1 },
+          { reference: "job-5", stopId: "stop-2", position: 2 },
+          { reference: "job-1", stopId: "stop-3", position: 3 },
+          { reference: "job-4", stopId: "stop-4", position: 4 },
+          { reference: "job-2", stopId: "stop-5", position: 5 },
+        ],
+      },
+    });
+    if (!quotation.ok) throw new Error("Missing quotation");
+    fetcher.mockResolvedValueOnce(orderResponse());
+    expect(
+      (
+        await adapter.createRoute!({
+          route: r,
+          quotation: quotation.value,
+          merchantOrderId: "fm-shared-fixture",
+        })
+      ).ok,
+    ).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1]![0])).toContain("/v3/orders");
+    const body = JSON.parse(String(fetcher.mock.calls[1]![1]?.body));
+    expect(body.data.quotationId).toBe("accepted-shared-quote");
+    expect(body.data.sender).not.toHaveProperty("remarks");
+    expect(
+      body.data.recipients.map((r: { name: string; stopId: string; remarks: string }) => [
+        r.name,
+        r.stopId,
+        r.remarks,
+      ]),
+    ).toEqual([
+      ["Recipient 3", "stop-1", "Instructions 3"],
+      ["Recipient 5", "stop-2", "Instructions 5"],
+      ["Recipient 1", "stop-3", "Instructions 1"],
+      ["Recipient 4", "stop-4", "Instructions 4"],
+      ["Recipient 2", "stop-5", "Instructions 2"],
+    ]);
+    expect(body.data).not.toHaveProperty("isSMSNotificationEnabled");
+  });
+  it("accepts provider decimal rounding while preserving every stop identity", async () => {
+    const fetcher = quotes((stops) => {
+      for (const stop of stops) stop.coordinates.lat = Number(stop.coordinates.lat).toFixed(7);
+    });
+    const r = route();
+    r.destinations[0]!.address.coordinate.latitude = 10.300000000000001;
+    expect(await provider(fetcher).quoteRoute!(r)).toMatchObject({
+      ok: true,
+      value: { stops: expect.arrayContaining([expect.objectContaining({ reference: "job-1" })]) },
+    });
+  });
+  it.each(["changed destination", "duplicate stop ID", "changed coordinate"])(
+    "rejects %s instead of guessing recipient mapping",
+    async (kind) => {
+      const fetcher = quotes((stops) => {
+        if (kind === "changed destination") stops[1]!.address = "Unexpected";
+        else if (kind === "changed coordinate")
+          stops[1]!.coordinates.lat = String(Number(stops[1]!.coordinates.lat) + 0.00001);
+        else stops[1]!.stopId = stops[0]!.stopId;
+      });
+      expect(await provider(fetcher).quoteRoute!(route())).toMatchObject({
+        ok: false,
+        error: { code: "LALAMOVE_INVALID_RESPONSE" },
+      });
+    },
+  );
+  it("rejects an expired accepted quote before making any create request", async () => {
+    const fetcher = quotes();
+    const adapter = provider(fetcher);
+    const r = route();
+    const quote = await adapter.quoteRoute!(r);
+    if (!quote.ok) throw new Error("Missing quote");
+    expect(
+      await adapter.createRoute!({
+        route: r,
+        merchantOrderId: "fm-shared-fixture",
+        quotation: {
+          ...quote.value,
+          quote: { ...quote.value.quote, expiresAt: new Date(now).toISOString() },
+        },
+      }),
+    ).toMatchObject({ ok: false, error: { code: "LALAMOVE_INVALID_REQUEST" } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("Lalamove delivery adapter", () => {
   it("signs the exact v3 request and maps a quotation to integer minor units", async () => {

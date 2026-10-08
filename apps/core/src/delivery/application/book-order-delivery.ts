@@ -152,6 +152,14 @@ function formattedDestination(components: AddressComponents): string {
     .join(", ");
 }
 
+export {
+  parseObject,
+  nullableString,
+  destinationComponents,
+  deliveryInstructions,
+  formattedDestination,
+};
+
 function publicDispatch(value: ProviderDispatchView): ExternalDeliveryDispatchView {
   return {
     dispatchId: value.dispatchId,

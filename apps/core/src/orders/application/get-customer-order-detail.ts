@@ -178,7 +178,9 @@ export async function getCustomerOrderDetail(
                 WHERE tracking.id=(SELECT latest.id FROM delivery_provider_dispatch latest
                   WHERE latest.delivery_job_id=d.id ORDER BY latest.attempt_sequence DESC LIMIT 1)
                   AND tracking.method='EXTERNAL' AND tracking.provider='lalamove'
-                  AND tracking.status='ACTIVE' AND tracking.provider_delivery_id IS NOT NULL) AS liveTrackingAvailable,
+                  AND tracking.status='ACTIVE' AND (tracking.provider_delivery_id IS NOT NULL OR EXISTS (
+                    SELECT 1 FROM delivery_shared_booking shared WHERE shared.id=tracking.shared_booking_id
+                      AND shared.provider_delivery_id IS NOT NULL AND shared.route_review_required=0 AND shared.replacement_pending=0))) AS liveTrackingAvailable,
               d.delivered_at AS deliveredAt,
               checkout_attempt.status AS checkoutPaymentStatus,
               checkout_attempt.updated_at AS checkoutPaymentUpdatedAt,
