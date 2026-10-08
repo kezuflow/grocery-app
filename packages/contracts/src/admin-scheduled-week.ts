@@ -45,7 +45,23 @@ export type ScheduledDemandItem = {
   receivingStatus: string | null;
   canConfirmPurchase: boolean;
 };
+export type ScheduledPurchaseQuantity = {
+  sizeLabel: string | null;
+  unit: "GRAM" | "MILLILITER" | "PIECE";
+  quantity: number;
+};
+export type SupplierPurchaseListRequest = AuthenticatedRequest & {
+  cycleId: string;
+  locationId?: string;
+};
+export type SupplierPurchaseList = {
+  cycleName: string;
+  scopeName: string;
+  generatedAt: number;
+  items: readonly (ScheduledPurchaseQuantity & { productName: string })[];
+};
 export type ScheduledSellingOptionSummaryItem = {
+  purchaseQuantity?: ScheduledPurchaseQuantity;
   skuId: string;
   inventoryPoolId: string;
   productName: string;
@@ -57,6 +73,7 @@ export type ScheduledSellingOptionSummaryItem = {
   totalQuantityBase: number;
   destinationCount: number;
   destinations: readonly {
+    purchaseQuantity?: ScheduledPurchaseQuantity;
     locationId: string;
     locationName: string;
     soldUnitCount: number;
@@ -64,6 +81,7 @@ export type ScheduledSellingOptionSummaryItem = {
   }[];
 };
 export type ScheduledOrderSummaryItem = {
+  purchaseQuantities?: readonly ScheduledPurchaseQuantity[];
   productId: string;
   productName: string;
   paidOrderCount: number;
@@ -141,6 +159,9 @@ export type ScheduledWeekView = {
       };
 };
 export interface AdminScheduledWeekService {
+  getAdminSupplierPurchaseList(
+    request: SupplierPurchaseListRequest,
+  ): Promise<RpcResult<SupplierPurchaseList>>;
   getAdminScheduledWeek(request: ScheduledWeekRequest): Promise<RpcResult<ScheduledWeekView>>;
   completeAdminScheduledWeek(
     request: ScheduledWeekCompletionRequest,

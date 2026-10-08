@@ -495,11 +495,90 @@ describe("Scheduled cycle order summary", () => {
       throw new Error("Missing second page");
     expect(second.value.page.items).toHaveLength(1);
     expect(second.value.page.nextCursor).toBeNull();
+    const exported = await core.getAdminSupplierPurchaseList(query);
+    if (!exported.ok) throw new Error("Missing complete supplier list");
+    expect(exported.value.items).toHaveLength(51);
+    expect(exported.value.items.every((item) => item.quantity === 1000)).toBe(true);
+    expect(Object.keys(exported.value.items[0]!).sort()).toEqual([
+      "productName",
+      "quantity",
+      "sizeLabel",
+      "unit",
+    ]);
+
     expect(second.value.page.totals).toEqual(first.value.page.totals);
     expect(
       new Set([...first.value.page.items, ...second.value.page.items].map((item) => item.productId))
         .size,
     ).toBe(51);
+  });
+
+  it("exports immutable size snapshots as pieces and leaves paid gram quantities unchanged", async () => {
+    const cycleId = crypto.randomUUID();
+    await seedTestCycle(env.DB, cycleId);
+    const local = await locationManager("location");
+    await grantProcurementRead(local.id);
+    const orderId = `size-${cycleId}`;
+    await seedOrder(cycleId, orderId);
+    for (const [productName, variantName, soldUnits, baseQuantity, status, addition] of [
+      ["Repolyo (Cabbage)", "Small", 3, 1500, "OPEN", false],
+      ["Repolyo (Cabbage)", "Large", 1, 1000, "OPEN", true],
+      ["Sayote (Chayote)", "Medium", 1, 300, "OPEN", false],
+      ["Carrots", "500 g", 3, 1500, "OPEN", false],
+      ["Sayote (Chayote)", "Medium", 9, 2700, "CANCELED", false],
+    ] as const)
+      await seedPaidLine({
+        cycleId,
+        orderId,
+        locationId: "location-cebu-central",
+        skuId: "sku-carrot-1kg",
+        poolId: "pool-carrot",
+        productName,
+        variantName,
+        soldUnits,
+        baseQuantity,
+        status,
+        addition,
+        unitName: "unit-gram",
+        baseUnit: "GRAM",
+      });
+    const input = {
+      headers: local.headers,
+      requestId: crypto.randomUUID(),
+      cycleId,
+      locationId: "location-cebu-central",
+    };
+    const result = await core.getAdminSupplierPurchaseList(input);
+    if (!result.ok) throw new Error("Missing supplier list");
+    expect(result.value.items).toEqual([
+      { productName: "Carrots", sizeLabel: null, unit: "GRAM", quantity: 1500 },
+      { productName: "Repolyo (Cabbage)", sizeLabel: "Large", unit: "PIECE", quantity: 1 },
+      { productName: "Repolyo (Cabbage)", sizeLabel: "Small", unit: "PIECE", quantity: 3 },
+      { productName: "Sayote (Chayote)", sizeLabel: "Medium", unit: "PIECE", quantity: 1 },
+    ]);
+    const summary = await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" });
+    if (!summary.ok || summary.value.page.kind !== "ORDER_SUMMARY")
+      throw new Error("Missing summary");
+    const cabbage = summary.value.page.items.find(
+      (item) => item.productName === "Repolyo (Cabbage)",
+    )!;
+    expect(cabbage.purchaseQuantities).toEqual([
+      { sizeLabel: "Large", unit: "PIECE", quantity: 1 },
+      { sizeLabel: "Small", unit: "PIECE", quantity: 3 },
+    ]);
+    expect(cabbage.quantities[0]!.totalQuantityBase).toBe(2500);
+    const outside = await core.getAdminSupplierPurchaseList({
+      ...input,
+      locationId: "missing-location",
+    });
+    expect(outside.ok).toBe(false);
+    const unauthorized = await core.getAdminSupplierPurchaseList({ ...input, headers: {} });
+    expect(unauthorized.ok).toBe(false);
+    const globalDenied = await core.getAdminSupplierPurchaseList({
+      ...input,
+      locationId: undefined,
+    });
+    expect(globalDenied.ok).toBe(false);
   });
 
   it("shows exact purchase demand when shipping weight is unavailable on a paid line", async () => {

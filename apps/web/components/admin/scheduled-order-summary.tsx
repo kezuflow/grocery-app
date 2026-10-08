@@ -33,6 +33,21 @@ export function formatScheduledQuantity(
 }
 
 function ProductQuantities({ item }: { item: ScheduledOrderSummaryItem }) {
+  if (item.purchaseQuantities)
+    return (
+      <ul className="flex flex-col gap-1">
+        {item.purchaseQuantities.map((quantity, index) => (
+          <li key={index}>
+            {quantity.sizeLabel ? (
+              <span className="block text-sm text-muted-foreground">{quantity.sizeLabel}</span>
+            ) : null}
+            <span className="font-semibold tabular-nums">
+              {formatScheduledQuantity(quantity.quantity, quantity.unit)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
   return (
     <ul className="flex flex-col gap-1">
       {item.quantities.map((quantity) => (
@@ -81,7 +96,10 @@ function SellingOptions({ item, global }: { item: ScheduledOrderSummaryItem; glo
                 </p>
               </div>
               <p className="font-medium tabular-nums">
-                {formatScheduledQuantity(option.totalQuantityBase, option.baseUnit)}
+                {formatScheduledQuantity(
+                  option.purchaseQuantity?.quantity ?? option.totalQuantityBase,
+                  option.purchaseQuantity?.unit ?? option.baseUnit,
+                )}
               </p>
             </div>
             {global ? (
@@ -95,7 +113,10 @@ function SellingOptions({ item, global }: { item: ScheduledOrderSummaryItem; glo
                     <span className="tabular-nums">
                       {destination.soldUnitCount.toLocaleString("en-PH")} sold{" "}
                       {destination.soldUnitCount === 1 ? "unit" : "units"} ·{" "}
-                      {formatScheduledQuantity(destination.totalQuantityBase, option.baseUnit)}
+                      {formatScheduledQuantity(
+                        destination.purchaseQuantity?.quantity ?? destination.totalQuantityBase,
+                        destination.purchaseQuantity?.unit ?? option.baseUnit,
+                      )}
                     </span>
                   </li>
                 ))}

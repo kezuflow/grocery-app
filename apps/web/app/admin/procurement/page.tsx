@@ -1,4 +1,5 @@
 "use client";
+import { SupplierExport } from "../../../components/admin/supplier-export";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -172,11 +173,25 @@ export default function ProcurementPage() {
             : `Review the customer arrival plan and operational work for ${label}.`
         }
         action={
-          canManageCycles ? (
-            <Button asChild variant="outline">
-              <Link href="/admin/settings/scheduled-cycles">Manage Scheduled cycles</Link>
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-start gap-2">
+            <SupplierExport
+              key={selectedWeekKey}
+              cycleId={cycleId}
+              locationId={global ? undefined : (locationId ?? undefined)}
+              disabled={
+                !week ||
+                !capabilities.includes("procurement.read") ||
+                command.busy ||
+                command.uncertain ||
+                purchasePending
+              }
+            />
+            {canManageCycles ? (
+              <Button asChild variant="outline">
+                <Link href="/admin/settings/scheduled-cycles">Manage Scheduled cycles</Link>
+              </Button>
+            ) : null}
+          </div>
         }
       />
       {!locationId && !global ? (

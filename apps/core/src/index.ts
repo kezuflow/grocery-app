@@ -1,3 +1,4 @@
+import { getAdminSupplierPurchaseList } from "./admin/application/supplier-purchase-list";
 import {
   GooglePlaces,
   autocompleteSchema,
@@ -2608,6 +2609,14 @@ export class CoreEntrypoint extends WorkerEntrypoint<Env> {
         { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
         validation.data,
       ),
+    );
+  }
+  getAdminSupplierPurchaseList(
+    input: import("@freshmarkets/contracts").SupplierPurchaseListRequest,
+  ) {
+    return getAdminSupplierPurchaseList(
+      { auth: createAuth(this.env as Env & AuthEnvironment), db: this.env.DB },
+      input,
     );
   }
   getAdminScheduledWeek(input: import("@freshmarkets/contracts").ScheduledWeekRequest) {

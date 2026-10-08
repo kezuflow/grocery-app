@@ -1,3 +1,4 @@
+import { scheduledPurchaseQuantity } from "../domain/scheduled-purchase-quantity";
 import type {
   RpcResult,
   ScheduledWeekRequest,
@@ -14,6 +15,18 @@ import {
   resolveGlobalOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
 } from "./operations-administration-access";
+
+export const scheduledPaidLinesSql = `SELECT d.order_id,d.location_id,d.inventory_pool_id,d.sku_id,d.quantity_sellable,d.quantity_base_total,d.base_unit_code,
+      s.product_id,l.name locationName,
+      COALESCE(oi.product_name_snapshot,al.product_name_snapshot) productName,
+      COALESCE(oi.variant_name_snapshot,al.variant_name_snapshot) variantName,
+      COALESCE(oi.unit_snapshot,al.unit_snapshot) unitName
+      FROM committed_demand d JOIN sku s ON s.id=d.sku_id
+      JOIN fulfillment_location l ON l.id=d.location_id
+      LEFT JOIN order_item oi ON oi.id=d.order_item_id
+      LEFT JOIN paid_order_amendment_line al ON al.id=d.amendment_line_id
+      WHERE d.delivery_cycle_id=? AND (? IS NULL OR d.location_id=?)
+        AND d.status='OPEN' AND d.demand_basis='EXACT_PAID_LINE'`;
 
 /** A bounded operational projection; Orders, demand, receiving and catalog keep their own authority. */
 export async function getAdminScheduledWeek(
@@ -161,17 +174,7 @@ export async function getAdminScheduledWeek(
     ),
   };
   if (query.section === "ORDER_SUMMARY") {
-    const paidLines = `SELECT d.order_id,d.location_id,d.inventory_pool_id,d.sku_id,d.quantity_sellable,d.quantity_base_total,d.base_unit_code,
-      s.product_id,l.name locationName,
-      COALESCE(oi.product_name_snapshot,al.product_name_snapshot) productName,
-      COALESCE(oi.variant_name_snapshot,al.variant_name_snapshot) variantName,
-      COALESCE(oi.unit_snapshot,al.unit_snapshot) unitName
-      FROM committed_demand d JOIN sku s ON s.id=d.sku_id
-      JOIN fulfillment_location l ON l.id=d.location_id
-      LEFT JOIN order_item oi ON oi.id=d.order_item_id
-      LEFT JOIN paid_order_amendment_line al ON al.id=d.amendment_line_id
-      WHERE d.delivery_cycle_id=? AND (? IS NULL OR d.location_id=?)
-        AND d.status='OPEN' AND d.demand_basis='EXACT_PAID_LINE'`;
+    const paidLines = scheduledPaidLinesSql;
     const [rows, totals] = await Promise.all([
       deps.db
         .prepare(`WITH source_lines AS (${paidLines}), paid_lines AS (
@@ -231,8 +234,20 @@ export async function getAdminScheduledWeek(
       items: rows.results
         .slice(0, 50)
         .map(({ rowCursor: _rowCursor, sellingOptionsJson, ...row }) => {
-          const sellingOptions: ScheduledSellingOptionSummaryItem[] =
-            JSON.parse(sellingOptionsJson);
+          const sellingOptions: ScheduledSellingOptionSummaryItem[] = JSON.parse(
+            sellingOptionsJson,
+          ).map((option: ScheduledSellingOptionSummaryItem) => ({
+            ...option,
+            purchaseQuantity: scheduledPurchaseQuantity(option),
+            destinations: option.destinations.map((destination) => ({
+              ...destination,
+              purchaseQuantity: scheduledPurchaseQuantity({
+                ...option,
+                soldUnitCount: destination.soldUnitCount,
+                totalQuantityBase: destination.totalQuantityBase,
+              }),
+            })),
+          }));
           const quantities = new Map<
             string,
             {
@@ -255,7 +270,25 @@ export async function getAdminScheduledWeek(
               quantity.sellingOptionNames.push(option.variantName);
             quantities.set(key, quantity);
           }
-          return { ...row, quantities: [...quantities.values()], sellingOptions };
+          const purchaseQuantities = new Map<
+            string,
+            ReturnType<typeof scheduledPurchaseQuantity>
+          >();
+          for (const option of sellingOptions) {
+            const quantity = scheduledPurchaseQuantity(option);
+            const key = JSON.stringify([option.inventoryPoolId, quantity.sizeLabel, quantity.unit]);
+            const previous = purchaseQuantities.get(key);
+            purchaseQuantities.set(key, {
+              ...quantity,
+              quantity: quantity.quantity + (previous?.quantity ?? 0),
+            });
+          }
+          return {
+            ...row,
+            purchaseQuantities: [...purchaseQuantities.values()],
+            quantities: [...quantities.values()],
+            sellingOptions,
+          };
         }),
       totals: totals ?? {
         paidOrderCount: 0,

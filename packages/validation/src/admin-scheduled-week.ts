@@ -2,7 +2,23 @@ import { z } from "zod";
 const identifierSchema = z.string().trim().min(1).max(200);
 const integer = z.number().int().safe().nonnegative();
 const cursorSchema = z.string().trim().min(1).max(4096);
+export const scheduledPurchaseQuantitySchema = z.object({
+  sizeLabel: z.string().nullable(),
+  unit: z.enum(["GRAM", "MILLILITER", "PIECE"]),
+  quantity: integer,
+});
+export const supplierPurchaseListQuerySchema = z.object({
+  cycleId: identifierSchema,
+  locationId: identifierSchema.optional(),
+});
+export const supplierPurchaseListSchema = z.object({
+  cycleName: z.string(),
+  scopeName: z.string(),
+  generatedAt: integer,
+  items: z.array(scheduledPurchaseQuantitySchema.extend({ productName: z.string() })),
+});
 const sellingOptionSummarySchema = z.object({
+  purchaseQuantity: scheduledPurchaseQuantitySchema.optional(),
   skuId: identifierSchema,
   inventoryPoolId: identifierSchema,
   productName: z.string(),
@@ -15,6 +31,7 @@ const sellingOptionSummarySchema = z.object({
   destinationCount: integer,
   destinations: z.array(
     z.object({
+      purchaseQuantity: scheduledPurchaseQuantitySchema.optional(),
       locationId: identifierSchema,
       locationName: z.string(),
       soldUnitCount: integer,
@@ -75,6 +92,7 @@ export const scheduledWeekViewSchema = z.object({
           productName: z.string(),
           paidOrderCount: integer,
           destinationCount: integer,
+          purchaseQuantities: z.array(scheduledPurchaseQuantitySchema).optional(),
           quantities: z
             .array(
               z.object({

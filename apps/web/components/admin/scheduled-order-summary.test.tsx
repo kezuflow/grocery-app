@@ -101,6 +101,41 @@ describe("ScheduledOrderSummary", () => {
     expect(container.textContent).toContain("do not subtract physical stock");
   });
 
+  it("shows sized pieces in purchasing totals and Global breakdowns instead of accounting grams", () => {
+    const purchaseQuantity = { sizeLabel: "Small", unit: "PIECE" as const, quantity: 3 };
+    const option = {
+      ...items[1]!.sellingOptions[0]!,
+      variantName: "Small",
+      soldUnitCount: 3,
+      totalQuantityBase: 1500,
+      purchaseQuantity,
+      destinations: [
+        {
+          locationId: "central",
+          locationName: "Central Cebu",
+          soldUnitCount: 3,
+          totalQuantityBase: 1500,
+          purchaseQuantity,
+        },
+      ],
+    };
+    const item = {
+      ...items[1]!,
+      productName: "Repolyo (Cabbage)",
+      purchaseQuantities: [purchaseQuantity],
+      sellingOptions: [option],
+    };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root.render(<ScheduledOrderSummary items={[item]} totals={totals} global />));
+    const table = container.querySelector("table")!;
+    expect(table.textContent).toContain("Small3 pcs");
+    act(() => table.querySelector<HTMLButtonElement>("button")!.click());
+    expect(table.textContent).toContain("Central Cebu");
+    expect(table.textContent).not.toContain("1.5 kg");
+  });
+
   it("renders the clear empty state and preserves fractional kilograms exactly", () => {
     expect(formatScheduledQuantity(1250, "GRAM")).toBe("1.25 kg");
     container = document.createElement("div");

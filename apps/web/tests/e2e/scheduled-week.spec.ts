@@ -68,6 +68,21 @@ for (const width of [1440, 390])
         "30 kg",
       );
     }
+    for (const [label, extension] of [
+      ["PDF document", "pdf"],
+      ["Excel workbook", "xlsx"],
+    ] as const) {
+      await page.getByRole("button", { name: "Export supplier list", exact: true }).click();
+      const downloaded = page.waitForEvent("download");
+      await page.getByRole("menuitem", { name: label, exact: true }).click();
+      const download = await downloaded;
+      expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${extension}$`));
+      expect(await download.failure()).toBeNull();
+      await download.saveAs(`../../.wrangler/procurement-export-browser-${width}.${extension}`);
+      await expect(
+        page.getByRole("button", { name: "Export supplier list", exact: true }),
+      ).toBeEnabled();
+    }
     const options = page.getByRole("button", { name: "Selling options for Carrots", exact: true });
     await expect(options).toHaveAttribute("aria-expanded", "false");
     await options.focus();

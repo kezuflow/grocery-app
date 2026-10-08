@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Supplier purchase downloads - owner approval 2026-10-09
+
+Procurement's stock shadcn Export supplier list menu offers PDF document and Excel workbook after a week loads. Disable during generation or an unresolved purchase outcome; show accessible progress and explicit errors. Replacing scope/week cancels the pending download. Files have a FreshMarkets heading, week/scope/generated time and exactly Product/Quantity columns. Size appears beside Product; quantities use Core's typed piece/weight/volume decision. PDF wraps labels, repeats headings and paginates A4. Excel retains numeric quantities with displayed units, wrapped labels, frozen/repeated headers and two editable columns. No selling-option, price or customer details enter the file. Summary shows size/pieces for historical sized offers; persisted stock-accounting facts are unchanged.
+
 ## Product-level Scheduled Order summary — owner approval 2026-10-08
 
 Order summary uses one collapsed row/card per stable Product and immutable paid Product label. Show exact paid quantities, unique paid Orders and authorized destination count. Compatible pack sizes share one quantity; separate stock identities and unlike units show separately labeled quantities. A stock shadcn Collapsible trigger exposes original selling-option labels, sold units, exact quantities and per-option paid Order counts; Global also sees named destination quantities. Keep Sold units in the breakdown so mixed pack sizes do not look like interchangeable pieces. Desktop uses stock Table/Button/Collapsible composition and mobile uses the same disclosure inside stacked product cards. Preserve keyboard activation, expansion state and narrow-screen wrapping. Core owns totals and groups before pagination; Web never sums partial pages. Quantities to buy and purchase/packing commands retain their existing behavior.

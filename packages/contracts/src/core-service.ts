@@ -282,6 +282,7 @@ export const coreServiceMethodNames = [
   "completeAdminScheduledWeek",
   "recordScheduledCountedReceipt",
   "releaseScheduledSurplus",
+  "getAdminSupplierPurchaseList",
   "getAdminScheduledWeek",
   "startAdminReceiving",
   "recordAdminReceivedLine",
