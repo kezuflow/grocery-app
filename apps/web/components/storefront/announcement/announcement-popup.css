@@ -1,9 +1,17 @@
-.fm-announcement-popover {
+.fm-announcement-overlay[data-slot="dialog-overlay"] {
+  z-index: 80;
+  background: rgb(0 0 0 / 50%);
+}
+
+.fm-announcement-dialog[data-slot="dialog-content"] {
   position: fixed;
-  inset: auto 12px calc(env(safe-area-inset-bottom) + 5rem) auto;
-  z-index: 71;
-  width: min(380px, calc(100vw - 24px));
-  max-height: calc(100dvh - env(safe-area-inset-bottom) - 6rem);
+  top: 50%;
+  left: 50%;
+  z-index: 81;
+  display: block;
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
   margin: 0;
   padding: 0;
   overflow: auto;
@@ -12,10 +20,6 @@
   background: var(--fm-background);
   color: var(--fm-text);
   box-shadow: var(--fm-shadow-overlay);
-}
-
-.fm-announcement-popover::backdrop {
-  background: transparent;
 }
 
 .fm-announcement-topbar {
@@ -105,12 +109,14 @@
 .fm-announcement-content h2 {
   color: var(--fm-text);
   font-size: clamp(22px, 5vw, 26px);
+  font-weight: 600;
   line-height: 1.15;
   outline: none;
 }
 
 .fm-announcement-body {
   margin-top: 10px;
+  color: var(--fm-text);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -147,13 +153,5 @@
 @media (max-width: 400px) {
   .fm-announcement-content {
     padding: 20px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .fm-announcement-popover {
-    right: 24px;
-    bottom: 24px;
-    max-height: calc(100dvh - 48px);
   }
 }

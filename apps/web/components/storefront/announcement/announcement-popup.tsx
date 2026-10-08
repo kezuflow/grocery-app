@@ -5,46 +5,20 @@ import { useEffect, useRef, useState } from "react";
 import { FreshMarketsMark } from "../../brand/freshmarkets-mark";
 import { welcomeAnnouncementPages } from "./announcement-campaign";
 import { DELIVERY_LOCATION_REQUEST_EVENT } from "../../../lib/storefront/browsing-location";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "../../ui/dialog";
 import "./announcement-popup.css";
 
 export function AnnouncementPopup() {
   const pages = welcomeAnnouncementPages();
   const [pageIndex, setPageIndex] = useState(0);
   const [open, setOpen] = useState(true);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const outsideDismissRef = useRef(false);
+  const closeDestinationRef = useRef<"home" | "catalog" | "delivery-address">("home");
   const [motionAllowed, setMotionAllowed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(true);
   const page = pages[pageIndex];
-
-  useEffect(() => {
-    const popover = popoverRef.current;
-    if (!open || !popover) return;
-    // Opening a non-modal popover leaves browsing and keyboard focus available.
-    // Removing the element automatically removes it from the browser's top layer.
-    popover.showPopover();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function dismissOutside(event: Event) {
-      const popover = popoverRef.current;
-      if (!popover || !(event.target instanceof Node) || popover.contains(event.target)) return;
-      // Leave the outside action and its focus behavior to the storefront.
-      outsideDismissRef.current = true;
-      popover.hidePopover();
-      setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismissOutside, true);
-    document.addEventListener("click", dismissOutside, true);
-    return () => {
-      document.removeEventListener("pointerdown", dismissOutside, true);
-      document.removeEventListener("click", dismissOutside, true);
-    };
-  }, [open]);
 
   useEffect(() => {
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -76,8 +50,12 @@ export function AnnouncementPopup() {
   }
 
   function dismiss(destination: "home" | "catalog" | "delivery-address") {
-    popoverRef.current?.hidePopover();
+    closeDestinationRef.current = destination;
     setOpen(false);
+  }
+
+  function restoreFocus() {
+    const destination = closeDestinationRef.current;
     requestAnimationFrame(() => {
       if (destination === "delivery-address") {
         document
@@ -108,108 +86,107 @@ export function AnnouncementPopup() {
   const lastPage = pageIndex === pages.length - 1;
 
   return (
-    <div
-      ref={popoverRef}
-      popover="auto"
-      role="region"
-      aria-roledescription="carousel"
-      aria-label="FreshMarkets welcome"
-      className="fm-announcement-popover"
-      onBeforeToggle={(event) => {
-        if (event.newState !== "closed") return;
-        if (!outsideDismissRef.current && popoverRef.current?.contains(document.activeElement)) {
-          document
-            .querySelector<HTMLAnchorElement>('header a[href="/"]')
-            ?.focus({ preventScroll: true });
-        }
-        setOpen(false);
-      }}
-      onPointerEnter={(event) => {
-        if (event.pointerType !== "touch") setHovered(true);
-      }}
-      onPointerLeave={() => setHovered(false)}
-      onFocusCapture={() => setFocused(true)}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
-      }}
-    >
-      <div className="fm-announcement-topbar">
-        <span className="fm-announcement-topbar-spacer" aria-hidden="true" />
-        <div className="fm-announcement-brand" aria-label="FreshMarkets">
-          <FreshMarketsMark className="size-6" />
-          <span>freshmarkets</span>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        className="fm-announcement-dialog"
+        overlayClassName="fm-announcement-overlay"
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          headingRef.current?.focus({ preventScroll: true });
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          restoreFocus();
+        }}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== "touch") setHovered(true);
+        }}
+        onPointerLeave={() => setHovered(false)}
+        onFocusCapture={(event) => setFocused(event.target instanceof HTMLButtonElement)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+        }}
+      >
+        <DialogTitle className="sr-only">FreshMarkets welcome</DialogTitle>
+        <div className="fm-announcement-topbar">
+          <span className="fm-announcement-topbar-spacer" aria-hidden="true" />
+          <div className="fm-announcement-brand" aria-label="FreshMarkets">
+            <FreshMarketsMark className="size-6" />
+            <span>freshmarkets</span>
+          </div>
+          <button
+            type="button"
+            className="fm-announcement-close"
+            aria-label="Close welcome announcement"
+            onClick={() => dismiss("home")}
+          >
+            <X aria-hidden="true" size={18} />
+          </button>
         </div>
-        <button
-          type="button"
-          className="fm-announcement-close"
-          aria-label="Close welcome announcement"
-          onClick={() => dismiss("home")}
-        >
-          <X aria-hidden="true" size={18} />
-        </button>
-      </div>
-      <div className="fm-announcement-media">
-        <img
-          src={page.image.src}
-          alt={page.image.alt}
-          width={1536}
-          height={1024}
-          className="fm-announcement-scene"
-        />
-        {pages.length > 1 ? (
-          <div role="group" aria-label="Announcement pages">
-            <button
-              type="button"
-              className="fm-announcement-arrow fm-announcement-previous"
-              aria-label="Previous announcement page"
-              onClick={() => selectPage((pageIndex - 1 + pages.length) % pages.length)}
-            >
-              <ChevronLeft aria-hidden="true" size={22} />
-            </button>
-            <button
-              type="button"
-              className="fm-announcement-arrow fm-announcement-next"
-              aria-label="Next announcement page"
-              onClick={() => selectPage((pageIndex + 1) % pages.length)}
-            >
-              <ChevronRight aria-hidden="true" size={22} />
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <div className="fm-announcement-content">
-        <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
-          {page.title}
-        </h2>
-        <p id="fm-announcement-body" className="fm-announcement-body">
-          {page.body.map((segment, index) =>
-            segment.emphasis ? (
-              <strong key={index} className="fm-announcement-emphasis">
-                {segment.text}
-              </strong>
-            ) : (
-              <span key={index}>{segment.text}</span>
-            ),
-          )}
-        </p>
-        {pages.length > 1 ? (
-          <div className="fm-announcement-pagination">
-            <span role="status" aria-live="off" aria-label="Announcement page">
-              {pageIndex + 1} of {pages.length}
-            </span>
-          </div>
-        ) : null}
-        <button
-          type="button"
-          className="fm-announcement-action"
-          onClick={() => {
-            if (lastPage) dismiss(page.action);
-            else selectPage(pageIndex + 1);
-          }}
-        >
-          {lastPage ? page.actionLabel : "Next"}
-        </button>
-      </div>
-    </div>
+        <div className="fm-announcement-media">
+          <img
+            src={page.image.src}
+            alt={page.image.alt}
+            width={1536}
+            height={1024}
+            className="fm-announcement-scene"
+          />
+          {pages.length > 1 ? (
+            <div role="group" aria-label="Announcement pages">
+              <button
+                type="button"
+                className="fm-announcement-arrow fm-announcement-previous"
+                aria-label="Previous announcement page"
+                onClick={() => selectPage((pageIndex - 1 + pages.length) % pages.length)}
+              >
+                <ChevronLeft aria-hidden="true" size={22} />
+              </button>
+              <button
+                type="button"
+                className="fm-announcement-arrow fm-announcement-next"
+                aria-label="Next announcement page"
+                onClick={() => selectPage((pageIndex + 1) % pages.length)}
+              >
+                <ChevronRight aria-hidden="true" size={22} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="fm-announcement-content">
+          <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
+            {page.title}
+          </h2>
+          <DialogDescription className="fm-announcement-body">
+            {page.body.map((segment, index) =>
+              segment.emphasis ? (
+                <strong key={index} className="fm-announcement-emphasis">
+                  {segment.text}
+                </strong>
+              ) : (
+                <span key={index}>{segment.text}</span>
+              ),
+            )}
+          </DialogDescription>
+          {pages.length > 1 ? (
+            <div className="fm-announcement-pagination">
+              <span role="status" aria-live="off" aria-label="Announcement page">
+                {pageIndex + 1} of {pages.length}
+              </span>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="fm-announcement-action"
+            onClick={() => {
+              if (lastPage) dismiss(page.action);
+              else selectPage(pageIndex + 1);
+            }}
+          >
+            {lastPage ? page.actionLabel : "Next"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
