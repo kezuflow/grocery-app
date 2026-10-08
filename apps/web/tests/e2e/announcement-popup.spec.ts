@@ -1,11 +1,9 @@
 import { expect, test, type Locator } from "@playwright/test";
 
 async function expectPage(popover: Locator, number: number) {
-  const pages = popover.getByRole("group", { name: "Announcement pages" });
-  await expect(
-    pages.getByRole("button", { name: new RegExp(`^Show page ${number}:`) }),
-  ).toHaveAttribute("aria-current", "true");
-  await expect(pages.locator('[aria-current="true"]')).toHaveCount(1);
+  await expect(popover.getByRole("status", { name: "Announcement page" })).toHaveText(
+    `${number} of 2`,
+  );
 }
 
 test("welcome announcement opens on every home visit with the scheduled delivery message", async ({
@@ -34,12 +32,19 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   const pageButtons = dialog.getByRole("group", { name: "Announcement pages" }).getByRole("button");
   await expect(pageButtons).toHaveCount(2);
   const cardBounds = await dialog.boundingBox();
-  const pagesBounds = await dialog.getByRole("group", { name: "Announcement pages" }).boundingBox();
+  const pagesBounds = await dialog.getByRole("status", { name: "Announcement page" }).boundingBox();
+  const frameBounds = await dialog.locator(".fm-announcement-media").boundingBox();
+  if (!frameBounds) throw new Error("Announcement image frame is not visible");
   expect(pagesBounds!.x).toBeGreaterThan(cardBounds!.x + cardBounds!.width / 2);
   for (const button of await pageButtons.all()) {
     const bounds = await button.boundingBox();
     expect(bounds!.width).toBeGreaterThanOrEqual(44);
     expect(bounds!.height).toBeGreaterThanOrEqual(44);
+    if (!bounds) throw new Error("Announcement navigation is not visible");
+    expect(bounds.x).toBeGreaterThanOrEqual(frameBounds.x);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(frameBounds.x + frameBounds.width);
+    expect(bounds.y).toBeGreaterThanOrEqual(frameBounds.y);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(frameBounds.y + frameBounds.height);
   }
   const scene = dialog.locator("img.fm-announcement-scene");
   await expect(scene).toBeVisible();
@@ -58,9 +63,7 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   await page.screenshot({ path: test.info().outputPath("popup-schedule-desktop.png") });
   await dialog.screenshot({ path: test.info().outputPath("welcome-gallery-card-desktop.png") });
 
-  await dialog
-    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Next announcement page", exact: true }).click();
   const addressDialog = page.getByRole("region", { name: "FreshMarkets welcome" });
   await expect(addressDialog).toContainText(
     "Set your address to see local prices and place an order.",
@@ -78,7 +81,7 @@ test("welcome announcement opens on every home visit with the scheduled delivery
     .toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath("popup-address-desktop.png") });
   await addressDialog
-    .getByRole("button", { name: "Show page 1: Welcome to FreshMarkets", exact: true })
+    .getByRole("button", { name: "Previous announcement page", exact: true })
     .focus();
   await page.keyboard.press("Enter");
   await expect(dialog.getByRole("heading")).toBeFocused();
@@ -107,6 +110,30 @@ test("welcome announcement opens on every home visit with the scheduled delivery
   ).toBeFocused();
 });
 
+test("outside clicks dismiss the announcement and preserve the chosen storefront focus", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const popover = page.getByRole("region", { name: "FreshMarkets welcome" });
+  await expect(popover).toBeVisible();
+  await popover.getByRole("button", { name: "Next announcement page", exact: true }).click();
+  await expect(popover.getByRole("heading")).toBeFocused();
+  const search = page.getByRole("textbox", { name: "Search groceries", exact: true });
+  await search.click();
+  await expect(popover).toHaveCount(0);
+  await expect(search).toBeFocused();
+
+  await page.reload();
+  await expect(popover).toBeVisible();
+  await page.mouse.click(2, 2);
+  await expect(popover).toHaveCount(0);
+
+  await page.reload();
+  await expect(popover).toBeVisible();
+  await popover.getByRole("button", { name: "Close welcome announcement" }).click();
+  await expect(popover).toHaveCount(0);
+});
+
 test("welcome popover autoplays both pages, pauses on hover and focus, and allows browsing", async ({
   page,
 }) => {
@@ -132,9 +159,7 @@ test("welcome popover autoplays both pages, pauses on hover and focus, and allow
   await page.clock.runFor(6_100);
   await expectPage(popover, 2);
 
-  await popover
-    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
-    .focus();
+  await popover.getByRole("button", { name: "Next announcement page", exact: true }).focus();
   await page.mouse.move(0, 0);
   await page.clock.runFor(12_100);
   await expectPage(popover, 2);
@@ -170,9 +195,7 @@ test("reduced motion keeps onboarding pages manual without playback controls", a
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
   await page.clock.runFor(12_100);
   await expectPage(popover, 1);
-  await popover
-    .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
-    .click();
+  await popover.getByRole("button", { name: "Next announcement page", exact: true }).click();
   await page.clock.runFor(12_100);
   await expectPage(popover, 2);
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -214,6 +237,14 @@ test("popup action and storefront buttons use the rounded action shape", async (
   await expect(dialog.getByRole("button", { name: "Close welcome announcement" })).toBeInViewport({
     ratio: 1,
   });
+  await expect(dialog.getByRole("button", { name: "Previous announcement page" })).toBeInViewport({
+    ratio: 1,
+  });
+  await expect(
+    dialog.getByRole("button", { name: "Next announcement page", exact: true }),
+  ).toBeInViewport({
+    ratio: 1,
+  });
   const popoverBounds = await dialog.boundingBox();
   expect(popoverBounds!.x).toBeGreaterThanOrEqual(0);
   expect(popoverBounds!.x + popoverBounds!.width).toBeLessThanOrEqual(320);
@@ -249,11 +280,11 @@ test.describe("touch welcome popover", () => {
     await expectPage(popover, 2);
     await page.clock.runFor(6_100);
     await expectPage(popover, 1);
-    await popover
-      .getByRole("button", { name: "Show page 2: Set your delivery address", exact: true })
-      .tap();
+    await popover.getByRole("button", { name: "Next announcement page", exact: true }).tap();
     await page.clock.runFor(12_100);
     await expectPage(popover, 2);
+    await page.touchscreen.tap(2, 2);
+    await expect(popover).toHaveCount(0);
   });
 });
 

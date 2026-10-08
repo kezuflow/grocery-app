@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FreshMarketsMark } from "../../brand/freshmarkets-mark";
 import { welcomeAnnouncementPages } from "./announcement-campaign";
@@ -13,6 +13,7 @@ export function AnnouncementPopup() {
   const [open, setOpen] = useState(true);
   const popoverRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const outsideDismissRef = useRef(false);
   const [motionAllowed, setMotionAllowed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -25,6 +26,24 @@ export function AnnouncementPopup() {
     // Opening a non-modal popover leaves browsing and keyboard focus available.
     // Removing the element automatically removes it from the browser's top layer.
     popover.showPopover();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function dismissOutside(event: Event) {
+      const popover = popoverRef.current;
+      if (!popover || !(event.target instanceof Node) || popover.contains(event.target)) return;
+      // Leave the outside action and its focus behavior to the storefront.
+      outsideDismissRef.current = true;
+      popover.hidePopover();
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("click", dismissOutside, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("click", dismissOutside, true);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -98,7 +117,7 @@ export function AnnouncementPopup() {
       className="fm-announcement-popover"
       onBeforeToggle={(event) => {
         if (event.newState !== "closed") return;
-        if (popoverRef.current?.contains(document.activeElement)) {
+        if (!outsideDismissRef.current && popoverRef.current?.contains(document.activeElement)) {
           document
             .querySelector<HTMLAnchorElement>('header a[href="/"]')
             ?.focus({ preventScroll: true });
@@ -137,6 +156,26 @@ export function AnnouncementPopup() {
           height={1024}
           className="fm-announcement-scene"
         />
+        {pages.length > 1 ? (
+          <div role="group" aria-label="Announcement pages">
+            <button
+              type="button"
+              className="fm-announcement-arrow fm-announcement-previous"
+              aria-label="Previous announcement page"
+              onClick={() => selectPage((pageIndex - 1 + pages.length) % pages.length)}
+            >
+              <ChevronLeft aria-hidden="true" size={22} />
+            </button>
+            <button
+              type="button"
+              className="fm-announcement-arrow fm-announcement-next"
+              aria-label="Next announcement page"
+              onClick={() => selectPage((pageIndex + 1) % pages.length)}
+            >
+              <ChevronRight aria-hidden="true" size={22} />
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="fm-announcement-content">
         <h2 id="fm-announcement-heading" ref={headingRef} tabIndex={-1}>
@@ -155,20 +194,9 @@ export function AnnouncementPopup() {
         </p>
         {pages.length > 1 ? (
           <div className="fm-announcement-pagination">
-            <div className="fm-announcement-pages" role="group" aria-label="Announcement pages">
-              {pages.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="fm-announcement-page"
-                  aria-label={`Show page ${index + 1}: ${item.title}`}
-                  aria-current={index === pageIndex ? "true" : undefined}
-                  onClick={() => selectPage(index)}
-                >
-                  <span aria-hidden="true" />
-                </button>
-              ))}
-            </div>
+            <span role="status" aria-live="off" aria-label="Announcement page">
+              {pageIndex + 1} of {pages.length}
+            </span>
           </div>
         ) : null}
         <button

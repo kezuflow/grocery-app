@@ -41,7 +41,7 @@
 
 .fm-announcement-close:focus-visible,
 .fm-announcement-action:focus-visible,
-.fm-announcement-pagination button:focus-visible {
+.fm-announcement-arrow:focus-visible {
   outline: 2px solid var(--fm-focus);
   outline-offset: 2px;
 }
@@ -69,6 +69,32 @@
   height: 100%;
   object-fit: cover;
   object-position: center top;
+}
+
+.fm-announcement-arrow {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: var(--fm-background);
+  color: var(--fm-text);
+  box-shadow: var(--fm-shadow-overlay);
+}
+
+.fm-announcement-arrow:hover {
+  background: var(--fm-hover);
+}
+
+.fm-announcement-previous {
+  left: 12px;
+}
+
+.fm-announcement-next {
+  right: 12px;
 }
 
 .fm-announcement-content {
@@ -100,38 +126,6 @@
   align-items: center;
   margin-top: 12px;
   font-size: 12px;
-}
-
-.fm-announcement-pages {
-  display: flex;
-  align-items: center;
-}
-
-.fm-announcement-pages .fm-announcement-page {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-}
-
-.fm-announcement-page span {
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--fm-text-muted);
-}
-
-.fm-announcement-page[aria-current="true"] span {
-  width: 20px;
-  background: var(--fm-storefront-action);
-}
-
-.fm-announcement-pagination button {
-  min-height: 44px;
-  padding-inline: 14px;
-  border-radius: 9999px;
-  font-weight: 600;
 }
 
 .fm-announcement-action {
