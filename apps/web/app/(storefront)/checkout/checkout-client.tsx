@@ -136,7 +136,9 @@ function matchesDeliveryPartnerIntent(
 }
 
 function deliveryPartnerName(option?: FulfillmentOptionView | null) {
-  return option?.deliveryPartner?.displayName ?? "the selected courier";
+  return option?.deliveryPartner?.code === "lalamove"
+    ? "our delivery partner"
+    : (option?.deliveryPartner?.displayName ?? "the selected courier");
 }
 
 export function CheckoutClient({
@@ -612,7 +614,9 @@ export function CheckoutClient({
         setQuoteLifecycleRevision((revision) => revision + 1);
         return true;
       }
-      const message = quoteResult.error?.message ?? "The delivery fee could not be confirmed.";
+      const message = (
+        quoteResult.error?.message ?? "The delivery fee could not be confirmed."
+      ).replace(/lalamove/gi, "Delivery partner");
       setPendingQuote(null);
       if (quoteResult.error?.details?.reason === CHECKOUT_PAYMENT_IN_PROGRESS_REASON) {
         clearQuoteRefreshTimer();

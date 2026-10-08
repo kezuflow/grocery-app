@@ -23,8 +23,8 @@ export function ServiceabilityClient({
           <h1 className="mt-1 text-3xl font-bold tracking-[-0.03em]">Check serviceability</h1>
           <p className="mt-2 max-w-2xl text-sm text-[var(--fm-text-muted)]">
             Search for a destination and confirm its exact entrance. We assign the closest active
-            fulfillment location; Lalamove confirms route availability at checkout. You do not need
-            to sign in or save the address.
+            fulfillment location; our delivery partner confirms route availability at checkout. You
+            do not need to sign in or save the address.
           </p>
           <section className="mt-7 rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-white p-5 sm:p-6">
             <AddressEditor purpose="serviceability" browserApiKey={browserApiKey} mapId={mapId} />

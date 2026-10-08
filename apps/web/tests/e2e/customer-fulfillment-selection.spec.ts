@@ -189,8 +189,8 @@ for (const width of [1440, 390]) {
       page.getByText("Select a confirmed address to load delivery options."),
     ).toHaveCount(0);
     await page.getByRole("button", { name: "Retry delivery options" }).click();
-    await expect(page.getByRole("radio", { name: /Lalamove/ })).toBeEnabled();
-    await expect(page.getByRole("radio", { name: /Lalamove/ })).toHaveAttribute(
+    await expect(page.getByRole("radio", { name: /Instant delivery/ })).toBeEnabled();
+    await expect(page.getByRole("radio", { name: /Instant delivery/ })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -199,7 +199,7 @@ for (const width of [1440, 390]) {
     ).toHaveCount(0);
     await expect(page.getByText(/hub|location-cebu/i)).toHaveCount(0);
     await expect(page.getByRole("alert")).toContainText(
-      "Lalamove quotation is temporarily unavailable. Retry the delivery quotation.",
+      "Delivery partner quotation is temporarily unavailable. Retry the delivery quotation.",
     );
     await page.getByRole("button", { name: "Try quotation again" }).click();
     await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText(
@@ -341,7 +341,7 @@ test("quotes the current Scheduled delivery option and keeps the cutoff notice v
   });
 
   await page.goto("/checkout");
-  await expect(page.getByRole("radio", { name: /Lalamove/ })).toHaveAttribute(
+  await expect(page.getByRole("radio", { name: /Scheduled delivery/ })).toHaveAttribute(
     "aria-checked",
     "true",
   );

@@ -90,12 +90,20 @@ export function FulfillmentOptionPicker({
               : "text-[var(--fm-text)] hover:text-[var(--fm-storefront-accent)]",
           )}
         >
-          <DeliveryPartnerIcon code={option.deliveryPartner?.code} />
+          <DeliveryPartnerIcon
+            code={
+              option.deliveryPartner?.code === "lalamove" ? undefined : option.deliveryPartner?.code
+            }
+          />
           <span className="min-w-0 flex-1">
             <span className="flex items-center justify-between gap-3">
               <strong className="text-sm leading-5">
-                {option.deliveryPartner?.displayName ??
-                  (option.mode === "SCHEDULED" ? "Scheduled delivery" : "Instant delivery")}
+                {option.deliveryPartner?.code === "lalamove"
+                  ? option.mode === "SCHEDULED"
+                    ? "Scheduled delivery"
+                    : "Instant delivery"
+                  : (option.deliveryPartner?.displayName ??
+                    (option.mode === "SCHEDULED" ? "Scheduled delivery" : "Instant delivery"))}
               </strong>
               <span className="flex min-w-[8.5rem] shrink-0 flex-col items-end text-sm font-bold tabular-nums">
                 <span className="flex items-center justify-end gap-2">

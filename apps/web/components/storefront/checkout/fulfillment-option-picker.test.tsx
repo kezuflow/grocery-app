@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FulfillmentOptionPicker } from "./fulfillment-option-picker";
 describe("FulfillmentOptionPicker", () => {
-  it("presents compact branded Instant courier choices", () => {
+  it("presents neutral Instant delivery alongside other courier choices", () => {
     const html = renderToStaticMarkup(
       <FulfillmentOptionPicker
         disabled={false}
@@ -54,10 +54,10 @@ describe("FulfillmentOptionPicker", () => {
         ]}
       />,
     );
-    expect(html).toContain("Lalamove");
+    expect(html).not.toContain("Lalamove");
     expect(html).toContain("Motorcycle");
     expect(html).toContain("GrabExpress");
-    expect(html).toContain('data-provider-icon="lalamove"');
+    expect(html).toContain('data-provider-icon="delivery"');
     expect(html).toContain('data-provider-icon="grab-express"');
     expect(html).toContain("₱50.00");
     expect(html).toContain("delivery partner unavailable");
@@ -70,7 +70,7 @@ describe("FulfillmentOptionPicker", () => {
     expect(html).toContain("divide-y");
     expect(html).not.toContain("fm-shadow-card");
     expect(html).not.toContain("fm-radius-surface");
-    expect(html).not.toContain("fm-surface-soft");
+    expect(html).toContain("Instant delivery");
   });
 
   it("presents the configured Scheduled courier, delivery window, and cutoff", () => {
@@ -107,12 +107,12 @@ describe("FulfillmentOptionPicker", () => {
       />,
     );
 
-    expect(html).toContain("Lalamove");
+    expect(html).not.toContain("Lalamove");
     expect(html).toContain("Motorcycle");
     expect(html).toContain("Sat, Sep 26");
     expect(html).toContain("Sun, Sep 27");
     expect(html).toContain("Order cutoff Fri, Sep 25, 11:59 PM");
     expect(html).toContain('aria-label="Delivery option"');
-    expect(html).toContain('data-provider-icon="lalamove"');
+    expect(html).toContain('data-provider-icon="delivery"');
   });
 });

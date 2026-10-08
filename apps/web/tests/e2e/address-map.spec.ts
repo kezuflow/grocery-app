@@ -325,7 +325,7 @@ test("checkout sends only a selected serviceable saved address to Core eligibili
   await expect(page.getByRole("radio", { name: /Outside Cebu/ })).toBeDisabled();
   await assertNoCoordinateInputs(page);
   await page.getByRole("radio", { name: /Home/ }).check();
-  await expect(page.getByText("Delivery fee confirmed with Lalamove.")).toBeVisible();
+  await expect(page.getByText("Delivery fee confirmed with our delivery partner.")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Order summary" })).toContainText("₱320.00");
   expect(optionAddressId).toBe("address-home");
 });

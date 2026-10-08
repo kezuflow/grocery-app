@@ -773,7 +773,9 @@ describe("CheckoutClient delivery inputs", () => {
     expect(quoteCalls).toBe(1);
     expect(container.querySelector('[aria-label="Scheduled delivery cutoff"]')).not.toBeNull();
     expect(container.textContent).toContain("Order cutoff");
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove.");
+    expect(container.textContent).not.toContain(
+      "Delivery fee confirmed with our delivery partner.",
+    );
     expect(container.textContent).toContain("₱30.00");
     expect(container.textContent).toContain(
       "Scheduled ordering closes Sep 19, 2026, 8:00 AM (Philippine time).",
@@ -829,7 +831,7 @@ describe("CheckoutClient delivery inputs", () => {
     choose(container, "Home");
     await flush();
     await vi.waitFor(() => expect(quoteKeys).toHaveLength(1));
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove");
+    expect(container.textContent).not.toContain("Delivery fee confirmed with our delivery partner");
 
     choose(container, "Office");
     await flush();
@@ -958,7 +960,7 @@ describe("CheckoutClient delivery inputs", () => {
     choose(container, "Home");
     await flush();
     const initialChoice = Array.from(container.querySelectorAll('[role="radio"]')).find((choice) =>
-      choice.textContent?.includes("Lalamove"),
+      choice.textContent?.includes("Instant delivery"),
     );
     expect(initialChoice?.getAttribute("aria-checked")).toBe("true");
     click(container, "GrabExpress");
@@ -999,7 +1001,7 @@ describe("CheckoutClient delivery inputs", () => {
         1,
       ),
     );
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove");
+    expect(container.textContent).not.toContain("Delivery fee confirmed with our delivery partner");
   });
   it("shows the delivery error beside a confirmed address and retries with fresh input versions", async () => {
     const base = successfulFetch();
@@ -1043,7 +1045,7 @@ describe("CheckoutClient delivery inputs", () => {
         1,
       ),
     );
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove");
+    expect(container.textContent).not.toContain("Delivery fee confirmed with our delivery partner");
   });
 
   it("clears old options while a new address loads and discards the older response", async () => {
@@ -1070,7 +1072,8 @@ describe("CheckoutClient delivery inputs", () => {
     await flush();
     pending.resolve(json({ ok: true, value: [] }));
     await flush();
-    expect(container.textContent).toContain("Lalamove");
+    expect(container.textContent).toContain("Instant delivery");
+    expect(container.textContent).not.toContain("Lalamove");
   });
 
   it("offers recovery for network failure and distinguishes a successful empty result", async () => {
@@ -1194,7 +1197,7 @@ describe("CheckoutClient delivery inputs", () => {
     await vi.waitFor(() => expect(requests).toHaveLength(2));
     expect(requests[1]).toEqual(requests[0]);
     await flush();
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove");
+    expect(container.textContent).not.toContain("Delivery fee confirmed with our delivery partner");
   });
 
   it("releases a successful obsolete quote before automatically quoting newer promo intent", async () => {
@@ -1277,6 +1280,6 @@ describe("CheckoutClient delivery inputs", () => {
         1,
       ),
     );
-    expect(container.textContent).not.toContain("Delivery fee confirmed with Lalamove");
+    expect(container.textContent).not.toContain("Delivery fee confirmed with our delivery partner");
   });
 });

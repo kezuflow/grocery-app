@@ -130,7 +130,7 @@ function serviceabilityTitle(value: ServiceabilityResult): string {
 
 function serviceabilityMessage(value: ServiceabilityResult, purpose: "save" | "serviceability") {
   if (value.serviceable)
-    return `${value.serviceArea?.name ?? "Service area"} · Fulfilled from ${value.fulfillmentLocation?.name ?? "the nearest location"}. Lalamove availability and the delivery fee are confirmed at checkout.`;
+    return `${value.serviceArea?.name ?? "Service area"} · Fulfilled from ${value.fulfillmentLocation?.name ?? "the nearest location"}. Delivery availability and the delivery fee are confirmed at checkout.`;
   if (value.reason === "OUTSIDE_SERVICE_AREA")
     return purpose === "save"
       ? "FreshMarkets does not deliver to this address yet. You may save it, but it cannot be used for checkout."
