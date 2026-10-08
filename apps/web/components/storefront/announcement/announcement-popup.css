@@ -9,9 +9,9 @@
   left: 50%;
   z-index: 81;
   display: block;
-  width: min(440px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 24px));
   max-width: none;
-  max-height: calc(100dvh - 32px);
+  max-height: calc(100dvh - 24px);
   margin: 0;
   padding: 0;
   overflow: auto;

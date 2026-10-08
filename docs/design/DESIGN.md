@@ -517,6 +517,8 @@ Owner correction, 2026-09-30: in the compact Storefront Chat popup, show convers
 
 ## Storefront welcome announcement
 
+Owner size correction, 2026-10-08: preserve the prior 380px card width, clamped to the viewport with 12px margins. Keep the centered shadcn modal and gray backdrop; changing its position does not authorize enlarging it.
+
 
 Owner correction, 2026-10-08: the welcome announcement is a centered, focused modal on every eligible storefront home visit, superseding the bottom-right non-modal popover. Use shadcn Dialog with a gray dimming backdrop, keyboard focus initially on the current heading, focus trapped inside while open and background interaction/scroll blocked. Center it horizontally and vertically on desktop and mobile, with viewport-clamped content and reachable Close/action controls. It does not appear over checkout, payment, order tracking, authentication or Admin. Close, Escape, backdrop click/tap and the final primary action dismiss the current opening; the next home visit shows it again. Ordinary dismissal returns focus to the storefront home link. Backdrop dismissal does not also activate the shop behind it. The shop remains accessible if an image fails to load.
 

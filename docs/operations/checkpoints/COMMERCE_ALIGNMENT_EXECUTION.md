@@ -1,5 +1,11 @@
 # Commerce alignment — active checkpoint
 
+## Welcome announcement size restoration — POPUP-20261008.SIZE
+
+Phase **Restore announcement dimensions without tests**; checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner requests restoring the prior size and explicitly says not to test. Started `main / 17ecf85812d4e0d28c48f915c72808cfa929220f`; preserve unfinished shared-courier code/contracts/migration/Admin/spec/checkpoint work and unrelated Web debug/Scratch files. Caller path remains the Storefront AnnouncementPopup through shadcn Dialog to its scoped CSS; no business writes change. Acceptance: 380px maximum card width, 12px viewport margins, centered modal/gray backdrop and existing content/controls retained.
+
+Scoped CSS restores `width: min(380px, calc(100vw - 24px))` and aligns the height clamp to `calc(100dvh - 24px)`. DESIGN records the owner correction. Source diff is reviewed; no automated checks, browser checks or tests are run, as requested. Earlier 440px live acceptance is historical and does not verify this size correction. Production deployment is not performed in this size-change turn. Implementation 1/1 complete; current-size browser acceptance unexecuted by owner instruction. Selective main commit/push follows, preserving all unrelated changes. Next action: publish the size correction when deployment is requested.
+
 ## Finalized Scheduled cycle defaults — CYCLE-20261008.DEFAULTS
 
 Phase **Ordering-range drag and two-day delivery defaults**; checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner: current owner request and PRODUCT, Scheduled ordering and preparation. Started `main / 275df917fbb4c8193fa239591daa1a0639797311` with unfinished shared-courier Core/contracts/migration 0113/Admin/spec/checkpoint work and unrelated untracked debug/Scratch files. Additional Storefront/announcement work appears concurrently; preserve it. Acceptance: dragging Oct 9 through Oct 16, 2026 defaults orders opening Oct 9; cutoff/procurement/preparation Oct 16 at midnight; delivery Oct 17 at midnight through Oct 18 at 11:59 PM in the market timezone. Single-day/picker starts use the same plan; all six endpoints remain editable; saved/duplicated schedules remain chosen evidence. No deployment or live cycle/provider write is authorized.
