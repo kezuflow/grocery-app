@@ -1,12 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Leaf, ShoppingBasket, Sprout } from "lucide-react";
+import { ArrowRight, ExternalLink, Leaf, ShoppingBasket, Sprout } from "lucide-react";
 
 const description =
-  "FreshmarketsPH is a Cebu-based grocery delivery startup building technology to make fresh produce shopping easier and more affordable.";
+  "FreshmarketsPH is a grocery technology startup based in Cebu, Philippines. We operate Freshmarkets, our online grocery ordering and delivery platform.";
+
+const organization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": "https://freshmarkets.ph/#organization",
+  name: "FreshmarketsPH",
+  url: "https://freshmarkets.ph",
+  description,
+  brand: { "@type": "Brand", name: "Freshmarkets" },
+  email: "reggie@freshmarkets.ph",
+  location: { "@type": "Place", name: "Cebu, Philippines" },
+  sameAs: ["https://www.facebook.com/freshmarketsph/"],
+};
 
 export const metadata: Metadata = {
-  title: "About FreshmarketsPH | FreshMarkets",
+  title: "About FreshmarketsPH | Freshmarkets",
   description,
   alternates: { canonical: "https://freshmarkets.ph/about" },
   openGraph: {
@@ -20,20 +33,22 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <article className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization).replace(/</g, "\\u003c") }}
+      />
       <header className="max-w-3xl">
         <p className="text-sm font-semibold text-[var(--fm-storefront-accent)]">
           About FreshmarketsPH · Cebu, Philippines
         </p>
         <h1 className="fm-font-display mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-          Fresh groceries.
-          <br />
-          A simpler everyday shop.
+          The team behind Freshmarkets
         </h1>
         <p className="mt-6 text-lg leading-8 text-[var(--fm-text-muted)]">{description}</p>
         <p className="mt-4 leading-7 text-[var(--fm-text-muted)]">
-          Our platform, freshmarkets.ph, connects customers with fresh vegetables, fruits, and
-          groceries through a streamlined online ordering and delivery experience. We’re starting in
-          Cebu, with a focus on the everyday essentials that keep households going.
+          Freshmarkets is our customer-facing grocery delivery platform at freshmarkets.ph. It’s
+          where customers shop for fresh vegetables, fruits, and everyday groceries. FreshmarketsPH
+          is the startup building the technology and running the grocery operations behind it.
         </p>
       </header>
 
@@ -42,12 +57,13 @@ export default function AboutPage() {
         className="mt-12 border-t border-[var(--fm-border)] pt-10"
       >
         <h2 id="mission-heading" className="text-2xl font-semibold tracking-tight">
-          Better shopping, from basket to doorstep
+          Grocery ordering and fulfillment today
         </h2>
         <p className="mt-4 max-w-3xl leading-7 text-[var(--fm-text-muted)]">
-          We believe fresh food should be easier to buy and easier to plan for. Our mission is to
-          bring convenient grocery shopping and thoughtful technology together, helping customers
-          spend less time arranging their groceries and more time enjoying them.
+          Freshmarkets is a live ordering service. Customers browse groceries, add items to their
+          cart, check out, and follow their orders online. Our team sources groceries, prepares
+          orders, and arranges delivery in supported areas of Cebu. Customers confirm their delivery
+          location to see current prices and availability before ordering.
         </p>
         <div className="mt-7 grid gap-5 sm:grid-cols-2">
           <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-card)] p-6">
@@ -69,11 +85,10 @@ export default function AboutPage() {
           </div>
           <div className="rounded-[var(--fm-radius-surface)] border border-[var(--fm-border)] bg-[var(--fm-card)] p-6">
             <Leaf className="size-6 text-[var(--fm-storefront-accent)]" aria-hidden="true" />
-            <h3 className="mt-4 text-lg font-semibold">Built around fresh food</h3>
+            <h3 className="mt-4 text-lg font-semibold">From order to delivery</h3>
             <p className="mt-3 text-sm leading-6 text-[var(--fm-text-muted)]">
-              Fresh vegetables, fruits, and practical household staples are at the heart of
-              FreshmarketsPH. We’re building around the needs of local customers and the realities
-              of grocery supply.
+              Our operations cover sourcing, order preparation, and delivery coordination. The
+              platform helps our team manage this work alongside customer orders.
             </p>
           </div>
         </div>
@@ -93,26 +108,27 @@ export default function AboutPage() {
           </p>
         </div>
         <h2 id="technology-heading" className="mt-4 text-2xl font-semibold tracking-tight">
-          Smarter planning. Less waste.
+          Tools we’re still building
         </h2>
         <p className="mt-4 max-w-3xl leading-7 text-[var(--fm-text-muted)]">
-          Beyond online ordering, we’re developing inventory forecasting and supplier pricing tools
-          to reduce food waste, improve product availability, and keep prices competitive. Our goal
-          is to help grocery operations better understand demand and make more informed purchasing
-          decisions.
+          We’re developing inventory forecasting to plan stock levels, supplier price analysis to
+          compare purchasing costs, demand prediction to understand what customers may need, and
+          procurement optimization to help decide what to buy and when. We want these tools to
+          support our grocery operations and help reduce waste.
         </p>
         <p className="mt-4 text-sm leading-6 text-[var(--fm-text-muted)]">
-          These tools are in development as we build the next stage of FreshmarketsPH.
+          These advanced capabilities are still in development. They are not available as live
+          features of Freshmarkets today.
         </p>
       </section>
 
       <section aria-labelledby="connect-heading" className="mt-12">
         <h2 id="connect-heading" className="text-2xl font-semibold tracking-tight">
-          Let’s build something fresh
+          Find us and get in touch
         </h2>
         <p className="mt-3 leading-7 text-[var(--fm-text-muted)]">
-          Have a question, supply fresh products, or want to explore a partnership? We’d love to
-          hear from you.
+          We’re based in Cebu, Philippines. Contact FreshmarketsPH for questions about the platform,
+          supplier opportunities, or potential partnerships, or visit our official Facebook page.
         </p>
         <Link
           href="/contact"
@@ -120,6 +136,24 @@ export default function AboutPage() {
         >
           Get in touch <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
+        <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:gap-6">
+          <a
+            href="mailto:reggie@freshmarkets.ph"
+            className="inline-flex min-h-11 max-w-full items-center rounded-sm font-semibold text-[var(--fm-text-muted)]! hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            <span className="break-all">reggie@freshmarkets.ph</span>
+          </a>
+          <a
+            href="https://www.facebook.com/freshmarketsph/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm font-semibold text-[var(--fm-text-muted)]! hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            FreshmarketsPH on Facebook
+            <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </div>
       </section>
     </article>
   );

@@ -23,8 +23,8 @@ export function StorefrontFooter() {
             freshmarkets
           </Link>
           <p className="mt-4 text-sm leading-6 text-[var(--fm-text-muted)]">
-            FreshmarketsPH is a Cebu-based grocery delivery startup making fresh produce shopping
-            easier and more affordable.
+            Freshmarkets is the grocery delivery platform from FreshmarketsPH, a grocery technology
+            startup based in Cebu, Philippines.
           </p>
         </div>
 
@@ -72,11 +72,20 @@ export function StorefrontFooter() {
             <span>Email us</span>
             <span className="text-xs">reggie@freshmarkets.ph</span>
           </a>
+          <a
+            href="https://www.facebook.com/freshmarketsph/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${footerLinkClassName} inline-flex min-h-11 items-center lg:min-h-0`}
+          >
+            Facebook
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
         </FooterLinkGroup>
       </div>
 
       <div className="mx-auto mt-10 flex w-full max-w-[var(--fm-container-content)] flex-col gap-2 border-t border-[var(--fm-border)] px-4 pt-5 text-xs text-[var(--fm-text-muted)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-        <p>© FreshMarkets</p>
+        <p>© FreshmarketsPH · Freshmarkets</p>
         <p>Cebu, Philippines</p>
       </div>
     </footer>
