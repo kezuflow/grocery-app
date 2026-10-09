@@ -4,8 +4,8 @@ import { validateProduceCatalog } from "./validate-produce-catalog.ts";
 import { produceCatalog } from "./produce-catalog.ts";
 
 /**
- * Real-directory integrity gate: the committed manifest must cover every
- * public produce asset exactly once before generation may run. The sorted
+ * Real-directory integrity gate: every committed seed image reference must
+ * exist before generation may run. Additional bundled images are allowed. The sorted
  * asset list is read once on the Node side of the vitest harness and injected
  * as a binding, so the check runs against the actual public directory.
  */
@@ -14,13 +14,12 @@ describe("produce catalog manifest integrity", () => {
     JSON.parse((env as unknown as { PRODUCE_ASSET_KEYS: string }).PRODUCE_ASSET_KEYS) as string[]
   ).sort();
 
-  it("covers exactly the 226 public produce assets", () => {
-    expect(assetKeys).toHaveLength(226);
+  it("resolves all 226 seeded products to existing bundled images", () => {
     const validated = validateProduceCatalog({ products: produceCatalog, assetKeys });
     expect(validated.products).toHaveLength(226);
-    expect(new Set(validated.products.map((product) => product.media.assetKey))).toEqual(
-      new Set(assetKeys),
-    );
+    const referencedAssets = validated.products.map((product) => product.media.assetKey);
+    expect(new Set(referencedAssets).size).toBe(226);
+    expect(assetKeys).toEqual(expect.arrayContaining(referencedAssets));
     expect(validated.summary.unpricedVariantCount).toBe(0);
     expect(validated.summary.unavailableSkuCount).toBe(0);
   });

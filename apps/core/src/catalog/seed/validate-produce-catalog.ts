@@ -200,12 +200,6 @@ export function validateProduceCatalog(input: ProduceCatalogInput): ValidatedPro
     }
   }
 
-  for (const assetKey of knownAssets) {
-    if (!productsByAsset.has(assetKey)) {
-      violations.push(`missing asset mapping: asset file "${assetKey}" has no manifest product`);
-    }
-  }
-
   if (violations.length > 0) throw new ProduceCatalogValidationError(violations);
 
   const sorted = [...products].sort((left, right) => {

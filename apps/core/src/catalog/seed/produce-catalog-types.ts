@@ -120,7 +120,7 @@ export type ProduceSeedProduct = {
 
 export type ProduceCatalogInput = {
   products: ReadonlyArray<ProduceSeedProduct>;
-  /** Every public asset key that must map to exactly one product. */
+  /** Available bundled seed images. Unreferenced images do not require products. */
   assetKeys: ReadonlyArray<string>;
 };
 

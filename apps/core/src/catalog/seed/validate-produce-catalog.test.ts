@@ -44,6 +44,23 @@ function chiliPack(overrides: Partial<ProduceSeedProduct> = {}): ProduceSeedProd
 }
 
 describe("validateProduceCatalog", () => {
+  it("allows additional bundled images without creating seed products", () => {
+    const validated = validateProduceCatalog({
+      products: [chiliPack()],
+      assetKeys: [...ASSET_KEYS, "apple-fuji-big.webp"],
+    });
+    expect(validated.products.map((product) => product.id)).toEqual([
+      "product-chili-pepper-fruit-siling-labuyo",
+    ]);
+    expect(validated.summary.productCount).toBe(1);
+  });
+
+  it("still rejects a seed product whose referenced image is missing", () => {
+    expect(() =>
+      validateProduceCatalog({ products: [chiliPack()], assetKeys: ["apple-fuji-big.webp"] }),
+    ).toThrowError(/missing asset file "chili-pepper-fruit-siling-labuyo.webp"/);
+  });
+
   it("accepts a complete chili pack manifest and summarizes it", () => {
     const validated = validateProduceCatalog({
       products: [chiliPack()],

@@ -8,8 +8,8 @@ import type {
 } from "./produce-catalog-types.ts";
 
 /**
- * The complete development-time produce seed manifest: one reviewable entry
- * per public asset under apps/web/public/produce. This is seed input for the
+ * The development-time produce seed manifest: each entry references an image
+ * under apps/web/public/produce. Additional images need no seed entry. This is seed input for the
  * deterministic migration generator, never a runtime catalog authority.
  *
  * Money is positive integer PHP centavos. Base quantities are exact positive
