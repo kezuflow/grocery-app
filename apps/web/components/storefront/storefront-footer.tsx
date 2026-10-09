@@ -55,19 +55,19 @@ export function StorefrontFooter() {
         <FooterLinkGroup title="Help">
           <Link
             href="/about"
-            className={`${footerLinkClassName} inline-flex min-h-11 items-center`}
+            className={`${footerLinkClassName} inline-flex min-h-11 items-center lg:min-h-0`}
           >
             About FreshmarketsPH
           </Link>
           <Link
             href="/contact"
-            className={`${footerLinkClassName} inline-flex min-h-11 items-center`}
+            className={`${footerLinkClassName} inline-flex min-h-11 items-center lg:min-h-0`}
           >
             Contact & inquiries
           </Link>
           <a
             href="mailto:reggie@freshmarkets.ph"
-            className={`${footerLinkClassName} flex min-h-11 flex-col justify-center gap-1`}
+            className={`${footerLinkClassName} flex min-h-11 flex-col justify-center gap-1 lg:min-h-0`}
           >
             <span>Email us</span>
             <span className="text-xs">reggie@freshmarkets.ph</span>
