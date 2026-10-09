@@ -2,6 +2,10 @@
 
 Current rules by subject. Product approval, source implementation and application/provider acceptance remain distinct. The protected [owner discussion](SIMPLIFICATION_DISCUSSION.md) and source map preserve decisions; the [checkpoint](../operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md) owns unfinished work. Later explicit owner decisions win over historical baselines.
 
+## Public company profile — owner request 2026-10-10
+
+The Storefront footer links to public `/about` and `/contact` pages. The owner describes FreshmarketsPH as a Cebu-based grocery delivery startup building technology to make fresh produce shopping easier and more affordable. freshmarkets.ph connects customers with fresh vegetables, fruits and groceries through online ordering and delivery. Inventory forecasting and supplier pricing tools are described as in development, with the goals of reducing food waste, improving availability and keeping prices competitive; this is company direction, not acceptance of implemented tools. Contacts and general inquiries use the owner-provided `reggie@freshmarkets.ph`. The pages may invite supplier and partnership inquiries, but do not invent an office address, telephone, staffed hours, response guarantee, traction, funding or provider endorsement. Existing Order messaging and serviceability remain authoritative.
+
 ## Audited Order status correction — owner supplement 2026-10-05
 
 The owner explicitly authorizes unrestricted **Order status only** changes with an audit reason.

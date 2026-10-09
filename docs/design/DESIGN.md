@@ -1,5 +1,9 @@
 # FreshMarkets Design
 
+## Public company pages — owner request 2026-10-10
+
+About and Contact use the existing StorefrontShell, green action colors, typography and surface/radius tokens. Present a readable company introduction, mission, grocery offering and clearly labeled tools in development. Contact exposes a direct owner-provided inquiry email, Cebu/Philippines location, delivery-area link and existing Order help path. Both pages remain public, responsive and keyboard accessible, with page-specific titles/descriptions and canonical/Open Graph URLs. Footer adds About and Contact links, a concise startup introduction and the inquiry email; retain existing shopping/account links and mobile navigation clearance. This extends the 2026-09-12 footer destinations without changing Admin/auth presentation or shared tokens.
+
 ## Supplier purchase downloads - owner approval 2026-10-09
 
 Procurement's stock shadcn Export supplier list menu offers PDF document and Excel workbook after a week loads. Disable during generation or an unresolved purchase outcome; show accessible progress and explicit errors. Replacing scope/week cancels the pending download. Files have a FreshMarkets heading, week/scope/generated time and exactly Product/Quantity columns. Size appears beside Product; quantities use Core's typed piece/weight/volume decision. PDF wraps labels, repeats headings and paginates A4. Excel retains numeric quantities with displayed units, wrapped labels, frozen/repeated headers and two editable columns. No selling-option, price or customer details enter the file. Summary shows size/pieces for historical sized offers; persisted stock-accounting facts are unchanged.

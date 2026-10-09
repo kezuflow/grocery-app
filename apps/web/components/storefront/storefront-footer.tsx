@@ -23,7 +23,8 @@ export function StorefrontFooter() {
             freshmarkets
           </Link>
           <p className="mt-4 text-sm leading-6 text-[var(--fm-text-muted)]">
-            Fresh groceries and everyday essentials, delivered in supported Cebu areas.
+            FreshmarketsPH is a Cebu-based grocery delivery startup making fresh produce shopping
+            easier and more affordable.
           </p>
         </div>
 
@@ -52,12 +53,24 @@ export function StorefrontFooter() {
         </FooterLinkGroup>
 
         <FooterLinkGroup title="Help">
-          <a
-            href="mailto:support@freshmarkets.ph"
-            className={`${footerLinkClassName} flex flex-col gap-1`}
+          <Link
+            href="/about"
+            className={`${footerLinkClassName} inline-flex min-h-11 items-center`}
           >
-            <span>Contact FreshMarkets</span>
-            <span className="text-xs">support@freshmarkets.ph</span>
+            About FreshmarketsPH
+          </Link>
+          <Link
+            href="/contact"
+            className={`${footerLinkClassName} inline-flex min-h-11 items-center`}
+          >
+            Contact & inquiries
+          </Link>
+          <a
+            href="mailto:reggie@freshmarkets.ph"
+            className={`${footerLinkClassName} flex min-h-11 flex-col justify-center gap-1`}
+          >
+            <span>Email us</span>
+            <span className="text-xs">reggie@freshmarkets.ph</span>
           </a>
         </FooterLinkGroup>
       </div>
