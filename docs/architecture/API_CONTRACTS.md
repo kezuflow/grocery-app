@@ -47,6 +47,11 @@ clears on invalidation, unavailable read, and terminal state. Core validates the
 before exposing a call action and never persists rider contact or includes it in telemetry.
 The scoped Admin Delivery queue also returns the saved delivery-stop recipient contact for
 operational calls, separate from the Customer account phone.
+Admin dashboard tracking opens the queue's Core-provided provider `trackingUrl` directly in a
+new tab; it no longer opens the custom map or issues Admin tracking/timeline reads from a dialog.
+The queue retains operational status/evidence/actions and saved-recipient calling. Customer
+tracking DTOs, private shared-route projections and Core provider event/recovery processing
+remain unchanged.
 The Web tracking GET routes carry the existing authentication context and request ID to Core.
 For an authorized active Lalamove attempt with valid rider and destination coordinates, Core may
 return `roadRoute` as Google Routes high-quality road geometry. It is `null` when unconfigured, limited,

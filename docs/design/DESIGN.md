@@ -76,16 +76,20 @@ The prior Expo app used a five-tab shopping shell: Home, Search, Cart, Orders an
 
 ## Lalamove delivery tracking — owner approval 2026-09-29
 
-Admin Delivery and the Customer Order detail offer a Track Delivery button for an active Lalamove
+Owner update, 2026-10-10: Admin Delivery presents one stock shadcn outline **Track Delivery**
+link to the Core-provided Lalamove share page, with a new-tab announcement and safe external-link
+attributes. The duplicate provider link and custom Admin tracking dialog/map are removed.
+Keep status, proof/cost evidence and operational actions in the queue, Order details/timeline in
+the existing Order page, and a saved **Call recipient** action in the queue when a valid number
+is available. Provider rider tracking/contact opens externally. Customer maps and shared-route
+privacy stay unchanged; Core continues status/event/recovery processing.
+
+Customer Order detail offers a Track Delivery button for an active Lalamove
 attempt. The map and its tracking read mount only after that button opens the tracking view;
 ordinary Order and Delivery page views do not load it. On desktop, the opened view places the map
 on the left and the Order timeline/details on the right. On narrow screens, the map comes first and
-the details follow beneath it. Admin uses its authorized Order timeline when available; a Delivery
-staff member without Orders read access sees the Delivery status without an invented timeline. The
-Admin timeline refreshes while its view is open and marks the last confirmed events when a read fails.
-The opened view places the four-step horizontal Order progress strip in the details column. Admin
-uses the same Core-confirmed milestone states and achieved times as Storefront, with no strip for a
-role that cannot read Order detail; its event timeline remains beneath the strip.
+the details follow beneath it. The opened Customer view places the four-step horizontal Order
+progress strip in the details column using Core-confirmed milestone states and achieved times.
 The Customer button appears only while the Order is out for delivery.
 Show the destination pin and a motorcycle marker for the provider's last reported rider position,
 with explicit waiting, unavailable and finished text. Use the existing red address-pin silhouette
@@ -102,8 +106,7 @@ countdown or imply that a stationary marker is live movement.
 The map fits the two pins once, then lets the viewer pan or zoom without snapping back on refresh.
 For active Lalamove tracking, place a compact rider contact area below the map. Show a Call rider
 action only for a currently verified dialable phone; otherwise explain that rider contact is not
-available and keep FreshMarkets Order messaging visible to the Customer. Admin Delivery uses the
-same verified rider call evidence and the saved recipient contact within its existing map card.
+available and keep FreshMarkets Order messaging visible to the Customer.
 Do not label FreshMarkets messaging as Lalamove rider chat. This adapts the contact beside
 progress in Mobbin's
 [DoorDash rider tracking](https://mobbin.com/screens/b2543cf1-7f95-4718-92d6-74af14de04d5),

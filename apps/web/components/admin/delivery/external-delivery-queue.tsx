@@ -15,7 +15,6 @@ import { SharedDeliveryBooking } from "./shared-delivery-booking";
 import { Input } from "@/components/admin/shadcn/input";
 import { Skeleton } from "@/components/admin/shadcn/skeleton";
 import { ProviderDeliveryEvidence } from "./provider-delivery-evidence";
-import { DeliveryTrackingDialog } from "./delivery-tracking-dialog";
 import {
   Table,
   TableBody,
@@ -110,7 +109,6 @@ export function ExternalDeliveryQueue() {
   const selectedCount = Object.keys(selectedJobs).length;
   const [sharedOpen, setSharedOpen] = useState(false);
   const [providerReferences, setProviderReferences] = useState<Record<string, string>>({});
-  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const loading = loadingKey === readKey;
   const [readError, setReadError] = useState<{ key: string; message: string } | null>(null);
@@ -297,8 +295,6 @@ export function ExternalDeliveryQueue() {
     }
   }
 
-  const trackingItem = summary?.items.find((item) => item.orderId === trackingOrderId);
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -405,6 +401,13 @@ export function ExternalDeliveryQueue() {
                         <span className="block break-all font-mono text-xs text-muted-foreground">
                           {item.orderId}
                         </span>
+                        {item.recipient?.phone && /^\+?\d{7,15}$/.test(item.recipient.phone) ? (
+                          <div className="mt-2">
+                            <Button asChild size="sm" variant="outline">
+                              <a href={`tel:${item.recipient.phone}`}>Call recipient</a>
+                            </Button>
+                          </div>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-sm">
                         <span className="mb-1 block text-muted-foreground lg:hidden">Mode</span>
@@ -426,7 +429,7 @@ export function ExternalDeliveryQueue() {
                           Delivery progress
                         </span>
                         {item.externalDispatch ? (
-                          <div className="space-y-1 text-xs">
+                          <div className="flex flex-col items-start gap-1 text-xs">
                             <p>
                               {item.externalDispatch.provider === "lalamove"
                                 ? "Lalamove"
@@ -463,26 +466,15 @@ export function ExternalDeliveryQueue() {
                               </p>
                             ) : null}
                             {item.externalDispatch.trackingUrl ? (
-                              <a
-                                className="underline"
-                                href={item.externalDispatch.trackingUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open provider tracking
-                              </a>
-                            ) : null}
-                            {item.externalDispatch.provider === "lalamove" &&
-                            item.externalDispatch.providerDeliveryId &&
-                            item.externalDispatch.status === "ACTIVE" ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setTrackingOrderId(item.orderId)}
-                                aria-haspopup="dialog"
-                              >
-                                Track Delivery
+                              <Button asChild size="sm" variant="outline">
+                                <a
+                                  href={item.externalDispatch.trackingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Track Delivery
+                                  <span className="sr-only"> (opens in a new tab)</span>
+                                </a>
                               </Button>
                             ) : null}
                           </div>
@@ -631,21 +623,6 @@ export function ExternalDeliveryQueue() {
             void load();
           }}
           onInteractionState={(draft, command) => setInteraction("shared-booking", draft, command)}
-        />
-      ) : null}
-      {locationId &&
-      trackingItem?.externalDispatch?.provider === "lalamove" &&
-      trackingItem.externalDispatch.status === "ACTIVE" ? (
-        <DeliveryTrackingDialog
-          key={`${locationId}:${trackingItem.orderId}`}
-          item={trackingItem}
-          locationId={locationId}
-          statusLabel={externalStatusLabel(trackingItem.externalDispatch)}
-          canReadOrder={
-            admin.state.phase === "ready" &&
-            admin.state.context.capabilities.includes("orders.read")
-          }
-          onClose={() => setTrackingOrderId(null)}
         />
       ) : null}
       <AdminConfirmationDialog

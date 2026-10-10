@@ -1,5 +1,64 @@
 # Commerce alignment — active checkpoint
 
+## Admin provider tracking simplification — ADMIN-TRACKING-20261010.IMPLEMENT
+
+Phase **Replace the Admin tracking map with one provider share-page link**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner approves
+the proposed Admin-only simplification. Started
+`main / 1fae4c7a99e085b1c881698e4f7f4b2db773b7de`, tracked runtime clean;
+preserve unrelated untracked Web debug/Scratch files and ignored local/provider state.
+Acceptance: one Core-provided Track Delivery link for individual/shared bookings, new-tab
+announcement/security and keyboard operation, no custom Admin map/dialog/tracking reads,
+valid saved-recipient calling, unchanged queue status/proofs/costs/actions and Order detail,
+unchanged customer maps/private shared-route tracking and Core provider processing; relevant
+browser checks and selective main commit/push. Owner follow-up explicitly dispenses with
+remaining full verification for this small UI change; record partial aggregate evidence only.
+No deployment, real provider
+transaction, customer message, shared-state reset or delegation is authorized.
+
+Caller path is Admin Delivery queue -> Core-authorized delivery DTO -> existing provider
+`trackingUrl`; the new stock Radix/new-york Button `asChild` renders an external anchor.
+It replaces both the provider link and custom map button/state/dialog. Removed the exclusively
+consumed Admin dialog and rider-contact composition; saved recipient calling moves to the
+queue's Order cell with the existing phone-validation gate. Customer map components and
+Core/contracts/HTTP tracking APIs remain untouched. PRODUCT/DESIGN record the approved
+Admin presentation supersession; API_CONTRACTS records unchanged underlying boundaries.
+Project-local shadcn skill discovery/info/docs/view are executed from `apps/web`; installed
+Admin Button matches upstream stock defaults with only Admin theme scope. No shared UI/CSS
+or dependency change is needed. CLI search initially selects the unrelated configured auth
+registry and reports a Windows native cleanup assertion; successful `@shadcn/button` view
+and official Radix Button documentation supply the actual component evidence.
+
+Focused `pnpm --config.verify-deps-before-run=false exec oxfmt --write` for the touched
+component/test, Web typecheck, focused oxlint, local Web build and `git diff --check` pass.
+Browser command (local test environment, authenticated fixture, existing isolated
+`e2e-full-release-20261008` state, no reset):
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/web exec playwright test tests/e2e/admin-delivery-queue.spec.ts tests/e2e/customer-order-timeline-layout.spec.ts --workers=1 --retries=0`.
+Initial run passes 15/22, including all four new tracking journeys and all Customer journeys;
+seven existing queue tests still use retired confirmation roles/Manual assignment labels.
+Update those selectors to the current alertdialog/combined assignment-handover controls and
+the success fixture to existing EN_ROUTE behavior; no Manual runtime changes or weakened
+assertions. Repeat passes **22/22**, including the real local Core scoped queue read.
+The four synthetic individual/shared provider-link journeys cover 1440/390px, secure external
+attributes, keyboard opening, one link/no duplicate action, saved recipient calling, absent
+custom map/API requests and no horizontal overflow. Missing URL means no tracking link.
+Screenshots are inspected at desktop/mobile widths; receipts/logs are ignored under
+`.wrangler/admin-provider-tracking-20261010-*`. Customer's three journeys remain unchanged.
+These UI fixtures and the local mock provider do not prove live booking/callback acceptance.
+The task-owned local preview is stopped and port 3100 released before the full aggregate.
+`pnpm --config.verify-deps-before-run=false check` starts on the same runtime working tree:
+conventions/harness/migrations/architecture/readiness/lint/types, shared package tests and
+Web **813/813** pass. While Core Worker/D1 tests are running, the owner explicitly requests
+no further verification because this is a small UI change. Stop the task-owned aggregate;
+Core's final test result and aggregate builds are **not completed or claimed as passes**.
+This follow-up supersedes the remaining aggregate requirement for this implementation only.
+No further test runs are made. The previously completed local Web build and browser results
+retain their original scopes; actual provider acceptance remains outside this UI task.
+**ADMIN-TRACKING-20261010.IMPLEMENT complete: 1/1 Admin UI implementation and 22/22
+browser journeys; remaining counting level: one production Web deployment, not authorized
+by this implementation request.** Next action: selectively commit/push the reviewed eight
+paths on main; then obtain explicit authorization if production Web deployment is desired.
+
 ## Courier payload production release — COURIER-20261010.DEPLOY
 
 Phase **Publish the verified individual Lalamove pickup instruction correction**; checkpoint

@@ -221,12 +221,12 @@ test("Unknown manual request retains its key and body across navigation and queu
     });
   });
   await page.goto("/admin/delivery");
-  await page.getByRole("button", { name: "Assign manual delivery" }).click();
+  await page.getByRole("button", { name: "Assign and hand over order" }).click();
   await page.getByRole("textbox", { name: "Person delivering" }).fill("Test rider");
   await page.getByRole("textbox", { name: "Phone including country code" }).fill("+639171234567");
-  await page.getByRole("button", { name: "Review assign manual delivery" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Test rider");
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await page.getByRole("button", { name: "Review assign and hand over order" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Test rider");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
   await expect(
     page
@@ -267,170 +267,104 @@ test("Read-only delivery staff cannot use provider recovery controls", async ({ 
   await expect(page.getByText("GrabExpress · Finding rider")).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh provider" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Track Delivery/ })).toHaveCount(0);
 });
 
-test("active Lalamove delivery opens a scoped map in Admin", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await installDeliveryScopes(page, false, true);
-  await page.route("**/api/admin/delivery?**", (route) => {
-    const item = {
-      ...deliveryItem(firstLocation, "tracking-order", "INSTANT"),
-      externalDispatch: {
-        dispatchId: "dispatch-tracking",
-        provider: "lalamove",
-        status: "ACTIVE",
-        providerStatus: "PENDING_PICKUP",
-        trackingUrl: null,
-        providerDeliveryId: "provider-tracking",
-        version: 1,
-      },
-    };
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        value: { ...deliveryPage(firstLocation, "tracking-order").value, items: [item] },
-      }),
-    });
-  });
-  let trackingReads = 0;
-  await page.route("**/api/admin/delivery-tracking?**", (route) => {
-    trackingReads += 1;
-    const params = new URL(route.request().url()).searchParams;
-    expect(params.get("locationId")).toBe(firstLocation);
-    expect(params.get("orderId")).toBe("tracking-order");
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        value: {
-          availability: "LIVE",
-          attemptId: "dispatch-tracking",
-          destination: { latitude: 10.3173, longitude: 123.9058 },
-          rider: {
-            coordinate: { latitude: 10.31, longitude: 123.9 },
-            updatedAt: new Date().toISOString(),
-          },
-          roadRoute: null,
-          riderContact: { name: "Rider One", phone: "+639181234567" },
-          nextRefreshMilliseconds: 30_000,
-        },
-      }),
-    });
-  });
-  let timelineReads = 0;
-  let timelineLabel = "Rider assigned";
-  let timelineUnavailable = false;
-  await page.route("**/api/admin/orders/tracking-order", (route) => {
-    timelineReads += 1;
-    return route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(
-        timelineUnavailable
-          ? { ok: false, error: { code: "UNAVAILABLE", message: "Order unavailable" } }
-          : {
-              ok: true,
-              value: {
-                orderId: "tracking-order",
-                orderNumber: "FM-TRACKING-1",
-                progress: {
-                  steps: [
-                    {
-                      key: "PAYMENT",
-                      state: "COMPLETE",
-                      achievedAt: "2026-10-01T05:00:00.000Z",
-                    },
-                    {
-                      key: "PACKED",
-                      state: "COMPLETE",
-                      achievedAt: "2026-10-01T06:00:00.000Z",
-                    },
-                    { key: "OUT_FOR_DELIVERY", state: "CURRENT", achievedAt: null },
-                    { key: "DELIVERED", state: "UPCOMING", achievedAt: null },
-                  ],
-                  detail: "Your order is packed. A rider has been assigned.",
-                },
-                timeline: [
-                  {
-                    eventId: "event-tracking",
-                    kind: "DELIVERY",
-                    label: timelineLabel,
-                    status: "ASSIGNED",
-                    occurredAt: "2026-10-01T07:00:00.000Z",
-                    referenceId: null,
+for (const width of [1440, 390]) {
+  for (const shared of [false, true]) {
+    test(`Admin opens ${shared ? "shared" : "individual"} provider tracking externally at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await installDeliveryScopes(page, false);
+      const trackingUrl = `https://share.lalamove.com/?fixture-${shared ? "shared" : "individual"}`;
+      await page.route("**/api/admin/delivery?**", (route) => {
+        const item = {
+          ...deliveryItem(firstLocation, "tracking-order", shared ? "SCHEDULED" : "INSTANT"),
+          externalDispatch: {
+            dispatchId: "dispatch-tracking",
+            provider: "lalamove",
+            status: "ACTIVE",
+            providerStatus: "PENDING_PICKUP",
+            trackingUrl,
+            providerDeliveryId: "provider-tracking",
+            version: 1,
+            ...(shared
+              ? {
+                  sharedBooking: {
+                    bookingId: "shared-tracking",
+                    memberCount: 5,
+                    quoteAmountMinor: 7100,
+                    actualCostMinor: null,
                   },
-                ],
-              },
-            },
-      ),
+                }
+              : {}),
+          },
+        };
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: true,
+            value: { ...deliveryPage(firstLocation, "tracking-order").value, items: [item] },
+          }),
+        });
+      });
+      await page.context().route("https://share.lalamove.com/**", (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: "<title>Provider fixture</title><h1>Synthetic provider tracking</h1>",
+        }),
+      );
+      const internalReads: string[] = [];
+      page.on("request", (request) => {
+        if (
+          /\/api\/admin\/(delivery-tracking|orders\/tracking-order)/.test(request.url()) ||
+          /maps\.googleapis\.com/.test(request.url())
+        )
+          internalReads.push(request.url());
+      });
+      await page.goto("/admin/delivery");
+      const tracking = page.getByRole("link", {
+        name: "Track Delivery (opens in a new tab)",
+        exact: true,
+      });
+      await expect(tracking).toHaveCount(1);
+      await expect(tracking).toHaveAttribute("href", trackingUrl);
+      await expect(tracking).toHaveAttribute("target", "_blank");
+      await expect(tracking).toHaveAttribute("rel", "noopener noreferrer");
+      await expect(
+        page.getByRole("link", { name: "Open provider tracking", exact: true }),
+      ).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Track Delivery", exact: true })).toHaveCount(
+        0,
+      );
+      await expect(page.getByRole("link", { name: "Call recipient", exact: true })).toHaveAttribute(
+        "href",
+        "tel:+639171234567",
+      );
+      if (shared) await expect(page.getByText(/Shared rider · 5 Orders/)).toBeVisible();
+      await tracking.focus();
+      await expect(tracking).toBeFocused();
+      const popupPromise = page.waitForEvent("popup");
+      await page.keyboard.press("Enter");
+      const popup = await popupPromise;
+      await expect(
+        popup.getByRole("heading", { name: "Synthetic provider tracking" }),
+      ).toBeVisible();
+      await expect(page).toHaveURL(/\/admin\/delivery$/);
+      await expect(page.getByRole("dialog", { name: "Track Delivery" })).toHaveCount(0);
+      expect(internalReads).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: `../../.wrangler/admin-provider-tracking-${shared ? "shared" : "individual"}-${width}.png`,
+        fullPage: true,
+      });
+      await popup.close();
     });
-  });
-  await page.goto("/admin/delivery");
-  expect(trackingReads).toBe(0);
-  expect(timelineReads).toBe(0);
-  await page.getByRole("button", { name: "Track Delivery" }).click();
-  const dialog = page.getByRole("dialog", { name: "Track Delivery" });
-  await expect(dialog).toBeVisible();
-  await expect(
-    dialog
-      .getByRole("region", { name: "Delivery tracking map" })
-      .or(dialog.getByText("Map is unavailable. Delivery status is shown above.")),
-  ).toBeVisible();
-  await page.evaluate(() =>
-    (window as Window & { gm_authFailure?: () => void }).gm_authFailure?.(),
-  );
-  await expect(
-    dialog.getByText("Map is unavailable. Delivery status is shown above."),
-  ).toBeVisible();
-  await expect(dialog).not.toContainText("Green line shows a suggested road route");
-  await expect(
-    dialog.getByRole("status").filter({ hasText: "Rider's last reported" }),
-  ).toBeVisible();
-  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
-    "Rider assigned",
-  );
-  const progress = dialog.getByRole("list", { name: "Order progress" });
-  await expect(progress).toBeVisible();
-  await expect(progress.locator("[data-progress-state]")).toHaveCount(4);
-  await expect(progress.locator('[aria-current="step"]')).toContainText("Out for delivery");
-  await expect(progress.locator("time")).toHaveCount(2);
-  await expect(dialog).toContainText("Current delivery: Rider assigned");
-  await expect(dialog.getByRole("link", { name: "Call rider" })).toHaveAttribute(
-    "href",
-    "tel:+639181234567",
-  );
-  await expect(dialog.getByRole("link", { name: "Call recipient" })).toHaveAttribute(
-    "href",
-    "tel:+639171234567",
-  );
-  const mapPane = await dialog
-    .getByRole("region", { name: "Delivery map and contacts" })
-    .boundingBox();
-  const detailsPane = await dialog
-    .getByRole("complementary", { name: "Order details and timeline" })
-    .boundingBox();
-  expect(mapPane).not.toBeNull();
-  expect(detailsPane).not.toBeNull();
-  expect(detailsPane!.x).toBeGreaterThan(mapPane!.x + mapPane!.width - 2);
-  expect(trackingReads).toBeGreaterThan(0);
-  const initialTimelineReads = timelineReads;
-  timelineLabel = "Pickup confirmed";
-  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
-    "Pickup confirmed",
-  );
-  expect(timelineReads).toBeGreaterThan(initialTimelineReads);
-  timelineUnavailable = true;
-  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(dialog.getByText("Timeline updates delayed")).toBeVisible();
-  await expect(dialog.getByRole("list", { name: "Order timeline" })).toContainText(
-    "Pickup confirmed",
-  );
-  await dialog.getByRole("button", { name: "Close" }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Track Delivery" })).toBeVisible();
-});
-
+  }
+}
 test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignment, and shows saved evidence at 1440px", async ({
   page,
 }) => {
@@ -441,11 +375,11 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   await page.route("**/api/admin/delivery?**", (route) => {
     const item = {
       ...deliveryItem(firstLocation, "scheduled-choice", "SCHEDULED"),
-      status: assigned ? "ASSIGNED" : "UNASSIGNED",
+      status: assigned ? "EN_ROUTE" : "UNASSIGNED",
       courierPickup: assigned
         ? { allowedKinds: [], unavailableReason: "Delivery is assigned" }
         : { allowedKinds: ["IMMEDIATE", "SCHEDULED"], unavailableReason: null },
-      manualActions: assigned ? ["HAND_OVER", "FAIL"] : ["ASSIGN"],
+      manualActions: assigned ? ["COMPLETE", "FAIL"] : ["ASSIGN"],
       manualDelivery: assigned
         ? {
             dispatchId: "manual-saved",
@@ -454,7 +388,7 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
             selectionReason: "STAFF_SELECTED_MANUAL",
             note: "Local team",
             status: "ACTIVE",
-            handedOverAt: null,
+            handedOverAt: Date.parse("2026-10-10T03:00:00.000Z"),
             returnInspectedAt: null,
             actualCostMinor: null,
             currency: "PHP",
@@ -494,11 +428,11 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   await expect(row.getByText("Request a driver now", { exact: true })).toBeVisible();
   await expect(row.getByText("Schedule pickup")).toBeVisible();
   await row.getByRole("button", { name: "Review Lalamove booking" }).click();
-  await expect(page.getByRole("dialog")).toContainText("fresh, short-lived courier quote");
-  await expect(page.getByRole("dialog")).toContainText(
+  await expect(page.getByRole("alertdialog")).toContainText("fresh, short-lived courier quote");
+  await expect(page.getByRole("alertdialog")).toContainText(
     "customer’s delivery charge does not change",
   );
-  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
   await row.getByRole("button", { name: "Assign manual rider" }).click();
   await expect(row.getByRole("textbox", { name: "Person delivering" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Request Lalamove" })).toBeEnabled();
@@ -507,10 +441,10 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   await row.getByRole("textbox", { name: "Person delivering" }).fill("Dispatch helper");
   await row.getByRole("textbox", { name: "Phone including country code" }).fill("+639171110000");
   await row.getByRole("textbox", { name: "Operational note (optional)" }).fill("Local team");
-  await row.getByRole("button", { name: "Review assign manual delivery" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Dispatch helper");
+  await row.getByRole("button", { name: "Review assign and hand over order" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Dispatch helper");
   expect(requests).toHaveLength(0);
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm" }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(JSON.parse(requests[0]!)).toMatchObject({
     action: "ASSIGN",
@@ -519,7 +453,9 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   });
   await expect(row.getByText("Selection reason: Staff chose manual delivery")).toBeVisible();
   await expect(row.getByText("Result: active")).toBeVisible();
-  await expect(row.getByRole("button", { name: "Hand over packed order" })).toBeVisible();
+  await expect(row).toContainText("Out for delivery");
+  await expect(row.getByRole("button", { name: "Hand over packed order" })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Record delivered" })).toBeVisible();
   await row.getByRole("button", { name: "Record delivery failure" }).click();
   await row.getByRole("textbox", { name: "What went wrong" }).fill("Local test failure");
   await row.getByRole("textbox", { name: "Actual delivery cost (PHP)" }).fill("1.234");
@@ -527,7 +463,7 @@ test("Scheduled dispatch chooses a Core-permitted method, reviews manual assignm
   await expect(
     row.getByText("Enter a non-negative cost with at most two decimal places"),
   ).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   expect(requests).toHaveLength(1);
 });
 
@@ -639,14 +575,14 @@ test("An older queue read cannot unmount an unknown manual request", async ({ pa
   });
   await page.route("**/api/admin/manual-deliveries", (route) => route.abort("failed"));
   await page.goto("/admin/delivery");
-  await expect(page.getByRole("button", { name: "Assign manual delivery" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Assign and hand over order" })).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await olderReadStarted;
-  await page.getByRole("button", { name: "Assign manual delivery" }).click();
+  await page.getByRole("button", { name: "Assign and hand over order" }).click();
   await page.getByRole("textbox", { name: "Person delivering" }).fill("Test rider");
   await page.getByRole("textbox", { name: "Phone including country code" }).fill("+639171234567");
-  await page.getByRole("button", { name: "Review assign manual delivery" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await page.getByRole("button", { name: "Review assign and hand over order" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
   releaseOlderRead();
   await expect(page.getByRole("button", { name: "Retry saved request" })).toBeVisible();
@@ -756,7 +692,7 @@ test("Delivery pagination asks before discarding a manual draft and restores foc
     });
   });
   await page.goto("/admin/delivery");
-  await page.getByRole("button", { name: "Assign manual delivery" }).click();
+  await page.getByRole("button", { name: "Assign and hand over order" }).click();
   await page.getByRole("textbox", { name: "Person delivering" }).fill("Draft rider");
   const next = page
     .getByRole("navigation", { name: "Results pagination" })
@@ -938,9 +874,11 @@ test("An uncertain courier booking keeps one request identity and never reports 
   const row = page.getByRole("row", { name: /booking-unknown/ });
   await row.getByRole("button", { name: "Request Lalamove" }).click();
   await row.getByRole("button", { name: "Review Lalamove booking" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm and book" }).click();
   await expect.poll(() => requests.length).toBe(1);
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Booking…" })).toBeDisabled();
+  await expect(
+    page.getByRole("alertdialog").getByRole("button", { name: "Booking…" }),
+  ).toBeDisabled();
   expect(requests).toHaveLength(1);
   releaseFirst();
   await expect(row.getByText(/Booking was not confirmed\. Retry the saved request/)).toBeVisible();
@@ -1009,7 +947,7 @@ test("A definite pre-provider rejection lets staff correct pickup and use a new 
   const pickup = row.getByLabel("Pickup time");
   await pickup.fill("2026-01-01T10:00");
   await row.getByRole("button", { name: "Review Lalamove booking" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm and book" }).click();
   await expect(row.getByText(/Pickup must be in the future/)).toBeVisible();
   await expect(pickup).toBeEnabled();
   await expect(row.getByRole("button", { name: "Retry saved booking request" })).toHaveCount(0);
@@ -1020,7 +958,7 @@ test("A definite pre-provider rejection lets staff correct pickup and use a new 
   ).toBeEnabled();
   await pickup.fill("2027-01-01T10:00");
   await row.getByRole("button", { name: "Review Lalamove booking" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm and book" }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]?.key).not.toBe(requests[0]?.key);
   expect(requests[1]?.body).not.toBe(requests[0]?.body);
@@ -1071,7 +1009,7 @@ test("A successful reply with unresolved provider status still locks the saved b
   const row = page.getByRole("row", { name: /booking-unresolved/ });
   await row.getByRole("button", { name: "Request Lalamove" }).click();
   await row.getByRole("button", { name: "Review Lalamove booking" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm and book" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm and book" }).click();
   await expect(row.getByText(/Booking outcome is unresolved/)).toBeVisible();
   await expect(row.getByRole("button", { name: "Assign manual rider" })).toBeDisabled();
   await expect(

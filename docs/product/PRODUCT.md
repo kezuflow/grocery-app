@@ -292,18 +292,24 @@ evidence remains distinct from an explicit provider report of failed delivery, w
 continues to follow the existing failed-delivery policy. This supplement approves the
 rule; implementation and acceptance are tracked separately in the active checkpoint.
 
-Admin
-Delivery and Customer Order detail open the active Lalamove map through Track Delivery rather than
+Owner supplement, 2026-10-10: Admin Delivery uses one **Track Delivery** link to the
+Core-provided Lalamove share page, opening a new tab. Remove the duplicate provider-tracking
+link and custom Admin map/dialog. The queue retains saved-recipient calling and operational
+status/proofs/costs/actions; rider tracking/contact is available through the provider page.
+Core webhooks, refresh/reconciliation and per-Order delivery outcomes remain authoritative.
+Customer tracking stays private and unchanged, including for shared routes; shared provider
+links are never exposed to Customers. This supersedes the earlier custom Admin map presentation.
+
+Customer Order detail opens the active Lalamove map through Track Delivery rather than
 loading it during the ordinary page view. The opened desktop view places map left and Order
-timeline/details right; narrow screens stack them. Admin may show the assigned rider before pickup
-when the provider makes a position available. The Customer action appears only while the Order is
+timeline/details right; narrow screens stack them. The Customer action appears only while the Order is
 Out for delivery. The tracking view shows verified rider and destination positions without a
 report timestamp or arrival estimate. When Google Routes supplies road geometry, draw a green
-suggested route from the rider's last reported position to the destination in both opened maps.
+suggested route from the rider's last reported position to the destination in the opened Customer map.
 It is neither the path already traveled nor a promise of the rider's actual road choice.
 The opened view also shows the four-stage Order progress strip (Payment successful, Packed, Out
-for delivery, Delivered) from Core-confirmed states and achievement times. Admin displays it only
-with authorized Order detail access and retains the separate event timeline.
+for delivery, Delivered) from Core-confirmed states and achievement times. Admin Order detail
+retains its authorized progress and separate event timeline.
 Lalamove's documented Order and Driver Details responses do not provide a delivery ETA;
 do not label the Order promise or route distance as one. Manual deliveries have no map. Provider
 location is temporary tracking evidence, never an Order or delivery-status authority. Keep the
@@ -311,11 +317,12 @@ last reported rider coordinate through a temporary read failure only for the sam
 a replacement attempt must not inherit the former rider's position.
 
 during an active Lalamove delivery, the owning
-Customer and scoped Delivery staff may call the currently assigned rider only when Lalamove's
+Customer may call the currently assigned rider only when Lalamove's
 driver-details read returns a dialable phone. The Customer uses existing Order messaging for
 FreshMarkets help; Lalamove's in-app rider chat is not represented as a FreshMarkets conversation.
 The booking continues to provide the staffed pickup contact and saved recipient contact to
-Lalamove. Scoped Delivery staff may call the saved recipient from the immutable delivery stop.
+Lalamove. Admin rider contact uses the provider share page; scoped Delivery staff may call the
+saved recipient from the immutable delivery stop directly from the Delivery queue.
 Missing, invalidated, unavailable, or finished rider details never show a stale rider call
 action. No estimated arrival or new driver-notification API is implied by this presentation.
 
