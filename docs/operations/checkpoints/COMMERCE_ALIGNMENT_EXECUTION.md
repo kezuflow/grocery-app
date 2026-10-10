@@ -1,5 +1,51 @@
 # Commerce alignment — active checkpoint
 
+## Courier payload production release — COURIER-20261010.DEPLOY
+
+Phase **Publish the verified individual Lalamove pickup instruction correction**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner explicitly
+requests deployment after reviewing `COURIER-20261010.PAYLOAD`. Started
+`main / 20a8062169bbd08a8d5c89d83a0bfa296b7d5517`, verified runtime source `ae3d7211`;
+tracked runtime clean, with only unrelated untracked Web debug/Scratch files preserved.
+Acceptance: deploy the verified Core source to `freshmarkets-core-production`, preserve
+production variables/secrets/resources/runtime and unchanged Web, confirm 100% active release
+and Core health/readiness plus Web-Core health. Authorization is Core deployment only;
+no real driver request/cancellation, customer message, schema/data mutation or delegation.
+
+Installed Wrangler deploy help and official command index are checked. Production Core
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production --dry-run --keep-vars`
+passes. `node .wrangler/courier-20261010-release-verify.mjs before` checks prior Core
+`72909259-b111-4ce4-9aab-2570cc7ecb9c` and Web `b9165e8b-9213-4d7d-96d8-7625cba8825c`
+at 100%, matching
+configured variables, D1/R2 and Core service identities and required secret names; snapshots
+retain hashed variables and no credentials. Pre-release
+`node .wrangler/courier-20261010-release-live.mjs before` checks Core `/health`, `/ready`
+and Web `/api/core-health`. Prior implementation checks remain scoped to the unchanged
+verified source; no broad suite is rerun. Safe receipts remain ignored under
+`.wrangler/courier-20261010-*`.
+
+Authorized
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production --keep-vars --message "Courier pickup instruction payload correction ae3d7211"`
+exits **0**, deploying Core **`4c424e3a-f094-451a-b9c6-6bccbef08e3c`**. Output confirms
+both existing cron schedules and the notification producer/consumer remain attached.
+`node .wrangler/courier-20261010-release-verify.mjs after` exits 0: new Core receives **100%
+traffic**, Web retains its prior identity, both Workers retain matching hashed variables,
+resource/secret binding identities, runtime/placement and original source/Scratch bytes.
+`node .wrangler/courier-20261010-release-live.mjs after` exits 0: **3/3 HTTP 200 probes**
+for Core health, Core ready and Web-Core health. This verifies deployment/readiness, not
+a real corrected booking. No real rider request/cancellation or provider transaction is made
+by this task, and no schema migration, data mutation, Web release or customer message occurs.
+
+**COURIER-20261010.DEPLOY complete: 1/1 production Core release and 3/3 live readiness
+probes; zero requested deployment actions remain.** Only this checkpoint receipt changes
+after release; deployed runtime source remains `ae3d7211` at deployment HEAD `20a80621`.
+The prior implementation's 55/55 focused and full aggregate passes retain their recorded
+scope. Exact live rejection detail and actual corrected courier acceptance remain unverified.
+Next action: refresh the Delivery page and use the ordinary operator booking flow when a
+real driver request is intended; separate actual provider acceptance still requires its own
+concrete authorization/inputs. Final receipt review, naming/diff checks and main commit/push
+preserve the unrelated untracked files.
+
 ## Individual courier booking rejection — COURIER-20261010.PAYLOAD
 
 Phase **Correct Lalamove single-Order pickup instruction mapping**; checkpoint
@@ -49,12 +95,13 @@ and build output stay ignored in `.wrangler/courier-20261010-*`. Final documenta
 edits follow the tested runtime source and receive naming/diff review.
 
 **COURIER-20261010.PAYLOAD implementation complete: 1/1 payload correction; zero requested
-source fixes remain.** Actual corrected provider/production booking acceptance is unexecuted;
-the exact live subcode remains inaccessible as recorded above. At the release/acceptance
-counting level, **two obligations remain: Core deployment and an authorized live booking
-verification**. No live retry is attempted on the owner's behalf. Next action: after the reviewed
-main Git landing, obtain separate owner authorization to deploy the Core correction; a deployment
-approval alone does not authorize another real driver request.
+source fixes remain.** The owner's subsequent explicit deployment authorization and completed
+release are recorded in **COURIER-20261010.DEPLOY** above, superseding this implementation's
+earlier deployment-pending state. Actual corrected provider/production booking acceptance is
+unexecuted; the exact live subcode remains inaccessible as recorded above. At the provider
+acceptance counting level, **one obligation remains: an authorized live booking verification**.
+No live retry is attempted on the owner's behalf; deployment approval alone does not authorize
+another real driver request. Next action follows the completed deployment receipt above.
 
 The three reviewed runtime/test/specification files are committed and pushed directly to
 main as **`ae3d721108b4c6ecd0ae92ffe2a8f93305ba79ef`**. `git push origin main` succeeds;
