@@ -1,5 +1,68 @@
 # Commerce alignment — active checkpoint
 
+## Individual courier booking rejection — COURIER-20261010.PAYLOAD
+
+Phase **Correct Lalamove single-Order pickup instruction mapping**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner reports
+an unconfirmed external courier booking with request reference
+`d1c15cb4-a3f5-40d1-9510-d54eaab49dbf`. Acceptance: diagnose safely, correct a verified
+provider payload incompatibility, preserve pickup/recipient instructions, exact coordinates,
+idempotency and unknown-outcome safeguards; run relevant checks and commit/push main.
+Started `main / 240743295f28f41fad1b388178cd00882ba3dfb4`; tracked tree clean;
+unrelated untracked Web debug/Scratch files remain preserved. No deployment, real courier
+booking/cancellation, outbound message, data mutation or delegation is authorized.
+
+Read-only production D1 queries find two latest individual dispatches for the same job at
+02:20:43 and 02:21:05 UTC, both `FAILED / LALAMOVE_HTTP_422`, one attempt each and no
+provider identity; both protected request snapshots contain pickup instructions. Exact
+request-reference audit lookup returns no rows, so attribution to that reference is not
+independently established. SELECT receipts show zero rows written. Existing Wrangler OAuth
+can read D1 but direct account/telemetry REST queries return HTTP 403/code 10000; exact live
+provider error detail remains unavailable. No credential values or raw logs/payloads are printed.
+
+Caller path: existing Admin booking -> same-origin external-deliveries adapter ->
+`bookOrderDelivery` -> `requestProviderDelivery` -> Lalamove `create`. Single-Order creation
+still includes unsupported `sender.remarks`; the prior actual Sandbox receipt below records
+HTTP 422 `ERR_UNKNOWN_FIELD` for that field and HTTP 201 after its removal. Current official
+Lalamove documentation restricts remarks to recipient stops. The shared-route adapter already
+uses the compatible mapping. Both quotation paths now share pickup-stop formatting, retain
+instructions in address text and preserve coordinates; individual sender carries only stop ID,
+name and phone. Recipient remarks, business/storage/UI behavior and paid snapshots stay intact.
+API_CONTRACTS records the wire correction. This is a verified source defect and likely live
+cause, not proof of the inaccessible live provider error detail.
+
+Initial focused run: 27/28 pass, with one quotation fixture still expecting the old address text;
+the signature fixture is corrected for preserved pickup instructions. Final command
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/delivery/infrastructure/lalamove/lalamove-provider.test.ts src/delivery/application/request-provider-delivery.integration.test.ts src/delivery/http/lalamove-webhook.integration.test.ts`
+passes **55/55 across three files**, covering the provider-compatible payload, signatures,
+booking replay, timeout/unknown outcomes and webhook reconciliation in local Worker/D1.
+Core `typecheck`, focused Oxlint/Oxfmt and `git diff --check` pass. Required aggregate
+`pnpm --config.verify-deps-before-run=false check` exits **0** against `24074329` plus this
+reviewed working tree: formatting/naming/skills/terminology, **39/39 harness**, fresh/retained
+migration/schema/integrity checks, commit convention, architecture/readiness, repository lint,
+workspace types, **27/27 shared-package, 813/813 Web and 1,923/1,923 Core tests across 221
+Core files**, and both workspace builds. Broad Core takes 655 seconds and completes; no
+timeout or check is weakened. Core builds are deployment dry runs; Vinext classification
+notices remain non-failing. Independent `pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core build`
+dry run also exits 0. Detailed aggregate
+and build output stay ignored in `.wrangler/courier-20261010-*`. Final documentation receipt
+edits follow the tested runtime source and receive naming/diff review.
+
+**COURIER-20261010.PAYLOAD implementation complete: 1/1 payload correction; zero requested
+source fixes remain.** Actual corrected provider/production booking acceptance is unexecuted;
+the exact live subcode remains inaccessible as recorded above. At the release/acceptance
+counting level, **two obligations remain: Core deployment and an authorized live booking
+verification**. No live retry is attempted on the owner's behalf. Next action: after the reviewed
+main Git landing, obtain separate owner authorization to deploy the Core correction; a deployment
+approval alone does not authorize another real driver request.
+
+The three reviewed runtime/test/specification files are committed and pushed directly to
+main as **`ae3d721108b4c6ecd0ae92ffe2a8f93305ba79ef`**. `git push origin main` succeeds;
+`git rev-parse HEAD` and `git ls-remote origin refs/heads/main` both confirm that source revision.
+This subsequent checkpoint-only receipt records actual verification and the Git landing,
+with final naming/diff review before its own main commit/push. Unrelated Web debug/Scratch
+files remain untracked and untouched. No deployment or real driver request occurs.
+
 ## Startup identity production release — IDENTITY-20261010.DEPLOY
 
 Phase **Publish the verified FreshmarketsPH storefront identity update**; checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner explicitly approves deployment after reviewing `IDENTITY-20261010.PUBLIC`. Started `main / ce761d81f84fb924b76d6615b9f5a39e654a10b7`, runtime source `449e64dd`; only unrelated untracked Web debug/Scratch files exist and remain preserved. Acceptance: publish the verified production Web build to freshmarkets.ph, preserve production variables/secrets/resources and unchanged Core, verify live About/footer/Facebook/metadata/Organization information and desktop/mobile shopping interface. Authorization is Web deployment only; no schema/data/provider transaction/outbound message/Core deployment/delegation is included.
