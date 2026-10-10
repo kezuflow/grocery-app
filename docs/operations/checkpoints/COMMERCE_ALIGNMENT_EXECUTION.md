@@ -1,5 +1,46 @@
 # Commerce alignment — active checkpoint
 
+## Recent Lalamove booking payload inspection — COURIER-20261010.PAYLOAD-READ
+
+Phase **Inspect retained booking evidence and explain the outbound payload**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; owner requests recent actual
+booking data after three bookings. Started `main / 9708fca2`, tracked source clean; unrelated
+untracked Web debug/Scratch files preserved. Acceptance: bounded production reads, distinguish
+saved provider-neutral snapshots from exact wire captures, reconstruct a redacted real booking
+using retained identifiers, and explain SMS forwarding without provider/account changes.
+Authorization is read-only; no booking, cancellation, message, deployment or business mutation.
+
+Production target is the existing `freshmarkets-core-production` D1 binding. Installed Wrangler
+4.127.1 D1 execute help and official D1 command documentation are checked. Initial `--file`
+uses the import endpoint and receives authentication code 10000; multiline Windows `--command`
+then receives incomplete-input SQLite error. Neither succeeds. Flattening the fixed SELECT
+to one argument succeeds. Three bounded SELECTs use
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec wrangler d1 execute freshmarkets-core-production --config wrangler.jsonc --env production --remote --command <single-line redacted SELECT> --json`.
+Each reports **zero rows written / changed_db false**. Query files remain ignored under
+`.wrangler/lalamove-*-20261010.sql`; output projects identifiers, statuses, field presence,
+instruction lengths and safe quotation/stop mappings only, never raw snapshots, personal
+contacts/addresses, credentials or signed URLs.
+
+Observed five accepted booking identities on October 10 Manila time: two older canceled
+individual bookings, one completed two-member shared booking and two newer individual bookings
+stored ACTIVE/PENDING_PICKUP. Two older HTTP-422 attempts have no provider booking identity.
+Shared member rows are counted under their single booking. The three newest accepted bookings
+retain the expected Motorcycle/PHP immediate-pickup intent; the shared booking retains its
+actual quotation/pickup/drop-off identifiers and optimized stop mapping. These are persisted
+facts at read time, not a new live provider status lookup or physical-delivery verification.
+
+Individual snapshots contain internal sender/recipient `smsEnabled: true`; shared snapshots
+contain false. The deployed Lalamove adapter sends neither flag: contact mapping emits stop ID,
+name, phone and optional recipient remarks, with POD and merchant metadata at order level.
+Provider-neutral saved snapshots are not raw wire-body archives. The shared wire shape can be
+reconstructed from its snapshot/quotation and unchanged deployed adapter, with personal fields
+redacted; transient individual quotation/stop IDs are not claimed as retained. No runtime code
+changes or test runs are made. **COURIER-20261010.PAYLOAD-READ complete: 1/1 requested
+inspection and 3/3 successful bounded production SELECTs; zero requested inspection steps
+remain.** Next action: owner review of the redacted real shared-booking payload; Recipient SMS
+activation still requires Lalamove account-manager confirmation, and the prior Web UI release
+remains pending separate authorization. This checkpoint-only receipt is committed/pushed on main.
+
 ## Admin provider tracking simplification — ADMIN-TRACKING-20261010.IMPLEMENT
 
 Phase **Replace the Admin tracking map with one provider share-page link**; checkpoint
