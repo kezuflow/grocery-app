@@ -307,7 +307,7 @@ describe("Lalamove delivery adapter", () => {
         stops: [
           {
             coordinates: { lat: "10.3157", lng: "123.8854" },
-            address: "FreshMarkets Hub, Cebu City, Cebu, Philippines",
+            address: `${request.origin.formattedAddress}\r\nPickup instructions: ${request.origin.instructions.deliveryInstructions}`,
           },
           {
             coordinates: { lat: "10.317331", lng: "123.905812" },
@@ -424,11 +424,18 @@ describe("Lalamove delivery adapter", () => {
     });
   });
 
-  it("quotes immediately before create and carries the selected stops and merchant metadata", async () => {
+  it("quotes before create and maps pickup instructions without unsupported sender remarks", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(quotationResponse())
-      .mockResolvedValueOnce(orderResponse());
+      .mockImplementationOnce(async (_url, init) => {
+        const payload = JSON.parse(String(init?.body)) as {
+          data: { sender: Record<string, unknown> };
+        };
+        return "remarks" in payload.data.sender
+          ? Response.json({ errors: [{ id: "ERR_UNKNOWN_FIELD" }] }, { status: 422 })
+          : orderResponse();
+      });
     const provider = createLalamoveProvider({
       apiKey: "key-1",
       apiSecret: "secret-1",
@@ -472,7 +479,6 @@ describe("Lalamove delivery adapter", () => {
         quotationId: "quote-1",
         sender: {
           stopId: "stop-origin",
-          remarks: request.origin.instructions.deliveryInstructions,
           name: "FreshMarkets Cebu",
           phone: "+639171110000",
         },
@@ -487,6 +493,16 @@ describe("Lalamove delivery adapter", () => {
         ],
         isPODEnabled: true,
         metadata: { merchantOrderId: "FM-1001" },
+      },
+    });
+    const quotation = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as {
+      data: { stops: { address: string; coordinates: { lat: string; lng: string } }[] };
+    };
+    expect(quotation.data.stops[0]).toEqual({
+      address: `${request.origin.formattedAddress}\r\nPickup instructions: ${request.origin.instructions.deliveryInstructions}`,
+      coordinates: {
+        lat: String(request.origin.coordinate.latitude),
+        lng: String(request.origin.coordinate.longitude),
       },
     });
     const serializedRequests = fetcher.mock.calls

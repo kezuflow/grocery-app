@@ -274,15 +274,15 @@ function quotationBody(request: DeliveryProviderRequest, language: string) {
     data: {
       serviceType: request.serviceType,
       language,
-      stops: [stop(request.origin), stop(request.destination)],
+      stops: [pickupStop(request.origin), stop(request.destination)],
       ...(request.schedule ? { scheduleAt: request.schedule.pickupFrom } : {}),
     },
   };
 }
 
-function routePickup(request: DeliveryRouteRequest) {
-  const pickup = stop(request.origin);
-  const instructions = request.origin.instructions.deliveryInstructions?.trim();
+function pickupStop(address: DeliveryProviderAddress) {
+  const pickup = stop(address);
+  const instructions = address.instructions.deliveryInstructions?.trim();
   return {
     ...pickup,
     address: instructions
@@ -559,7 +559,7 @@ export function createLalamoveProvider(
     quoteRoute(request) {
       return observed("LALAMOVE_QUOTE", async () => {
         if (!validRoute(request, now())) return resultError("LALAMOVE_INVALID_REQUEST");
-        const pickup = routePickup(request);
+        const pickup = pickupStop(request.origin);
         const response = await api(
           "/v3/quotations",
           "POST",
@@ -702,11 +702,7 @@ export function createLalamoveProvider(
         const body = JSON.stringify({
           data: {
             quotationId: quoted.value.quotationId,
-            sender: contact(
-              request.sender,
-              quoted.value.stopIds[0],
-              request.origin.instructions.deliveryInstructions?.trim() || undefined,
-            ),
+            sender: contact(request.sender, quoted.value.stopIds[0]),
             recipients: [contact(request.recipient, quoted.value.stopIds[1], remarks(request))],
             isPODEnabled: true,
             metadata: { merchantOrderId: request.merchantOrderId },

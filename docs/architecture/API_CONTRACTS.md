@@ -605,6 +605,11 @@ The Delivery application depends on a provider-neutral typed capability/policy l
 - the fixed 20,000 g order-level parcel plus only provider-required package facts; the internal `BOX` classification remains outside the Lalamove payload; and
 - an optional RFC 3339 pickup window created only within the provider-supported horizon.
 
+Lalamove single-Order and shared-route quotations retain pickup instructions in the pickup stop's
+address text while preserving its coordinates. Order creation sends only the sender's stop ID,
+name and phone; `sender.remarks` is unsupported. Recipient delivery instructions remain in
+`recipients[].remarks`. This wire mapping does not change paid address snapshots or promises.
+
 Admin exposes three purpose-built, location-scoped Service Binding operations around this boundary.
 `getLocationDeliveryProfile(locationId)` returns the authoritative store coordinate and either its
 sender/pickup profile or `profile: null`. `upsertLocationDeliveryProfile` requires `delivery.manage`,
