@@ -27,7 +27,7 @@ guard before the submitted-Cart handoff; history alone does not establish author
 Initial intended-behavior run fails **8/8** at `2fb3bdfc` plus the test working tree:
 every case returns `ok: true` where rejection is required. Both modes reproduce competing
 keys, principal disablement, and authorized price/availability edits during courier refresh.
-Local test-first commit `84136918` preserves that evidence; it is not pushed while failing.
+Test-first commit `84136918` preserves that evidence and was kept local until the fix passed.
 The fix adds current Cart/version, linked-principal, competing-Payment, exact current price,
 and active availability checks to the existing admission batch before Intent insertion.
 It changes no address, paid Order, provider, schema, public DTO, or recovery authority.
@@ -67,8 +67,16 @@ and this checkpoint. No new comments or correctness suppressions are added. Fix 
 Causes selects the transaction boundary; Laziness Protocol avoids a new API/table;
 Test Behavior Not Implementation and Prove It Works require rejected effects, stable
 replay/recovery, paid snapshots, and real Worker/D1/browser execution.
-Current progress: R1/R3/R4 source corrections and required local checks pass.
-Next action: commit/push the verified intended main changes and record their delivery.
+Source fix `29045d61` and test-first commit `84136918` are committed/pushed to `main`.
+`git push origin main` exits 0 and advances origin from `2fb3bdfc` to `29045d61`.
+Final naming, terminology, diff, scope, and commit hooks pass. This subsequent receipt
+changes checkpoint prose only; the tested application and test bytes remain unchanged.
+**FIX-20261011.PAYMENT-ADMISSION complete: 3/3 approved findings fixed and locally verified**
+at the finding counting level. Zero approved implementation actions remain. Two review
+items remain outside this fix: R2 awaiting the owner's unpaid-checkout/address discussion,
+and S1 requiring safe stock-release policy/provider evidence. Next action: resolve R2's
+pre-payment behavior while preserving the paid Scheduled Order's accepted terms. No
+deployment, actual provider transaction, or production acceptance is claimed.
 The browser state path
 `apps/core/.wrangler/e2e-fix-admission-20261011` was verified absent and port 3100 free before
 the managed harness; only that new disposable path may be prepared. All provider ingress
