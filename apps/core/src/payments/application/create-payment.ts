@@ -192,8 +192,27 @@ export async function createPayment(
       JOIN market market ON market.id=l.market_id AND market.status='active'
       JOIN global_commerce_configuration mode ON mode.id='global'
       JOIN customer customer ON customer.id=q.customer_id AND customer.status='active'
+      JOIN cart cart ON cart.id=q.cart_id AND cart.customer_id=q.customer_id AND cart.status='ACTIVE'
       WHERE q.id=? AND q.customer_id=? AND q.version=? AND q.status='ACTIVE' AND q.expires_at>?
         AND q.total_minor=? AND q.currency=? AND mode.selling_state='OPEN' AND mode.fulfillment_mode=q.fulfillment_mode
+        AND (q.cart_version IS NULL OR cart.version=q.cart_version)
+        AND ((customer.principal_id IS NULL AND NOT EXISTS (
+          SELECT 1 FROM customer_principal principal WHERE principal.auth_user_id=customer.auth_user_id))
+          OR EXISTS (SELECT 1 FROM customer_principal principal WHERE principal.id=customer.principal_id
+            AND principal.auth_user_id=customer.auth_user_id AND principal.status='active'))
+        AND NOT EXISTS (SELECT 1 FROM payment_intent payment WHERE payment.subject_type='checkout_quote'
+          AND payment.subject_id=q.id AND payment.status IN ('INITIATED','REQUIRES_ACTION','PROCESSING','SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED'))
+        AND NOT EXISTS (SELECT 1 FROM json_each(q.lines_json) line WHERE NOT EXISTS (
+          SELECT 1 FROM sku sku JOIN product product ON product.id=sku.product_id
+          JOIN sku_location_availability availability ON availability.sku_id=sku.id AND availability.location_id=l.id
+          WHERE sku.id=json_extract(line.value,'$.skuId') AND sku.status='active' AND product.status='active'
+            AND availability.availability_status='AVAILABLE'
+            AND (SELECT price.amount_minor FROM price_version price WHERE price.sku_id=sku.id
+              AND price.market_id=l.market_id AND price.location_id=l.id AND price.currency=q.currency
+              AND price.price_type='STANDARD' AND price.amount_minor>0
+              AND price.valid_from<=CAST(unixepoch('subsec')*1000 AS INTEGER)
+              AND (price.valid_to IS NULL OR price.valid_to>CAST(unixepoch('subsec')*1000 AS INTEGER))
+              ORDER BY price.version DESC LIMIT 1)=json_extract(line.value,'$.unitPriceMinor')))
         AND geography.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.geographyVersion'),1)
         AND l.status='active' AND l.purpose='CUSTOMER_FULFILLMENT'
         AND l.version=COALESCE(json_extract(q.cycle_snapshot_json,'$.locationVersion'),l.version)
@@ -289,7 +308,7 @@ export async function createPayment(
         command.purpose === "ORDER_AMENDMENT" ? "ILLEGAL_TRANSITION" : "PRICE_CHANGED",
         command.purpose === "ORDER_AMENDMENT"
           ? "This addition is no longer available for payment"
-          : "Checkout routing changed; accept a new quote",
+          : "Checkout eligibility changed; review your current checkout",
         command.requestId,
       );
     if (message.includes("UNIQUE constraint failed")) {

@@ -247,6 +247,16 @@ Fulfillment-option reads require a Maps-confirmed active Customer address inside
 
 ## Checkout, Payment, and Order Commitment
 
+New checkout Payment admission atomically checks the owned active Cart/version, current
+Customer principal, exact-location merchandise prices and availability alongside the
+existing Quote/routing guards. A Quote cannot admit another started or captured Payment
+while its existing financial identity remains pending or successful. Exact-key replay
+and recovery of an already-admitted Payment use its original identity and accepted terms;
+later catalog changes do not reprice it or the resulting paid Order. A definitive provider
+rejection before creation adoption permits a new-key attempt against a still-valid Quote.
+Unknown outcomes prohibit competing submission. Guard rejection produces no Intent,
+provider submission, or Cart handoff.
+
 `paymentMethod` is a provider-neutral token chosen on the checkout review surface before payment
 creation. Core validates and persists it with the Payment Intent, includes it in idempotency identity,
 and supplies it on every resumable action. The current enabled checkout token is `qrph`; other

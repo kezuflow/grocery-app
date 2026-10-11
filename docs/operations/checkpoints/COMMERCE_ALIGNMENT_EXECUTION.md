@@ -1,5 +1,79 @@
 # Commerce alignment — active checkpoint
 
+## Payment admission corrections - FIX-20261011.PAYMENT-ADMISSION
+
+Phase **Atomically reject competing or no-longer-eligible checkout Payments**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Owner approves
+review findings R1, R3, and R4. R2 remains under discussion: the reproduced Scheduled
+case precedes payment, while the owner's paid-Order rule preserves accepted charge and
+destination snapshots. No address requoting or paid-Order change is authorized here.
+S1 remains an unresolved stock-release concern, outside this fix.
+Started `main / 2fb3bdfc24171c0ae260bcc7834ad379f6637b75`, tracked tree clean, preserving
+the unrelated untracked Web debug/Scratch files and ignored local/provider state.
+Acceptance: both modes reject competing new payment identities and current principal,
+price, or availability invalidation before provider submission, with zero losing business
+effects. Exact-key replay, definite-failure replacement, retained evidence, admitted-payment
+recovery, and immutable paid Orders remain valid. Complete focused and aggregate checks,
+review the intended diff, and commit/push main. No deployment or provider transaction.
+
+Poteto Bug fix, how/why source tracing, architectural sketch comparison, behavior tests,
+and Prove It Works apply. No agents or settings change under AGENTS. Upstream PR/delegation
+steps are replaced by this chat and main delivery. Throughput checkpoint: one writer;
+regressions first, one cohesive admission correction, then focused and aggregate verification.
+The existing admitted Payment/Quote/Cart facts can guard the transaction directly. An
+alternative threaded eligibility DTO adds a cross-context API without necessary new facts,
+so the smaller existing transaction guard is preferred. Source history places the original
+guard before the submitted-Cart handoff; history alone does not establish author intent.
+Initial intended-behavior run fails **8/8** at `2fb3bdfc` plus the test working tree:
+every case returns `ok: true` where rejection is required. Both modes reproduce competing
+keys, principal disablement, and authorized price/availability edits during courier refresh.
+Local test-first commit `84136918` preserves that evidence; it is not pushed while failing.
+The fix adds current Cart/version, linked-principal, competing-Payment, exact current price,
+and active availability checks to the existing admission batch before Intent insertion.
+It changes no address, paid Order, provider, schema, public DTO, or recovery authority.
+Historical principal-less internal fixtures remain eligible only if no principal exists
+for their auth-user identity; normal authenticated customer resolution always provisions
+the linked principal. A mismatched, unlinked, or disabled existing principal is rejected.
+
+Focused post-fix **8/8** passes, with 47 unrelated cases filtered explicitly. The expanded
+five-file run passes **120/120**, including four definite-rejection/unknown-response cases
+and two admitted-payment replay/immutable-price cases. Initial expanded execution passes
+118 and fails two new assertions on a mistaken test table name; correction to the actual
+`order_item` table changes no application behavior. Command:
+`pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/orders/application/apply-checkout-payment-reaction.integration.test.ts src/checkout/application/instant-quote.integration.test.ts src/payments/application/create-payment.integration.test.ts src/payments/application/payment-creation-outcome.integration.test.ts src/payments/application/reconcile-stuck-payments.integration.test.ts`.
+API_CONTRACTS records the strengthened existing admission semantics and original paid terms.
+Selected browser journeys pass **2/2** at desktop width, reaching real Web/Core admission,
+signed synthetic payment confirmation, Order commitment, packing, and courier recovery/delivery.
+No mock supplies actual provider acceptance. The initial managed run builds/migrates but
+selects no tests because the anchored grep excludes Playwright's full titles. Its corrected
+run reuses the unchanged built Web artifact and that disposable state, with
+`E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-fix-admission-20261011 E2E_PROVIDER_GATEWAY=1 APP_BASE_URL=http://localhost:3100 pnpm --filter @freshmarkets/web exec playwright test instant-auto-booking.spec.ts scheduled-customer-journey.spec.ts --grep '(Instant automatic booking and courier recovery|Scheduled paid Order, week purchase, packing and courier delivery) at 1440px' --workers=1 --retries=0`.
+Logs are ignored `.wrangler/fix-20261011-browser.log`, `fix-20261011-browser-r2.log`, and
+`fix-20261011-browser-server.log`. The task server was stopped and port 3100 verified released.
+`pnpm --config.verify-deps-before-run=false check` exits **0** against `84136918` plus
+the admission-fix, six additional behavior checks, and reviewed specification/checkpoint
+working tree. Core **1,937/1,937 across 221 files**, Web **813/813 across 175 files**, shared
+packages **27/27**, and harness **40/40** pass. Formatting/conventions, retained migrations,
+architecture/readiness, lint, types, and workspace builds pass. Core build is a Wrangler
+dry run; no deployment occurs. The inherited staging INITIAL_GLOBAL_ADMIN_EMAIL and
+Vinext configuration/route-classification notices remain non-failing. Aggregate log:
+ignored `.wrangler/fix-20261011-check.log`. No assertion, check, retry, or business guard
+was weakened. The historical review probes now use the explicit `.probe.ts` suffix so
+their assertions of the old defective behavior cannot enter ordinary test discovery.
+
+Final diff/no-comments review finds one application file changed at the existing admission
+boundary, fourteen meaningful added Worker/D1 cases, the owning contract clarification,
+and this checkpoint. No new comments or correctness suppressions are added. Fix Root
+Causes selects the transaction boundary; Laziness Protocol avoids a new API/table;
+Test Behavior Not Implementation and Prove It Works require rejected effects, stable
+replay/recovery, paid snapshots, and real Worker/D1/browser execution.
+Current progress: R1/R3/R4 source corrections and required local checks pass.
+Next action: commit/push the verified intended main changes and record their delivery.
+The browser state path
+`apps/core/.wrangler/e2e-fix-admission-20261011` was verified absent and port 3100 free before
+the managed harness; only that new disposable path may be prepared. All provider ingress
+is the repository's explicit test gateway with fake payment/courier evidence.
+
 ## Read-only code review - REVIEW-20261011.CORE
 
 Phase **Review high-risk Core execution paths without application changes**; checkpoint

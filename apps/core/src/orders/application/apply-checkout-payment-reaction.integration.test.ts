@@ -2343,3 +2343,176 @@ describe("checkout payment admission", () => {
     },
   );
 });
+
+describe("checkout admission recovery and paid price preservation", () => {
+  it.each([
+    ["INSTANT", "definite-rejection"],
+    ["SCHEDULED", "definite-rejection"],
+    ["INSTANT", "unknown-response"],
+    ["SCHEDULED", "unknown-response"],
+  ] as const)(
+    "keeps %s payment replacement consistent with %s evidence",
+    async (fulfillmentMode, outcome) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const provider = createMockPaymentProvider();
+      const create = provider.createPayment.bind(provider);
+      const submission = vi
+        .spyOn(provider, "createPayment")
+        .mockImplementationOnce(async (input) => {
+          if (outcome === "definite-rejection")
+            return { ok: false, errorCode: "PROVIDER_REJECTED" };
+          await create(input);
+          throw new Error("PROVIDER_RESPONSE_LOST");
+        });
+      const registry = new ProviderRegistry("test", [provider]);
+      const firstCommand = paymentCommandForQuote(fixture.customerId, quote.value);
+      const first = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        firstCommand,
+        quoteDependencies.deliveryProviders,
+      );
+      expect(first).toMatchObject({
+        ok: false,
+        error: {
+          code: outcome === "definite-rejection" ? "PAYMENT_FAILED" : "PAYMENT_OUTCOME_UNRESOLVED",
+        },
+      });
+      const second = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        { ...firstCommand, idempotencyKey: crypto.randomUUID() },
+        quoteDependencies.deliveryProviders,
+      );
+      if (outcome === "definite-rejection") {
+        expect(second).toMatchObject({ ok: true });
+        expect(submission).toHaveBeenCalledTimes(2);
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+            .bind(fixture.customerId)
+            .first(),
+        ).toEqual({ count: 2 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+            .bind(fixture.customerId)
+            .first(),
+        ).toEqual({ count: 1 });
+      } else {
+        expect(second).toMatchObject({ ok: false });
+        expect(submission).toHaveBeenCalledTimes(1);
+        expect(
+          await env.DB.prepare("SELECT status FROM payment_intent WHERE idempotency_key=?")
+            .bind(firstCommand.idempotencyKey)
+            .first(),
+        ).toEqual({ status: "INITIATED" });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+            .bind(fixture.customerId)
+            .first(),
+        ).toEqual({ count: 1 });
+        expect(
+          await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+            .bind(fixture.customerId)
+            .first(),
+        ).toEqual({ count: 0 });
+      }
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "preserves exact %s payment replay and accepted Order prices after subsequent repricing",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const provider = createMockPaymentProvider();
+      const registry = new ProviderRegistry("test", [provider]);
+      const command = paymentCommandForQuote(fixture.customerId, quote.value);
+      const admitted = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        command,
+        quoteDependencies.deliveryProviders,
+      );
+      if (!admitted.ok) throw new Error(admitted.error.message);
+      const staff = await locationManager();
+      await env.DB.prepare(
+        "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code='prices.manage'",
+      )
+        .bind(staff.id)
+        .run();
+      expect(
+        await exports.default.setAdminSkuPrice({
+          headers: staff.headers,
+          requestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          skuId: fixture.skuId,
+          locationId: "location-cebu-central",
+          marketId: "market-metro-cebu",
+          currency: "PHP",
+          amountMinor: 20000,
+          validFrom: Date.now() - 1,
+          expectedVersion: 1,
+        }),
+      ).toMatchObject({ ok: true });
+      expect(
+        await createCheckoutPaymentIntent(
+          env.DB,
+          registry,
+          "mock",
+          quoteDependencies.routeDistance,
+          command,
+          quoteDependencies.deliveryProviders,
+        ),
+      ).toEqual(admitted);
+      const attempt = await env.DB.prepare(
+        "SELECT provider_reference FROM payment_attempt WHERE payment_intent_id=?",
+      )
+        .bind(admitted.value.paymentIntentId)
+        .first<{ provider_reference: string }>();
+      if (!attempt) throw new Error("Missing payment attempt");
+      setMockObservedState(provider, attempt.provider_reference, "SUCCEEDED");
+      expect(
+        await reconcilePayment(env.DB, registry, {
+          paymentIntentId: admitted.value.paymentIntentId,
+          idempotencyKey: crypto.randomUUID(),
+          actorId: "test",
+          requestId: crypto.randomUUID(),
+        }),
+      ).toMatchObject({ ok: true });
+      const reaction = await env.DB.prepare(
+        "SELECT id FROM payment_reaction WHERE payment_intent_id=?",
+      )
+        .bind(admitted.value.paymentIntentId)
+        .first<{ id: string }>();
+      if (!reaction) throw new Error("Missing Order reaction");
+      const committed = await applyCheckoutPaymentReaction(env.DB, {
+        reactionId: reaction.id,
+        paymentIntentId: admitted.value.paymentIntentId,
+        checkoutAttemptId: quote.value.quoteId,
+        canonicalPaymentState: "SUCCEEDED",
+      });
+      expect(committed).toMatchObject({ applied: true });
+      expect(
+        await env.DB.prepare(
+          "SELECT unit_price_minor FROM order_item WHERE order_id=? AND sku_id=?",
+        )
+          .bind(committed.orderId, fixture.skuId)
+          .first(),
+      ).toEqual({ unit_price_minor: 15000 });
+      expect(
+        await env.DB.prepare("SELECT total_minor FROM grocery_order WHERE id=?")
+          .bind(committed.orderId)
+          .first(),
+      ).toEqual({ total_minor: quote.value.totalMinor });
+    },
+  );
+});
