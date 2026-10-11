@@ -102,10 +102,15 @@ bytes change after aggregate or browser acceptance. Final diff/no-comments revie
 the shared purchasing/preparation predicates, full-balance admission/UI correction, behavior
 tests and owning specifications/checkpoint only. Storefront, shared styles, migrations,
 stock/demand rows and production Order/payment records remain untouched.
-**FIX-20261011.SUMMARY-REFUNDS locally complete in three work areas**: purchasing exclusion,
+**FIX-20261011.SUMMARY-REFUNDS complete: 3/3 work areas locally verified**: purchasing exclusion,
 refund-aware preparation admission, and new full-balance staff refunds. Actual provider and
-deployment acceptance remain unchecked and separate. Next action: commit/push verified
-intended work to main and record the delivery receipt. R2/S1 remain outside this correction.
+deployment acceptance remain unchecked and separate. Source fix `6c7c60f7` and test-first
+commits `b69397f8`/`a4bbbdb6` are committed/pushed to main. `git push origin main` exits 0
+and advances origin from `c8db95f9` to `6c7c60f7`. Final naming/commit hooks pass; the tracked
+application tree is clean and only the two preserved unrelated untracked Web files remain.
+This subsequent delivery receipt changes checkpoint prose only. Zero approved implementation
+actions remain. Next action: separately authorize release/provider acceptance if desired;
+R2/S1 remain outside this correction. No production data deletion or deployment is claimed.
 
 ## Summary and export eligibility investigation - REVIEW-20261011.SUMMARY-ELIGIBILITY
 
