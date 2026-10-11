@@ -1,5 +1,13 @@
 # FreshMarkets Design
 
+## Design skills
+
+Use the project-local [shadcn-admin skill](../../.agents/skills/shadcn-admin/SKILL.md) for Admin presentation in `apps/web/app/admin` and `apps/web/components/admin`. Stock shadcn Radix/new-york components are the baseline. Follow the approved Admin visual foundation below, preserve behavior, and run discovery commands from `apps/web`. Keep Admin styling beneath `.fm-admin` and verify shared changes against Storefront callers.
+
+Use [good-css](../../.agents/skills/good-css/SKILL.md) as supporting guidance for CSS and Tailwind changes. Read the references for the affected layout, interaction or motion. Apply compatible techniques through the existing authoring system and project tokens. The approved shadcn defaults and this guide's surface-specific rules take precedence where a skill preference differs. Preserve Storefront and authentication presentation when working on Admin. An installed skill does not authorize a visual reset, token migration or additional motion.
+
+[AGENTS](../../AGENTS.md#project-skills) routes engineering tasks through Poteto mode. [ENGINEERING](../architecture/ENGINEERING.md#choose-checks-by-risk) owns the required checks and acceptance evidence.
+
 ## Public company pages — owner request 2026-10-10
 
 About and Contact use the existing StorefrontShell, green action colors, typography and surface/radius tokens. Present a readable company introduction, grocery offering and clearly labeled tools in development. The owner's startup-verification follow-up makes About explicitly relate FreshmarketsPH to its Freshmarkets shopping platform, explains live ordering/fulfillment, and shows the inquiry email and official Facebook link directly. Facebook links in About and the footer announce a new tab and use `noopener noreferrer`; no embedded widget. Contact exposes a direct owner-provided inquiry email, Cebu/Philippines location, delivery-area link and existing Order help path. Both pages remain public, responsive and keyboard accessible, with page-specific titles/descriptions and canonical/Open Graph URLs. Footer adds About, Contact and Facebook links, a concise startup/platform introduction and the inquiry email; retain existing shopping/account links and mobile navigation clearance. Owner spacing correction, 2026-10-10: desktop Help links use the same natural line height and 12px gaps as Shop/Account; retain the 44px minimum Help hit targets below the desktop breakpoint and all focus styles. This extends the 2026-09-12 footer destinations without changing Admin/auth presentation or shared tokens.

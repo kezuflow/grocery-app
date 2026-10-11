@@ -56,6 +56,65 @@ test("ignores generated test results and linked worktree metadata", async () => 
   }
 });
 
+test("ignores agent skill metadata while enforcing visible package names", async () => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "freshmarkets-naming-skills-"));
+  const webPackage = join(fixtureRoot, "apps", "web", "package.json");
+  const contractsPackage = join(fixtureRoot, "packages", "contracts", "package.json");
+  const run = () =>
+    spawnSync(process.execPath, [verifier], {
+      cwd: fixtureRoot,
+      encoding: "utf8",
+      shell: false,
+    });
+
+  try {
+    await writeFile(join(fixtureRoot, "package.json"), '{"name":"freshmarkets","private":true}');
+    await mkdir(join(fixtureRoot, ".agents", "skills", "workflow", "scripts"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(fixtureRoot, ".agents", "skills", "workflow", "scripts", "package.json"),
+      '{"name":"@cursor-skill/workflow-tools","private":true}',
+    );
+    await mkdir(join(fixtureRoot, "apps", "web"), { recursive: true });
+    await mkdir(join(fixtureRoot, "packages", "contracts"), { recursive: true });
+    await writeFile(webPackage, '{"name":"@freshmarkets/web","private":true}');
+    await writeFile(contractsPackage, '{"name":"@freshmarkets/contracts","private":true}');
+
+    const valid = run();
+    assert.equal(valid.status, 0, `${valid.stdout}\n${valid.stderr}`);
+
+    await writeFile(webPackage, '{"name":"web","private":true}');
+    const invalidApp = run();
+    assert.equal(invalidApp.status, 1);
+    assert.match(invalidApp.stderr, /apps\/web\/package\.json: workspace package names/);
+
+    await writeFile(webPackage, '{"name":"@freshmarkets/web","private":true}');
+    await writeFile(contractsPackage, '{"name":"contracts","private":true}');
+    const invalidLibrary = run();
+    assert.equal(invalidLibrary.status, 1);
+    assert.match(
+      invalidLibrary.stderr,
+      /packages\/contracts\/package\.json: workspace package names/,
+    );
+
+    await writeFile(contractsPackage, '{"name":"@freshmarkets/contracts","private":true}');
+    await mkdir(join(fixtureRoot, ".github", "tools"), { recursive: true });
+    await writeFile(
+      join(fixtureRoot, ".github", "tools", "package.json"),
+      '{"name":"tools","private":true}',
+    );
+    const invalidGithubPackage = run();
+    assert.equal(invalidGithubPackage.status, 1);
+    assert.match(
+      invalidGithubPackage.stderr,
+      /\.github\/tools\/package\.json: workspace package names/,
+    );
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
 test("allows dated Superpowers plans without weakening canonical document names", () => {
   assert.equal(isDocumentationPathCompliant("docs/architecture/API_CONTRACTS.md"), true);
   assert.equal(

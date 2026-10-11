@@ -138,6 +138,7 @@ async function verifyPackages() {
   async function find(directory) {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name.startsWith(".") && entry.name !== ".github") continue;
       if (ignoredDirectories.has(entry.name)) continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await find(path);

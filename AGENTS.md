@@ -29,6 +29,16 @@ The protected [Simplification Discussion](docs/product/SIMPLIFICATION_DISCUSSION
 
 Use current session model/settings choices. Do not change personal settings or delegate without explicit authorization. Resolve ordinary implementation choices independently; identify material business-policy or external-input blockers while continuing independent authorized work.
 
+## Project skills
+
+Owner request, 2026-10-11: use [Poteto mode](.agents/skills/poteto-mode/SKILL.md) as the default workflow for repository tasks that require investigation, implementation, review or verification. Read its matched playbook and the routed skills needed for the task. Keep completed work and the active checkpoint in view. Casual conversation does not require a playbook.
+
+The installed pstack collection includes its supporting principles and verification skill generators. Use the existing [ENGINEERING verification requirements](docs/architecture/ENGINEERING.md#choose-checks-by-risk), repository commands and browser harness as the project verification source. Skill installation is not evidence that an application or provider check passed. Generate a project verification skill only when the requested work needs one; verify its instructions against the actual app before claiming completion.
+
+Apply upstream workflows within this router's authority. Keep the current session model and settings. Run delegated steps yourself when delegation is not authorized, and record why an incompatible playbook step is skipped. Use the required main commit/push workflow in place of upstream PR or stack steps. Deployment, provider transactions, outbound messages and destructive operations retain their existing authorization boundaries. Read only this workspace's session history if a routed skill needs it.
+
+Use [good-css](.agents/skills/good-css/SKILL.md) for relevant CSS and Tailwind work, reading only the affected references. [DESIGN](docs/design/DESIGN.md#design-skills) owns its use alongside the Admin shadcn skill and the approved visual standards. Installation sources and pinned revisions are recorded in [skill sources](.agents/skills/SOURCES.md).
+
 ## Admin-only shadcn skill
 
 Use the project-local `shadcn-admin` skill for Admin dashboard presentation work in `apps/web/app/admin` and `apps/web/components/admin`. For new or touched Admin components, use the upstream shadcn defaults for the configured Radix/new-york setup as the visual and component baseline; do not copy the existing FreshMarkets customizations as the default. Preserve required behavior. Run shadcn discovery and component commands from `apps/web`, where `components.json` lives. Inspect their intended file changes before accepting them: shared `apps/web/components/ui` primitives and `apps/web/app/globals.css` can affect both Admin and Storefront. Keep Admin-only styling beneath `.fm-admin` and verify Storefront remains unchanged. Do not use this skill to redesign or generate Storefront pages or to change Storefront tokens, layout, or behavior.

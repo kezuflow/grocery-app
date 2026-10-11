@@ -1,5 +1,68 @@
 # Commerce alignment — active checkpoint
 
+## Project engineering and design skills - SKILLS-20261011.INSTALL
+
+Phase **Install Poteto workflows and connect the design skills**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`; acceptance owner asks for
+Poteto skills across the codebase, including verification support, and shadcn guidance in
+DESIGN. The original request also names good-css. Started
+`main / 50c33e6c9fda86d378085e2d30622806b9c43f42`, tracked tree clean. Preserve the unrelated
+untracked Web debug/Scratch files and all ignored local/provider state. Acceptance: install
+the project-local workflows and their dependencies, route nontrivial tasks through Poteto,
+connect Admin shadcn and compatible good-css guidance to DESIGN, retain current verification
+and authorization boundaries, verify intended files, and commit/push main. This request
+does not change application presentation or authorize deployment, provider effects or delegation.
+
+The Codex `skill-installer` helper installs all 51 pstack skill directories at upstream
+`3a604672c46cd8187d2b19980eae0a34f9f91138` and good-css at
+`92d436ba1937d1b1407c47e35abb3e199eaace2e` into `.agents/skills`; both installer commands
+exit 0. Supporting playbooks/principles and verification generators are included. The existing
+Admin shadcn skill and Hermes mirror are retained. AGENTS routes tasks through Poteto within
+FreshMarkets' current model, delegation, Git and effect boundaries. DESIGN links the Admin
+shadcn and good-css skills while preserving approved surfaces and stock component defaults.
+ENGINEERING remains the project verification source. Installation is not application or
+provider acceptance. Sources and licenses are recorded with the installed collections.
+
+Initial naming and harness checks fail because package enumeration scans hidden agent metadata
+that source-path enumeration already excludes. The new CLI regression reproduces that error
+in a temporary fixture. Package discovery now uses the source walker's existing hidden-directory
+rule; no package-name allowance changes. Negative fixtures retain invalid-name rejection under
+apps, packages and `.github`. ENGINEERING records this verification boundary. Initial full
+harness result is 39 passing tests and one failing test file, not a pass.
+
+The installation verifier compares all 138 new upstream files and both licenses against Git
+blob hashes from the pinned revisions, checks all 52 frontmatter names/descriptions and 29 local
+links in AGENTS, DESIGN and the source receipt; it exits 0. `skills:check` confirms the existing
+15-file Admin mirror remains identical. `pnpm dlx shadcn@latest info --json` from `apps/web`
+exits 0 and confirms Radix/new-york plus the actual installed components without changing them.
+Final working-tree checks on the recorded starting revision plus this installation pass:
+`node --test scripts/verify-naming.test.mjs` is **5/5**; repository
+`pnpm --config.verify-deps-before-run=false harness:test` is **40/40**.
+`pnpm --config.verify-deps-before-run=false naming:check` and `skills:check` pass. Focused
+`pnpm --config.verify-deps-before-run=false exec oxlint scripts/verify-naming.mjs scripts/verify-naming.test.mjs`
+and Oxfmt write/check for those two scripts pass; `git diff --check` passes. Harness receipts
+and the source/hash/link verifier remain ignored under `.wrangler/skills-20261011-*`.
+Prove It Works drives the direct upstream-byte comparison; Fix Root Causes and Test Behavior,
+Not Implementation drive the reproduced naming defect and CLI rejection fixtures. Delegation
+and upstream PR steps are skipped under the owner's existing repository instructions.
+No application suites, browser journeys, provider transactions or deployment run for this
+agent-skill/tooling task. The installed verification generators are available, but no generated
+FreshMarkets verification skill or new application acceptance is claimed.
+
+**SKILLS-20261011.INSTALL implementation complete: 3/3 requested setup outcomes** at the
+collection/routing counting level: Poteto and support installed, good-css installed, and
+Admin shadcn connected to DESIGN. Zero requested setup changes remain. New skills become
+available on the next Codex turn. Final staged review passes; main delivery is pending. Next
+action: commit/push only the reviewed skill, guide, checkpoint and naming-guard files; preserve
+the unrelated untracked files.
+
+Staged whitespace review identifies one upstream extra final blank line in
+`automate-me/SKILL.md`. Remove that line only and record it in SOURCES. The direct verifier
+reconstructs that exact one-byte upstream difference before checking its blob hash; all other
+upstream bytes stay unchanged. Final source comparison and `git diff --cached --check` both
+exit 0. Staged scope is 147 intended files; application source and unrelated untracked files
+remain outside the commit. `git diff --quiet` confirms no unstaged tracked changes.
+
 ## Recent Lalamove booking payload inspection — COURIER-20261010.PAYLOAD-READ
 
 Phase **Inspect retained booking evidence and explain the outbound payload**; checkpoint

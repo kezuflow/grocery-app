@@ -170,6 +170,8 @@ Run from the repository root using the Node and pnpm versions declared in `packa
 
 `pnpm check` also runs `harness:test`. It does not include `catalog:check`, `check:vinext`, binding freshness, provider sandbox acceptance, or Playwright. Add the relevant checks rather than treating the aggregate as universal proof. `pnpm commit:check` validates the existing HEAD; it does not validate uncommitted content or a future commit message.
 
+Naming verification uses the same visible-directory scope for source paths and package manifests. Hidden agent/tool metadata such as `.agents/skills` is outside that scope; `.github` remains included. Package naming remains enforced under `apps`, `packages` and other visible repository directories. Installed upstream skill helpers retain their upstream package names.
+
 Architecture source discovery includes tracked and non-ignored untracked files under `apps` and `packages`; security source discovery covers `apps/core/src`. Both read working-tree content, exclude declaration files and local deletions, and fail if Git enumeration fails. Security telemetry analysis excludes test files. These static checks do not establish runtime authorization, alias resolution completeness, or end-to-end security. Their Node fixtures run in temporary Git repositories, never by staging test violations in the user's checkout.
 
 Local Git hooks enforce only their configured convention checks. There are no GitHub Actions checks. Hook success does not mean tests, types, builds, or business acceptance passed.
