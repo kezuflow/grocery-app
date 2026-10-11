@@ -2,6 +2,10 @@
 
 These skills are installed for this repository. AGENTS.md owns task routing and authorization. DESIGN.md owns visual standards.
 
+Research on 2026-10-11 confirms that the original pstack lives in [cursor/plugins](https://github.com/cursor/plugins/tree/main/pstack). Its [MIT license](https://github.com/cursor/plugins/blob/main/pstack/LICENSE) credits Lauren Tan. The installed backnotprop collection is a standalone mirror with mappings for Codex and other agents. It is not a separate official Codex plugin. [OpenAI's skill documentation](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) confirms repository discovery through `.agents/skills`.
+
+The [good-css source](https://github.com/vojtaholik/good-css) owns its CSS techniques and references. The [official shadcn skill documentation](https://ui.shadcn.com/docs/skills) and [CLI reference](https://ui.shadcn.com/docs/cli) own upstream component discovery and preview commands. FreshMarkets uses its existing Admin-only adaptation within AGENTS and DESIGN. This research does not update installed upstream files or their pinned revisions.
+
 | Collection | Source revision | Installed scope |
 | --- | --- | --- |
 | pstack | [backnotprop/pstack at 3a604672](https://github.com/backnotprop/pstack/tree/3a604672c46cd8187d2b19980eae0a34f9f91138) | All 51 upstream skill directories, including `poteto-mode`, its playbooks, principles and verification generators |

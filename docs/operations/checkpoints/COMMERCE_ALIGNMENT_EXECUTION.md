@@ -1,5 +1,63 @@
 # Commerce alignment — active checkpoint
 
+## Design workflow research - DESIGN-20261011.RESEARCH
+
+Phase **Research Lauren Tan's pstack for Codex and document CSS/Admin design rules**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner
+asks for research on Poteto mode, the pstack version for Codex, good-css rules, and the
+shadcn skill for DESIGN.md. Started `main / fac56415ed581d4bb6151d8c9aef7c84d6f186e9`,
+tracked tree clean. Acceptance: verify upstream attribution and Codex adaptation, document
+each skill's role and practical use in DESIGN, resolve conflicts against approved presentation,
+verify links/commands and documentation guards, and commit/push main. Preserve unrelated
+untracked Web debug/Scratch files and ignored local/provider state. No application redesign,
+upstream skill update, personal-setting change, delegation, deployment, provider effect,
+outbound message, or destructive operation is included.
+
+The research traces AGENTS -> Poteto playbook -> routed skills -> DESIGN -> ENGINEERING
+checks. The official pstack license credits Lauren Tan; the installed backnotprop mirror
+contains Codex mappings. Official OpenAI documentation confirms `.agents/skills` discovery.
+The installed good-css references and Admin skill establish CSS and composition rules.
+DESIGN now describes those roles, the Codex adaptations, compatible CSS rules, stock Admin
+discovery/composition, shared-file isolation, and actual acceptance evidence. SOURCES links
+the official attribution and documentation without updating pinned installations.
+
+Research uses the Investigation playbook and `how`, followed by technical-writing for the
+requested guide update. Throughput checkpoint: no fan-out; one documentation writer after
+source/configuration checks; shared files edited sequentially. Delegated explanation/review
+steps run in this chat under AGENTS. Architecture/code-writing and PR steps are inapplicable
+to this documentation-only change; main commit/push replaces upstream delivery steps.
+Prove It Works requires direct source, configuration, command, and link checks.
+
+Read-only `pnpm dlx shadcn@latest info --json` and `docs button field dialog` from `apps/web`
+exit 0. Discovery confirms Radix/new-york, Tailwind v4, aliases, registries, and installed
+components. The initial sandbox discovery fails with pnpm EPERM on the user-directory
+realpath; the approved read-only retry succeeds. Initial sandbox `git ls-remote` fails on
+network resolution; approved `git ls-remote origin refs/heads/main` confirms origin at the
+starting revision. No application/browser or provider acceptance is claimed.
+
+Read-only `view @shadcn/button` exits 0 and returns the stock new-york registry item.
+`search "@shadcn" -q "button"` returns the expected 33 matches but exits 1 with a Windows
+libuv `UV_HANDLE_CLOSING` assertion. Its `--json` retry also exits 1. The initial unquoted
+PowerShell registry argument searches the configured auth registry due to splatting.
+DESIGN quotes the argument and records the upstream-command limitation, with working direct
+inspection commands. No fake success or application/tool implementation change is included.
+
+Verification on starting HEAD plus the three-file documentation working tree passes:
+`pnpm --config.verify-deps-before-run=false naming:check` exits 0;
+`pnpm --config.verify-deps-before-run=false harness:test` passes **40/40**. Initial sandbox
+attempts fail on pnpm node_modules realpath restrictions; approved retries pass. Harness emits
+the inherited staging INITIAL_GLOBAL_ADMIN_EMAIL configuration warning. The ignored
+`node .wrangler/design-20261011-verify.mjs` verifies all eight added local links/anchors,
+documented package-script names, exact three-file scope, no added HTML comments, and byte
+preservation of existing DESIGN decisions after newline normalization. `git diff --check`
+passes. The documentation diff review uses unslop and a separate no-comments pass in this
+chat; no scoped comments or code suppressions exist. Main commit/push remains pending.
+
+**DESIGN-20261011.RESEARCH implementation complete: 3/3 researched skill roles documented**
+at the guide-update counting level. Zero requested documentation changes remain. One
+upstream Windows search failure remains recorded and is outside this guide-only task.
+Next action: commit/push only DESIGN, SOURCES, and this checkpoint, preserving unrelated files.
+
 ## Project engineering and design skills - SKILLS-20261011.INSTALL
 
 Phase **Install Poteto workflows and connect the design skills**; checkpoint

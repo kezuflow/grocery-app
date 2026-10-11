@@ -2,11 +2,71 @@
 
 ## Design skills
 
-Use the project-local [shadcn-admin skill](../../.agents/skills/shadcn-admin/SKILL.md) for Admin presentation in `apps/web/app/admin` and `apps/web/components/admin`. Stock shadcn Radix/new-york components are the baseline. Follow the approved Admin visual foundation below, preserve behavior, and run discovery commands from `apps/web`. Keep Admin styling beneath `.fm-admin` and verify shared changes against Storefront callers.
+Use these skills together for design work. Each owns a different part of the task.
 
-Use [good-css](../../.agents/skills/good-css/SKILL.md) as supporting guidance for CSS and Tailwind changes. Read the references for the affected layout, interaction or motion. Apply compatible techniques through the existing authoring system and project tokens. The approved shadcn defaults and this guide's surface-specific rules take precedence where a skill preference differs. Preserve Storefront and authentication presentation when working on Admin. An installed skill does not authorize a visual reset, token migration or additional motion.
+| Skill | Role in FreshMarkets | Read when |
+| --- | --- | --- |
+| [Poteto mode](../../.agents/skills/poteto-mode/SKILL.md) | Select the work's playbook, investigate the current implementation, review decisions, and verify the result. | A repository task needs investigation, implementation, review, or verification. |
+| [good-css](../../.agents/skills/good-css/SKILL.md) | Choose CSS techniques for layout, sizing, text, interaction, and motion through existing CSS and Tailwind. | You write, edit, or review styles, including utility classes and inline styles. |
+| [shadcn-admin](../../.agents/skills/shadcn-admin/SKILL.md) | Choose and compose stock Radix/new-york components for Admin. | You change presentation in `apps/web/app/admin` or `apps/web/components/admin`. |
 
-[AGENTS](../../AGENTS.md#project-skills) routes engineering tasks through Poteto mode. [ENGINEERING](../architecture/ENGINEERING.md#choose-checks-by-risk) owns the required checks and acceptance evidence.
+Follow the owner's request and [AGENTS](../../AGENTS.md#project-skills) for task execution. This guide owns approved presentation. Its surface-specific decisions and the stock Admin baseline take precedence over conflicting upstream style preferences. [ENGINEERING](../architecture/ENGINEERING.md#choose-checks-by-risk) owns checks and acceptance evidence. Skill installation alone does not authorize new product behavior, a token migration, or additional motion.
+
+### Poteto mode in Codex
+
+Lauren Tan's [pstack](https://github.com/cursor/plugins/tree/main/pstack) supplies Poteto mode and the supporting skills. FreshMarkets uses the [standalone mirror](https://github.com/backnotprop/pstack), which maps Cursor instructions to other agents, including Codex. Installed revisions and licenses are recorded in [skill sources](../../.agents/skills/SOURCES.md).
+
+Codex discovers the repository's `.agents/skills` folders, as described in [OpenAI's skill documentation](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills). AGENTS explicitly makes Poteto mode the default for relevant repository work. To request it directly, name Poteto mode and give a concrete outcome and acceptance criteria. Do not rely on Cursor's Custom Mode shortcut or `/loop` being available in Codex.
+
+Read the matched playbook and only the routed skills needed for the task. Use `how` to trace existing behavior before a substantial change. Follow the applicable architecture and domain skills when code changes cross those boundaries. Apply `technical-writing` and `unslop` to documentation and review prose. Record incompatible playbook steps with their reason.
+
+Keep the current session's model and settings. Run delegated steps yourself unless the owner authorizes delegation. Use the repository's required main commit/push workflow instead of upstream PR or stack steps. These adaptations preserve the investigation, review, and verification work. They do not authorize deployment or provider effects.
+
+### Apply good-css through the existing design
+
+Read the [good-css reference router](../../.agents/skills/good-css/SKILL.md#read-the-entry-before-you-write) before changing styles. Foundations covers tokens and base styles. Layout covers grids, containers, and sidebars. Interaction covers focus, hit targets, and controls. Read the other matching references for spacing, media, motion, overlays, or scrolling.
+
+Apply these rules to authored CSS and Tailwind layout classes when they fit the approved presentation.
+
+- Prefer CSS layout and intrinsic sizing over scripts that measure and position content. Use wrapping flex layouts, intrinsic grids, or container queries where the available component width determines the layout. Keep structural breakpoints when the approved navigation or composition changes.
+- Use logical properties such as `padding-inline`, `margin-block-start`, and `inset-inline-end`. Use equivalent Tailwind utilities or arbitrary properties when a utility is unavailable. Preserve stock component source unless a scoped change is needed for the task.
+- Use `gap` for spacing within flex and grid layouts. Use `clamp()` tokens for sizes that need continuous growth, with bounds that respect user font sizing. Keep the stock Admin typography, spacing scale, and component dimensions.
+- Reuse semantic color tokens and built-in component variants. For an authorized new custom color, prefer `oklch()` and derive related colors with `color-mix(in oklch, ...)`. Use `none` for an achromatic hue. Preserve approved colors, including the exact Storefront action and hover tokens, instead of replacing them with a derived approximation.
+- Gate authored hover effects with `@media (hover: hover) and (pointer: fine)`. Preserve visible keyboard focus with `:focus-visible` and an outline, including forced-colors support when a component uses a shadow ring. Keep press feedback accessible without requiring extra movement.
+- Name transition properties instead of `all`. Put moving or scaling transitions inside `prefers-reduced-motion: no-preference`. Follow the matching motion reference for easing and duration when motion is already required.
+- Use `overflow: clip` only for content that needs clipping without scrolling. Keep scrolling containers and script-driven scrolling functional. Do not hide page overflow to conceal a broken layout.
+- Preserve the approved touch targets, label associations, validation messages, and focus return. CSS state selectors supplement the form and Core validation paths. Radix retains ownership of dialog focus, Escape, stacking, and scroll locking.
+
+Check a proposed CSS feature against the project's actual browser requirements and test the affected behavior. A support note in the upstream skill is guidance, not FreshMarkets acceptance evidence. Add base rules incrementally in an existing stylesheet. Avoid global resets, universal text trimming, or container rewrites as incidental cleanup.
+
+### Compose stock shadcn Admin components
+
+Use the [official shadcn skill](https://ui.shadcn.com/docs/skills) through the project-local Admin adaptation. The configured baseline is Radix/new-york with Tailwind v4. Refresh discovery before component work instead of assuming a current primitive API, installed component, icon library, or preset from an old inventory.
+
+Run discovery and component commands from `apps/web` with the repository's pnpm runner. The following read-only commands establish context and component references.
+
+```powershell
+pnpm dlx shadcn@latest info --json
+pnpm dlx shadcn@latest search "@shadcn" -q "button"
+pnpm dlx shadcn@latest docs button field dialog
+pnpm dlx shadcn@latest view @shadcn/button
+```
+
+Quote the standalone registry argument in PowerShell. An unquoted `@shadcn` is interpreted as splatting and can change the searched registry. On the verified Windows environment, search returns the expected matches but then exits with a libuv assertion, including with `--json`. Record that command as failed. Direct `view`, `docs`, and `info` pass and remain available for inspecting a known component.
+
+Read the returned documentation and inspect the registry component. Before an installation or update, use `pnpm dlx shadcn@latest add button --dry-run` and `pnpm dlx shadcn@latest add button --diff button.tsx` to inspect intended changes. These preview commands are documented in the [shadcn CLI reference](https://ui.shadcn.com/docs/cli#add). Use the configured `@shadcn` registry for ordinary Admin components. Replace the example component with the one needed for the task.
+
+Compare existing `apps/web/components/ui` implementations with stock source before reusing them as the visual baseline. Local copies may contain FreshMarkets variants. Check shared callers before changing those files or `apps/web/app/globals.css`. Keep Admin theme, appearance, and any necessary overrides under `.fm-admin`, including portal content. Preserve Storefront and authentication presentation and behavior.
+
+Use the component's variants and semantic tokens before custom styling. Compose forms with `FieldGroup`, `Field`, and associated labels. Keep items inside their required groups, use Radix `asChild` for supported custom triggers, and give dialogs an accessible title. Preserve component-owned overlay stacking and full keyboard behavior. Read the Admin skill's matching forms, composition, styling, icons, or chat rules for the affected component.
+
+The approved Admin-wide stock reset below remains authorized. Apply it within its existing scope while preserving routes, composition, data, actions, permissions, and workflows. Discovery does not authorize `init`, a preset switch, or a global shared-component overwrite.
+
+### Verify the changed design
+
+Review the diff against the approved behavior and the owning specifications. For changed journeys, verify appropriate loading, empty, denied, unavailable, error, pending, conflict, and unknown-outcome states. Exercise keyboard focus, overlays, long content, narrow-screen reachability, both Admin appearances, and reduced motion where affected. Check Storefront callers after shared changes. Use the viewport requirements in [States, accessibility and verification](#states-accessibility-and-verification) and the checks required by ENGINEERING.
+
+Record observed results and remaining acceptance gaps in the active checkpoint. Documentation, stock-source comparison, screenshots of upstream examples, or a passing mock do not prove FreshMarkets runtime behavior.
 
 ## Public company pages — owner request 2026-10-10
 
