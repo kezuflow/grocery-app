@@ -5,6 +5,7 @@ import { seedTestCycle } from "../../test-commerce-fixtures";
 import { createAuth, type AuthEnvironment } from "../../auth/service";
 import { advanceFulfillment } from "../../operations/application/advance-fulfillment";
 import { requestHash } from "../../idempotency";
+import { completeScheduledWeek } from "./complete-scheduled-week";
 import { createMockDeliveryProvider } from "../../delivery/infrastructure/mock-delivery-provider";
 import {
   requestExternalDelivery,
@@ -51,6 +52,98 @@ async function fixture() {
 }
 
 describe("Scheduled purchase and per-order packing", () => {
+  it("preserves a completed purchase receipt but rejects packing after a completed refund", async () => {
+    const { manager, cycleId, orderId } = await fixture();
+    const purchase = {
+      headers: manager.headers,
+      requestId: crypto.randomUUID(),
+      cycleId,
+      locationId,
+      expectedVersion: 0,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const receipt = await core.completeAdminScheduledWeek(purchase);
+    expect(receipt).toMatchObject({ ok: true, value: { paidOrderCount: 1 } });
+    const intentId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'ORDER_AMENDMENT','paid_order_amendment',?,?,100,'PHP','REFUNDED',?,1,1)",
+      ).bind(intentId, intentId, orderId, intentId),
+      env.DB.prepare(
+        "INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at) VALUES (?,?,'COMMITTED','PHP',100,?,?,1,1)",
+      ).bind(intentId, orderId, intentId, intentId),
+      env.DB.prepare(
+        "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP','SUCCEEDED',?,1,1)",
+      ).bind(intentId, intentId, intentId),
+    ]);
+    expect(await core.completeAdminScheduledWeek(purchase)).toEqual(receipt);
+    const key = crypto.randomUUID();
+    expect(
+      await core.advanceAdminFulfillment({
+        headers: manager.headers,
+        requestId: crypto.randomUUID(),
+        locationId,
+        orderId,
+        action: "COMPLETE_SCHEDULED_PACKING",
+        expectedVersion: 1,
+        idempotencyKey: key,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+    expect(
+      await env.DB.prepare("SELECT status FROM fulfillment_record WHERE order_id=?")
+        .bind(orderId)
+        .first(),
+    ).toEqual({ status: "NOT_STARTED" });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+        .bind(key)
+        .first(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("rechecks refund eligibility inside purchase completion and rolls back a lost race", async () => {
+    const { manager, cycleId, orderId } = await fixture();
+    const originalBatch = env.DB.batch.bind(env.DB);
+    const spy = vi.spyOn(env.DB, "batch").mockImplementationOnce(async (statements) => {
+      await env.DB.prepare("UPDATE payment_attempt SET status='REFUNDED' WHERE id=?")
+        .bind(orderId)
+        .run();
+      return originalBatch(statements);
+    });
+    const key = crypto.randomUUID();
+    try {
+      expect(
+        await completeScheduledWeek(
+          { auth: createAuth(env), db: env.DB },
+          {
+            headers: manager.headers,
+            requestId: crypto.randomUUID(),
+            cycleId,
+            locationId,
+            expectedVersion: 0,
+            idempotencyKey: key,
+          },
+        ),
+      ).toMatchObject({ ok: false, error: { code: "STALE_VERSION" } });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM scheduled_week_completion WHERE cycle_id=?",
+        )
+          .bind(cycleId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?",
+        )
+          .bind(key)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("rejects a stale Scheduled Start picking caller without entering the legacy workflow", async () => {
     const { manager, orderId } = await fixture();
     const idempotencyKey = crypto.randomUUID();
