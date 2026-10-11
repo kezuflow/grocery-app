@@ -107,6 +107,13 @@ after Core durably adopts checkout payment creation, the submitted Cart leaves a
 
 ## Payments and refunds
 
+Owner correction, 2026-10-11: new Admin refund decisions return the full remaining
+captured balance; staff do not choose a partial amount. An existing unresolved refund
+must finish or definitively fail before a new decision is admitted. Customer cancellation
+retains its full-refund policy. Recorded partial refunds, provider observations and exact
+historical retries remain protected financial evidence; they are never relabeled as full
+refunds or deleted. This correction does not authorize a real provider transaction.
+
 Owner follow-up, 2026-10-05: Admin may retry a definitively rejected refund after correcting the provider funding/configuration issue. Global `refunds.manage` staff confirm a reason; the retry uses the same recorded amount/currency, preserves the rejected attempt and continues the existing cancellation. Pending, unknown and successful refunds cannot be submitted again through this action. Financial success still requires verified provider evidence. This authorization does not execute a real refund or deploy the implementation.
 
 While the QR Ph provider step is open, checkout automatically checks
@@ -220,6 +227,17 @@ Owner supplement, 2026-10-09: Procurement provides supplier PDF and Excel downlo
 location operating hours govern only new Instant checkout and payment admission. Scheduled accepts orders from each cycle's opening time through its cutoff without consulting those hours. Scheduled checkout still obtains an authoritative future courier quotation for the cycle pickup so the accepted total includes both groceries and delivery; unsupported or out-of-horizon courier scheduling remains specifically unavailable rather than bypassed or replaced with a flat fee.
 
 ## Cancellation
+
+Owner approval, 2026-10-11: the Scheduled Order summary, supplier PDF/Excel exports and
+current purchase quantities exclude canceled Orders and any completed refund using the
+same refund evidence as Fulfillment, including retained partial/addition outcomes. This
+applies before totals and pagination, including closed weeks. Unpaid/expired or cancellation-
+requested Order statuses and canceled fulfillment records do not contribute purchasing
+quantities. Valid delivered paid Orders remain in their week. Pending, unknown, failed or
+rejected refunds alone do not prove completion. Purchase completion rechecks the same
+eligible demand atomically; an existing purchase receipt remains historical evidence
+after later refunds. Exclusion never deletes Order/payment history or releases stock or
+persisted demand by inference. Financial reporting keeps its separate approved definitions.
 
 Scheduled customer cancellation remains available only before both
 the snapshotted cutoff and the first Start packing transition. Once packing has started, the online

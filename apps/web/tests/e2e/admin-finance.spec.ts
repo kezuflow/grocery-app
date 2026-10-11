@@ -860,7 +860,7 @@ test("a provisioned Staff operator uses the real payment workspaces and contextu
   await adminPage.goto(`/admin/payments/transactions/${paymentIntentId}`);
   await expect(adminPage).toHaveURL(new RegExp(`/admin/payments\\?payment=${paymentIntentId}`));
   await expect(adminPage.getByRole("heading", { level: 2, name: paymentIntentId })).toBeVisible();
-  await adminPage.getByLabel("Refund amount").fill("25.00");
+  await expect(adminPage.getByLabel("Refund amount")).toHaveCount(0);
   await adminPage.getByRole("button", { name: "Refund", exact: true }).click();
   await expect(adminPage.getByRole("alertdialog")).toContainText(paymentIntentId);
   await adminPage.getByLabel("Confirmation reason").fill("E2E quality issue");

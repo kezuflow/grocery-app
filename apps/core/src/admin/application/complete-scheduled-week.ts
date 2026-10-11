@@ -5,6 +5,7 @@ import type {
 } from "@freshmarkets/contracts";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
+import { scheduledPurchaseDemandSql } from "../../procurement/infrastructure/d1/scheduled-purchase-demand";
 import {
   resolveOperationsAdministrationAccess,
   type OperationsAdministrationDeps,
@@ -13,8 +14,8 @@ import {
 const SCOPE = "scheduledWeek.purchaseComplete";
 type DemandSummary = { lines: number; orders: number; quantity: number };
 const summarySql = `SELECT COUNT(*) lines,COUNT(DISTINCT order_id) orders,
-  COALESCE(SUM(quantity_base_total),0) quantity FROM committed_demand
-  WHERE delivery_cycle_id=? AND location_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`;
+  COALESCE(SUM(quantity_base_total),0) quantity FROM (${scheduledPurchaseDemandSql})
+  WHERE delivery_cycle_id=? AND location_id=?`;
 
 function failure(
   code: "NOT_FOUND" | "ILLEGAL_TRANSITION" | "STALE_VERSION" | "CONFLICT" | "IDEMPOTENCY_CONFLICT",

@@ -4,6 +4,7 @@ import { fulfillmentTransitions, transitionToResult } from "../../commerce/state
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { fulfillmentStates } from "@freshmarkets/contracts";
 import { isOrderEligibleForPreparation } from "../../fulfillment/domain/order-preparation";
+import { unrefundedOrderSql } from "../../orders/infrastructure/d1/unrefunded-order";
 import { z } from "@freshmarkets/validation";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
 import {
@@ -247,7 +248,7 @@ export async function advanceFulfillment(
       database.prepare("INSERT INTO commitment_abort(id) SELECT -30 WHERE changes()<>1"),
       database
         .prepare(
-          "INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (SELECT 1 FROM grocery_order WHERE id=? AND status=? AND version=?)",
+          `INSERT INTO commitment_abort(id) SELECT -30 WHERE NOT EXISTS (SELECT 1 FROM grocery_order o WHERE o.id=? AND o.status=? AND o.version=? AND ${unrefundedOrderSql})`,
         )
         .bind(command.orderId, order.status, order.version),
       ...(scheduledPack

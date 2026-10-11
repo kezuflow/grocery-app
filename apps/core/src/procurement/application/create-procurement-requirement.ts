@@ -11,6 +11,7 @@ import type {
 import { z } from "@freshmarkets/validation";
 import { findIdempotencyRecord, requestHash } from "../../idempotency";
 import { auditEventStatement } from "../../audit/application/append-audit-event";
+import { scheduledPurchaseDemandSql } from "../infrastructure/d1/scheduled-purchase-demand";
 const resultSchema = z.object({
   id: z.string(),
   status: z.enum(["AGGREGATED", "ORDERED"]),
@@ -163,7 +164,7 @@ async function executeProcurementCommand(
       "SKU does not belong to the supplied inventory pool",
       command.requestId,
     );
-  const totalsSql = `SELECT COUNT(*) count,COALESCE(SUM(quantity_sellable),0) units,COALESCE(SUM(quantity_base_total),0) quantity,CASE WHEN COUNT(*)=COUNT(shipping_weight_grams) THEN SUM(shipping_weight_grams) ELSE NULL END grams FROM committed_demand WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`;
+  const totalsSql = `SELECT COUNT(*) count,COALESCE(SUM(quantity_sellable),0) units,COALESCE(SUM(quantity_base_total),0) quantity,CASE WHEN COUNT(*)=COUNT(shipping_weight_grams) THEN SUM(shipping_weight_grams) ELSE NULL END grams FROM (${scheduledPurchaseDemandSql}) WHERE delivery_cycle_id=? AND location_id=? AND inventory_pool_id=? AND sku_id=?`;
   const demandBindings = [
     command.deliveryCycleId,
     command.locationId,

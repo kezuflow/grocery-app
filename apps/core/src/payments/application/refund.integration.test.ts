@@ -1196,7 +1196,7 @@ async function staffRefundFixture() {
     manager,
     command: {
       paymentIntentId: intentId,
-      amountMinor: 5000,
+      amountMinor: 20000,
       reason: "Inspected quality issue",
       expectedVersion: payment.version,
       actorAuthUserId: actor.auth_user_id,
@@ -1213,7 +1213,7 @@ describe("staff refund admission and external execution", () => {
     const submit = vi.spyOn(provider, "requestRefund");
     const registry = new ProviderRegistry("test", [provider]);
     const first = await requestStaffRefund(env.DB, registry, command);
-    expect(first).toMatchObject({ ok: true, value: { status: "REQUESTED", amountMinor: 5000 } });
+    expect(first).toMatchObject({ ok: true, value: { status: "REQUESTED", amountMinor: 20000 } });
     const stored = await env.DB.prepare(
       "SELECT status,provider_refund_reference FROM payment_refund WHERE idempotency_key=?",
     )
@@ -1225,7 +1225,7 @@ describe("staff refund admission and external execution", () => {
       kind: "refund",
       refundReference: stored?.provider_refund_reference,
       vendorState: "paid",
-      amountMinor: 5000,
+      amountMinor: 20000,
       currency: "PHP",
     });
     await ingestProviderEvent(

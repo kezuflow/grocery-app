@@ -123,12 +123,16 @@ export async function requestStaffRefund(
     );
   const reserved = await database
     .prepare(
-      "SELECT COALESCE(SUM(amount_minor),0) amount FROM payment_refund WHERE payment_intent_id=? AND status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')",
+      "SELECT COALESCE(SUM(amount_minor),0) amount,COUNT(CASE WHEN status!='SUCCEEDED' THEN 1 END) pending FROM payment_refund WHERE payment_intent_id=? AND status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED','SUCCEEDED')",
     )
     .bind(payment.id)
-    .first<{ amount: number }>();
-  if (command.amountMinor > payment.amount_minor - (reserved?.amount ?? 0))
-    return failure("VALIDATION_FAILED", "Refund exceeds the refundable amount", command.requestId);
+    .first<{ amount: number; pending: number }>();
+  if (reserved?.pending || command.amountMinor !== payment.amount_minor - (reserved?.amount ?? 0))
+    return failure(
+      "VALIDATION_FAILED",
+      "Refund the full remaining balance after existing refunds have resolved",
+      command.requestId,
+    );
   const attempt = await database
     .prepare(
       "SELECT id,provider,provider_reference FROM payment_attempt WHERE payment_intent_id=? AND status='SUCCEEDED' ORDER BY created_at DESC,id LIMIT 1",
@@ -177,7 +181,9 @@ export async function requestStaffRefund(
         WHERE payment.id=? AND payment.version=? AND payment.status=? AND payment.amount_minor=? AND payment.currency=?
         AND attempt.id=? AND attempt.status='SUCCEEDED' AND attempt.provider=? AND attempt.provider_reference=?)
         OR EXISTS (SELECT 1 FROM order_cancellation_refund_member member JOIN order_cancellation cancellation ON cancellation.id=member.cancellation_id
-          WHERE member.payment_intent_id=? AND cancellation.status!='COMPLETED')`)
+          WHERE member.payment_intent_id=? AND cancellation.status!='COMPLETED')
+        OR EXISTS (SELECT 1 FROM payment_refund WHERE payment_intent_id=? AND status IN ('REQUESTED','APPROVED','PROCESSING','ESCALATED'))
+        OR ?<>(SELECT amount_minor-(SELECT COALESCE(SUM(amount_minor),0) FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED') FROM payment_intent WHERE id=?)`)
         .bind(
           payment.id,
           payment.version,
@@ -187,6 +193,10 @@ export async function requestStaffRefund(
           attempt.id,
           attempt.provider,
           attempt.provider_reference,
+          payment.id,
+          payment.id,
+          command.amountMinor,
+          payment.id,
           payment.id,
         ),
       database

@@ -1216,6 +1216,70 @@ describe("finance administration", () => {
     ).toMatchObject({ ok: true, value: { amountMinor: 50000, status: "REQUESTED" } });
   });
 
+  it("refunds the full remaining balance of retained partial history", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE payment_intent SET status='PARTIALLY_REFUNDED' WHERE id=?").bind(
+        paymentIntentId,
+      ),
+      env.DB.prepare(
+        "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,10000,'PHP','SUCCEEDED',?,1,1)",
+      ).bind(crypto.randomUUID(), paymentIntentId, crypto.randomUUID()),
+    ]);
+    expect(
+      await core.requestAdminRefund({
+        expectedVersion: 1,
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 40000,
+        reason: "Refund remaining balance",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true, value: { amountMinor: 40000, status: "REQUESTED" } });
+    expect(
+      await env.DB.prepare(
+        "SELECT amount_minor,status FROM payment_refund WHERE payment_intent_id=? AND status='SUCCEEDED'",
+      )
+        .bind(paymentIntentId)
+        .first(),
+    ).toEqual({ amount_minor: 10000, status: "SUCCEEDED" });
+  });
+
+  it("blocks a new remainder refund while a retained partial request is unresolved", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    await env.DB.prepare(
+      "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,10000,'PHP','PROCESSING',?,1,1)",
+    )
+      .bind(crypto.randomUUID(), paymentIntentId, crypto.randomUUID())
+      .run();
+    expect(
+      await core.getAdminPayment({
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+      }),
+    ).toMatchObject({ ok: true, value: { remainingRefundableMinor: 40000, allowedActions: [] } });
+    expect(
+      await core.requestAdminRefund({
+        expectedVersion: 1,
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 40000,
+        reason: "No competing remainder",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_refund WHERE payment_intent_id=?")
+        .bind(paymentIntentId)
+        .first(),
+    ).toEqual({ count: 1 });
+  });
+
   it("requests refunds idempotently, validates amounts, and never asserts success", async () => {
     const manager = await seedManager();
     const { paymentIntentId } = await seedOrderWithPayment();
@@ -1248,20 +1312,20 @@ describe("finance administration", () => {
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
-      amountMinor: 10000,
+      amountMinor: 50000,
       reason: "goodwill",
       idempotencyKey: key,
     });
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    expect(created.value).toMatchObject({ status: "REQUESTED", amountMinor: 10000 });
+    expect(created.value).toMatchObject({ status: "REQUESTED", amountMinor: 50000 });
 
     const replay = await core.requestAdminRefund({
       expectedVersion: 1,
       requestId: crypto.randomUUID(),
       headers: { cookie: manager.cookie },
       paymentIntentId,
-      amountMinor: 10000,
+      amountMinor: 50000,
       reason: "goodwill",
       idempotencyKey: key,
     });

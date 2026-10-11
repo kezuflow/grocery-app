@@ -87,17 +87,17 @@ test("Finance restores URL cursor and detail independently, without carrying a r
   await page.getByRole("button", { name: "Refresh" }).click();
   await page.getByRole("row", { name: /Alpha Customer/ }).click();
   await expect(page.getByRole("heading", { name: "Alpha order" })).toBeVisible();
-  await page.getByRole("textbox", { name: "Refund amount" }).fill("12.00");
+  await expect(page.getByRole("button", { name: "Refund", exact: true })).toBeVisible();
   await page.getByRole("row", { name: /Beta Customer/ }).click();
   await expect(page.getByRole("heading", { name: "Beta order" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Refund amount" })).toHaveValue("");
+  await expect(page.getByText("Full refundable balance:")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/payment=finance-alpha/);
   await expect(page.getByRole("heading", { name: "Beta order" })).toHaveCount(0);
   await expect.poll(() => alphaReads).toBe(2);
   releaseAlpha();
   await expect(page.getByRole("heading", { name: "Alpha order" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Refund amount" })).toHaveValue("");
+  await expect(page.getByText("Full refundable balance:")).toBeVisible();
   await page.getByRole("button", { name: "Close payment details" }).click();
   await page
     .getByRole("navigation", { name: "Results pagination" })
@@ -330,7 +330,7 @@ test("Finance removes stale refund actions when a detail refresh is denied", asy
   await page.goto("/admin/payments");
   await page.getByRole("button", { name: "Refresh" }).click();
   await page.getByRole("row", { name: /Alpha Customer/ }).click();
-  await expect(page.getByRole("textbox", { name: "Refund amount" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Refund", exact: true })).toBeVisible();
   denyDetail = true;
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("Payment detail access has changed.")).toBeVisible();
@@ -340,5 +340,5 @@ test("Finance removes stale refund actions when a detail refresh is denied", asy
   await expect(page.getByRole("row", { name: /Alpha Customer/ })).toBeVisible();
   denyDetail = false;
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByRole("textbox", { name: "Refund amount" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Refund", exact: true })).toBeVisible();
 });

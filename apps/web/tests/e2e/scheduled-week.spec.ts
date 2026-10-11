@@ -1,6 +1,7 @@
 import { z } from "@freshmarkets/validation";
 import { test, expect, executeAdminE2eSql } from "./admin-authenticated-fixture";
 import { selectDeliveryWeek } from "./select-delivery-week";
+import { confirmLocalRefund } from "./signed-refund-events";
 // Synthetic committed-payment/cycle history is a fixture seam, not provider or no-SQL checkout acceptance.
 // Pending/failure history below is a fixture seam; signed provider closure is tested in Core.
 // Week reads, purchase confirmation, replay and receiving use the real Web/Core/D1 path.
@@ -42,6 +43,39 @@ for (const width of [1440, 390])
       INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,committed_at)
         VALUES ('summary-demand-carrot-small-${id}','summary-order-${id}','${id}','location-cebu-central','pool-carrot',250,'OPEN','EXACT_PAID_LINE','summary-carrot-small-${id}','sku-carrot-1kg',1,250,'GRAM',${now});
     `);
+    const refundIntent = `summary-refund-intent-${id}`;
+    const refundReference = `summary-refund-payment-${id}`;
+    executeAdminE2eSql(`
+      INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,version,created_at,updated_at)
+        VALUES ('${refundIntent}','GROCERY_CHECKOUT','checkout_quote','refund-quote-${id}','summary-customer-${id}',100,'PHP','SUCCEEDED','${refundIntent}',1,${now},${now});
+      INSERT INTO payment_attempt(id,customer_id,payment_intent_id,provider_reference,amount_minor,currency,status,provider,idempotency_key,created_at,updated_at)
+        VALUES ('summary-refund-attempt-${id}','summary-customer-${id}','${refundIntent}','${refundReference}',100,'PHP','SUCCEEDED','mock','summary-refund-attempt-${id}',${now},${now}),
+        ('summary-canceled-attempt-${id}','summary-customer-${id}',NULL,NULL,100,'PHP','SUCCEEDED','mock','summary-canceled-attempt-${id}',${now},${now});
+      INSERT INTO grocery_order(id,customer_id,payment_id,cycle_id,fulfillment_mode,status,total_minor,currency,address_snapshot_json,created_at)
+        VALUES ('summary-refunded-order-${id}','summary-customer-${id}','summary-refund-attempt-${id}','${id}','SCHEDULED','COMMITTED',100,'PHP','{}',${now}),
+        ('summary-canceled-order-${id}','summary-customer-${id}','summary-canceled-attempt-${id}','${id}','SCHEDULED','CANCELED',100,'PHP','{}',${now});
+      INSERT INTO order_item(id,order_id,sku_id,product_name_snapshot,variant_name_snapshot,unit_snapshot,quantity,unit_price_minor,line_total_minor,base_quantity,base_unit_code_snapshot)
+        VALUES ('summary-refunded-line-${id}','summary-refunded-order-${id}','sku-carrot-1kg','Refunded produce','1 kg','GRAM',99,1,99,99000,'GRAM'),
+        ('summary-canceled-line-${id}','summary-canceled-order-${id}','sku-carrot-1kg','Canceled produce','1 kg','GRAM',99,1,99,99000,'GRAM');
+      INSERT INTO committed_demand(id,order_id,delivery_cycle_id,location_id,inventory_pool_id,quantity,status,demand_basis,order_item_id,sku_id,quantity_sellable,quantity_base_total,base_unit_code,committed_at)
+        VALUES ('summary-refunded-demand-${id}','summary-refunded-order-${id}','${id}','location-cebu-central','pool-carrot',99000,'OPEN','EXACT_PAID_LINE','summary-refunded-line-${id}','sku-carrot-1kg',99,99000,'GRAM',${now}),
+        ('summary-canceled-demand-${id}','summary-canceled-order-${id}','${id}','location-cebu-central','pool-carrot',99000,'OPEN','EXACT_PAID_LINE','summary-canceled-line-${id}','sku-carrot-1kg',99,99000,'GRAM',${now});
+    `);
+    expect(
+      await (
+        await page.request.post("/api/admin/payments/refunds", {
+          headers: { "idempotency-key": crypto.randomUUID() },
+          data: {
+            paymentIntentId: refundIntent,
+            amountMinor: 100,
+            expectedVersion: 1,
+            reason: "Synthetic summary refund",
+          },
+        })
+      ).json(),
+    ).toMatchObject({ ok: true, value: { amountMinor: 100, status: "REQUESTED" } });
+    await confirmLocalRefund(page, refundIntent, refundReference, 100);
+    executeAdminE2eSql(`UPDATE delivery_cycle SET status='CLOSED' WHERE id='${id}';`);
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1200 });
     await page.goto("/admin/procurement");
     await page.getByRole("combobox", { name: "Active admin scope" }).click();
@@ -78,7 +112,9 @@ for (const width of [1440, 390])
       const download = await downloaded;
       expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${extension}$`));
       expect(await download.failure()).toBeNull();
-      await download.saveAs(`../../.wrangler/procurement-export-browser-${width}.${extension}`);
+      await download.saveAs(
+        `../../.wrangler/procurement-export-refund-20261011-${width}.${extension}`,
+      );
       await expect(
         page.getByRole("button", { name: "Export supplier list", exact: true }),
       ).toBeEnabled();

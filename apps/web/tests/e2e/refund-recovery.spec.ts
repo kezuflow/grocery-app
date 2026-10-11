@@ -31,33 +31,32 @@ for (const width of [1440, 390])
     await expect(page.getByRole("heading", { name: paymentIntentId, exact: true })).toBeVisible({
       timeout: 15_000,
     });
-    await page.getByLabel("Refund amount").fill("25.001");
-    await page.getByRole("button", { name: "Refund", exact: true }).click();
-    await page.getByLabel("Confirmation reason").fill("Inspected quality issue");
-    await page.getByRole("button", { name: "Confirm", exact: true }).click();
-    await expect(
-      page.getByText(/Enter a valid amount within the remaining refundable balance/),
-    ).toBeVisible();
-    await page.getByLabel("Refund amount").fill("25.01");
+    await expect(page.getByLabel("Refund amount")).toHaveCount(0);
+    await expect(page.getByText("Full refundable balance:")).toContainText("₱125.00");
     const writes: { body: string | null; key: string | undefined }[] = [];
     await page.route("**/api/admin/payments/refunds", async (route) => {
       writes.push({
         body: route.request().postData(),
         key: route.request().headers()["idempotency-key"],
       });
-      if (writes.length === 3) return route.abort("failed");
       if (writes.length > 1) return route.continue();
       const response = await route.fetch();
       expect(response.ok()).toBe(true);
       await route.abort("failed");
     });
     await page.getByRole("button", { name: "Refund", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toContainText("₱125.00");
     await page.getByLabel("Confirmation reason").fill("Inspected quality issue");
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
     await expect(
       page.getByText(/The response is unknown\. Retry the saved refund request/u),
     ).toBeVisible();
-    await expect(page.getByLabel("Refund amount")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Refund", exact: true })).toBeDisabled();
+    const refreshedPayment = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/admin/payments/${paymentIntentId}`) &&
+        response.request().method() === "GET",
+    );
     await page.getByRole("button", { name: "Retry saved command" }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Refund request accepted" }),
@@ -65,21 +64,20 @@ for (const width of [1440, 390])
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     expect(JSON.parse(writes[0].body ?? "{}")).toMatchObject({
-      amountMinor: 2501,
+      amountMinor: 12500,
       expectedVersion: 1,
       reason: "Inspected quality issue",
+      paymentIntentId,
     });
-    if (width === 1440) {
-      await page.getByLabel("Refund amount").fill("10.00");
-      await page.getByRole("button", { name: "Refund", exact: true }).click();
-      await page.getByLabel("Confirmation reason").fill("Separate later refund intent");
-      await page.getByRole("button", { name: "Confirm", exact: true }).click();
-      await expect.poll(() => writes.length).toBe(3);
-      expect(writes[2].key).not.toBe(writes[0].key);
-      await expect(
-        page.getByText(/The response is unknown\. Retry the saved refund request/u),
-      ).toBeVisible();
-    }
+    expect(await (await refreshedPayment).json()).toMatchObject({
+      ok: true,
+      value: {
+        remainingRefundableMinor: 0,
+        allowedActions: [],
+        refunds: [{ status: "PROCESSING", amountMinor: 12500 }],
+      },
+    });
+    await expect(page.getByRole("button", { name: "Refund", exact: true })).toHaveCount(0);
     executeAdminE2eSql(
       `UPDATE payment_refund SET status='ESCALATED', last_error_code='PROVIDER_STATUS_UNKNOWN', version=version+1, updated_at=${Date.now()} WHERE payment_intent_id='${paymentIntentId}';`,
     );
@@ -111,16 +109,25 @@ for (const width of [1440, 390])
           await route.abort("failed");
         } else await route.continue();
       });
+    const replayedCheck = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/payments/refunds/recheck") &&
+        response.request().method() === "POST",
+    );
     await refundCard.getByRole("button", { name: "Retry saved provider check" }).click();
-    await expect(
-      refundCard.getByText(
-        width === 1440
-          ? /Provider check queued\. Current progress could not be refreshed/
-          : /Provider check queued/,
-      ),
-    ).toBeVisible();
+    expect(await (await replayedCheck).json()).toMatchObject({
+      ok: true,
+      value: { state: "QUEUED" },
+    });
+    if (width === 1440) {
+      await expect(page.getByText("Payment details could not be loaded")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Refund", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Retry", exact: true }).click();
+      await expect(page.getByText("ESCALATED", { exact: true })).toBeVisible();
+    } else await expect(refundCard.getByText(/Provider check queued/)).toBeVisible();
     expect(checks).toHaveLength(2);
     expect(checks[1]).toEqual(checks[0]);
+    await expect(page.getByRole("button", { name: "Close payment details" })).toBeEnabled();
     await page.reload();
     await expect(page.getByRole("heading", { name: paymentIntentId, exact: true })).toBeVisible({
       timeout: 15_000,

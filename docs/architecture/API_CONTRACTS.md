@@ -895,6 +895,26 @@ Purchase-demand rows carry nullable recorded shipping weight. If any paid line i
 
 ### Scheduled purchase readiness (CA-5.5)
 
+The 2026-10-11 purchasing exclusion applies to summary rows/totals, supplier export rows,
+exact demand quantities and new purchase completion. They share one Core paid-demand
+source, excluding canceled/refunded Orders, unpaid/expired/cancellation-requested states,
+canceled fulfillment records and completed refunds linked through the original attempt,
+canonical Payment/reaction or retained committed addition. Pending/unknown/failed/rejected
+refunds alone do not hide an otherwise eligible paid Order. Filtering precedes aggregation
+and pagination and remains current on closed weeks. Valid delivered purchases remain.
+Purchase completion repeats eligibility inside its complete transaction; exact-key replay
+returns the original receipt even after later exclusion. Preparation commands recheck the
+same completed-refund evidence before committing their effects. No financial, Order,
+inventory or demand history is deleted or rewritten by these projections.
+
+New `requestAdminRefund` decisions must request the full remaining captured balance and
+have no unresolved competing refund. Web uses the Core-returned balance without an
+editable amount; Core checks the exact balance and refund state in the admission batch.
+Acceptance is still a request receipt, not provider success. Historical accepted partial
+refunds, exact receipt replay, rejected-attempt retry and provider reconciliation preserve
+their recorded amounts and identities. Those financial facts are never coerced to full
+refund success by this product correction.
+
 Historical addition payment admission used Order ownership/state, amendment version/amount/currency and cycle guards. New addition commands and payment intents now reject in both modes without an intent, link or provider call. Only exact historical retries and existing payment/refund reactions remain recoverable. An already-started addition uses its recorded admission evidence and saved settlement boundary; it cannot create demand after Procurement starts. Existing Order, Payment version and refund guards still apply.
 
 Before saved Procurement starts, unresolved original or retained addition payments remain settlement work. At that boundary exact verified paid demand freezes and week Purchase complete becomes eligible; unresolved attempts no longer hold routine purchasing indefinitely. Later captured uncommitted funds use durable full-refund recovery, never a new Order/addition. Browser expiry is not financial closure. Retained detailed purchase/receiving/surplus recovery continues to preserve pending reactions, creation observations and provider inbox evidence under its own guards; it is not the routine week workflow.

@@ -1013,11 +1013,15 @@ export async function getAdminPayment(
         ? "The coordinated order cancellation owns this payment's refund. Review its progress."
         : remainingRefundableMinor === 0
           ? "The payment balance is already refunded or reserved by existing refunds."
-          : !capturedAttempt?.provider_reference
-            ? "Captured provider payment evidence is missing."
-            : !deps.payments?.get(capturedAttempt.provider)
-              ? "The captured payment provider is unavailable."
-              : null;
+          : refunds.results.some((refund) =>
+                ["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED"].includes(refund.status),
+              )
+            ? "The existing refund must resolve before another refund can start."
+            : !capturedAttempt?.provider_reference
+              ? "Captured provider payment evidence is missing."
+              : !deps.payments?.get(capturedAttempt.provider)
+                ? "The captured payment provider is unavailable."
+                : null;
 
   return {
     ok: true,

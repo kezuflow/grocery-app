@@ -44,7 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/admin/shadcn/table";
-import { refundAmountMinor, refundResponse } from "@/lib/refund-response";
+import { refundResponse } from "@/lib/refund-response";
 import { notifyCommandSuccess } from "./admin-feedback";
 import { useAdminScopeGuard } from "../../app/admin/admin-context-provider";
 import { useAdminRouteGuard } from "./use-admin-route-guard";
@@ -118,7 +118,6 @@ export function PaymentsWorkspace({
         : null,
   );
   const [loading, setLoading] = useState(false);
-  const [refundAmount, setRefundAmount] = useState("");
   const [confirmRefund, setConfirmRefund] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [unresolved, setUnresolved] = useState<{
@@ -292,7 +291,6 @@ export function PaymentsWorkspace({
       setTab(restoredTab);
       setStatus(restoredStatus);
       setSelectedIssue(params.get("issue"));
-      setRefundAmount("");
       setConfirmRefund(false);
       const paymentId = params.get("payment");
       if (paymentId) void loadDetail(paymentId);
@@ -323,7 +321,6 @@ export function PaymentsWorkspace({
   function choosePayment(paymentIntentId: string) {
     if (locked) return;
     setSelectedIssue(null);
-    setRefundAmount("");
     setConfirmRefund(false);
     setNotice(null);
     replaceUrl({ payment: paymentIntentId, issue: null });
@@ -336,7 +333,6 @@ export function PaymentsWorkspace({
     setDetailTarget(null);
     setDetailError(null);
     setDetailLoading(false);
-    setRefundAmount("");
     setConfirmRefund(false);
     setNotice(null);
     setSelectedIssue(item.groupKey);
@@ -350,7 +346,6 @@ export function PaymentsWorkspace({
     setDetailTarget(null);
     setDetailError(null);
     setDetailLoading(false);
-    setRefundAmount("");
     setConfirmRefund(false);
     setSelectedIssue(null);
     replaceUrl({ tab: next, cursor: null, payment: null, issue: null });
@@ -386,7 +381,6 @@ export function PaymentsWorkspace({
             payload.value.amountMinor !== original.amountMinor
           )
             throw new Error("Mismatched refund acceptance");
-          setRefundAmount("");
         }
         command.reset();
       }
@@ -408,9 +402,9 @@ export function PaymentsWorkspace({
   }
   async function submitRefund(reason: string) {
     if (!detail || command.pending || unresolved) return;
-    const amountMinor = refundAmountMinor(refundAmount);
-    if (amountMinor === null || amountMinor > detail.remainingRefundableMinor) {
-      setNotice("Enter a valid amount within the remaining refundable balance.");
+    const amountMinor = detail.remainingRefundableMinor;
+    if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
+      setNotice("The full refundable balance is unavailable; refresh this payment.");
       setConfirmRefund(false);
       return;
     }
@@ -442,7 +436,7 @@ export function PaymentsWorkspace({
           ? "Refund request accepted. Provider progress is shown below."
           : result.error.message,
       );
-      if (result.ok) setRefundAmount("");
+
       if (result.ok)
         notifyCommandSuccess("Refund request accepted", "Provider progress is shown below.");
       if (!(await loadDetail(detail.paymentIntentId, true)))
@@ -752,7 +746,6 @@ export function PaymentsWorkspace({
     setDetailTarget(null);
     setDetailError(null);
     setDetailLoading(false);
-    setRefundAmount("");
     setConfirmRefund(false);
     replaceUrl({ payment: null });
   };
@@ -764,8 +757,6 @@ export function PaymentsWorkspace({
         locked={locked}
         onInteractionState={setChildCommand}
         notice={notice}
-        refundAmount={refundAmount}
-        setRefundAmount={setRefundAmount}
         onClose={closePayment}
         readError={detailError}
         onRetryRead={() => void loadDetail(detail.paymentIntentId, true)}
@@ -838,14 +829,14 @@ export function PaymentsWorkspace({
       />
       <AdminConfirmationDialog
         open={confirmRefund}
-        title="Confirm refund request"
+        title="Confirm full refund"
         resource={
           detail
-            ? `Payment ${detail.paymentIntentId} · ${detail.currency} ${refundAmount || "0"}`
+            ? `Payment ${detail.paymentIntentId} · ${money(detail.remainingRefundableMinor, detail.currency)}`
             : "Payment"
         }
         scope="Core-authorized global payment scope"
-        consequence="This creates a financial refund request. Provider confirmation determines the canonical outcome."
+        consequence="This requests the full remaining payment balance. The refund completes after provider confirmation."
         pending={command.pending}
         onCancel={() => setConfirmRefund(false)}
         onConfirm={(reason) => void submitRefund(reason)}
@@ -877,8 +868,6 @@ function PaymentPanel({
   locked,
   onInteractionState,
   notice,
-  refundAmount,
-  setRefundAmount,
   onClose,
   onRefresh,
   onRefund,
@@ -889,8 +878,6 @@ function PaymentPanel({
   locked: boolean;
   onInteractionState: (id: string, active: boolean) => void;
   notice: string | null;
-  refundAmount: string;
-  setRefundAmount: (value: string) => void;
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onRefund: () => void;
@@ -1020,20 +1007,12 @@ function PaymentPanel({
           </div>
         ))}
         {payment.allowedActions.includes("REQUEST_REFUND") ? (
-          <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex flex-col gap-2 rounded-lg border p-3">
             <p className="text-sm font-medium">Refund payment</p>
             <p className="text-xs text-muted-foreground">
-              Remaining refundable amount:{" "}
-              {money(payment.remainingRefundableMinor, payment.currency)}
+              Full refundable balance: {money(payment.remainingRefundableMinor, payment.currency)}
             </p>
             <div className="flex gap-2">
-              <Input
-                aria-label="Refund amount"
-                inputMode="decimal"
-                value={refundAmount}
-                disabled={locked}
-                onChange={(event) => setRefundAmount(event.target.value)}
-              />
               <Button variant="destructive" disabled={locked} onClick={onRefund}>
                 Refund
               </Button>

@@ -1,5 +1,112 @@
 # Commerce alignment — active checkpoint
 
+## Summary exclusion and full refund corrections - FIX-20261011.SUMMARY-REFUNDS
+
+Phase **Exclude canceled/refunded purchasing demand and make new staff refunds full-balance**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Owner approves
+the recommendation to exclude canceled Orders and completed refunds from summary/exports,
+keep Order/financial history, and remove their quantities from purchasing totals. Owner also
+corrects the product expectation: refund is a full refund, not a discretionary partial amount.
+The corrected production Order remains untouched. No deployment, production deletion or real
+provider transaction is authorized. Started `main / c8db95f9`, preserving unrelated untracked
+Web debug/Scratch files, historical checkpoints and ignored retained/local/provider state.
+R2/S1 and the completed payment-admission fixes remain separate.
+
+Acceptance: the summary, all PDF/Excel export rows and exact purchase totals exclude canceled
+Orders and completed refunds through original attempt, canonical Payment/reaction or retained
+committed additions, before aggregation/pagination, including closed weeks. Pending/unknown/
+failed/rejected refunds alone do not imply completion. Valid delivered paid purchases remain
+visible. Purchase completion uses the same current eligibility in its complete guarded write
+set; existing purchase receipts and financial/stock history remain immutable. New staff refund
+admission permits only the full unrefunded balance, with no competing unresolved refund, and
+Web confirms that exact Core-returned balance without an editable amount. Existing partial
+financial observations/recovery remain truthful and cannot become fake full refunds.
+
+Poteto Bug fix/how, architect, behavior tests, Model the Domain, Fix Root Causes, Laziness
+Protocol, Sequence Verifiable Units and Prove It Works apply. One writer; no delegation or
+model/settings changes under AGENTS. Upstream agent/PR steps are replaced by direct work and
+main commit/push. Throughput checkpoint: reproduce exclusion and partial-admission gaps,
+consolidate purchasing eligibility, enforce full-balance refunds, then Worker/D1/browser and
+aggregate verification. Design comparison: copying the predicate into each projection risks
+summary/export/attestation drift; one purchasing-demand SQL source plus the existing shared
+preparation refund predicate keeps those consumers aligned without new persisted state or API.
+Read-model exclusion changes no demand rows, stock, purchase history or financial outcomes.
+Admin-only shadcn applies to removing the refund amount control; shared/Storefront styles stay
+unchanged. Initial focused Worker/D1 run against `c8db95f9` application bytes plus new
+tests reports **11 failed / 6 passed / 44 explicitly filtered**, reproducing stale purchasing
+quantities and discretionary partial admission. Test-first commit `b69397f8` remains local
+until the fix passes. The shared SQL source now filters purchasing eligibility before
+summary/export/demand aggregation and inside purchase/retained per-option guards. The
+existing Fulfillment refund predicate is shared with that source and preparation admission;
+no extra business state is persisted. Delivered paid purchases remain visible on CLOSED
+cycles; canceled/refunded/unpaid/expired/cancellation-requested states and canceled
+fulfillment records do not contribute purchasing totals.
+
+The close-out pass reproduces another defect: purchase completion followed by a completed
+refund on a retained committed addition still permits Finish packing through the original
+Payment guard. Its test fails with `ok: true` instead of rejected effects; test-first commit
+`a4bbbdb6` records it. Preparation now rechecks the shared completed-refund exclusion in
+the guarded transaction. The regression verifies unchanged preparation and absent command
+receipt, while an identical purchase replay returns its immutable original success.
+An injected refund between purchase read and write rejects with no purchase/audit/receipt.
+
+New staff refund admission checks the exact remaining full balance and absence of an
+unresolved competing Refund in the same batch as intent, audit and receipt; Web removes
+the arbitrary amount input/parser and confirms the Core-returned balance. Recorded
+partial outcomes, rejected-attempt retries and exact historical receipts remain unchanged.
+PRODUCT/API_CONTRACTS record the owner's corrections. Model the Domain/Laziness Protocol
+select one query/predicate; Fix Root Causes selects existing transaction boundaries;
+Test Behavior Not Implementation/Prove It Works require exact quantities and rejected
+effects, not successful mocks. No new storage or shared transport contract is introduced.
+
+Focused post-fix execution passes **116/116 across five files**, then expanded execution
+finds ten staff-refund fixture failures because they still request 5,000 of a captured
+20,000. Only that staff fixture/observed full amount changes; authorization, provider,
+unknown-outcome, replay and atomicity assertions remain intact. The final four-file run
+passes **121/121**: `pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/payments/application/refund.integration.test.ts src/admin/application/admin-finance.integration.test.ts src/admin/application/complete-scheduled-week.integration.test.ts src/admin/application/scheduled-order-summary.integration.test.ts`.
+Existing cancellation, operational-read and retained procurement suites pass in the
+expanded run. Web response/summary/actual export generation tests pass **7/7 across three
+files**. Architecture, lint, workspace types and intended formatting pass.
+
+Browser acceptance uses newly verified-absent disposable state
+`apps/core/.wrangler/e2e-summary-refunds-20261011`, real Web/Core and explicit mock provider
+gateway. Managed desktop/mobile closed-week summary journeys pass **2/2**, including a
+real full-refund command, signed synthetic confirmation/redelivery and PDF/Excel downloads.
+Exact downloaded PDF text and Excel cells both contain Abiu 10 pcs, Carrots 12.25 kg and
+Cucumber 30 kg, excluding canceled/refunded produce, at both widths. The bundled pypdf
+reader succeeds; PyMuPDF is unavailable, not claimed as used.
+Initial recovery checks fail on a pending detail read and an outdated expectation that
+a failed read preserves its child notice. Trace confirms durable Refund rows; the existing
+approved UI clears failed financial detail. A further check awaited an absent status-role
+toast and attempted reload while the command navigation lock was active. Checks now await
+the actual refreshed/refund-recheck responses and unlocked controls, retaining exact-key,
+audit and no-competing-refund assertions. Final recovery journeys pass **2/2** at desktop
+and mobile against the unchanged application build. No application refresh workaround or
+new financial success is fabricated. Commands use `E2E_AUTHENTICATED=1 E2E_STATE_NAME=e2e-summary-refunds-20261011 E2E_PROVIDER_GATEWAY=1` and the task-local port 3100;
+managed `playwright test scheduled-week.spec.ts refund-recovery.spec.ts --grep '(Scheduled cycle paid Order summary|Recover a submitted refund)' --workers=1 --retries=0`,
+then `E2E_START_STACK=0 APP_BASE_URL=http://localhost:3100 playwright test refund-recovery.spec.ts --workers=1 --retries=0`.
+Logs are ignored `.wrangler/summary-refunds-20261011-browser*.log`; the manual task server
+is stopped and port 3100 verified released. Actual provider acceptance remains unchecked.
+
+The aggregate `pnpm --config.verify-deps-before-run=false check` exits **0** against
+`a4bbbdb6` plus the final application/specification working tree. Core **1,960/1,960 across
+221 files**, Web **812/812 across 175 files**, shared **27/27**, harness **40/40**, formatting,
+conventions, retained migrations, architecture/readiness, lint, types and both builds pass.
+The Web count drops by one because the removed discretionary amount parser's test is also
+removed; refund receipt validation remains tested. Core build is a Wrangler dry run; no
+deployment occurs. Existing staging INITIAL_GLOBAL_ADMIN_EMAIL, Vinext route classification,
+configuration and bundle/plugin notices remain non-failing. Aggregate log:
+ignored `.wrangler/summary-refunds-20261011-check.log`. Final browser-test changes also pass
+Web typecheck and targeted formatting after the aggregate's earlier checks. No application
+bytes change after aggregate or browser acceptance. Final diff/no-comments review finds
+the shared purchasing/preparation predicates, full-balance admission/UI correction, behavior
+tests and owning specifications/checkpoint only. Storefront, shared styles, migrations,
+stock/demand rows and production Order/payment records remain untouched.
+**FIX-20261011.SUMMARY-REFUNDS locally complete in three work areas**: purchasing exclusion,
+refund-aware preparation admission, and new full-balance staff refunds. Actual provider and
+deployment acceptance remain unchecked and separate. Next action: commit/push verified
+intended work to main and record the delivery receipt. R2/S1 remain outside this correction.
+
 ## Summary and export eligibility investigation - REVIEW-20261011.SUMMARY-ELIGIBILITY
 
 Phase **Explain which recorded Orders and refunds contribute to Scheduled purchasing**;

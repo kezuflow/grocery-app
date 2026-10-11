@@ -1,4 +1,5 @@
 import { scheduledPurchaseQuantity } from "../domain/scheduled-purchase-quantity";
+import { scheduledPurchaseDemandSql } from "../../procurement/infrastructure/d1/scheduled-purchase-demand";
 import type {
   RpcResult,
   ScheduledWeekRequest,
@@ -21,7 +22,7 @@ export const scheduledPaidLinesSql = `SELECT d.order_id,d.location_id,d.inventor
       COALESCE(oi.product_name_snapshot,al.product_name_snapshot) productName,
       COALESCE(oi.variant_name_snapshot,al.variant_name_snapshot) variantName,
       COALESCE(oi.unit_snapshot,al.unit_snapshot) unitName
-      FROM committed_demand d JOIN sku s ON s.id=d.sku_id
+      FROM (${scheduledPurchaseDemandSql}) d JOIN sku s ON s.id=d.sku_id
       JOIN fulfillment_location l ON l.id=d.location_id
       LEFT JOIN order_item oi ON oi.id=d.order_item_id
       LEFT JOIN paid_order_amendment_line al ON al.id=d.amendment_line_id
@@ -134,7 +135,7 @@ export async function getAdminScheduledWeek(
   const demandCount =
     query.locationId && settled && !completion
       ? await deps.db
-          .prepare(`SELECT COUNT(*) count FROM committed_demand WHERE delivery_cycle_id=?
+          .prepare(`SELECT COUNT(*) count FROM (${scheduledPurchaseDemandSql}) WHERE delivery_cycle_id=?
         AND location_id=? AND status='OPEN' AND demand_basis='EXACT_PAID_LINE'`)
           .bind(query.cycleId, query.locationId)
           .first<{ count: number }>()
@@ -304,7 +305,7 @@ export async function getAdminScheduledWeek(
       SELECT sku_id,inventory_pool_id,location_id,SUM(quantity_sellable) quantitySellable,SUM(quantity_base_total) quantityBase,
         CASE WHEN COUNT(*)=COUNT(shipping_weight_grams) THEN SUM(shipping_weight_grams) ELSE NULL END shippingGrams,
         MIN(base_unit_code) baseUnit
-      FROM committed_demand WHERE delivery_cycle_id=? AND (? IS NULL OR location_id=?) AND status='OPEN' AND demand_basis='EXACT_PAID_LINE' GROUP BY sku_id,inventory_pool_id,location_id
+      FROM (${scheduledPurchaseDemandSql}) WHERE delivery_cycle_id=? AND (? IS NULL OR location_id=?) GROUP BY sku_id,inventory_pool_id,location_id
     ), totals AS (SELECT demand.*,
       SUM(quantitySellable) OVER (PARTITION BY sku_id,inventory_pool_id) totalQuantitySellable,
       SUM(quantityBase) OVER (PARTITION BY sku_id,inventory_pool_id) totalQuantityBase FROM demand)

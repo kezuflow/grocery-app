@@ -189,6 +189,70 @@ async function seedSummaryEligibility() {
 }
 
 describe("Scheduled purchasing eligibility", () => {
+  it("filters excluded products before the summary cursor and export aggregation", async () => {
+    const { input, excludedOrder, includedOrder } = await seedSummaryEligibility();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE grocery_order SET status='CANCELED' WHERE id=?").bind(excludedOrder),
+      env.DB.prepare(
+        "UPDATE order_item SET product_name_snapshot='Visible carrots' WHERE order_id=?",
+      ).bind(includedOrder),
+    ]);
+    for (let index = 0; index < 51; index++)
+      await seedPaidLine({
+        cycleId: input.cycleId,
+        orderId: excludedOrder,
+        locationId: input.locationId,
+        skuId: "sku-carrot-1kg",
+        poolId: "pool-carrot",
+        productName: `Excluded ${index}`,
+        variantName: "1 kg",
+        unitName: "GRAM",
+        baseUnit: "GRAM",
+        soldUnits: 1,
+        baseQuantity: 1000,
+      });
+    const summary = await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" });
+    expect(summary).toMatchObject({
+      ok: true,
+      value: {
+        page: {
+          nextCursor: null,
+          totals: { paidOrderCount: 1, productCount: 1 },
+          items: [{ productName: "Visible carrots", purchaseQuantities: [{ quantity: 2000 }] }],
+        },
+      },
+    });
+    expect(await core.getAdminSupplierPurchaseList(input)).toMatchObject({
+      ok: true,
+      value: { items: [{ productName: "Visible carrots", quantity: 2000 }] },
+    });
+    if (!summary.ok || summary.value.page.kind !== "ORDER_SUMMARY")
+      throw new Error("Missing summary");
+    expect(summary.value.page.items).toHaveLength(1);
+  });
+
+  it("excludes a canceled fulfillment record without erasing the owning Order", async () => {
+    const { input, excludedOrder } = await seedSummaryEligibility();
+    await env.DB.prepare(
+      "INSERT INTO fulfillment_record(id,order_id,location_id,status,version,updated_at) VALUES (?,?,'location-cebu-central','CANCELED',1,1)",
+    )
+      .bind(excludedOrder, excludedOrder)
+      .run();
+    expect(await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" })).toMatchObject({
+      ok: true,
+      value: { page: { totals: { paidOrderCount: 1 } } },
+    });
+    expect(await core.getAdminSupplierPurchaseList(input)).toMatchObject({
+      ok: true,
+      value: { items: [{ quantity: 2000 }] },
+    });
+    expect(
+      await env.DB.prepare("SELECT status FROM grocery_order WHERE id=?")
+        .bind(excludedOrder)
+        .first(),
+    ).toEqual({ status: "COMMITTED" });
+  });
+
   it.each(["CANCELED", "REFUNDED", "PENDING_PAYMENT", "EXPIRED", "CANCELLATION_REQUESTED"])(
     "excludes Order %s from every purchasing total even with retained OPEN demand",
     async (status) => {
