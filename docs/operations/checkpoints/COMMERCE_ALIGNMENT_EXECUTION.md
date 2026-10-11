@@ -1,5 +1,61 @@
 # Commerce alignment — active checkpoint
 
+## Summary and export eligibility investigation - REVIEW-20261011.SUMMARY-ELIGIBILITY
+
+Phase **Explain which recorded Orders and refunds contribute to Scheduled purchasing**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Owner reports
+a refunded receipt appearing in the summary/export, then corrects the request: the named
+Order is good now; investigate the generic eligibility issue. Preserve that corrected
+production Order. No production deletion, financial transaction, deployment or application
+change is performed. Do not infer a new refund policy from the unanswered/confusing policy
+question. R2's address discussion and the completed admission fix remain separate.
+Acceptance: trace summary/export sources, inspect the named Order read-only, reproduce
+status/refund inclusion locally, and explain current behavior and the smallest policy-bound
+correction. Started `main / 2b147ab6e47e7486be3e59b4a460368109588700`, tracked tree clean,
+preserving the unrelated Web debug/Scratch files and ignored retained/local state.
+
+Poteto investigation/bug-reproduction, how source tracing, Test Behavior Not Implementation
+and Prove It Works apply. Throughput checkpoint: n/a, read-only application investigation.
+Delegation/model changes and upstream PR steps are skipped under AGENTS; one writer records
+the evidence here. Live Admin read shows the owner-named Order as DELIVERED, Fulfillment
+COMPLETED and Payment SUCCEEDED. No customer contact or provider payload is copied here.
+The temporary inspection tab was closed. The owner's correction removes the deletion request.
+
+`scheduledPaidLinesSql` in `apps/core/src/admin/application/scheduled-week.ts` supplies
+both product summary/totals and `supplier-purchase-list.ts`, whose complete result feeds
+both PDF and Excel. It filters only exact paid demand with status OPEN and selected cycle/
+location; it does not filter owning Order, cancellation or Payment/refund status.
+Normal accepted cancellation releases OPEN demand in `cancel-order.ts`. The approved
+Global status override explicitly leaves demand/financial state unchanged. A refund alone
+does not cancel the Order or release stock/demand. The 2026-10-07 completed-refund exclusion
+in PRODUCT currently owns Fulfillment, not the purchasing summary/export.
+
+Disposable ignored probe `.wrangler/summary-review-20261011` under Core runs the real
+Worker/D1 summary and supplier RPCs against synthetic seeded states. **13/13 pass** at
+`2b147ab6` application bytes: OPEN demand remains included under each of ten canonical
+Order statuses and legacy REFUNDED, and under successful partial/full refunds. Changing
+that demand to CANCELED excludes both summary and exported quantities. These are read-model
+state-boundary probes, not provider acceptance or proof of every preceding transition.
+Command: `pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config .wrangler/summary-review-20261011/vitest.config.ts`.
+Sandbox pnpm realpath fails EPERM; the same local command with approved escalation exits 0.
+Existing focused Worker/D1 suites pass **60/60 across three files** at the same application
+revision: `pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/admin/application/scheduled-order-summary.integration.test.ts src/orders/application/cancel-order.integration.test.ts src/admin/application/operations-read-correctness.integration.test.ts`.
+These cover the existing summary/export, normal cancellation/refund coordination and
+Fulfillment read exclusions. Application bytes remain unchanged; file download rendering,
+actual provider outcomes and historical production refund recovery are not revalidated.
+
+Confirmed behavior: an OPEN-demand Order is included even when its displayed status or
+refund history suggests exclusion. Normal coordinated cancellation's released demand is
+excluded. Unresolved policy: whether the summary/export should copy Fulfillment's exclusion
+of every completed refund, including partial refunds and retained additions; no such rule
+is implemented by this review. Smallest recommended change if approved: apply the chosen
+eligibility predicate in the shared Core source before aggregation/pagination, keeping
+financial/Order records intact. Check purchasing-demand and completion consumers together
+so displayed/exported quantities cannot disagree with purchase attestation. Next action:
+present the verified current rules plainly and resolve the summary/export refund exclusion.
+**REVIEW-20261011.SUMMARY-ELIGIBILITY complete as an investigation**: current query and
+status/refund inclusion verified, no application fix or production deletion claimed.
+
 ## Payment admission corrections - FIX-20261011.PAYMENT-ADMISSION
 
 Phase **Atomically reject competing or no-longer-eligible checkout Payments**;
