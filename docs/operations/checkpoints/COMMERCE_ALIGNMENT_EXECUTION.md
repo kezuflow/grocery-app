@@ -1,5 +1,44 @@
 # Commerce alignment — active checkpoint
 
+## Design workflow verification - DESIGN-20261011.VERIFY
+
+Phase **Independently verify the requested pstack, CSS, and shadcn guidance**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Owner asks whether the work
+matches the intended skills and is correct. Started `main / 2abe986fecca81d5bc36b74caea7f7f152a3f6dd`,
+tracked tree clean. Acceptance: verify source identity, installed bytes, Codex routing,
+guide rules, links, command behavior, and preservation of approved presentation. Preserve
+the unrelated untracked Web debug/Scratch files and ignored local/provider state.
+Investigation playbook with `how` and Prove It Works applies. Throughput checkpoint is
+not applicable to this read-only investigation. Explanation/review runs in this chat under
+AGENTS; no delegation, model/settings change, application edit, or provider effect is included.
+
+Fresh source reads confirm the official Cursor pstack manifest and license credit Lauren Tan.
+The pinned backnotprop MIRROR.md explicitly describes a copy of cursor/plugins/pstack with
+adaptations for other agents. Official OpenAI documentation confirms `.agents/skills` discovery.
+The correct verdict is Lauren's workflow adapted for Codex, subject to the owner's current
+repository overrides. It is not an official Codex plugin or a claim about her personal setup.
+The installed good-css and official shadcn source agree with DESIGN's roles and rules;
+approved Admin stock defaults and Storefront/auth preservation remain correctly scoped.
+
+Fresh `python .wrangler/skills-20261011-verify.py` exits 0 after comparing all **138 installed
+files** and both licenses with the pinned GitHub blob hashes. It verifies **51 pstack skills**
+and **one good-css skill**, with only the recorded extra-final-blank-line removal reconstructed
+for comparison. `pnpm --config.verify-deps-before-run=false skills:check` exits 0 and verifies
+all **15 Admin mirror files**. From `apps/web`, both `pnpm dlx shadcn@latest add button --dry-run`
+and `pnpm dlx shadcn@latest add button --diff button.tsx` exit 0. They preview the customized
+shared Button's replacement without applying it. `node .wrangler/design-20261011-audit.mjs`
+exits 0 for **33 local links, 10 local anchors**, preserved pre-research DESIGN decisions, and
+no tracked changes after the previews. `git diff --check` passes. The earlier 40/40 harness
+receipt remains valid for unchanged tooling; it is not presented as a new run. The earlier
+Windows registry-search failure remains separately recorded, not a passing command.
+
+**DESIGN-20261011.VERIFY complete: 3/3 requested skill roles verified** at the
+skill-and-guide counting level. No correction to DESIGN, skill reinstall, or upstream update
+is needed. Zero requested verification actions remain. This checkpoint-only receipt records
+the result; application/browser/provider acceptance remains outside this task.
+Next action: use the verified guide for the next authorized design task and retain existing
+commerce/provider gaps and the documented Windows search limitation.
+
 ## Design workflow research - DESIGN-20261011.RESEARCH
 
 Phase **Research Lauren Tan's pstack for Codex and document CSS/Admin design rules**;
