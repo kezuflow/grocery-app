@@ -51,12 +51,16 @@ the inherited staging INITIAL_GLOBAL_ADMIN_EMAIL configuration warning. The igno
 documented package-script names, exact three-file scope, no added HTML comments, and byte
 preservation of existing DESIGN decisions after newline normalization. `git diff --check`
 passes. The documentation diff review uses unslop and a separate no-comments pass in this
-chat; no scoped comments or code suppressions exist. Main commit/push remains pending.
+chat; no scoped comments or code suppressions exist. Source commit `f39b4344` contains exactly
+the three intended documentation files. `git push origin main` exits 0 and advances origin
+from `fac56415` to `f39b4344`; commit/push naming and message hooks pass. This receipt follows
+in a documentation-only checkpoint commit. Unrelated untracked files remain preserved.
 
-**DESIGN-20261011.RESEARCH implementation complete: 3/3 researched skill roles documented**
-at the guide-update counting level. Zero requested documentation changes remain. One
+**DESIGN-20261011.RESEARCH complete: 3/3 researched skill roles documented and main delivered**
+at the guide-update counting level. Zero requested research, documentation, or delivery actions remain. One
 upstream Windows search failure remains recorded and is outside this guide-only task.
-Next action: commit/push only DESIGN, SOURCES, and this checkpoint, preserving unrelated files.
+Next action: use DESIGN's workflow for the next authorized design task, retaining the recorded
+search limitation and all earlier commerce/provider acceptance gaps.
 
 ## Project engineering and design skills - SKILLS-20261011.INSTALL
 
