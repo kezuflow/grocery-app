@@ -1,5 +1,81 @@
 # Commerce alignment — active checkpoint
 
+## Read-only code review - REVIEW-20261011.CORE
+
+Phase **Review high-risk Core execution paths without application changes**; checkpoint
+`docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner requests
+a Poteto-mode review prioritizing correctness, security, authorization, money, stock,
+recovery, and architecture. Acceptance requires actual caller-to-write traces, local
+verification of suspected defects, exact locations, triggers/impact/evidence/minimal fixes,
+and separate confirmed findings, unresolved suspicions, and unchecked scope.
+Started `main / 423adc2d55e0294c89a839047fe4143e72682605`, tracked tree clean. Preserved
+unrelated untracked `apps/web/debug.log` and the Scratch project under `apps/web/public/produce`.
+Ignored local/provider configuration and retained state remain unchanged.
+
+Investigation, `how`, no-comments, unslop, TypeScript, and Workers review guidance apply.
+Technical-writing applies to this receipt. Delegated steps run here under AGENTS, with
+the current session settings. Throughput checkpoint is not applicable to this read-only
+investigation. Prove It Works requires actual Worker/D1 reproduction rather than static
+check success. Boundary Discipline places recommended fixes in Core payment admission.
+No application edits, independent agent, browser/provider transaction, deployment,
+outbound message, remote data write, or destructive operation occurred.
+
+Four defects are locally confirmed against the starting source. R1, P1, at
+`apps/core/src/payments/application/create-payment.ts:284`: distinct keys admitted while
+the first provider creation waits create two payable/captured Payments and one Order.
+R2, P1, at `apps/core/src/checkout/application/revalidate-checkout-quote.ts:216`: a real
+saved-address coordinate/contact edit still permits accepted courier-quote reuse and an
+Order with the earlier destination snapshot. R3, P1, at `create-payment.ts:194`: disabling
+the linked Customer principal during courier refresh does not prevent new provider
+submission. R4, P2, at `revalidate-checkout-quote.ts:179` and `create-payment.ts:188`:
+an authorized new effective price during courier refresh bypasses the admission guard.
+No financial success is inferred from provider creation; the double-capture and address
+Order evidence uses verified mock lookup and the actual Order reaction.
+
+S1 remains an unresolved suspicion at `apps/core/src/commerce/reconciliation.ts:8`.
+A real Instant Quote/Payment retains its stock hold after action expiry and verified
+mock awaiting-customer lookup completes. The held-stock behavior is locally proven;
+its defect classification requires the safe entitlement-release rule and actual
+post-expiry provider evidence. PRODUCT forbids fabricating financial failure from expiry.
+Do not reopen historical accepted work or treat this review as provider acceptance.
+
+Executed verification against unchanged application source at `423adc2d`:
+
+```text
+pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/readiness/security-boundary.integration.test.ts src/payments/application/payment-creation-outcome.integration.test.ts src/inventory/application/inventory-command-recovery.integration.test.ts src/orders/application/apply-checkout-payment-reaction.integration.test.ts
+pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/auth/authorization.test.ts src/customer-address.integration.test.ts src/payments/application/refund.integration.test.ts src/payments/application/provider-inbox-reliability.integration.test.ts src/payments/application/reconcile-refunds.integration.test.ts src/payments/application/reconcile-stuck-payments.integration.test.ts src/inventory/application/inventory-transfers.integration.test.ts src/inventory/application/counted-stock.integration.test.ts
+pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config vitest.config.ts src/admin/application/delivery-provider-operations.integration.test.ts -t "shared Scheduled courier"
+pnpm --config.verify-deps-before-run=false --filter @freshmarkets/web exec vitest run lib/core-client/security-boundary.test.ts tests/unit/app/api/checkout/payment/route.test.ts tests/unit/app/checkout/checkout-client.test.tsx
+pnpm --config.verify-deps-before-run=false --filter @freshmarkets/core exec vitest run --config .wrangler/review-20261011/vitest.config.ts
+node scripts/verify-architecture-boundaries.mjs
+node scripts/verify-readiness-security.mjs
+git diff --check
+```
+
+Results: existing Core **61/61**, **177/177**, and selected shared-courier **9/9** with
+53 cases explicitly skipped by the name filter; Web **33/33**; final reproduction
+suite **5/5**. The probes assert observed behavior, not a fixed application. Both static
+guards and diff checks pass. Initial sandbox pnpm execution fails EPERM before tests;
+approved local execution succeeds. Intermediate scratch syntax/assertion and mismatched
+file-filter failures were corrected without touching source or existing tests.
+Detailed findings and limits remain in ignored `.wrangler/code-review-20261011.md`;
+rerunnable probes/configuration remain in `apps/core/.wrangler/review-20261011`.
+
+Reviewed paths include Web payment transport, Customer/Staff resolution, quote/payment
+admission/adoption, verified observation/Order commitment, refunds/recovery, checkout
+expiry, stock adjustment/counts/transfers, and shared Scheduled courier operations.
+No full aggregate/build/typecheck, browser, production, or actual provider acceptance
+is claimed. Messaging/email, media/R2 recovery, full IAM administration, all Procurement
+and fulfillment commands, reporting reconciliation, retained schema upgrades, and the
+remaining routes are unchecked.
+
+**REVIEW-20261011.CORE complete at the review-deliverable counting level: four confirmed
+findings and one unresolved suspicion reported; all remain unremediated.** This
+checkpoint is the only tracked change. Next concrete action, if implementation is
+requested, is the atomic exclusive payment-admission guard for R1 with an assertion
+that competing distinct keys cannot create two provider submissions. This review
+does not authorize application changes or provider transactions.
+
 ## Design workflow verification - DESIGN-20261011.VERIFY
 
 Phase **Independently verify the requested pstack, CSS, and shadcn guidance**; checkpoint
