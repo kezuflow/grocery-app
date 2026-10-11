@@ -2131,3 +2131,215 @@ describe("paid Instant commitment readiness independence", () => {
     },
   );
 });
+
+describe("checkout payment admission", () => {
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "rejects competing %s payment keys before the first provider response and preserves exact replay",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const provider = createMockPaymentProvider();
+      const create = provider.createPayment.bind(provider);
+      let entered: () => void = () => undefined;
+      let release: () => void = () => undefined;
+      const submitted = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const response = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const submission = vi.spyOn(provider, "createPayment").mockImplementation(async (input) => {
+        if (submission.mock.calls.length === 1) {
+          entered();
+          await response;
+        }
+        return create(input);
+      });
+      const registry = new ProviderRegistry("test", [provider]);
+      const firstCommand = paymentCommandForQuote(fixture.customerId, quote.value);
+      const first = createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        firstCommand,
+        quoteDependencies.deliveryProviders,
+      );
+      await submitted;
+      const second = await createCheckoutPaymentIntent(
+        env.DB,
+        registry,
+        "mock",
+        quoteDependencies.routeDistance,
+        { ...firstCommand, idempotencyKey: crypto.randomUUID() },
+        quoteDependencies.deliveryProviders,
+      ).finally(release);
+      const accepted = await first;
+      expect(accepted).toMatchObject({ ok: true });
+      expect(second).toMatchObject({ ok: false });
+      expect(submission).toHaveBeenCalledTimes(1);
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 1 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 1 });
+      expect(
+        await createCheckoutPaymentIntent(
+          env.DB,
+          registry,
+          "mock",
+          quoteDependencies.routeDistance,
+          firstCommand,
+          quoteDependencies.deliveryProviders,
+        ),
+      ).toEqual(accepted);
+      expect(submission).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["INSTANT", "SCHEDULED"] as const)(
+    "rejects a disabled principal during %s payment revalidation without a financial identity or submission",
+    async (fulfillmentMode) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const authId = `auth-${fixture.customerId}`;
+      const principalId = crypto.randomUUID();
+      const now = Date.now();
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO user(id,name,email,email_verified,created_at,updated_at) VALUES (?,'Payment admission customer',?,1,?,?)",
+        ).bind(authId, `${authId}@example.com`, now, now),
+        env.DB.prepare(
+          "INSERT INTO customer_principal(id,auth_user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)",
+        ).bind(principalId, authId, now, now),
+        env.DB.prepare("UPDATE customer SET principal_id=? WHERE id=?").bind(
+          principalId,
+          fixture.customerId,
+        ),
+      ]);
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      await requireProviderRefresh(quote.value.quoteId);
+      const changedProvider = {
+        ...deliveryProvider,
+        quote: async (...args: Parameters<typeof deliveryProvider.quote>) => {
+          await env.DB.prepare("UPDATE customer_principal SET status='disabled' WHERE id=?")
+            .bind(principalId)
+            .run();
+          return deliveryProvider.quote(...args);
+        },
+      };
+      const provider = createMockPaymentProvider();
+      const submission = vi.spyOn(provider, "createPayment");
+      const result = await createCheckoutPaymentIntent(
+        env.DB,
+        new ProviderRegistry("test", [provider]),
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        new Map([["lalamove", changedProvider]]),
+      );
+      expect(result).toMatchObject({ ok: false });
+      expect(submission).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) count FROM payment_creation_observation WHERE customer_id=?",
+        )
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM cart WHERE id=?").bind(fixture.cartId).first(),
+      ).toEqual({ status: "ACTIVE" });
+    },
+  );
+
+  it.each([
+    ["INSTANT", "price"],
+    ["SCHEDULED", "price"],
+    ["INSTANT", "availability"],
+    ["SCHEDULED", "availability"],
+  ] as const)(
+    "rejects a concurrent authorized %s %s change before financial admission",
+    async (fulfillmentMode, change) => {
+      const fixture = await seededCheckout({ fulfillmentMode });
+      const quote = await createQuote(fixture);
+      if (!quote.ok) throw new Error(quote.error.message);
+      const staff = await locationManager();
+      await env.DB.prepare(
+        "INSERT INTO role_permission(role_id,permission_id) SELECT ?,id FROM permission WHERE code IN ('prices.manage','catalog.manage')",
+      )
+        .bind(staff.id)
+        .run();
+      await requireProviderRefresh(quote.value.quoteId);
+      const changedProvider = {
+        ...deliveryProvider,
+        quote: async (...args: Parameters<typeof deliveryProvider.quote>) => {
+          const meta = {
+            headers: staff.headers,
+            requestId: crypto.randomUUID(),
+            idempotencyKey: crypto.randomUUID(),
+            skuId: fixture.skuId,
+            locationId: "location-cebu-central",
+            expectedVersion: 1,
+          };
+          const updated =
+            change === "price"
+              ? await exports.default.setAdminSkuPrice({
+                  ...meta,
+                  marketId: "market-metro-cebu",
+                  currency: "PHP",
+                  amountMinor: 20000,
+                  validFrom: Date.now() - 1,
+                })
+              : await exports.default.setAdminSkuAvailability({
+                  ...meta,
+                  availabilityStatus: "UNAVAILABLE",
+                });
+          expect(updated).toMatchObject({ ok: true });
+          return deliveryProvider.quote(...args);
+        },
+      };
+      const provider = createMockPaymentProvider();
+      const submission = vi.spyOn(provider, "createPayment");
+      const result = await createCheckoutPaymentIntent(
+        env.DB,
+        new ProviderRegistry("test", [provider]),
+        "mock",
+        quoteDependencies.routeDistance,
+        paymentCommandForQuote(fixture.customerId, quote.value),
+        new Map([["lalamove", changedProvider]]),
+      );
+      expect(result).toMatchObject({ ok: false, error: { code: "PRICE_CHANGED" } });
+      expect(submission).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_intent WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM payment_attempt WHERE customer_id=?")
+          .bind(fixture.customerId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare("SELECT status FROM cart WHERE id=?").bind(fixture.cartId).first(),
+      ).toEqual({ status: "ACTIVE" });
+    },
+  );
+});
