@@ -147,6 +147,190 @@ async function seedUnpaidAddition(orderId: string) {
   ]);
 }
 
+async function seedSummaryEligibility() {
+  const cycleId = crypto.randomUUID();
+  await seedTestCycle(env.DB, cycleId);
+  const local = await locationManager("location");
+  await grantProcurementRead(local.id);
+  const includedOrder = crypto.randomUUID();
+  const excludedOrder = crypto.randomUUID();
+  for (const [orderId, soldUnits] of [
+    [includedOrder, 2],
+    [excludedOrder, 98],
+  ] as const) {
+    await seedOrder(cycleId, orderId);
+    await seedPaidLine({
+      cycleId,
+      orderId,
+      locationId: "location-cebu-central",
+      skuId: "sku-carrot-1kg",
+      poolId: "pool-carrot",
+      productName: "Carrots",
+      variantName: "1 kg",
+      unitName: "GRAM",
+      baseUnit: "GRAM",
+      soldUnits,
+      baseQuantity: soldUnits * 1000,
+    });
+  }
+  await env.DB.prepare("UPDATE grocery_order SET status='DELIVERED' WHERE id=?")
+    .bind(includedOrder)
+    .run();
+  return {
+    includedOrder,
+    excludedOrder,
+    input: {
+      headers: local.headers,
+      requestId: crypto.randomUUID(),
+      cycleId,
+      locationId: "location-cebu-central",
+    },
+  };
+}
+
+describe("Scheduled purchasing eligibility", () => {
+  it.each(["CANCELED", "REFUNDED", "PENDING_PAYMENT", "EXPIRED", "CANCELLATION_REQUESTED"])(
+    "excludes Order %s from every purchasing total even with retained OPEN demand",
+    async (status) => {
+      const { input, excludedOrder } = await seedSummaryEligibility();
+      await env.DB.prepare("UPDATE grocery_order SET status=? WHERE id=?")
+        .bind(status, excludedOrder)
+        .run();
+      const summary = await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" });
+      const demand = await core.getAdminScheduledWeek({ ...input, section: "DEMAND" });
+      const exported = await core.getAdminSupplierPurchaseList(input);
+      expect(summary).toMatchObject({
+        ok: true,
+        value: {
+          page: {
+            totals: { paidOrderCount: 1 },
+            items: [
+              {
+                paidOrderCount: 1,
+                sellingOptions: [{ soldUnitCount: 2, totalQuantityBase: 2000 }],
+              },
+            ],
+          },
+        },
+      });
+      expect(demand).toMatchObject({
+        ok: true,
+        value: { page: { items: [{ quantitySellable: 2, quantityBase: 2000 }] } },
+      });
+      expect(exported).toMatchObject({
+        ok: true,
+        value: { items: [{ productName: "Carrots", unit: "GRAM", quantity: 2000 }] },
+      });
+      expect(
+        await env.DB.prepare("SELECT status FROM committed_demand WHERE order_id=?")
+          .bind(excludedOrder)
+          .first(),
+      ).toEqual({ status: "OPEN" });
+    },
+  );
+
+  it.each(["attempt", "reaction", "addition"])(
+    "excludes completed refunds linked through %s after the week closes",
+    async (link) => {
+      const { input, excludedOrder } = await seedSummaryEligibility();
+      const intentId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare("UPDATE delivery_cycle SET status='CLOSED' WHERE id=?").bind(input.cycleId),
+        env.DB.prepare(
+          "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','SUCCEEDED',?,1,1)",
+        ).bind(intentId, crypto.randomUUID(), excludedOrder, intentId),
+        env.DB.prepare(
+          "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP','SUCCEEDED',?,1,1)",
+        ).bind(intentId, intentId, intentId),
+      ]);
+      if (link === "attempt")
+        await env.DB.prepare("UPDATE payment_attempt SET payment_intent_id=? WHERE id=?")
+          .bind(intentId, excludedOrder)
+          .run();
+      else if (link === "reaction")
+        await env.DB.prepare(
+          "INSERT INTO order_payment_reaction(id,payment_intent_id,reaction_id,order_id,applied_at) VALUES (?,?,?,?,1)",
+        )
+          .bind(intentId, intentId, intentId, excludedOrder)
+          .run();
+      else
+        await env.DB.prepare(
+          "INSERT INTO paid_order_amendment(id,order_id,status,currency,total_minor,payment_intent_id,idempotency_key,created_at,updated_at) VALUES (?,?,'COMMITTED','PHP',100,?,?,1,1)",
+        )
+          .bind(intentId, excludedOrder, intentId, intentId)
+          .run();
+      expect(
+        await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" }),
+      ).toMatchObject({
+        ok: true,
+        value: {
+          page: {
+            totals: { paidOrderCount: 1 },
+            items: [{ sellingOptions: [{ soldUnitCount: 2 }] }],
+          },
+        },
+      });
+      expect(await core.getAdminSupplierPurchaseList(input)).toMatchObject({
+        ok: true,
+        value: { items: [{ quantity: 2000 }] },
+      });
+      expect(await core.getAdminScheduledWeek({ ...input, section: "DEMAND" })).toMatchObject({
+        ok: true,
+        value: { page: { items: [{ quantityBase: 2000 }] } },
+      });
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) count FROM grocery_order WHERE cycle_id=?")
+          .bind(input.cycleId)
+          .first(),
+      ).toEqual({ count: 2 });
+    },
+  );
+
+  it.each(["REFUNDED", "PARTIALLY_REFUNDED"])(
+    "excludes retained financial projection %s",
+    async (status) => {
+      const { input, excludedOrder } = await seedSummaryEligibility();
+      await env.DB.prepare("UPDATE payment_attempt SET status=? WHERE id=?")
+        .bind(status, excludedOrder)
+        .run();
+      expect(
+        await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" }),
+      ).toMatchObject({ ok: true, value: { page: { totals: { paidOrderCount: 1 } } } });
+      expect(await core.getAdminSupplierPurchaseList(input)).toMatchObject({
+        ok: true,
+        value: { items: [{ quantity: 2000 }] },
+      });
+    },
+  );
+
+  it.each(["REQUESTED", "APPROVED", "PROCESSING", "ESCALATED", "FAILED", "REJECTED"])(
+    "does not treat refund %s as completion",
+    async (status) => {
+      const { input, excludedOrder } = await seedSummaryEligibility();
+      const intentId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO payment_intent(id,purpose,subject_type,subject_id,customer_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,'GROCERY_CHECKOUT','checkout_quote',?,?,100,'PHP','SUCCEEDED',?,1,1)",
+        ).bind(intentId, crypto.randomUUID(), excludedOrder, intentId),
+        env.DB.prepare("UPDATE payment_attempt SET payment_intent_id=? WHERE id=?").bind(
+          intentId,
+          excludedOrder,
+        ),
+        env.DB.prepare(
+          "INSERT INTO payment_refund(id,payment_intent_id,amount_minor,currency,status,idempotency_key,created_at,updated_at) VALUES (?,?,100,'PHP',?,?,1,1)",
+        ).bind(intentId, intentId, status, intentId),
+      ]);
+      expect(
+        await core.getAdminScheduledWeek({ ...input, section: "ORDER_SUMMARY" }),
+      ).toMatchObject({ ok: true, value: { page: { totals: { paidOrderCount: 2 } } } });
+      expect(await core.getAdminSupplierPurchaseList(input)).toMatchObject({
+        ok: true,
+        value: { items: [{ quantity: 100000 }] },
+      });
+    },
+  );
+});
+
 describe("Scheduled cycle order summary", () => {
   it("aggregates paid originals and additions, excludes cancellations, and enforces scope", async () => {
     const cycleId = crypto.randomUUID();

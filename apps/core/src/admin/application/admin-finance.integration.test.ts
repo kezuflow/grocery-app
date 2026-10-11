@@ -1178,6 +1178,44 @@ describe("finance administration", () => {
     expect(order).toEqual({ status: "COMMITTED", version: 1 });
   });
 
+  it("rejects new discretionary partial refunds without business effects", async () => {
+    const manager = await seedManager();
+    const { paymentIntentId } = await seedOrderWithPayment();
+    const key = crypto.randomUUID();
+    expect(
+      await core.requestAdminRefund({
+        expectedVersion: 1,
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 10000,
+        reason: "Inspected refund",
+        idempotencyKey: key,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM payment_refund WHERE payment_intent_id=?")
+        .bind(paymentIntentId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) count FROM idempotency_records WHERE idempotency_key=?")
+        .bind(key)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await core.requestAdminRefund({
+        expectedVersion: 1,
+        requestId: crypto.randomUUID(),
+        headers: { cookie: manager.cookie },
+        paymentIntentId,
+        amountMinor: 50000,
+        reason: "Inspected refund",
+        idempotencyKey: key,
+      }),
+    ).toMatchObject({ ok: true, value: { amountMinor: 50000, status: "REQUESTED" } });
+  });
+
   it("requests refunds idempotently, validates amounts, and never asserts success", async () => {
     const manager = await seedManager();
     const { paymentIntentId } = await seedOrderWithPayment();
