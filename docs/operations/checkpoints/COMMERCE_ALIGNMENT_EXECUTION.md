@@ -1,5 +1,52 @@
 # Commerce alignment — active checkpoint
 
+## Native workspace foundation - MOBILE-20261012.1.FOUNDATION
+
+Phase **Establish the native workspace and verification path**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`.
+Acceptance owner is the repository owner. The owner explicitly requests this one
+implementation ID, its verification evidence and a ready PR, stopping before merge.
+Acceptance requires the Foundation build, unit, live, performance and review-media
+boxes in `docs/operations/MOBILE_PR_PLAN.md`. Later mobile slices are not started.
+
+Started from clean tracked planning branch `codex/mobile-pr-plan-verification` at
+`415e5f4e6ea28669f9f60a09b8e329e481a12917`. Refreshed origin and created
+`codex/mobile-foundation` from merged planning trunk
+`9b1b59cc`. Preserve ignored local/provider state and earlier commerce obligations.
+Root owns shared guards, lockfile, owning guides and this checkpoint. The native
+driver worker owns only mobile scripts, flows and README. Two shell worker starts
+failed at model capacity; root completed that bounded scope. All roles inherit
+current session settings. No recurring audit, deployment, distribution, provider
+transaction, outbound message or merge is authorized.
+
+Caller path is Expo tab -> native presentation -> parsed Web `/api/core-health`
+-> Core Service Binding. This read establishes liveness and binding configuration,
+never shopping/payment readiness. No Core, Web, contract or storage behavior changes.
+Five route-owned tabs share safe-area/keyboard/scroll layout. Dependent capabilities
+remain explicitly unavailable. Configuration separates development and private-beta
+application IDs, schemes and origins; no provider secret is copied into app config.
+Naming permits only Expo's required route conventions. Architecture guards reject
+native imports of server, storage and provider implementation.
+
+Verification is in progress. Initial native tests pass 11/11; guard tests pass
+17/17; both native JavaScript exports passed before the final dependency/runtime
+corrections. These are source/bundle evidence, not Android or iOS acceptance.
+The unchanged Expo compatibility check identified native TypeScript 6.0.3 rather
+than repository TypeScript 7.0.2 and an unused server-rendering peer mismatch.
+Mobile now uses Expo's supported compiler; server-rendering packages are not direct
+native dependencies. Final checks and dependency warnings will be recorded below.
+
+No Android SDK, adb, Maestro, installed build or iOS-capable runner was detected.
+Native live lanes, layout comparison screenshots, iOS timing, actual-build video,
+and the full paired Web/native performance gate remain open. Missing native
+observations fail acceptance. FOUNDATION is started, not complete; implementation
+count is **1/12 started, 0/12 accepted**, under five parent phases.
+One next action is to finish local gates and independent review, then open the
+non-draft PR with the unavailable device gates stated explicitly.
+
+The prior planning/workflow receipt below is historical evidence and does not
+reopen its completed deliverable.
+
 ## Adopt pstack PR delivery and verification - MOBILE-20261012.PR-PLAN-VERIFY
 
 Phase **Convert the Expo program to PRs and prove the project verification skill**;

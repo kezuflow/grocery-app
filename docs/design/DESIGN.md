@@ -2,6 +2,14 @@
 
 ## Design skills
 
+The MOBILE-20261012.1.FOUNDATION shell uses five native tabs with individual route
+ownership and shared FreshMarkets colors, scroll layout, safe areas and keyboard
+handling. It shows feature-unavailable states rather than fabricated empty account
+or commerce data. A compact text-led shell is the source choice. The required two
+shopping-shell visual arrangements and actual Android/iOS screenshots remain an
+open acceptance gate until native builds can be driven. This does not change Web
+Storefront, Admin or authentication tokens or navigation.
+
 Use these skills together for design work. Each owns a different part of the task.
 
 | Skill | Role in FreshMarkets | Read when |

@@ -19,15 +19,20 @@ test("allows route groups only beneath the Web and Mobile app routers", () => {
   assert.equal(isAppRouteGroupDirectory("apps/web/components/(storefront)"), false);
   assert.equal(isAppRouteGroupDirectory("apps/web/app/(Storefront)"), false);
   assert.equal(isAppRouteGroupDirectory("apps/web/app/(store_front)"), false);
-  assert.equal(isAppRouteGroupDirectory("mobile/app/(tabs)"), true);
-  assert.equal(isAppRouteGroupDirectory("mobile/components/(tabs)"), false);
-  assert.equal(isAppRouteGroupDirectory("mobile/app/(Tabs)"), false);
+  assert.equal(isAppRouteGroupDirectory("apps/mobile/app/(tabs)"), true);
+  assert.equal(isAppRouteGroupDirectory("apps/mobile/components/(tabs)"), false);
+  assert.equal(isAppRouteGroupDirectory("apps/mobile/app/(Tabs)"), false);
+  assert.equal(isAppRouteGroupDirectory("mobile/app/(tabs)"), false);
 });
 
 test("allows Expo's required layout filename only beneath mobile routes", () => {
-  assert.equal(isMobileExpoRouteFile("mobile/app/_layout.tsx"), true);
-  assert.equal(isMobileExpoRouteFile("mobile/app/(tabs)/_layout.tsx"), true);
-  assert.equal(isMobileExpoRouteFile("mobile/components/_layout.tsx"), false);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/app/_layout.tsx"), true);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/app/(tabs)/_layout.tsx"), true);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/app/+not-found.tsx"), true);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/components/_layout.tsx"), false);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/app/_helper.tsx"), false);
+  assert.equal(isMobileExpoRouteFile("apps/mobile/app/+secret.tsx"), false);
+  assert.equal(isMobileExpoRouteFile("mobile/app/_layout.tsx"), false);
   assert.equal(isMobileExpoRouteFile("apps/web/app/_layout.tsx"), false);
 });
 

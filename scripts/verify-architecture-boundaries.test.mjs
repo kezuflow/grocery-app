@@ -5,6 +5,39 @@ import { analyzeSourceFile } from "./verify-architecture-boundaries.mjs";
 
 const violation = (fileName, sourceText) => analyzeSourceFile(fileName, sourceText)[0];
 
+test("rejects native server, storage and provider implementation imports", () => {
+  for (const moduleName of [
+    "../../core/src/orders/query",
+    "../../web/lib/core-client/core",
+    "@freshmarkets/core",
+    "@freshmarkets/web",
+    "@cloudflare/workers-types",
+    "drizzle-orm",
+    "../infrastructure/providers/xendit",
+    "stripe",
+  ]) {
+    assert.equal(
+      violation("apps/mobile/lib/bad.ts", `import { value } from "${moduleName}";`).code,
+      "MOBILE_IMPORTS_IMPLEMENTATION",
+      moduleName,
+    );
+  }
+});
+
+test("allows native public contracts, Expo routes and local presentation", () => {
+  assert.deepEqual(
+    analyzeSourceFile(
+      "apps/mobile/app/(tabs)/index.tsx",
+      [
+        'import type { CoreHealthResponse } from "@freshmarkets/contracts";',
+        'import { Tabs } from "expo-router";',
+        'import { Screen } from "../../components/screen";',
+      ].join("\n"),
+    ),
+    [],
+  );
+});
+
 test("rejects Web imports from Core source", () => {
   assert.deepEqual(
     violation("apps/web/lib/bad.ts", 'import { query } from "../../core/src/orders/query";'),

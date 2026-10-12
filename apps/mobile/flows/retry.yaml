@@ -1,0 +1,9 @@
+appId: ${APP_ID}
+---
+- assertVisible:
+    id: backend-unavailable
+- tapOn:
+    id: retry-backend
+- assertVisible:
+    id: backend-available
+- takeScreenshot: retry
