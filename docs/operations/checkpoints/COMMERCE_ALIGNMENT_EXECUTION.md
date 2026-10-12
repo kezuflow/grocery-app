@@ -7,8 +7,9 @@ checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Owner 
 the recommendation to exclude canceled Orders and completed refunds from summary/exports,
 keep Order/financial history, and remove their quantities from purchasing totals. Owner also
 corrects the product expectation: refund is a full refund, not a discretionary partial amount.
-The corrected production Order remains untouched. No deployment, production deletion or real
-provider transaction is authorized. Started `main / c8db95f9`, preserving unrelated untracked
+The corrected production Order remains untouched. Owner authorizes production deployment
+on 2026-10-12 with "deploy". Production deletion and real provider transactions remain
+unauthorized. Started `main / c8db95f9`, preserving unrelated untracked
 Web debug/Scratch files, historical checkpoints and ignored retained/local/provider state.
 R2/S1 and the completed payment-admission fixes remain separate.
 
@@ -103,14 +104,68 @@ the shared purchasing/preparation predicates, full-balance admission/UI correcti
 tests and owning specifications/checkpoint only. Storefront, shared styles, migrations,
 stock/demand rows and production Order/payment records remain untouched.
 **FIX-20261011.SUMMARY-REFUNDS complete: 3/3 work areas locally verified**: purchasing exclusion,
-refund-aware preparation admission, and new full-balance staff refunds. Actual provider and
-deployment acceptance remain unchecked and separate. Source fix `6c7c60f7` and test-first
+refund-aware preparation admission, and new full-balance staff refunds. Actual provider
+transaction acceptance remains unchecked and separate. Source fix `6c7c60f7` and test-first
 commits `b69397f8`/`a4bbbdb6` are committed/pushed to main. `git push origin main` exits 0
 and advances origin from `c8db95f9` to `6c7c60f7`. Final naming/commit hooks pass; the tracked
 application tree is clean and only the two preserved unrelated untracked Web files remain.
 This subsequent delivery receipt changes checkpoint prose only. Zero approved implementation
-actions remain. Next action: separately authorize release/provider acceptance if desired;
-R2/S1 remain outside this correction. No production data deletion or deployment is claimed.
+actions remain. Production release is authorized and completed from `main / 1a5c98bf`,
+matching origin/main with unchanged verified application bytes. Poteto Shipping PR/agent
+steps are skipped because this is a Worker deployment and AGENTS requires direct main work
+without delegation. The deployment runbook supplies the ordered production build, Core,
+Web and runtime checks. No schema migration is introduced.
+
+**DEPLOY-20261012.SUMMARY-REFUNDS complete: 2/2 production Workers released and checked**.
+Phase **Deploy verified purchasing/refund corrections and check live readiness** at this
+checkpoint. Acceptance owner is the repository owner through "deploy" on 2026-10-12.
+Production build uses `$env:CLOUDFLARE_ENV='production'; pnpm --filter @freshmarkets/web build`
+and exits 0. Both `wrangler types ... --check` commands, `vinext check` and
+`node scripts/verify-worker-readiness.mjs` pass. The existing aggregate/browser acceptance
+above still describes unchanged application bytes; it is not rerun for this release.
+Production Core and Web `wrangler deploy --dry-run` commands both exit 0.
+Ignored logs are `.wrangler/summary-refunds-20261012-production-build.log` and
+`.wrangler/summary-refunds-20261012-{core,web}-dry-run.log`.
+
+Wrangler 4.127.1 `whoami`, `deploy --help`, `deployments list` and `versions view --json`
+confirm the existing account and production resources. Prior rollback versions are Core
+`4c424e3a-f094-451a-b9c6-6bccbef08e3c` and Web `b9165e8b-9213-4d7d-96d8-7625cba8825c`.
+All current plain-text production variables match source, and required secret names exist;
+secret values are not read or uploaded. Generated Web configuration resolves to
+`freshmarkets-web-production`, production Core binding and the `freshmarkets.ph` custom
+domain without nested environments. One unrelated untracked Scratch project was copied
+by the build into generated client assets. Only that exact generated copy is removed after
+checking its resolved path; its source file and unrelated Web debug log remain untouched.
+An initial configuration-check attempt used an unavailable TypeScript JSONC API; the
+repository's existing JSONC parsing approach then verifies the configuration successfully.
+
+`pnpm --filter @freshmarkets/core exec wrangler deploy --config wrangler.jsonc --env production --message '1a5c98bf: refunded purchasing exclusion, full staff refunds and checkout safeguards'`
+exits 0. Core version **`fca53ef4-1981-446e-bc61-23055d6e7363`** deploys at
+2026-10-12T08:55:11Z. Core liveness/dependency readiness pass before Web deployment.
+`pnpm --filter @freshmarkets/web exec wrangler deploy --config dist/server/wrangler.json --message '1a5c98bf: purchasing refund exclusions and full-balance refund confirmation'`
+exits 0. Web version **`efb4ec8f-9bf3-4a3a-aae2-ea646904e4eb`** deploys at
+2026-10-12T08:56:28Z. Subsequent `deployments list --json` confirms each version at 100%.
+The release includes the prior verified checkout safeguards and provider tracking-link
+changes already on main. Durable Object migrations, secrets and production resources are
+preserved; no database migration, deletion or financial command is performed.
+
+Live production Core `/health` and `/ready`, plus `https://freshmarkets.ph/api/core-health`,
+return HTTP 200 with production environment and valid request references. Readiness reports
+runtime configuration, D1 and the configured PayMongo adapter ready. The local probe initially
+rejects the external responses because it requires the caller's request ID to be echoed;
+the external boundary issues its own ID. Direct assertions against the actual production
+responses then pass. An initially guessed `/auth/sign-in` URL returns expected 404; source
+identifies the actual `/auth/login`, which passes HTTP 200. Home and Admin also return 200.
+Live Chrome verifies the rendered welcome dialog and Admin's "Sign in required" boundary.
+These read-only production checks do not repeat authenticated summary/refund journeys or
+establish actual provider transaction acceptance.
+
+A bounded readiness-only `wrangler tail` for the deployed Core version confirms an `ok`
+invocation and `core.readiness` event for request `acdbe7b2-2e21-4425-bb98-8e40ad897155`,
+with all three dependencies ready. The tail is stopped; its ignored task log retains only
+the sanitized structured readiness event, excluding request headers and network metadata.
+No release blocker remains. Next action: use the released summary/exports and full-balance
+staff refund controls. R2/S1 and actual provider transaction acceptance remain separate.
 
 ## Summary and export eligibility investigation - REVIEW-20261011.SUMMARY-ELIGIBILITY
 
