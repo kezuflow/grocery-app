@@ -1,5 +1,77 @@
 # Commerce alignment — active checkpoint
 
+## Adopt pstack PR delivery and verification - MOBILE-20261012.PR-PLAN-VERIFY
+
+Phase **Convert the Expo program to PRs and prove the project verification skill**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. Acceptance owner is
+the repository owner. The owner requests an actual PR using pstack and create-verification-skill,
+then explicitly confirms PR delivery for all repository work and enables subagents and independent
+review with current session model/settings. This supersedes the earlier direct-main/no-delegation
+route. Acceptance requires a ready reviewable PR, twelve dependency-ordered implementation PRs
+with unchanged stable IDs, unchanged upstream plan-checker success, and a generated verification
+skill proven through an actual local app lifecycle. Future mobile implementation is still unstarted.
+
+Started branch `codex/mobile-pr-plan-verification` at `64bf34b7410fc7678563df67c8e20f2b05f5af09`,
+the preceding organization receipt. Preserve unrelated untracked `apps/web/debug.log`, the Web
+Scratch project, ignored local/provider state and prior commerce/deployment evidence. Scoped
+workers own only the new mobile PR plan and generated verification skill. Root owns workflow,
+hook tests, guide links and this checkpoint. Independent review uses inherited settings.
+Caller-to-write path is owner correction -> AGENTS/ENGINEERING -> local pre-push guard -> branch
+and ready PR. Browser verification reuses the managed Web/Core Worker and disposable D1 setup;
+no commerce runtime, production configuration or provider credentials change.
+
+Poteto Multi-phase plan and Opening a PR, create-verification-skill, technical-writing, unslop,
+No comments and Prove It Works apply. Worktree creation is unnecessary for this clean tracked
+checkout with disjoint write scopes; unrelated untracked work remains untouched. Origin CLI is
+absent, so GitHub CLI is the forge fallback for inspection and the built-in GitHub PR tool owns
+creation. No recurring automation, merge, deployment, distribution, real provider transaction or
+outbound customer message is authorized by this task. Pinned upstream skills remain unchanged.
+
+Workflow implementation updates repository-wide PR/subagent/review defaults and allows
+`codex/` pushes while retaining naming and full new-commit validation. Real local bare-remote
+fixtures prove initial PR pushes, existing PR ranges, invalid subjects, unsupported branches,
+authorized main pushes and missing-baseline rejection. `pnpm --config.verify-deps-before-run=false
+harness:test` passes **48/48**, including eight hook test nodes. Naming, skill mirrors and
+terminology pass; `git diff --check` passes. Sandbox Git writes to its temporary directory were
+denied, so the unchanged suite ran outside that restriction. Existing Wrangler staging-var
+warnings remain unrelated to this change.
+
+The replacement `docs/operations/MOBILE_PR_PLAN.md` preserves all twelve IDs/dependencies,
+adds 120 concrete live scenarios and passes the unchanged upstream checker with **12 PR sections,
+0 problems**. `python .wrangler/verify-mobile-plan.py` compares the preceding commit-pinned
+request IDs, verifies acyclic dependencies and 22 plan links. A separate affected-document
+link check passes **117 local file/heading links across 16 Markdown files**. All future evidence
+boxes remain unchecked. Native performance limits are proposed budgets with no fabricated
+measurements; actual provider, device and distribution gates retain their external inputs.
+
+Generated `verify-freshmarkets` contains four feature maps and a proved catalog-search recipe.
+`node .agents/skills/verify-freshmarkets/scripts/run.mjs` passes a real Web/Core browser journey
+at `64bf34b7` plus the recorded working tree. Final run
+`.wrangler/verify-freshmarkets/c24686bc-a953-4673-a5d3-ec68e92b038d/` retains its manifest,
+Core health/owned-listener doctor, one passing browser result, actions, three screenshots,
+ARIA snapshots, trace and cleanup receipt. Exit is zero; owned listener is stopped, unique
+disposable D1 state is removed and fourteen required artifacts survive. Rerunning doctor after
+cleanup correctly exits one. Two actual-listener regressions pass through
+`node --test .agents/skills/verify-freshmarkets/scripts/doctor.test.mjs`. Skill quick validation,
+ten skill links and five-helper formatting pass. Other mapped journeys are inspected recipes,
+not executed acceptance. No native Expo workspace exists; Android/iOS/provider acceptance
+remains unavailable. No application source, production deployment or provider operation changes.
+
+Independent comment review finds no comments/suppressions to remove. Correctness review catches
+POSIX hook permissions, premature log-stream closure and ambiguous exact rating replay. All
+three corrections are applied, tested or rechecked, and final independent review finds no
+remaining blocker in scope. The first browser run's free-port cleanup failure remains recorded;
+the final corrected lifecycle passes. No unrelated app suites or unmeasured performance claims
+are used to prove this tooling/planning change.
+
+**MOBILE-20261012.PR-PLAN-VERIFY source and verification complete: 1/1 planning/workflow deliverable.**
+Commit/push and the ready PR are the remaining publication step; the final handoff carries their
+immutable receipt. At implementation-PR counting level, **0/12 have started**, under five parent
+phases. One concrete next implementation action after an owner execution request is
+**MOBILE-20261012.1.FOUNDATION**, including native control-skill proof on both platforms.
+The preceding work-request receipt below is historical evidence at `64bf34b7`; it is superseded
+as the current execution route.
+
 ## Organize the approved mobile direction - MOBILE-20261012.REQUESTS
 
 Phase **Create actionable Expo work requests and preserve approved product decisions**;

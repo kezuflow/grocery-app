@@ -131,7 +131,7 @@ This lifecycle policy supersedes blanket append-only or indefinite-compatibility
 
 Run focused checks while iterating. At implementation-phase completion, run the repository aggregate gate and any relevant checks it does not contain. Do not rerun an unchanged full suite repeatedly after it passes without a new concern.
 
-The planned [mobile queue](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) must establish native commands and actual-build journey verification before commerce work. Integrate the new workspace into the existing gates without weakening them. Native export/bundle success is separate from signed binaries, actual Android/iOS device journeys and received provider/push outcomes; record each at its tested revision. No native workspace or simulator-control capability is supplied by this documentation update.
+The planned [mobile queue](../operations/MOBILE_PR_PLAN.md) must establish native commands and actual-build journey verification before commerce work. Integrate the new workspace into the existing gates without weakening them. Native export/bundle success is separate from signed binaries, actual Android/iOS device journeys and received provider/push outcomes; record each at its tested revision. No native workspace or simulator-control capability is supplied by this documentation update.
 
 | Change | Required evidence |
 | --- | --- |
@@ -261,17 +261,17 @@ Run `pnpm commit:check` to validate `HEAD`. Run `pnpm hooks:install` once per cl
 
 ## Git workflow
 
-This is a single-developer repository. All work lands on `main` directly.
+Owner correction, 2026-10-12: all repository work uses pstack PR delivery, scoped subagents and independent review. Current session model/settings choices apply to workers and reviewers.
 
-- Commit to `main` and push with `git push origin main`.
-- Do not create, push, or open PRs from feature branches unless the owner explicitly requests an exception for a specific change.
-- The `.githooks/pre-push` guard rejects pushes of any branch other than `main`; bypass only with `--no-verify` when the owner approves an exception.
-- Use separate git worktrees only to isolate uncommitted local state, and land their commits back on `main` promptly.
+- Commit verified work on `codex/` branches, push them and open ready PRs through the matched pstack playbook. Stack coupled changes in dependency order, with explicit unit, live and performance evidence appropriate to the behavior.
+- Obtain independent review before reporting readiness. The owner approves landing; opening a PR does not authorize merging or direct-main delivery.
+- The `.githooks/pre-push` guard accepts `main` and `codex/` branches and validates naming plus new commit subjects. Initial PR-branch pushes validate commits since their merge base with `origin/main`; a missing base rejects the push.
+- Prefer a suitable current checkout. Isolate concurrent writers or unrelated local changes in separate worktrees when needed; never reset another worker's unfinished work.
 
 ## Local convention checks (no GitHub-side checks)
 
 - Every **commit** runs locally via `.githooks`: `commit-msg` validates the commit-message convention; `pre-commit` validates file/path naming conventions.
-- Every **push** runs locally via `.githooks/pre-push`: the trunk guard (main only), file naming conventions, and commit-message conventions for the full pushed range.
+- Every **push** runs locally via `.githooks/pre-push`: the branch guard (`main` or `codex/`), file naming conventions, and commit-message conventions for the full pushed range.
 - The GitHub Actions commit-message workflow was removed; all enforcement is local. `git push --no-verify` bypasses only for owner-approved exceptions.
 
 ## What hooks do not prove
