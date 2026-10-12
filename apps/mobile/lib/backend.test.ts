@@ -12,17 +12,15 @@ describe("backend connectivity boundary", () => {
     vi.stubGlobal("AbortSignal", {});
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          Response.json({
-            service: "core",
-            status: "ok",
-            environment: "development",
-            contractVersion: "test",
-            databaseBindingConfigured: true,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        Response.json({
+          service: "core",
+          status: "ok",
+          environment: "development",
+          contractVersion: "test",
+          databaseBindingConfigured: true,
+        }),
+      ),
     );
     expect(await readBackend(environment, new AbortController().signal)).toEqual({
       kind: "available",
