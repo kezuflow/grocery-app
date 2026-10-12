@@ -1,8 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import config from "../app.config";
 import { parseEnvironment } from "./environment";
 
 describe("isolated mobile configuration", () => {
+  it("shares the canonical origin used by the app and readiness marks", async () => {
+    vi.resetModules();
+    vi.stubEnv("EXPO_PUBLIC_APP_VARIANT", "development");
+    vi.stubEnv("EXPO_PUBLIC_BACKEND_ORIGIN", "http://10.0.2.2:3100/");
+    try {
+      const { mobileEnvironment } = await import("./runtime-environment");
+      expect(mobileEnvironment.backendOrigin).toBe("http://10.0.2.2:3100");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("separates native identities and callback schemes", () => {
     const development = parseEnvironment({
       variant: "development",

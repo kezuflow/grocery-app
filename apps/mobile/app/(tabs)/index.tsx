@@ -2,13 +2,8 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { Screen, styles } from "../../components/screen";
 import { readBackend, type BackendState } from "../../lib/backend";
-import { parseEnvironment } from "../../lib/environment";
+import { mobileEnvironment as environment } from "../../lib/runtime-environment";
 import { emitReadiness } from "../../lib/readiness";
-
-const environment = parseEnvironment({
-  variant: process.env.EXPO_PUBLIC_APP_VARIANT,
-  backendOrigin: process.env.EXPO_PUBLIC_BACKEND_ORIGIN,
-});
 
 export default function Home() {
   const [state, setState] = useState<BackendState>({ kind: "loading" });

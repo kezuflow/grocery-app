@@ -8,6 +8,26 @@ const environment = parseEnvironment({
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("backend connectivity boundary", () => {
+  it("works without Node-only AbortSignal static methods", async () => {
+    vi.stubGlobal("AbortSignal", {});
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({
+            service: "core",
+            status: "ok",
+            environment: "development",
+            contractVersion: "test",
+            databaseBindingConfigured: true,
+          }),
+        ),
+    );
+    expect(await readBackend(environment, new AbortController().signal)).toEqual({
+      kind: "available",
+    });
+  });
   it("reads actual health shape without sending authentication or location identity", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       Response.json({

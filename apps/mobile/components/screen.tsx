@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { tokens } from "../lib/tokens";
 import { emitReadiness, markShellReady } from "../lib/readiness";
+import { mobileEnvironment } from "../lib/runtime-environment";
 
 export function Screen({
   title,
@@ -36,8 +37,8 @@ export function Screen({
                 if (__DEV__)
                   emitReadiness("shell-ready", {
                     platform: Platform.OS,
-                    buildVariant: process.env.EXPO_PUBLIC_APP_VARIANT ?? "",
-                    backendOrigin: process.env.EXPO_PUBLIC_BACKEND_ORIGIN ?? "",
+                    buildVariant: mobileEnvironment.variant,
+                    backendOrigin: mobileEnvironment.backendOrigin,
                   });
               })
             }

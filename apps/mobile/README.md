@@ -1,5 +1,19 @@
 # Run the mobile foundation
 
+The foundation uses Expo SDK 57 and Expo Router. The official reference scaffold
+was generated with `create-expo-app@5.0.0 --template default@sdk-57 --no-install`.
+Its native dependency versions, Router entry point and strict Expo TypeScript base
+match this workspace. Template demo content and its separate Web target are omitted.
+The existing FreshMarkets website remains the Web client.
+
+Expo SDK 57 supports Android 7 and later and iOS 16.4 and later, per
+[Expo's SDK 57 matrix](https://docs.expo.dev/versions/v57.0.0/).
+Begin native smoke tests on an Android API 34 emulator with pinned Maestro 2.11.0.
+Exercise the minimum Android API 24 on a separate compatible runner and a newer
+API 36 device before claiming broad phone compatibility. Maestro support on those
+device versions must be proved rather than assumed. iOS needs macOS and Xcode 26.4
+or later. Device coverage and minimum-version runtime acceptance remain open.
+
 The customer shell contains Home, Search, Cart, Orders, and Account. These tabs show their actual foundation state. Catalog search, commerce, authentication, and payments are not implemented by this slice.
 
 Install the workspace with `pnpm install --frozen-lockfile`. Run these checks from the repository root.
