@@ -1,18 +1,20 @@
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { join } from "node:path";
-import { commandInvocation, mobileRoot, repositoryRoot } from "./native-driver.mjs";
+import { mobileRoot, repositoryRoot } from "./native-driver.mjs";
+
+const expoCli = createRequire(import.meta.url).resolve("expo/bin/cli");
 
 for (const target of ["android", "ios"]) {
-  const invocation = commandInvocation("pnpm", [
-    "exec",
-    "expo",
+  const args = [
+    expoCli,
     "export",
     "--platform",
     target,
     "--output-dir",
     join(repositoryRoot, ".wrangler", "mobile-bundles", target),
-  ]);
-  const result = spawnSync(invocation.executable, invocation.args, {
+  ];
+  const result = spawnSync(process.execPath, args, {
     cwd: mobileRoot,
     env: {
       ...process.env,

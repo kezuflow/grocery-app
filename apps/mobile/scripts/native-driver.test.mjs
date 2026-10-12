@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { platform } from "node:os";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { platform, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
-import { commandInvocation, mobileRoot, parseOptions, validateBackend } from "./native-driver.mjs";
+import {
+  command,
+  commandInvocation,
+  mobileRoot,
+  parseOptions,
+  validateBackend,
+} from "./native-driver.mjs";
 import { parseColdStart, summarizeTrials } from "./performance-probe.mjs";
 
 test("journey requires explicit platform and device, and rejects remote origins and embedded credentials", () => {
@@ -83,6 +91,7 @@ test(
       {
         executable: "cmd.exe",
         args: ["/d", "/s", "/c", 'maestro "test" "C:\\workspace with spaces\\shell.yaml"'],
+        windowsVerbatimArguments: true,
       },
     );
     assert.throws(() => commandInvocation("maestro", ["%TOKEN%"]), /Unsafe Windows/);
@@ -97,6 +106,35 @@ const expected = {
   appId: "ph.freshmarkets.customer.development",
   backendOrigin: "http://10.0.2.2:8787",
 };
+
+test(
+  "Windows launcher preserves actual CLI arguments with spaces",
+  { skip: platform() !== "win32" },
+  () => {
+    const fixture = mkdtempSync(join(tmpdir(), "fm-mobile-cli-"));
+    const previousPath = process.env.PATH;
+    try {
+      writeFileSync(
+        join(fixture, "arguments.cjs"),
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n",
+      );
+      writeFileSync(
+        join(fixture, "maestro.cmd"),
+        `@echo off\r\n"${process.execPath}" "${join(fixture, "arguments.cjs")}" %*\r\n`,
+      );
+      process.env.PATH = `${fixture};${previousPath ?? ""}`;
+      assert.equal(
+        command("maestro", ["test", "C:\\workspace with spaces\\shell.yaml"]),
+        '["test","C:\\\\workspace with spaces\\\\shell.yaml"]',
+      );
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      assert.equal(dirname(resolve(fixture)), resolve(tmpdir()));
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  },
+);
 function timingLog(launchId = "launch-1") {
   const identity = {
     platform: "android",

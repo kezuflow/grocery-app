@@ -62,6 +62,7 @@ export function command(executable, args, timeout = 30_000) {
     encoding: "utf8",
     timeout,
     windowsHide: true,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     maxBuffer: 10 * 1024 * 1024,
   });
   if (result.error || result.status !== 0) {
@@ -75,13 +76,13 @@ export function command(executable, args, timeout = 30_000) {
 }
 
 export function commandInvocation(executable, args) {
-  if (platform() !== "win32" || !["maestro", "pnpm"].includes(executable))
-    return { executable, args };
+  if (platform() !== "win32" || executable !== "maestro") return { executable, args };
   if (args.some((arg) => /["%!&|<>^\r\n]/.test(arg)))
     throw new Error("Unsafe Windows command argument.");
   return {
     executable: "cmd.exe",
     args: ["/d", "/s", "/c", `${executable} ${args.map((arg) => `"${arg}"`).join(" ")}`],
+    windowsVerbatimArguments: true,
   };
 }
 
