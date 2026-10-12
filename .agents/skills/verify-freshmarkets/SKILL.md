@@ -1,6 +1,6 @@
 ---
 name: verify-freshmarkets
-description: Verify FreshMarkets Web customer journeys against an isolated local Web/Core Worker and D1 stack with Playwright. Capture user actions, resulting state, and cleanup evidence. Use for changed browser behavior and mobile prerequisites; native Expo acceptance remains unavailable until apps/mobile exists.
+description: Verify FreshMarkets Web customer journeys against an isolated local Web/Core Worker and D1 stack with Playwright. Capture user actions, resulting state, and cleanup evidence. Use for changed browser behavior and mobile prerequisites; native Expo device acceptance remains unproved.
 ---
 
 # Verify FreshMarkets

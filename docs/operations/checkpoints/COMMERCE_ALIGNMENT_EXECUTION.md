@@ -28,21 +28,51 @@ application IDs, schemes and origins; no provider secret is copied into app conf
 Naming permits only Expo's required route conventions. Architecture guards reject
 native imports of server, storage and provider implementation.
 
-Verification is in progress. Initial native tests pass 11/11; guard tests pass
-17/17; both native JavaScript exports passed before the final dependency/runtime
-corrections. These are source/bundle evidence, not Android or iOS acceptance.
-The unchanged Expo compatibility check identified native TypeScript 6.0.3 rather
-than repository TypeScript 7.0.2 and an unused server-rendering peer mismatch.
-Mobile now uses Expo's supported compiler; server-rendering packages are not direct
-native dependencies. Final checks and dependency warnings will be recorded below.
+Source is committed through `79681d20efa86c9232655ea3dbf885c5501d6c55`.
+The official SDK 57 reference scaffold confirms the Expo Router entry point,
+strict TypeScript base and native dependency baseline. Mobile uses Expo-supported
+TypeScript 6.0.3 independently of repository TypeScript 7.0.2. A fresh compatibility
+check required overnight Expo patch updates to 57.0.28, Router 57.0.26 and
+development client 57.0.20. Existing Web/Core dependency definitions are unchanged.
+Optional React DOM/server-rendering peer warnings and existing Better Auth peer
+warnings remain; those server-rendering packages are not direct native dependencies.
+
+`pnpm check` passes at source `79681d20` with final documentation-only edits during
+the run, recorded in `.wrangler/mobile-foundation/check-sdk57-patch.log`. It includes
+50 harness, 1960 Core, 812 Web and 20 native tests, shared package tests,
+lint/types/guards/migrations/readiness and all workspace builds. Exit is zero.
+Final documentation formatting, local file links and `git diff --check` pass.
+Focused native tests and types pass; explicit-development `expo install --check` passes.
+Android/iOS JavaScript exports are bundle evidence, not installed-build acceptance.
+
+Real isolated Web/Core catalog search passes on trunk `9b1b59cc` and head
+`2bd4cf40`. Selected-location categories/current prices pass on head `55b80d99`
+after the real welcome close action; the same journey passes on trunk `9b1b59cc`. Admin
+scope navigation passes at `55b80d99`. The original Storefront scenario failed
+because it did not dismiss the welcome dialog; its failure trace is preserved.
+No Web application or test source was changed. Executed browser lanes use unique
+disposable D1 state and retain screenshots, traces and owned cleanup receipts.
+
+Independent source reviews pass through `79681d20`, including canonical backend
+configuration and actual Windows CLI argument behavior. Reviewers inherit session
+settings. The final dependency review confirms only the mobile importer and Expo
+packages changed. No comments or suppressions require removal. Exact receipts and
+remaining obligations are in [Mobile foundation evidence](../MOBILE_FOUNDATION_EVIDENCE.md).
 
 No Android SDK, adb, Maestro, installed build or iOS-capable runner was detected.
+At `79681d20`, both Android commands exit 1 for missing Maestro; both iOS commands
+exit 1 for unavailable macOS/Xcode. All four failed manifests retain that SHA and
+documentation-only working-tree scope. iOS timing transport and served JavaScript
+identity attestation also remain unimplemented. No native timing result is claimed.
 Native live lanes, layout comparison screenshots, iOS timing, actual-build video,
 and the full paired Web/native performance gate remain open. Missing native
 observations fail acceptance. FOUNDATION is started, not complete; implementation
 count is **1/12 started, 0/12 accepted**, under five parent phases.
-One next action is to finish local gates and independent review, then open the
-non-draft PR with the unavailable device gates stated explicitly.
+[PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft for
+source review. It is not merge-ready. One next action is to provide Android API 34
+and macOS/iOS runners, prove installation and driving, then complete timing,
+accessibility, layout and review-media gates. Android API 24 minimum support and
+API 36 compatibility need separate actual-device proof before a broad phone claim.
 
 The prior planning/workflow receipt below is historical evidence and does not
 reopen its completed deliverable.

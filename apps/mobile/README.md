@@ -2,8 +2,9 @@
 
 The foundation uses Expo SDK 57 and Expo Router. The official reference scaffold
 was generated with `create-expo-app@5.0.0 --template default@sdk-57 --no-install`.
-Its native dependency versions, Router entry point and strict Expo TypeScript base
-match this workspace. Template demo content and its separate Web target are omitted.
+Its native dependency baseline, Router entry point and strict Expo TypeScript base
+establish this workspace's scaffold. Current patch versions follow `expo install --check`.
+Template demo content and its separate Web target are omitted.
 The existing FreshMarkets website remains the Web client.
 
 Expo SDK 57 supports Android 7 and later and iOS 16.4 and later, per
