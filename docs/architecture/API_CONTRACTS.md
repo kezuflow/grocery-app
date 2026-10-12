@@ -10,6 +10,12 @@
 
 Existing dispatch refresh/cancel commands route shared members to the parent and compare its displayed version. Cancellation means the entire booking; a candidate identity for unknown create requires exact saved merchant metadata. Admin projections include optional `sharedBooking` totals explicitly labeled shared, with per-member actual cost/variance unavailable. Customer tracking DTOs contain no shared route/other recipient/provider share link. DTOs remain storage/provider independent.
 
+## Planned native client boundary
+
+Owner planning direction, 2026-10-12: reuse existing Web catalog, commerce, checkout and Better Auth HTTP adapters for the customer Expo app. New typed capabilities cover native signed browsing context, enabled login methods, personal saved lists/bulk cart addition, optional real verified contact email, authorized device registration and scoped staff feedback reads. Reuse retained Core favorites, feedback and tracking contracts. Shared DTOs remain storage-independent; every private operation derives the current customer and scope from Core-owned authentication.
+
+The prepared phone-OTP capability is disabled without an SMS adapter; internal placeholder identity cannot become an email destination. Native adapters preserve command keys, versions, safe unknown outcomes and immutable checkout completion. Notification acceptance is separate from device receipt. Exact new DTOs, routes and schemas are introduced with their implementing request, not fabricated as existing interfaces here. The [mobile requests](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) contain dependencies and executable acceptance requirements.
+
 ## Deferred Mobile HTTP adapter (MOB-1)
 
 Owner correction, 2026-10-05: native Mobile and `apps/mobile-api` source are removed from the

@@ -135,10 +135,14 @@ financial history without a duplicate claim action; a delivered Order with an av
 still expose Order options. The transaction summary retains its claim action with the same button
 presentation. Core owns availability and the private provider link.
 
-## Native Mobile direction — owner approval 2026-09-30
+## Native Mobile direction - owner planning decisions 2026-10-12
 
-Owner correction, 2026-10-05: native Mobile is deferred and its source removed. This section
-preserves the prior presentation direction as history, not current implementation authority.
+The planned customer Expo app uses a shopping-first Home, Search, Cart, Orders and Account shell with FreshMarkets identity. Foodpanda/Grab-style discovery is inspiration for address visibility, categories, product cards, clear quantities and the shopping-to-delivery journey; do not copy third-party branding or claim an Uber-style estimated arrival. Personal quantity lists and favorites appear through Account and Home shortcuts. Native Order detail exposes honest provider-observation tracking, Order chat, Problems and private delivered-Order feedback.
+
+Use native components and supported StyleSheet tokens, adapting good-css layout, spacing, interaction and accessibility principles without assuming browser CSS support. Check safe areas, keyboards, large text, screen readers, touch targets and reduced motion on both platforms. The staff-only feedback read uses the existing Order page and Admin stock-shadcn baseline. Phone login appears only when configured; existing login methods keep the private beta usable. This is approved presentation intent, not a rendered or accepted app. The [implementation requests](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) own the build and visual evidence sequence.
+
+Historical owner correction, 2026-10-05: native Mobile was deferred and its source removed. The
+following preserves the earlier presentation direction as reference, not a restore instruction.
 
 The prior Expo app used a five-tab shopping shell: Home, Search, Cart, Orders and Account. Its discovery/search, order tracking and after-delivery feedback hierarchy referenced the Foodpanda Mobbin examples linked in [the historical mobile plan](https://github.com/kezuflow/grocery-app/blob/ac2474fcfadf3af5ef8d019175b3de9f4fa346b2/mobile/README.md), using FreshMarkets branding, original components and copy. The expanded customer journey included rounded category/product cards, delivery-address entry, product detail, sign-in, favorites, cart, quote-backed checkout, order progress and private post-delivery review. This does not change current Storefront or Admin presentation.
 

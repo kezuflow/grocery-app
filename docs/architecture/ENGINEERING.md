@@ -131,6 +131,8 @@ This lifecycle policy supersedes blanket append-only or indefinite-compatibility
 
 Run focused checks while iterating. At implementation-phase completion, run the repository aggregate gate and any relevant checks it does not contain. Do not rerun an unchanged full suite repeatedly after it passes without a new concern.
 
+The planned [mobile queue](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) must establish native commands and actual-build journey verification before commerce work. Integrate the new workspace into the existing gates without weakening them. Native export/bundle success is separate from signed binaries, actual Android/iOS device journeys and received provider/push outcomes; record each at its tested revision. No native workspace or simulator-control capability is supplied by this documentation update.
+
 | Change | Required evidence |
 | --- | --- |
 | Markdown only | Review factual claims and local links, `git diff --check`, `pnpm naming:check`; validate documented command names against manifests. No application tests merely to prove prose. |

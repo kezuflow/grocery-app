@@ -10,6 +10,8 @@ Owner image-cache update (2026-09-10): Web caches successful anonymous versioned
 
 ## System Shape
 
+Owner planning direction, 2026-10-12: the approved future customer Expo client calls existing public Web HTTP adapters, which continue to use the typed Core Service Binding. Extend only missing/native-specific transport behavior; do not reintroduce a separate Mobile API Worker or general customer HTTP API on Core. Native sessions remain Better Auth sessions in SecureStore; Core owns identity, serviceability, pricing, stock and business writes. Native browsing transports an opaque Core-signed context and never trusts caller-selected customer/location identities. [Mobile implementation requests](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) own the planned sequence; no client, endpoint, migration or deployment is implemented by this documentation decision.
+
 Owner correction (2026-10-05): native Mobile and its public Mobile API adapter are deferred and their source packages removed. The active deployment shape remains Web and authoritative Core below. This supersedes the 2026-09-30/2026-10-01 Mobile extension; its source remains recoverable at commit `ac2474fc`. Shared Core contracts, customer features, authentication support and retained business data are not removed by this source cleanup. No Mobile deployment or remote resource deletion is authorized.
 
 FreshMarkets is a single monorepo with two initial Cloudflare Worker deployments:

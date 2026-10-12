@@ -1,5 +1,55 @@
 # Commerce alignment — active checkpoint
 
+## Organize the approved mobile direction - MOBILE-20261012.REQUESTS
+
+Phase **Create actionable Expo work requests and preserve approved product decisions**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`. The owner requests
+pstack organization after the mobile planning conversation, with work requests preferred under
+the existing direct-main workflow. Acceptance is a dependency-ordered, handoff-ready queue with
+stable IDs, actual observable completion criteria, explicit external inputs and correct owner
+guidance. This task organizes work; it does not execute the mobile application or authorize a
+deployment, native distribution, provider transaction, outbound message or production mode change.
+
+Started `main / 2b9c060806568765423c68d254e6801224743770`, with no tracked partial work.
+Preserve unrelated `apps/web/debug.log`, the untracked Web Scratch project and all ignored
+provider/local state. The preceding purchasing/refund source and production-release receipts
+remain intact. Caller-to-write path is owner planning answers -> owning guide supplements ->
+`docs/operations/MOBILE_IMPLEMENTATION_REQUESTS.md` -> this checkpoint; runtime source is unchanged.
+
+Poteto Multi-phase plan, technical-writing and unslop apply. Sequence Verifiable Units splits
+the five agreed parents into twelve independently checked requests; Foundational Thinking puts
+native verification before commerce. No subagents or settings changes. Upstream PR/swarm/recurring
+audit and routine approval steps are adapted to AGENTS and ENGINEERING. The upstream plan checker
+is only a compatibility diagnostic for its fixed PR format; it cannot replace project verification.
+Local decision trail is ignored `.wrangler/mobile-20261012-decisions.tsv`.
+
+Approved choices are recorded as planned intent in PRODUCT, ARCHITECTURE, API_CONTRACTS, DESIGN
+and ENGINEERING. The queue distinguishes Core-backed feature reuse from lists, native push, staff
+feedback reads and deferred phone integration. Phone login stays unavailable without SMS setup;
+existing configured login methods make the beta usable. Native-only transactional/chat push and
+optional email for future phone accounts are bounded policy changes, not implemented capabilities.
+Public store/account-deletion work remains separate. No historical mobile acceptance is reopened.
+
+**MOBILE-20261012.REQUESTS complete: 1/1 organization artifact verified.** Verification applies
+to `2b9c0608` plus these seven Markdown files. `node .wrangler/verify-mobile-20261012-requests.mjs`
+passes twelve unique IDs, matching ordered table/section dependencies, per-request acceptance,
+91 relative file/heading links and deferred execution/provider boundaries. `git diff --check`
+passes. `pnpm --config.verify-deps-before-run=false terminology:check` also passes. Initial
+sandboxed pnpm naming fails with an EPERM dependency-symlink read; the unchanged
+`pnpm --config.verify-deps-before-run=false naming:check` passes outside that restriction.
+The upstream `node .agents/skills/poteto-mode/scripts/check-plan.mjs
+docs/operations/MOBILE_IMPLEMENTATION_REQUESTS.md` reports exit 1, twelve sections and 21
+format/workflow problems requiring its PR/recurring/swarm-specific structure. It is not claimed
+passed or modified; AGENTS and ENGINEERING govern the adapted direct-main request artifact.
+The diagnostic receipt is ignored `.wrangler/mobile-20261012-upstream-check.log`.
+No application tests, native prototypes/builds/device/provider checks or deployments are claimed
+for this documentation-only organization task. Git landing follows the required main workflow;
+the documentation commit and final handoff carry its immutable revision/push receipt.
+At the work-request counting level, **0/12 implementation requests are started**, grouped into
+the five agreed parents.
+One concrete next implementation action, after an explicit owner execution request, is
+**MOBILE-20261012.1.FOUNDATION**. Do not start the feature queue from this organization receipt alone.
+
 ## Summary exclusion and full refund corrections - FIX-20261011.SUMMARY-REFUNDS
 
 Phase **Exclude canceled/refunded purchasing demand and make new staff refunds full-balance**;

@@ -356,8 +356,9 @@ requires successful refund facts. Destinations use existing Order, checkout and 
 Signed-out customers get a sign-in entry. The storefront bell may show a browser-local, per-account
 count of currently returned updates not yet opened in that browser; opening the panel clears the
 counter for those rows. This is presentation state only, not a Core read receipt or cross-device
-guarantee. No promotional feed, SMS, push, permanent dots or notification-management workflow is
-approved.
+guarantee. This Web notification approval adds no promotional feed, SMS, browser push, permanent
+dots or notification-management workflow. Planned native transactional push is separately approved
+under Mobile customer scope below.
 
 Admin reuses `AdminOverviewView.notifications` for the same six approved material notices and
 selected-scope destinations. Notifications grant no access and cannot reopen an Order. This approval
@@ -366,7 +367,7 @@ does not accept the outstanding deployed commerce-event → received-email journ
 
 
 
-Transactional Customer email and scoped staff notices follow confirmed Order, pickup, delivery, cancellation/refund progress, Problems and approved report facts. Transaction updates are mandatory; promotional email is optional. There is no email for each packing step, SMS or browser push, and notification failure never changes the successful source command.
+Transactional Customer email and scoped staff notices follow confirmed Order, pickup, delivery, cancellation/refund progress, Problems and approved report facts. Transaction updates are mandatory; promotional email is optional. There is no email for each packing step, SMS or browser push, and notification failure never changes the successful source command. The planned phone-account exception in Mobile customer scope permits accounts without a real verified email; their in-app purchase details and transaction notices remain available independently of email and device push permission. This exception is approved intent, not implemented acceptance.
 
 ## Messaging retention and recovery
 
@@ -380,9 +381,17 @@ Image-upload safeguards follow the approved audit repairs. The implementation li
 
 ## Mobile customer scope
 
-Owner correction, 2026-10-05: native Mobile and the Mobile API adapter are deferred; the owner explicitly authorizes committing their pending source deletions as work not intended at this time. This supersedes the earlier native-client implementation approval. The historical [Expo setup guide](https://github.com/kezuflow/grocery-app/blob/ac2474fcfadf3af5ef8d019175b3de9f4fa346b2/mobile/README.md) remains recoverable. Web/Core customer features and retained data remain governed by their existing rules; this source cleanup does not remove shared Core features or authorize deleting remote resources or customer data.
+Owner planning decisions, 2026-10-12: resume native Mobile planning for a customer-only FreshMarkets store app using Expo on iOS and Android. The owner approved the planned scope in this chat and requested actionable work requests; application implementation, external configuration, deployment, distribution and actual provider acceptance are not performed or authorized by this organization task. The [implementation requests](../operations/MOBILE_IMPLEMENTATION_REQUESTS.md) sequence the approved intent. This supersedes the 2026-10-05 Mobile deferral for planning, without restoring the removed client or separate Mobile API packages.
 
-Retained Core customer features: saved favorites are private per customer. “Popular with your order” uses real paid co-purchases: an active locally available candidate must have been bought with an active-Cart product in at least two paid orders from two distinct customers. Cap results at eight and hide the rail on sparse history. Private post-delivery feedback attaches to the whole order: one 1–5 star rating and optional comment up to 1,000 characters, accepted only after the order and delivery job are Delivered. Exact retries return the saved review; edits need separately approved policy. Product ratings and public reviews are excluded; Admin handling remains unresolved.
+The target is current customer functionality for Instant shopping plus personal named lists of variants/quantities, in-app provider-observation tracking, private delivered-Order feedback and transactional/chat native push. FreshMarkets remains the catalog/sourcing/fulfillment owner; staff use existing Web Admin. Launch both clients under the existing global Instant mode, preserving Scheduled code, history and outstanding commitments. Do not add simultaneous channel-specific modes, switch production automatically, fabricate delivery estimates or alter current price, stock, cancellation and full-refund rules.
+
+Personal lists synchronize across native devices and add eligible requested quantities at current prices/availability with explicit skipped-line reasons. They do not share household access, substitute products, silently reduce quantities or schedule purchases. Retained favorites and Buy again remain separate capabilities. Private feedback is readable by currently authorized staff on the existing Order page; it introduces no public reviews, staff rating edits or separate feedback workspace.
+
+Keep Better Auth and existing email/password/Google login; plan Apple on iOS. Prepare phone OTP behind an SMS delivery adapter, but defer provider selection and disable phone login until configured. Future phone accounts may omit email. A real verified contact email may receive transaction email; internal phone-account placeholder identity is never a contact destination or proof of email ownership. Phone linking requires a current account session and verification, never a saved unverified contact phone. Native push covers confirmed Order/payment/delivery/refund events and new Order support messages only, with optional device permission and no promotional campaign. Denying push cannot block shopping or hide in-app transaction facts. No general transactional SMS is approved by the phone-auth adapter.
+
+First delivery is an isolated-staging private beta with synthetic data and separately recorded controlled-provider acceptance. Public store launch and account-deletion work remain a later milestone. Rewards, bundles, shared lists, vendor marketplaces, internal rider apps and additional payment methods remain deferred. The historical [Expo setup guide](https://github.com/kezuflow/grocery-app/blob/ac2474fcfadf3af5ef8d019175b3de9f4fa346b2/mobile/README.md) remains reference evidence only; remote resources and retained customer data are preserved.
+
+Retained Core customer features: saved favorites are private per customer. “Popular with your order” uses real paid co-purchases: an active locally available candidate must have been bought with an active-Cart product in at least two paid orders from two distinct customers. Cap results at eight and hide the rail on sparse history. Private post-delivery feedback attaches to the whole order: one 1–5 star rating and optional comment up to 1,000 characters, accepted only after the order and delivery job are Delivered. Exact retries return the saved review; edits need separately approved policy. Product ratings and public reviews are excluded. The 2026-10-12 planning decision above settles read-only staff visibility; implementation and acceptance remain pending.
 
 ## Approved report definitions
 
@@ -420,6 +429,8 @@ The independent welcome campaign shows on every eligible home visit and only tha
 Current scope follows these settled rules; membership/trial/recurring billing, general checkout minimum, mandatory item-by-item problem intake and guessed weight-to-count conversion are retired.
 
 Exclude internal fleet/Rider apps/routes/batches, third-party rider chat, supplier portals/messages, walk-in POS/payment, stock forecasting, separate shortage/quality/recovery workspaces, SMS/push, loyalty/wallet, automatically recurring orders, arbitrary promotion scripting, variable-weight repricing, automatic substitution and a new analytics/settings product. Approved Order messaging, external Lalamove tracking and the website Picking & packing station remain in scope. A useful addition outside the discussion needs a separate owner conversation. Historical implementation can remain until a reviewed change removes its consumers safely; preservation is not feature approval.
+
+The 2026-10-12 Mobile planning supplement is the bounded exception for native transactional/chat push and the prepared, disabled phone-auth SMS adapter. It does not approve browser push, promotional push or transactional SMS.
 
 The owner approved all nine follow-up choices on 2026-09-09: Problems list, weekly view, receiving form, sale overlap/depletion/fixed amount rules, eligible-cancellation restoration, normal mode changeover, simple grams calculation and expanded report definitions. These approvals supersede the corresponding proposed/deferred labels in the unchanged discussion. Actual operational timing/boundaries/contacts and provider/payment activation remain factual inputs. The owner subsequently confirmed that Instant orders cannot have items added or quantities changed after payment. This is the approved rule, not a pending deadline decision. The 2026-09-26 owner correction closes all new paid additions; retained additions and their refund history remain recoverable.
 
