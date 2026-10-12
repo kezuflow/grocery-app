@@ -11,6 +11,8 @@ coverage/
 *.tsbuildinfo
 *.cpuprofile
 .expo/
+apps/mobile/android/
+apps/mobile/ios/
 
 # Playwright local run artifacts
 test-results/

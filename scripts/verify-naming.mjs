@@ -89,6 +89,7 @@ async function walk(directory) {
     if (entry.name.startsWith(".") && entry.name !== ".github") continue;
     if (ignoredDirectories.has(entry.name)) continue;
     const path = join(directory, entry.name);
+    if (["apps/mobile/android", "apps/mobile/ios"].includes(display(path))) continue;
     if (entry.isDirectory()) {
       const isRouteDirectory =
         routeDirectoryPattern.test(entry.name) || isAppRouteGroupDirectory(display(path));

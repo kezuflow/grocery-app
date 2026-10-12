@@ -9,6 +9,26 @@ implementation ID, its verification evidence and a ready PR, stopping before mer
 Acceptance requires the Foundation build, unit, live, performance and review-media
 boxes in `docs/operations/MOBILE_PR_PLAN.md`. Later mobile slices are not started.
 
+Owner continuation on 2026-10-13 requests actual proof and explicitly pauses
+real-phone checks. Continue with Android emulators and iOS simulators only;
+physical-device compatibility and physical VoiceOver acceptance remain deferred.
+Observed continuation HEAD is `3724ed193d714c470e4b0adbe165e8904a3fad44`, with
+a clean tracked tree before this work. GitHub Actions is enabled on the public
+repository, with no registered self-hosted runners. Two independent designs and
+a cross-judge select Ubuntu Android plus macOS 26 iOS simulator jobs over installing
+personal toolchains. One worker owns the workflow, CI runner and conditional Metro
+bundle-response capture. Root owns generated-project ignores, narrow naming guard,
+documentation and delivery. No merge, signing, EAS distribution or provider activity
+is authorized. Existing source receipts below remain valid for their tested scope.
+Continuation source gates pass with 51 harness tests and 21 mobile tests, workspace
+types, lint, formatting, naming and diff checks. Actual Android prebuild passes;
+its debug manifest permits local HTTP. Installing Expo-supported system UI 57.0.4
+corrects the observed light-style prebuild warning. Windows iOS generation exits
+one with Expo's explicit unsupported-host message. Independent CI source review
+corrects Android AVD-name selection and retains D1 state if process/port cleanup
+fails. Both corrected source verdicts permit the first hosted attempt, not native
+acceptance. Hosted results and the fresh aggregate remain pending.
+
 Started from clean tracked planning branch `codex/mobile-pr-plan-verification` at
 `415e5f4e6ea28669f9f60a09b8e329e481a12917`. Refreshed origin and created
 `codex/mobile-foundation` from merged planning trunk
@@ -69,8 +89,8 @@ and the full paired Web/native performance gate remain open. Missing native
 observations fail acceptance. FOUNDATION is started, not complete; implementation
 count is **1/12 started, 0/12 accepted**, under five parent phases.
 [PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft for
-source review. It is not merge-ready. One next action is to provide Android API 34
-and macOS/iOS runners, prove installation and driving, then complete timing,
+source review. It is not merge-ready. One next action is to execute hosted Android
+API 34 and macOS/iOS simulator builds, prove installation and driving, then complete timing,
 accessibility, layout and review-media gates. Android API 24 minimum support and
 API 36 compatibility need separate actual-device proof before a broad phone claim.
 

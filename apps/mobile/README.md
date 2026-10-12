@@ -83,6 +83,21 @@ iOS timing transport is unavailable and exits with failure. Thirty alternating p
 
 ## Inspect the run evidence
 
+The `Mobile foundation installed shell` GitHub Actions workflow runs on pushes to
+`codex/mobile-foundation`. It builds and installs the development application on
+an Android API 34 emulator and an iOS 26.4 simulator with Xcode 26.4.1. Each job owns
+its local Web/Core backend, migrated D1 state, Metro process and device session.
+`scripts/run-native-ci.mjs` drives the existing ready and shell journeys, including
+cold relaunch, and records screenshots, video, installed binary hashes and the
+actual Metro bundle response hashes. The conditional Metro capture preserves the
+response bytes. It is disabled outside the explicit evidence session.
+
+The workflow uploads partial evidence even on failure. A passing workflow proves
+only the named installed-shell journey on those device versions. It does not prove
+performance, all accessibility lanes or commerce. The owner paused real-phone
+checks on 2026-10-13; continue with emulators and simulators. Physical-phone
+compatibility and physical VoiceOver acceptance remain deferred.
+
 Each journey or performance run prints its unique directory under `.wrangler/swarm/MOBILE-20261012.1.FOUNDATION/`. Its manifest records the Git SHA, working-tree scope, host, platform, device, installed build hash, backend origins, outcome, and cleanup. Maestro writes action arguments, JUnit results, diagnostic logs, and screenshots beside that manifest. Performance adds raw timing records for every completed trial.
 
 The current Windows environment has no proved Android driver, device, or installed build, and cannot execute iOS. Native live lanes, physical-phone acceptance, both-platform timing, design comparison screenshots, and the required 30 to 60 second actual-build review video remain blocked. Safe areas, maximum text size, TalkBack, VoiceOver, and reduced motion require actual device observations. Unit tests and bundle exports cannot check those boxes. No native screenshots or video have been fabricated.

@@ -61,6 +61,29 @@ test("ignores generated test results and linked worktree metadata", async () => 
   }
 });
 
+test("ignores Expo-generated projects while enforcing authored mobile source", async () => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "freshmarkets-naming-native-"));
+  const run = () => spawnSync(process.execPath, [verifier], { cwd: fixtureRoot, encoding: "utf8" });
+  try {
+    await writeFile(join(fixtureRoot, "package.json"), '{"name":"freshmarkets","private":true}');
+    for (const platform of ["android", "ios"]) {
+      const generated = join(fixtureRoot, "apps", "mobile", platform, "Generated Project");
+      await mkdir(generated, { recursive: true });
+      await writeFile(join(generated, "Contents.json"), "{}");
+    }
+    const valid = run();
+    assert.equal(valid.status, 0, `${valid.stdout}\n${valid.stderr}`);
+    const authored = join(fixtureRoot, "apps", "mobile", "lib");
+    await mkdir(authored, { recursive: true });
+    await writeFile(join(authored, "WrongName.ts"), "export {};");
+    const invalid = run();
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /apps\/mobile\/lib\/WrongName\.ts/);
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
 test("ignores agent skill metadata while enforcing visible package names", async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "freshmarkets-naming-skills-"));
   const webPackage = join(fixtureRoot, "apps", "web", "package.json");
