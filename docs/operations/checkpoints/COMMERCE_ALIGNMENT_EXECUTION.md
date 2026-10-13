@@ -9,6 +9,48 @@ implementation ID, its verification evidence and a ready PR, stopping before mer
 Acceptance requires the Foundation build, unit, live, performance and review-media
 boxes in `docs/operations/MOBILE_PR_PLAN.md`. Later mobile slices are not started.
 
+Current head is `e40d6c83019921799ac1c6ab0d99b3ff8dfb93f4` on
+`codex/mobile-foundation`. Navigation/cleanup corrections are committed in
+`96a86462`; hosted proof and timing tools are committed in `e40d6c83`. The exact-head
+`pnpm check` exits zero in `.wrangler/mobile-foundation/check-proof-head.log` and
+`check-proof-head-result.json`, finished 2026-10-13T07:58:27Z with no tracked edits
+during the run. It includes 51 harness, 1960 Core, 812 Web, 27 Node mobile and 13
+Vitest mobile tests; two POSIX mobile tests skip on Windows. All builds pass.
+
+[Run 38364253354](https://github.com/kezuflow/grocery-app/actions/runs/38364253354)
+fails three jobs at that head. Android renders Home but the actual screenshot shows
+the system Pixel Launcher ANR dialog blocking readiness. Its Metro log records
+both semantic marks, but no native timing or completed shell acceptance is claimed.
+iOS stops before build because the driver interruption test receives `kill EPERM`
+while probing its owned process group. The descendant cleanup tests pass there.
+Apple's XNU source excludes zombie members when probing a group; the possible
+reaping race requires a bounded census and actual macOS proof. Paired Web starts
+both real isolated backends and fails its first baseline warmup because the literal
+`₱179.00` price is absent. There are no recorded HTTP/request/page errors. Both Web
+backend cleanup receipts complete. No measured performance result exists.
+
+One worker owns native-driver cleanup, one owns Web performance diagnostics and
+one owns the exact observed native-launch dialog handling. Root owns workflow,
+checkpoint and delivery. Next action is to review their corrections and rerun
+the hosted gates. Physical-phone and physical VoiceOver checks remain deferred;
+simulator layout/accessibility comparisons and complete timing remain open.
+
+Corrections are source-reviewed for the next hosted attempt. Real isolated browser
+reproduction shows the price paragraph is exactly `₱179.00 / 500 g`; the catalog's
+500 g variant is 17900 centavos. The old amount-only exact locator matched zero
+elements. The new assertion retains the full literal price label. The reproduction
+and successful owned cleanup are in `web-price-repro-5c2c6386-378e-4b1f-b32b-7fff7670ebeb`.
+Darwin cleanup now waits for an observed owned zombie-only group to reach actual
+ESRCH. Its hosted old-source control requires observed kernel EPERM, the original
+command rejection and successful fixture cleanup before accepting the expected
+failure. Android startup closes only the exact observed Pixel Launcher ANR dialog,
+records the incident and refuses timing in a contaminated session. Its health
+parser accepts only the known clean dump; reasonless ANR and unknown output fail
+timing acceptance. Focused mobile tests pass 30 Node plus 13 Vitest, with five
+Windows platform skips. Fresh independent reviews are clean. Actual runtime
+corroboration still requires the next CI run; the aggregate receipt above tests
+`e40d6c83`, not these new bytes.
+
 Owner continuation on 2026-10-13 requests actual proof and explicitly pauses
 real-phone checks. Continue with Android emulators and iOS simulators only;
 physical-device compatibility and physical VoiceOver acceptance remain deferred.

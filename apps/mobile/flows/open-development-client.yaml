@@ -2,6 +2,18 @@ appId: ${APP_ID}
 ---
 - runFlow:
     when:
+      platform: Android
+      visible: "^Pixel Launcher isn't responding$"
+    commands:
+      - takeScreenshot: pixel-launcher-anr
+      - assertVisible:
+          id: android:id/alertTitle
+          text: "^Pixel Launcher isn't responding$"
+      - tapOn:
+          id: android:id/aerr_close
+          text: "^Close app$"
+- runFlow:
+    when:
       platform: iOS
       visible: 'Open in “FreshMarkets Dev”\?'
     commands:

@@ -70,6 +70,75 @@ export function parseOptions(args) {
   return options;
 }
 
+export async function stopOwnedProcessGroup(child, signal = "SIGTERM") {
+  const group = child.pid;
+  if (!group) return;
+  let reapingError;
+  const send = (signal) => {
+    try {
+      process.kill(-group, signal);
+      return true;
+    } catch (error) {
+      if (error.code === "ESRCH") return false;
+      if (platform() === "darwin" && error.code === "EPERM") {
+        const census = spawnSync("ps", ["-axo", "pid=,pgid=,stat="], {
+          encoding: "utf8",
+          timeout: 5_000,
+          maxBuffer: 1024 * 1024,
+        });
+        if (census.error || census.status !== 0)
+          throw new AggregateError(
+            [error, census.error ?? new Error(`ps failed with exit ${census.status}.`)],
+            `Cannot inspect owned process group ${group} after EPERM.`,
+          );
+        const members = census.stdout
+          .trim()
+          .split(/\r?\n/)
+          .map((line) => {
+            const row = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)$/);
+            if (!row) throw new Error("Invalid PID/PGID/STAT process census.");
+            return { pid: Number(row[1]), pgid: Number(row[2]), stat: row[3] };
+          })
+          .filter((row) => row.pgid === group);
+        if (members.length === 0) {
+          try {
+            process.kill(-group, 0);
+          } catch (probeError) {
+            if (probeError.code === "ESRCH") return false;
+          }
+        }
+        const observed = new Error(
+          `Owned process group ${group} returned EPERM. PID/PGID/STAT ${JSON.stringify(members)}.`,
+          { cause: error },
+        );
+        observed.code = "EPERM";
+        observed.processGroupCensus = members;
+        if (members.length > 0 && members.every((row) => row.stat.startsWith("Z"))) {
+          reapingError = observed;
+          return true;
+        }
+        throw observed;
+      }
+      throw error;
+    }
+  };
+  if (!send(signal)) return;
+  const forceAt = performance.now() + 5_000;
+  const deadline = forceAt + 5_000;
+  let forced = false;
+  while (send(0)) {
+    if (performance.now() >= deadline)
+      throw new Error(`Owned process group ${group} survived forced cleanup.`, {
+        cause: reapingError,
+      });
+    if (!forced && performance.now() >= forceAt) {
+      if (!send("SIGKILL")) return;
+      forced = true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 export function commandAsync(executable, args, { timeout = 120_000, signal } = {}) {
   if (signal?.aborted) return Promise.reject(signal.reason);
   const invocation = commandInvocation(executable, args);
@@ -84,31 +153,6 @@ export function commandAsync(executable, args, { timeout = 120_000, signal } = {
     let stderr = "";
     let failure;
     let stopping;
-    const stopGroup = async () => {
-      if (!child.pid) return;
-      const send = (signal) => {
-        try {
-          process.kill(-child.pid, signal);
-          return true;
-        } catch (error) {
-          if (error.code === "ESRCH") return false;
-          throw error;
-        }
-      };
-      if (!send("SIGTERM")) return;
-      const forceAt = performance.now() + 5_000;
-      const deadline = forceAt + 5_000;
-      let forced = false;
-      while (send(0)) {
-        if (performance.now() >= deadline)
-          throw new Error(`Owned process group ${child.pid} survived forced cleanup.`);
-        if (!forced && performance.now() >= forceAt) {
-          if (!send("SIGKILL")) return;
-          forced = true;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-    };
     const stop = (error) => {
       if (stopping) return;
       failure = error;
@@ -116,7 +160,7 @@ export function commandAsync(executable, args, { timeout = 120_000, signal } = {
         spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
         stopping = Promise.resolve();
       } else
-        stopping = stopGroup().catch((cleanupError) => {
+        stopping = stopOwnedProcessGroup(child).catch((cleanupError) => {
           failure = new AggregateError(
             [failure, cleanupError],
             `${executable} could not stop its owned process group. ${cleanupError.message}`,

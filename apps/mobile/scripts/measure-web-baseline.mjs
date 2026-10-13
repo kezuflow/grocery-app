@@ -82,6 +82,7 @@ async function main() {
       category: "Fruits",
       product: "Baguio Strawberries",
       price: "₱179.00",
+      priceLabel: "₱179.00 / 500 g",
     },
     nativeBaseline: "Unavailable at trunk. No Web/native ratio is computed.",
     limits:
@@ -348,6 +349,7 @@ async function main() {
       (profile ? receipt.profiles : receipt.trials).push(sample);
       let cdp;
       let traceComplete;
+      let page;
       try {
         if (interrupted) throw new Error("Paired measurement interrupted.");
         activeBrowser = await chromium.launch({ headless: true });
@@ -381,7 +383,7 @@ async function main() {
             ),
           point,
         );
-        const page = await context.newPage();
+        page = await context.newPage();
         page.setDefaultTimeout(30_000);
         page.on("response", (response) => {
           if (response.status() >= 400)
@@ -416,7 +418,9 @@ async function main() {
         await expect(page.getByRole("heading", { name: "Fruits", exact: true })).toBeVisible();
         const card = page.getByRole("article").filter({ hasText: "Baguio Strawberries" }).first();
         await expect(card.getByRole("heading", { name: "Baguio Strawberries" })).toBeVisible();
-        await expect(card.getByText("₱179.00", { exact: true })).toBeVisible();
+        const price = card.locator("p");
+        await expect(price).toBeVisible();
+        await expect(price).toHaveText("₱179.00 / 500 g");
         sample.timing = await page.evaluate(async () => {
           await new Promise((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(resolve)),
@@ -436,7 +440,7 @@ async function main() {
         sample.semanticEvidence = {
           category: await page.getByRole("heading", { name: "Fruits", exact: true }).innerText(),
           product: await card.getByRole("heading", { name: "Baguio Strawberries" }).innerText(),
-          price: await card.getByText("₱179.00", { exact: true }).innerText(),
+          price: await price.innerText(),
           welcomeDismissed: !(await page
             .getByRole("dialog", { name: "FreshMarkets welcome" })
             .isVisible()),
@@ -470,6 +474,50 @@ async function main() {
       } catch (error) {
         sample.status = "failed";
         sample.error = error.message;
+        if (page && !page.isClosed()) {
+          try {
+            const card = page
+              .getByRole("article")
+              .filter({ hasText: "Baguio Strawberries" })
+              .first();
+            sample.failedObservation = {
+              path: new URL(page.url()).pathname,
+              cardText: (await card.count()) ? (await card.innerText()).slice(0, 1000) : null,
+              selectedCoordinate: await page.evaluate(() => {
+                const selected = localStorage.getItem("freshmarkets.delivery-location.v3");
+                return selected ? JSON.parse(selected).coordinate : null;
+              }),
+            };
+            sample.screenshot = `${order.side}-${order.phase}-${order.pair}-failed.png`;
+            await page.screenshot({ path: join(directory, sample.screenshot), fullPage: true });
+            const response = await page.request.get(
+              `http://127.0.0.1:${side.port}/api/catalog?home=1`,
+              {
+                timeout: 5000,
+              },
+            );
+            const payload = await response.json();
+            sample.failedObservation.catalog = {
+              status: response.status(),
+              products: (payload.value?.marketplace?.rails ?? [])
+                .flatMap((rail) => rail.items)
+                .filter((product) => product.name === "Baguio Strawberries")
+                .map((product) => ({
+                  name: product.name,
+                  variants: product.variants.map(
+                    ({ name, priceMinor, currency, availability }) => ({
+                      name,
+                      priceMinor,
+                      currency,
+                      availability,
+                    }),
+                  ),
+                })),
+            };
+          } catch (diagnosticError) {
+            sample.diagnosticError = diagnosticError.message;
+          }
+        }
         throw error;
       } finally {
         if (activeBrowser) {

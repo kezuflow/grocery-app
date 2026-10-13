@@ -37,7 +37,10 @@ jobs:
           java-version: "17"
       - run: pnpm install --frozen-lockfile
       - name: Verify native driver and clock parsers
-        run: pnpm --filter @freshmarkets/mobile test
+        shell: bash
+        run: |
+          mkdir -p .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof
+          pnpm --filter @freshmarkets/mobile test 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/android-tests.log
       - name: Install pinned Maestro
         shell: bash
         run: |
@@ -75,6 +78,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24"
@@ -92,7 +97,34 @@ jobs:
           xcodebuild -version
           pnpm install --frozen-lockfile
       - name: Verify native driver and clock parsers
-        run: pnpm --filter @freshmarkets/mobile test
+        shell: bash
+        run: |
+          mkdir -p .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const before = 'apps/mobile/scripts/native-driver.before.mjs';
+          const test = 'apps/mobile/scripts/native-driver.before.test.mjs';
+          if (existsSync(before) || existsSync(test)) throw new Error('Refusing existing regression fixture files.');
+          writeFileSync(before, execFileSync('git', ['show', 'e40d6c83019921799ac1c6ab0d99b3ff8dfb93f4:apps/mobile/scripts/native-driver.mjs']));
+          writeFileSync(test, readFileSync('apps/mobile/scripts/native-driver.test.mjs', 'utf8').replace('./native-driver.mjs', './native-driver.before.mjs'));
+          NODE
+          trap 'rm -f apps/mobile/scripts/native-driver.before.mjs apps/mobile/scripts/native-driver.before.test.mjs' EXIT
+          set +e
+          node --test --test-name-pattern='Darwin cleanup waits' apps/mobile/scripts/native-driver.before.test.mjs 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/darwin-before.log
+          before_status=${PIPESTATUS[0]}
+          set -e
+          test "$before_status" -eq 1
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const log = readFileSync('.wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/darwin-before.log', 'utf8');
+          assert.match(log, /observedKernelError.*EPERM/);
+          assert.match(log, /could not stop its owned process group.*EPERM/);
+          assert.match(log, /fixtureCleanupResult.*ESRCH/);
+          NODE
+          rm apps/mobile/scripts/native-driver.before.mjs apps/mobile/scripts/native-driver.before.test.mjs
+          pnpm --filter @freshmarkets/mobile test 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/ios-tests.log
       - name: Install pinned Maestro
         shell: bash
         run: |

@@ -1,5 +1,32 @@
 # Mobile foundation evidence
 
+## Latest proof attempt
+
+`pnpm check` passes at `e40d6c83019921799ac1c6ab0d99b3ff8dfb93f4` with a frozen
+tracked tree. `check-proof-head-result.json` records exit zero and finish time
+2026-10-13T07:58:27Z. Mobile has 27 Node and 13 Vitest passes; two POSIX tests skip
+on Windows. Harness, Core, Web, shared packages and all builds pass.
+
+[Hosted run 38364253354](https://github.com/kezuflow/grocery-app/actions/runs/38364253354)
+fails all three jobs. Android's actual Home is blocked by a Pixel Launcher ANR
+dialog. iOS fails the interruption regression with `kill EPERM` before build.
+Web starts both isolated backends but fails the first baseline warmup's literal
+`₱179.00` assertion. These are retained failures, with no accepted performance
+number or completed native navigation receipt. Corrections are in progress.
+
+The price failure is reproduced against real isolated Web/Core. The paragraph
+contains `₱179.00 / 500 g`; the amount-only exact locator matches zero elements.
+The full-label assertion passes, and the catalog returns the expected 17900-centavo
+500 g variant. All owned browser/backend processes and disposable state cleaned
+up. Evidence is in `web-price-repro-5c2c6386-378e-4b1f-b32b-7fff7670ebeb`.
+
+Reviewed corrections retain the old Darwin command failure and require successful
+fixture cleanup, census zombie-only groups until actual ESRCH, recover only the
+exact Pixel Launcher dialog and refuse ANR-contaminated performance. Android
+health parsing fails closed on unrecognized output. Focused mobile checks pass
+43 tests with five Windows platform skips. Fresh independent source reviews pass;
+actual hosted corroboration remains pending.
+
 Task `MOBILE-20261012.1.FOUNDATION` uses phase **Establish the native workspace and verification path** in `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`.
 
 Source implementation is on `codex/mobile-foundation`, against trunk `9b1b59cc8fb0ebe1e6374bc760cee8c82237410f`. [PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft. Full acceptance remains blocked. This PR is available for source review and is not merge-ready.

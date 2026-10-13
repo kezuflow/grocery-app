@@ -122,6 +122,168 @@ test("an interrupted asynchronous driver drains output and rejects before cleanu
   }
 });
 
+test(
+  "owned recorder cleanup delivers SIGINT and waits for its process group to disappear",
+  { skip: platform() === "win32" ? "Recorder process groups require a POSIX host." : false },
+  async () => {
+    const { stopOwnedProcessGroup } = await import("./native-driver.mjs");
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        "process.on('SIGINT', () => { process.stdout.write('recorder-flushed'); process.exit(0); }); process.stdout.write('recorder-ready'); setInterval(() => {}, 1000);",
+      ],
+      { detached: true },
+    );
+    const output = collectOutput(child);
+    let startTimer;
+    const started = new Promise((resolve, reject) => {
+      startTimer = setTimeout(
+        () => reject(new Error("The recorder fixture did not start.")),
+        5_000,
+      );
+      child.stdout.once("data", resolve);
+      child.once("error", reject);
+    }).finally(() => clearTimeout(startTimer));
+    try {
+      await started;
+      await stopOwnedProcessGroup(child, "SIGINT");
+      assert.equal(await output.stop(), "recorder-readyrecorder-flushed");
+      assert.throws(() => process.kill(-child.pid, 0), { code: "ESRCH" });
+    } finally {
+      await stopOwnedProcessGroup(child, "SIGKILL");
+    }
+  },
+);
+
+test(
+  "Darwin cleanup waits for an observed zombie-only group to be reaped",
+  { skip: platform() !== "darwin" ? "The zombie-only EPERM race requires Darwin." : false },
+  async (context) => {
+    const kill = process.kill.bind(process);
+    const controller = new AbortController();
+    let group;
+    let census;
+    context.mock.method(process, "kill", (pid, signal) => {
+      const result = kill(pid, signal);
+      if (pid < 0 && signal === "SIGTERM" && !group) {
+        group = -pid;
+        const deadline = performance.now() + 2_000;
+        while (performance.now() < deadline) {
+          const observed = spawnSync("ps", ["-axo", "pid=,pgid=,stat="], {
+            encoding: "utf8",
+            timeout: 1_000,
+          });
+          assert.equal(observed.status, 0);
+          const members = observed.stdout
+            .trim()
+            .split(/\r?\n/)
+            .map((line) => line.trim().split(/\s+/))
+            .filter((row) => Number(row[1]) === group);
+          if (members.length && members.every((row) => row[2].startsWith("Z"))) {
+            census = members.map(([pid, pgid, stat]) => ({
+              pid: Number(pid),
+              pgid: Number(pgid),
+              stat,
+            }));
+            assert.throws(() => kill(-group, 0), { code: "EPERM" });
+            context.diagnostic(JSON.stringify({ observedKernelError: "EPERM", census }));
+            break;
+          }
+        }
+        assert.ok(census, "The actual kernel must expose the zombie-only group before reaping.");
+      }
+      return result;
+    });
+    const timer = setTimeout(() => controller.abort(new Error("zombie trial interrupted")), 500);
+    let primaryFailure;
+    let cleanupFailure;
+    try {
+      await assert.rejects(
+        commandAsync(
+          process.execPath,
+          ["-e", "process.stdout.write('zombie-trial-ready'); setInterval(() => {}, 1000);"],
+          { signal: controller.signal },
+        ),
+        (error) => {
+          context.diagnostic(
+            JSON.stringify({
+              observedCommandRejection: error.message,
+              cleanupCode: error.errors?.[1]?.code,
+            }),
+          );
+          assert.equal(error.message, "zombie trial interrupted");
+          assert.match(error.commandOutput, /zombie-trial-ready/);
+          return true;
+        },
+      );
+      assert.throws(() => kill(-group, 0), { code: "ESRCH" });
+      context.diagnostic(JSON.stringify({ group, finalKernelError: "ESRCH" }));
+    } catch (error) {
+      primaryFailure = error;
+    } finally {
+      clearTimeout(timer);
+      context.mock.restoreAll();
+      if (group) {
+        try {
+          context.diagnostic(
+            JSON.stringify({ group, fixtureCleanup: "current-helper-after-measurement" }),
+          );
+          const { stopOwnedProcessGroup } = await import("./native-driver.mjs");
+          await stopOwnedProcessGroup({ pid: group }, "SIGKILL");
+          assert.throws(() => kill(-group, 0), { code: "ESRCH" });
+          context.diagnostic(JSON.stringify({ group, fixtureCleanupResult: "ESRCH" }));
+        } catch (cleanupError) {
+          cleanupFailure = cleanupError;
+        }
+      }
+    }
+    if (primaryFailure && cleanupFailure)
+      throw new AggregateError(
+        [primaryFailure, cleanupFailure],
+        `${primaryFailure.message} Fixture cleanup also failed. ${cleanupFailure.message}`,
+      );
+    if (primaryFailure) throw primaryFailure;
+    if (cleanupFailure) throw cleanupFailure;
+  },
+);
+
+test(
+  "Darwin cleanup rejects EPERM when the owned process census still has a live member",
+  { skip: platform() !== "darwin" ? "Darwin owns the EPERM census behavior." : false },
+  async (context) => {
+    const kill = process.kill.bind(process);
+    let group;
+    context.mock.method(process, "kill", (pid, signal) => {
+      if (pid < 0 && signal === "SIGTERM") {
+        group = -pid;
+        const error = new Error("fixture permission denied");
+        error.code = "EPERM";
+        throw error;
+      }
+      return kill(pid, signal);
+    });
+    try {
+      await assert.rejects(
+        commandAsync(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
+          timeout: 500,
+        }),
+        (error) => {
+          assert.ok(error instanceof AggregateError);
+          const cleanupError = error.errors[1];
+          assert.equal(cleanupError.code, "EPERM");
+          assert.equal(cleanupError.cause.message, "fixture permission denied");
+          assert.ok(cleanupError.processGroupCensus.some((row) => !row.stat.startsWith("Z")));
+          return true;
+        },
+      );
+    } finally {
+      context.mock.restoreAll();
+      if (group) kill(-group, "SIGKILL");
+    }
+  },
+);
+
 for (const interruption of ["abort", "timeout"])
   test(
     `${interruption} waits for a TERM-ignoring descendant after its process-group leader exits`,
