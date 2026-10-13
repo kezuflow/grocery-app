@@ -44,6 +44,55 @@ iOS `26.4.1` runtime. Xcode first-launch setup and expanded readiness/runtime
 receipts make the next failure inspectable. Actual native acceptance still needs
 the next hosted run.
 
+## Current native proof and uncommitted continuation
+
+[Run 38347896824](https://github.com/kezuflow/grocery-app/actions/runs/38347896824)
+at `09d97ae4` fails both jobs. Android passes actual Home, development identity,
+backend-origin and connected-state assertions. Its installed APK hash is
+`bbf1c4886bea33200e330dcb7362af9aea89b4bb7eed63acaaf3a913e34dbdfb`.
+The actual Metro response hash is
+`a385c37f00fdf564bbf9a4b658f9341abe374aacc229b8a312b1b3b0cf624502`.
+The screenshot and receipts are retained in
+`.wrangler/mobile-foundation/ci-38347896824-android/` and the screenshot was shown
+in chat. Full navigation stops at Maestro's `stopApp` format error. Its video
+records failure, so it does not pass the navigation review gate. Android owned
+cleanup completes. iOS also fails. Its retrieved receipt proves successful native
+compilation and installation with Xcode 26.4.1/iOS 26.4.1. Its screenshot shows
+`Open in “FreshMarkets Dev”?` blocking the owned Metro deep link. Home rendering
+and a served iOS bundle remain unproved. All iOS owned cleanup completes.
+
+`check-host-fix.log` and its result JSON record `pnpm check` exit 0 at HEAD
+`09d97ae4`. Native corrections were edited during that run. Mobile tests ran
+before those edits and report 8 Node plus 13 Vitest tests. Core reports 1960 tests
+and Web 812; builds pass. This is not a receipt for the final correction bytes or
+the new performance probes. Their final-head aggregate remains due.
+
+Uncommitted corrections address keyboard navigation, asynchronous interruption
+cleanup, atomic ADB tunnel acquisition, assertion-only observations and timing
+log history/draining. A real POSIX process reproduction observes a surviving
+descendant before the cleanup fix and its absence afterward. Windows driver
+checks pass 10 tests and skip two POSIX tests. The launch flow now uses literal
+`launchApp`; actual Maestro parsing still needs the next native run. Independent
+review identified iOS keyboard occlusion. The keyboard controller now encloses
+Tabs while preserving screen scrolling and safe areas. TypeScript 6.0.3, focused
+lint and formatting pass; fresh independent source review is clean.
+
+The iOS kernel-clock and paired Web performance tools are implemented and have
+fresh clean independent source reviews. Caller cancellation reaches the clock trial.
+Focused mobile checks pass 27 Node tests and 13 Vitest tests; two POSIX cleanup
+checks skip on Windows and run in hosted CI. No macOS compilation, simulator
+transport, profile or measured trial receipt exists yet. The next CI run attempts
+both installed shell journeys, Android cold trials, one iOS clock smoke and the
+paired Web trials. Ordinary Maestro does not prove TalkBack focus
+navigation, and Apple does not provide VoiceOver in Simulator. Physical checks
+remain deferred under the owner's instruction.
+
+Shell approval review timed out, then failed because its selected model was at
+capacity. The read-only GitHub connector recovered job conclusions and logs. Its
+iOS ZIP initially could not be fetched into the sandbox. Protected commands later
+resumed, and the authorized CLI download retrieved it. Commit/push and another
+native run remain pending; no merge or deployment occurred.
+
 ## Scope and choices
 
 Five route-owned tabs use shared native layout. The shell reports backend liveness through the existing Web adapter and labels later capabilities unavailable. No price, cart, order or account data is fabricated. Core and Web application source remains unchanged.
@@ -71,4 +120,4 @@ These ignored artifacts remain in the owner's workspace. They contain actual obs
 
 The native manifests record the source SHA and documentation-only working-tree scope. Their `unavailable` device argument is a missing prerequisite, not an observed device identity. Bundles do not attest installed binaries or the JavaScript served to a device.
 
-The implementation count is **1/12 started, 0/12 accepted**, under five parent phases. The next action is to provide an Android API 34 runner and a macOS/iOS runner, prove installation and driver behavior, implement the iOS timing transport and served-JavaScript identity receipt, then execute the remaining native, performance and media gates. Dependent mobile slices remain unstarted.
+The implementation count is **1/12 started, 0/12 accepted**, under five parent phases. Hosted Android API 34 and macOS/iOS runners are available. The next action is to push the reviewed corrections and execute the hosted shell, clock and paired Web proof jobs, then complete the remaining simulator accessibility, layout, timing and media gates. Dependent mobile slices remain unstarted.

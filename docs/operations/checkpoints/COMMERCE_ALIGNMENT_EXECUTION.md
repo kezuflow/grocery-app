@@ -43,7 +43,63 @@ Expo's standalone debugger installation through its headless setting, pins the
 runner's documented iOS runtime `26.4.1`, and runs Xcode first-launch setup.
 New receipts retain Xcode and simulator inventories plus launch-endpoint status
 and failure cause. Root owns the documentation; one worker owns only runner and
-workflow corrections. Fresh independent review and another hosted attempt are next.
+workflow corrections. Those corrections passed fresh independent source review and
+were pushed as `09d97ae4836d5cf5d687f609adf8c27f04d9b8c2`.
+
+Current continuation evidence, 2026-10-13: [run 38347896824](https://github.com/kezuflow/grocery-app/actions/runs/38347896824)
+failed both jobs at `09d97ae4`. Android now reaches Metro, loads the captured actual
+bundle, and passes installed Home/development-origin/connected-backend assertions.
+Its actual screenshot is retained in `ci-38347896824-android` under
+`.wrangler/mobile-foundation`. Installed APK SHA-256 and served bundle SHA-256 are
+recorded in that receipt. The full shell flow then fails Maestro parsing because
+`stopApp` receives a string expression. Its 56.962-second video is failure evidence,
+not a passing navigation review video. Owned Android cleanup completes. iOS also
+fails. Its retrieved artifact proves successful Xcode 26.4.1/iOS 26.4.1 compilation
+and installation, but the readiness screenshot shows the system's exact
+`Open in “FreshMarkets Dev”?` confirmation over the development launcher.
+Maestro cannot see Home before that dialog is accepted. iOS owned cleanup completes.
+The GitHub connector confirms both job conclusions.
+
+`pnpm check` exits zero in `check-host-fix.log`, with `check-host-fix-result.json`
+recording HEAD `09d97ae4`. Native corrections were edited during this run. Its mobile
+suite ran before those edits and reports 8 Node plus 13 Vitest tests; it does not
+validate the new probes or final correction bytes. Core reports 1960 tests, Web
+812 tests, and all workspace builds pass. A fresh final-head aggregate remains due.
+
+Current uncommitted native corrections preserve tabs while the keyboard opens,
+await asynchronous Maestro termination, acquire ADB reverse without rebinding,
+label assertion-only ready observations, distinguish host checkout from unverified
+public served-JavaScript identity, and fence/drain fresh-PID Android timing logs.
+The Maestro boolean expression and unused parameter are removed together.
+Independent review reproduced a surviving POSIX descendant before cleanup and
+confirmed it gone after correction. Focused Windows driver tests pass 10 and
+explicitly skip two POSIX regressions. A final source review identifies iOS tab
+occlusion because keyboard avoidance encloses only screen content; a scoped worker
+has moved that controller around the entire tab navigator. Mobile TypeScript 6.0.3,
+focused lint and formatting pass, and fresh independent source review is clean.
+Actual keyboard navigation remains due on both platforms.
+
+The iOS C clock helper/transport/tests and paired Web performance runner/tests are
+implemented. Caller cancellation now reaches iOS trials, with separate bounded
+cleanup. Fresh independent integration review is clean. Focused mobile checks pass
+27 Node tests and 13 Vitest tests, with two POSIX cleanup tests skipped on Windows.
+The hosted jobs execute those POSIX checks. macOS compilation, simulator log
+transport, profiles and measured trials remain unexecuted. The next CI revision
+attempts both installed shell journeys, Android five warmups/thirty measured trials,
+one iOS clock smoke and thirty paired Web trials. Root owns delivery; all scoped
+writers are quiescent. Physical VoiceOver is unavailable in Simulator and deferred under
+the owner's instruction; ordinary Maestro suppresses Android accessibility
+services and cannot substitute for actual TalkBack driving.
+
+Automatic approval review timed out reading CI through the shell, then failed
+because its selected model was at capacity. Those commands were not executed.
+Read-only GitHub connector calls recovered job status and logs. Downloading the
+connector's iOS ZIP into the sandbox also failed. Protected verification commands
+subsequently resumed, and the authorized GitHub CLI download retrieved the iOS
+receipt and screenshot. No merge or deployment occurred. One next action is to
+commit/push the independently reviewed corrections, and run
+the installed shell plus paired Web measurements and one iOS clock smoke before
+extending the remaining native live/performance gates.
 
 Started from clean tracked planning branch `codex/mobile-pr-plan-verification` at
 `415e5f4e6ea28669f9f60a09b8e329e481a12917`. Refreshed origin and created
@@ -99,14 +155,16 @@ No Android SDK, adb, Maestro, installed build or iOS-capable runner was detected
 At `79681d20`, both Android commands exit 1 for missing Maestro; both iOS commands
 exit 1 for unavailable macOS/Xcode. All four failed manifests retain that SHA and
 documentation-only working-tree scope. iOS timing transport and served JavaScript
-identity attestation also remain unimplemented. No native timing result is claimed.
+identity attestation were unimplemented at that revision. The current hosted runner
+captures actual Metro response hashes; the new iOS transport still needs runtime
+proof. No native timing result is claimed.
 Native live lanes, layout comparison screenshots, iOS timing, actual-build video,
 and the full paired Web/native performance gate remain open. Missing native
 observations fail acceptance. FOUNDATION is started, not complete; implementation
 count is **1/12 started, 0/12 accepted**, under five parent phases.
 [PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft for
-source review. It is not merge-ready. One next action is to execute hosted Android
-API 34 and macOS/iOS simulator builds, prove installation and driving, then complete timing,
+source review. It is not merge-ready. One next action is to push the reviewed
+native corrections and execute the hosted proof jobs, then complete timing,
 accessibility, layout and review-media gates. Android API 24 minimum support and
 API 36 compatibility need separate actual-device proof before a broad phone claim.
 

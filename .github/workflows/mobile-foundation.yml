@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  MAESTRO_CLI_NO_ANALYTICS: "1"
+
 concurrency:
   group: mobile-foundation-${{ github.ref }}
   cancel-in-progress: false
@@ -19,7 +22,7 @@ concurrency:
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -33,6 +36,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - run: pnpm install --frozen-lockfile
+      - name: Verify native driver and clock parsers
+        run: pnpm --filter @freshmarkets/mobile test
       - name: Install pinned Maestro
         shell: bash
         run: |
@@ -67,7 +72,7 @@ jobs:
 
   ios:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -86,6 +91,8 @@ jobs:
           sudo xcodebuild -runFirstLaunch
           xcodebuild -version
           pnpm install --frozen-lockfile
+      - name: Verify native driver and clock parsers
+        run: pnpm --filter @freshmarkets/mobile test
       - name: Install pinned Maestro
         shell: bash
         run: |
@@ -101,6 +108,48 @@ jobs:
         with:
           name: foundation-ios-${{ github.sha }}
           path: .wrangler/swarm/MOBILE-20261012.1.FOUNDATION
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  paired-web-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out pinned baseline
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: 9b1b59cc8fb0ebe1e6374bc760cee8c82237410f
+          path: baseline
+      - name: Check out measured head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          path: head
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.9
+      - name: Install frozen baseline dependencies
+        working-directory: baseline
+        run: pnpm install --frozen-lockfile
+      - name: Install frozen head dependencies
+        working-directory: head
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        working-directory: head
+        run: pnpm --filter @freshmarkets/web exec playwright install --with-deps chromium
+      - name: Measure alternating baseline and head Web trials
+        working-directory: head
+        run: node apps/mobile/scripts/measure-web-baseline.mjs --baseline "$GITHUB_WORKSPACE/baseline" --head "$GITHUB_WORKSPACE/head"
+      - name: Preserve paired Web evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: foundation-paired-web-${{ github.sha }}
+          path: head/.wrangler/swarm/MOBILE-20261012.1.FOUNDATION
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

@@ -65,7 +65,7 @@ The Android retry lane uses a development build configured with `http://127.0.0.
 pnpm --filter @freshmarkets/mobile verify:journey --platform android --device emulator-5554 --backend-origin http://127.0.0.1:3100 --backend-host-origin http://127.0.0.1:3100 --lane retry
 ```
 
-`--lane network-off` asserts the unavailable state on an already disconnected device. The host backend remains healthy for preflight. The runner does not change device Wi-Fi or replace responses. For the retry lane, cleanup removes only its own tunnel. Every drive stops only the development application and preserves device and business data.
+`--lane network-off` asserts the unavailable state on an already disconnected device. The host backend remains healthy for preflight. The runner does not change device Wi-Fi or replace responses. For the retry lane, cleanup removes only its own tunnel. Launching journeys stop only the development application and preserve device and business data. The `ready` lane only observes an already running app and leaves it running. Verification accepts documented emulator loopback aliases with matching ports. LAN instance identity remains unproved by this driver.
 
 ## Capture cold-start evidence
 
@@ -79,7 +79,9 @@ The probe runs five warmups and thirty measured cold process launches. It observ
 
 The probe reports native launch to rendered shell and launch to connected customer state separately. It retains JavaScript initialization elapsed time separately from native startup. Maestro startup and execution time are excluded. Device log transport delay and development-client configuration can affect observations and require a native-capable runner audit before trusting a measured result. Missing marks, repeated process identities, failed renders, and unavailable backends fail the gate. The proposed p95 budgets are 1000 milliseconds for native shell readiness and 5000 milliseconds for the connected customer state.
 
-iOS timing transport is unavailable and exits with failure. Thirty alternating paired trunk/head Web baseline trials remain a separate gate in [the mobile PR plan](../../docs/operations/MOBILE_PR_PLAN.md). Do not compare native startup with the Web baseline as a speedup ratio.
+iOS uses a compiled kernel-clock helper and Simulator logs to measure fresh process birth through rendered readiness. Run the same command with `--platform ios` and the owned simulator UDID. Missing clock calibration, mismatched process identity or incomplete logs fail the run. This transport has passed source tests; actual macOS compilation and Simulator observations remain unproved. The hosted job first attempts one clock smoke before the full five warmups and thirty measured trials.
+
+The separate Linux CI job runs thirty alternating paired trunk/head Web baseline trials through `scripts/measure-web-baseline.mjs`. It uses isolated Web/Core instances and actual selected-location categories and current prices. Raw trials and separate profiles are retained. Do not compare native startup with the Web baseline as a speedup ratio.
 
 ## Inspect the run evidence
 
@@ -92,12 +94,14 @@ cold relaunch, and records screenshots, video, installed binary hashes and the
 actual Metro bundle response hashes. The conditional Metro capture preserves the
 response bytes. It is disabled outside the explicit evidence session.
 
-The workflow uploads partial evidence even on failure. A passing workflow proves
-only the named installed-shell journey on those device versions. It does not prove
-performance, all accessibility lanes or commerce. The owner paused real-phone
+The workflow uploads partial evidence even on failure. The Android job attempts
+the installed shell and cold-start trials. The iOS job attempts the installed shell
+and one clock smoke. A separate job attempts the paired Web trials. Each receipt
+proves only its named assertions and observations. Accessibility lanes and commerce
+remain separate gates. The owner paused real-phone
 checks on 2026-10-13; continue with emulators and simulators. Physical-phone
 compatibility and physical VoiceOver acceptance remain deferred.
 
-Each journey or performance run prints its unique directory under `.wrangler/swarm/MOBILE-20261012.1.FOUNDATION/`. Its manifest records the Git SHA, working-tree scope, host, platform, device, installed build hash, backend origins, outcome, and cleanup. Maestro writes action arguments, JUnit results, diagnostic logs, and screenshots beside that manifest. Performance adds raw timing records for every completed trial.
+Each journey or performance run prints its unique directory under `.wrangler/swarm/MOBILE-20261012.1.FOUNDATION/`. Its manifest records `hostCheckoutSha`, working-tree scope, host, platform, device, installed build hash, backend origins, outcome, and cleanup. Public driver receipts explicitly leave served JavaScript unverified. The hosted CI parent owns Metro and records actual bundle-response hashes separately. Maestro writes action arguments, JUnit results, diagnostic logs, and screenshots beside that manifest. Performance adds raw timing records for every completed trial.
 
-The current Windows environment has no proved Android driver, device, or installed build, and cannot execute iOS. Native live lanes, physical-phone acceptance, both-platform timing, design comparison screenshots, and the required 30 to 60 second actual-build review video remain blocked. Safe areas, maximum text size, TalkBack, VoiceOver, and reduced motion require actual device observations. Unit tests and bundle exports cannot check those boxes. No native screenshots or video have been fabricated.
+The Windows host cannot execute the native gates. Hosted Android has compiled and installed the build and passed Home/backend readiness; its full shell journey failed flow parsing. Hosted iOS has compiled and installed the build; a system confirmation blocked Home readiness. Corrections await another hosted run. Safe areas, maximum text size, TalkBack, reduced motion, design comparison, both-platform performance and the passing 30 to 60 second review video remain open. Physical-phone checks and physical VoiceOver are deferred. Unit tests and bundle exports cannot check those boxes.

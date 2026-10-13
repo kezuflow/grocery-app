@@ -6,7 +6,15 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { appId, mobileRoot, preflight, repositoryRoot, validateBackend } from "./native-driver.mjs";
+import {
+  appId,
+  mobileRoot,
+  preflight,
+  repositoryRoot,
+  runFlow,
+  validateBackend,
+} from "./native-driver.mjs";
+import { prepareIosTiming, runIosColdTrial } from "./ios-performance-transport.mjs";
 
 const platform = process.argv[2];
 if (!["android", "ios"].includes(platform) || process.platform === "win32")
@@ -41,7 +49,7 @@ const receipt = {
   status: "running",
   startedAt: new Date().toISOString(),
   limits:
-    "Installed development shell only. No physical devices, accessibility, performance, or commerce acceptance.",
+    "Installed development shell, Android cold-start gate, and one iOS clock smoke only. No physical devices, accessibility, complete iOS performance, or commerce acceptance.",
   cleanup: {},
 };
 const children = new Set();
@@ -54,6 +62,7 @@ let recordingStop;
 let stateOwned = false;
 let options;
 let interrupted = false;
+const controller = new AbortController();
 const deviceVideo = `/sdcard/${stateName}.mp4`;
 const env = {
   ...process.env,
@@ -72,6 +81,7 @@ const env = {
   FRESHMARKETS_DEV_DATA: "local",
   GRADLE_OPTS: "-Dorg.gradle.daemon=false",
   WRANGLER_SEND_METRICS: "false",
+  MAESTRO_CLI_NO_ANALYTICS: "1",
 };
 const save = () =>
   writeFile(join(directory, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
@@ -187,6 +197,7 @@ const stopRecording = () =>
   })());
 process.once("SIGTERM", () => {
   interrupted = true;
+  controller.abort(new Error("Native CI runner interrupted."));
   for (const child of children) {
     if (child.exitCode === null && child.signalCode === null) {
       try {
@@ -351,6 +362,13 @@ try {
   };
   receipt.prerequisites = await preflight(options);
   receipt.build = receipt.prerequisites.build;
+  if (platform === "ios")
+    await runFlow(
+      options,
+      { directory, manifest: {} },
+      "open-development-client",
+      controller.signal,
+    );
   const args = [
     "--platform",
     platform,
@@ -429,6 +447,29 @@ try {
     throw new Error("The installed device did not fetch an observed successful bundle.");
   receipt.bundleIdentityLimit =
     "SHA-256 of actual Metro response bytes in the isolated device session. No claim of device memory attestation or release-build identity.";
+  if (platform === "ios") {
+    const timingDirectory = join(directory, "ios-clock-smoke");
+    const transport = await prepareIosTiming({
+      device: receipt.device,
+      directory: timingDirectory,
+      appId,
+      backendOrigin: options["backend-origin"],
+    });
+    receipt.iosClockSmoke = await runIosColdTrial(transport, {
+      directory: timingDirectory,
+      callerSignal: controller.signal,
+      assertReady: (signal) =>
+        runFlow(options, { directory: timingDirectory, manifest: {} }, "ready", signal),
+    });
+    await writeFile(
+      join(timingDirectory, "result.json"),
+      `${JSON.stringify(receipt.iosClockSmoke, null, 2)}\n`,
+    );
+  } else
+    await run("android-performance", process.execPath, [
+      join(mobileRoot, "scripts/measure-journey.mjs"),
+      ...args,
+    ]);
   receipt.status = "passed";
 } catch (error) {
   receipt.status = "failed";
