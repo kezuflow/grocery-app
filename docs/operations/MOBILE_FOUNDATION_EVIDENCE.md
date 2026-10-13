@@ -4,18 +4,45 @@ Task `MOBILE-20261012.1.FOUNDATION` uses phase **Establish the native workspace 
 
 Source implementation is on `codex/mobile-foundation`, against trunk `9b1b59cc8fb0ebe1e6374bc760cee8c82237410f`. [PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft. Full acceptance remains blocked. This PR is available for source review and is not merge-ready.
 
-| Gate | Executed evidence | Result |
-| --- | --- | --- |
-| Native behavior | `pnpm --filter @freshmarkets/mobile test` | 7 driver tests and 13 Vitest tests pass. Health fixtures are unit evidence. |
-| Native types | `pnpm --filter @freshmarkets/mobile typecheck` | Pass with Expo-supported TypeScript 6.0.3. |
-| Expo compatibility | Explicit development origin, `expo install --check` | Pass with Expo 57.0.28, Router 57.0.26 and development client 57.0.20. Overnight recommended patch changes required a fresh compatibility check. |
-| Repository aggregate | `pnpm check` | Pass at source `79681d20`, with final documentation-only edits during the run. Includes 50 harness, 1960 Core, 812 Web and 20 mobile tests, shared package tests and all builds, including Android/iOS exports. Exit 0. Final documentation formatting, links and diff checks also pass. |
-| Web trunk/head | Isolated real Web/Core browser runs | Catalog search passes on trunk `9b1b59cc` and head `2bd4cf40`. Selected-location prices pass on trunk `9b1b59cc` and head `55b80d99`. Admin scope navigation passes on head `55b80d99`. No native equivalence claimed. |
-| Android journey/perf | Actual native commands at `79681d20` | Both exit 1 before driving because Maestro is absent. No device or installed native build is available. |
-| iOS journey/perf | Actual native commands at `79681d20` | Both exit 1 because macOS/Xcode is unavailable. iOS timing transport also remains unimplemented. |
-| Independent source review | Separate review rounds, inherited settings | Source verdict passes through `79681d20`. DNS aliases, double launch, default icons, canonical timing origin and Windows CLI execution corrected. Latest dependency review confirms only mobile Expo definitions changed. |
-| Native screenshots/video | Actual-build review gate | Unavailable. No native media generated. |
-| Performance | Thirty paired Web trials plus native trials | Not measured. No performance result claimed. |
+| Gate                      | Executed evidence                                   | Result                                                                                                                                                                                                                                                                                   |
+| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native behavior           | `pnpm --filter @freshmarkets/mobile test`           | 7 driver tests and 13 Vitest tests pass. Health fixtures are unit evidence.                                                                                                                                                                                                              |
+| Native types              | `pnpm --filter @freshmarkets/mobile typecheck`      | Pass with Expo-supported TypeScript 6.0.3.                                                                                                                                                                                                                                               |
+| Expo compatibility        | Explicit development origin, `expo install --check` | Pass with Expo 57.0.28, Router 57.0.26 and development client 57.0.20. Overnight recommended patch changes required a fresh compatibility check.                                                                                                                                         |
+| Repository aggregate      | `pnpm check`                                        | Pass at source `79681d20`, with final documentation-only edits during the run. Includes 50 harness, 1960 Core, 812 Web and 20 mobile tests, shared package tests and all builds, including Android/iOS exports. Exit 0. Final documentation formatting, links and diff checks also pass. |
+| Web trunk/head            | Isolated real Web/Core browser runs                 | Catalog search passes on trunk `9b1b59cc` and head `2bd4cf40`. Selected-location prices pass on trunk `9b1b59cc` and head `55b80d99`. Admin scope navigation passes on head `55b80d99`. No native equivalence claimed.                                                                   |
+| Android journey/perf      | Actual native commands at `79681d20`                | Both exit 1 before driving because Maestro is absent. No device or installed native build is available.                                                                                                                                                                                  |
+| iOS journey/perf          | Actual native commands at `79681d20`                | Both exit 1 because macOS/Xcode is unavailable. iOS timing transport also remains unimplemented.                                                                                                                                                                                         |
+| Independent source review | Separate review rounds, inherited settings          | Source verdict passes through `79681d20`. DNS aliases, double launch, default icons, canonical timing origin and Windows CLI execution corrected. Latest dependency review confirms only mobile Expo definitions changed.                                                                |
+| Native screenshots/video  | Actual-build review gate                            | Unavailable. No native media generated.                                                                                                                                                                                                                                                  |
+| Performance               | Thirty paired Web trials plus native trials         | Not measured. No performance result claimed.                                                                                                                                                                                                                                             |
+
+## Hosted emulator and simulator continuation
+
+The owner paused real-phone checks on 2026-10-13. Hosted emulator and simulator
+proof continues; physical compatibility and physical VoiceOver remain deferred.
+
+[Run 38311188514](https://github.com/kezuflow/grocery-app/actions/runs/38311188514)
+at `6c84c02a` failed both jobs. Both booted the real local Web/Core backend and
+observed its configured D1 binding. Android compiled and installed the development
+APK, then failed to reach Metro's launch endpoint. iOS failed before building
+because exact simulator version `26.4` was unavailable. No native UI assertion,
+screenshot, video or timing measurement passed in this run. Both partial receipts
+report successful owned process, port and disposable-state cleanup.
+
+Downloaded receipts and logs remain under `.wrangler/mobile-foundation/ci-38311188514/`.
+The aggregate attempt in `check-native-ci-source.log` was interrupted and has no
+confirmed result. The earlier aggregate at `79681d20` remains its own passing scope.
+
+The loopback reproduction in `repro-metro-loopback-default.json` observes a Node
+server bound to IPv6 `localhost`, with IPv4 refusal. `repro-metro-loopback-ipv4.json`
+observes successful IPv4 connections under `--dns-result-order=ipv4first`.
+This proves the mechanism; the failed hosted run did not record its socket family.
+The correction applies that option only to Metro, disables Expo's standalone
+debugger installation with its headless setting, and pins the runner's documented
+iOS `26.4.1` runtime. Xcode first-launch setup and expanded readiness/runtime
+receipts make the next failure inspectable. Actual native acceptance still needs
+the next hosted run.
 
 ## Scope and choices
 

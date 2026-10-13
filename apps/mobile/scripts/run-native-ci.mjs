@@ -37,6 +37,7 @@ const receipt = {
   stateName,
   device: undefined,
   ownedProcessIDs: [],
+  readiness: [],
   status: "running",
   startedAt: new Date().toISOString(),
   limits:
@@ -59,6 +60,7 @@ const env = {
   CI: "1",
   EXPO_NO_DEV_MENU: "1",
   EXPO_NO_METRO_LAZY: "1",
+  EXPO_UNSTABLE_HEADLESS: "1",
   EXPO_PUBLIC_APP_VARIANT: "development",
   EXPO_PUBLIC_BACKEND_ORIGIN:
     platform === "android" ? "http://10.0.2.2:3100" : "http://127.0.0.1:3100",
@@ -145,21 +147,29 @@ const reserve = (port) =>
   });
 const waitFor = async (child, url, validate, timeout = 180_000) => {
   const deadline = Date.now() + timeout;
-  let lastError;
+  const observation = { url, attempts: 0, status: "waiting" };
+  receipt.readiness.push(observation);
   while (Date.now() < deadline) {
     if (interrupted) throw new Error("Native CI runner interrupted.");
     if (child.failure || child.exitCode !== null || child.signalCode !== null)
       throw new Error(`Owned server exited before ${url} became ready.`);
     try {
+      observation.attempts += 1;
       const response = await fetch(url, { signal: AbortSignal.timeout(5_000), redirect: "error" });
-      if (response.ok) return await validate(response);
+      observation.lastHttpStatus = response.status;
+      if (response.ok) {
+        const result = await validate(response);
+        observation.status = "ready";
+        return result;
+      }
     } catch (error) {
-      lastError = error.message;
+      observation.lastError = { message: error.message, causeCode: error.cause?.code };
     }
     await delay(1000);
   }
+  observation.status = "timed-out";
   throw new Error(
-    `Owned server did not become ready at ${url}. ${lastError ?? "No successful response."}`,
+    `Owned server did not become ready at ${url}. ${observation.lastError?.message ?? "No successful response."}`,
   );
 };
 const stopRecording = () =>
@@ -228,17 +238,24 @@ try {
     async (response) => validateBackend(await response.json()),
   );
   if (platform === "ios") {
+    receipt.xcode = {
+      developerDirectory: command("xcode-select", ["-p"]),
+      version: command("xcodebuild", ["-version"]),
+    };
     const runtimes = JSON.parse(
       command("xcrun", ["simctl", "list", "runtimes", "--json"]),
     ).runtimes;
-    const runtime = runtimes.find(
-      (item) => item.isAvailable && item.version === "26.4" && item.identifier.includes("iOS"),
-    );
-    if (!runtime) throw new Error("Pinned iOS 26.4 simulator runtime is unavailable.");
     const types = JSON.parse(
       command("xcrun", ["simctl", "list", "devicetypes", "--json"]),
     ).devicetypes;
+    receipt.simulatorInventory = { runtimes, deviceTypes: types };
+    const runtime = runtimes.find(
+      (item) => item.isAvailable && item.version === "26.4.1" && item.identifier.includes("iOS"),
+    );
     const type = types.find((item) => item.name === "iPhone 17 Pro");
+    receipt.simulatorSelection = { runtime, deviceType: type };
+    await save();
+    if (!runtime) throw new Error("Pinned iOS 26.4.1 simulator runtime is unavailable.");
     if (!type) throw new Error("iPhone 17 Pro simulator type is unavailable.");
     simulator = command("xcrun", [
       "simctl",
@@ -276,6 +293,7 @@ try {
     "metro",
     process.execPath,
     [
+      "--dns-result-order=ipv4first",
       expo,
       "start",
       "--dev-client",
@@ -292,6 +310,8 @@ try {
     `http://127.0.0.1:8081/_expo/open?platform=${platform}&runtime=custom`,
     (response) => response.json(),
   );
+  receipt.expoOpen = info;
+  await save();
   if (info.runtime !== "custom" || info.appId !== appId)
     throw new Error("Metro returned the wrong development application.");
   const link = new URL(info.url);

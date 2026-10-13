@@ -85,7 +85,7 @@ iOS timing transport is unavailable and exits with failure. Thirty alternating p
 
 The `Mobile foundation installed shell` GitHub Actions workflow runs on pushes to
 `codex/mobile-foundation`. It builds and installs the development application on
-an Android API 34 emulator and an iOS 26.4 simulator with Xcode 26.4.1. Each job owns
+an Android API 34 emulator and an iOS 26.4.1 simulator with Xcode 26.4.1. Each job owns
 its local Web/Core backend, migrated D1 state, Metro process and device session.
 `scripts/run-native-ci.mjs` drives the existing ready and shell journeys, including
 cold relaunch, and records screenshots, video, installed binary hashes and the
