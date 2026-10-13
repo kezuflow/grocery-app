@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { tokens } from "../lib/tokens";
 import { emitReadiness, markShellReady } from "../lib/readiness";
@@ -16,37 +16,32 @@ export function Screen({
 }) {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        style={styles.safe}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <ScrollView
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}
       >
-        <ScrollView
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.content}
+        <Text style={styles.brand}>FreshMarkets</Text>
+        <Text accessibilityRole="header" testID={testID} style={styles.heading}>
+          {title}
+        </Text>
+        <View
+          style={styles.body}
+          onLayout={() =>
+            requestAnimationFrame(() => {
+              markShellReady();
+              if (__DEV__)
+                emitReadiness("shell-ready", {
+                  platform: Platform.OS,
+                  buildVariant: mobileEnvironment.variant,
+                  backendOrigin: mobileEnvironment.backendOrigin,
+                });
+            })
+          }
         >
-          <Text style={styles.brand}>FreshMarkets</Text>
-          <Text accessibilityRole="header" testID={testID} style={styles.heading}>
-            {title}
-          </Text>
-          <View
-            style={styles.body}
-            onLayout={() =>
-              requestAnimationFrame(() => {
-                markShellReady();
-                if (__DEV__)
-                  emitReadiness("shell-ready", {
-                    platform: Platform.OS,
-                    buildVariant: mobileEnvironment.variant,
-                    backendOrigin: mobileEnvironment.backendOrigin,
-                  });
-              })
-            }
-          >
-            {children}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {children}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

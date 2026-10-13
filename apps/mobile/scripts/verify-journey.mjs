@@ -10,14 +10,20 @@ import {
 
 let evidence;
 let options;
-let appOwned = false;
+let session = { phase: "validating" };
 let tunnel;
+const controller = new AbortController();
+const interrupt = (signal) =>
+  controller.abort(new Error(`Native journey interrupted by ${signal}.`));
+const onInterrupt = () => interrupt("SIGINT");
+const onTerminate = () => interrupt("SIGTERM");
+process.on("SIGINT", onInterrupt);
+process.on("SIGTERM", onTerminate);
 try {
   options = parseOptions(process.argv.slice(2));
   evidence = createEvidence(options, "journey");
   saveEvidence(evidence);
   evidence.manifest.prerequisites = await preflight(options);
-  appOwned = true;
   if (options.lane === "retry") {
     const deviceOrigin = new URL(options["backend-origin"]);
     const hostOrigin = new URL(options["backend-host-origin"]);
@@ -37,13 +43,24 @@ try {
       throw new Error(
         "The retry lane requires an unowned device port. Preserve existing ADB reverse mappings.",
       );
-    runFlow(options, evidence, "network-off");
-    command("adb", ["-s", options.device, "reverse", `tcp:${port}`, `tcp:${port}`]);
+    controller.signal.throwIfAborted();
+    session = { phase: "driving", ownsApp: true };
+    await runFlow(options, evidence, "network-off", controller.signal);
+    controller.signal.throwIfAborted();
+    command("adb", ["-s", options.device, "reverse", "--no-rebind", `tcp:${port}`, `tcp:${port}`]);
     tunnel = `tcp:${port}`;
     evidence.manifest.mapping = { device: tunnel, host: tunnel, owner: "this run" };
-    runFlow(options, evidence, "retry", false);
-  } else runFlow(options, evidence);
-  evidence.manifest.status = "passed";
+    await runFlow(options, evidence, "retry", controller.signal);
+  } else {
+    controller.signal.throwIfAborted();
+    session = { phase: "driving", ownsApp: options.lane !== "ready" };
+    if (options.lane === "ready")
+      evidence.manifest.observation =
+        "Assertions on an already running application. This command did not launch or own it.";
+    await runFlow(options, evidence, options.lane, controller.signal);
+  }
+  controller.signal.throwIfAborted();
+  evidence.manifest.status = options.lane === "ready" ? "passed-observation" : "passed";
 } catch (error) {
   if (evidence) {
     evidence.manifest.status = "failed";
@@ -62,7 +79,7 @@ try {
       process.exitCode = 1;
     }
   }
-  if (appOwned) {
+  if (session.phase === "driving" && session.ownsApp) {
     try {
       stopOwnedApp(options);
       evidence.manifest.cleanup =
@@ -78,4 +95,6 @@ try {
     saveEvidence(evidence);
     console.log(`Evidence ${evidence.directory}`);
   }
+  process.off("SIGINT", onInterrupt);
+  process.off("SIGTERM", onTerminate);
 }

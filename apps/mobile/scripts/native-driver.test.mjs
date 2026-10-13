@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
   command,
+  commandAsync,
+  collectOutput,
   commandInvocation,
   mobileRoot,
   parseOptions,
   validateBackend,
+  trialTimingLog,
 } from "./native-driver.mjs";
 import { parseColdStart, summarizeTrials } from "./performance-probe.mjs";
 
@@ -55,7 +58,135 @@ test("journey requires explicit platform and device, and rejects remote origins 
     /credentials/,
   );
   assert.throws(() => parseOptions([...args, "--unknown", "true"]), /Use --platform/);
+  assert.throws(
+    () =>
+      parseOptions(
+        args.map((value) => (value === "http://10.0.2.2:3100" ? "http://192.168.1.8:3100" : value)),
+      ),
+    /LAN backend identity is unproved/,
+  );
+  assert.throws(
+    () =>
+      parseOptions(
+        args.map((value) => (value === "http://127.0.0.1:3100" ? "http://127.0.0.1:3101" : value)),
+      ),
+    /matching emulator/,
+  );
 });
+
+test("timing evidence excludes buffered historical trials and marks from another process", () => {
+  const log = [
+    timingLog("stale"),
+    "101.000 300 300 I FreshMarketsProbe: live-fence",
+    timingLog("current").replaceAll("100.", "102."),
+    '102.900 999 999 I ReactNativeJS: FM_PERF {"launchId":"another-process"}',
+  ].join("\n");
+  const observed = trialTimingLog(log, { fence: "live-fence", pid: "200" });
+  assert.doesNotMatch(observed, /stale|another-process|FreshMarketsProbe/);
+  assert.equal(parseColdStart(observed, expected).launchId, "current");
+  assert.throws(
+    () => trialTimingLog(log, { fence: "missing-fence", pid: "200" }),
+    /live launch fence/,
+  );
+});
+
+test("output capture waits for process closure and drains the final stdout bytes", async () => {
+  const child = spawn(
+    process.execPath,
+    ["-e", "process.stdout.write('first'); setTimeout(() => process.stdout.end('-final'), 30);"],
+    { windowsHide: true },
+  );
+  const output = collectOutput(child);
+  await new Promise((resolve) => child.once("exit", resolve));
+  assert.equal(await output.stop(), "first-final");
+});
+
+test("an interrupted asynchronous driver drains output and rejects before cleanup continues", async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("driver interrupted")), 500);
+  try {
+    await assert.rejects(
+      commandAsync(
+        process.execPath,
+        ["-e", "process.stdout.write('driver-started'); setInterval(() => {}, 1000);"],
+        { signal: controller.signal },
+      ),
+      (error) => {
+        assert.equal(error.message, "driver interrupted");
+        assert.match(error.commandOutput, /driver-started/);
+        return true;
+      },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+for (const interruption of ["abort", "timeout"])
+  test(
+    `${interruption} waits for a TERM-ignoring descendant after its process-group leader exits`,
+    {
+      skip: platform() === "win32" ? "POSIX process-group behavior requires a POSIX host." : false,
+    },
+    async () => {
+      const fixture = mkdtempSync(join(tmpdir(), "fm-mobile-process-group-"));
+      const identityPath = join(fixture, "identity.json");
+      const controller = new AbortController();
+      const descendant = [
+        "process.on('SIGTERM', () => {});",
+        "setInterval(() => {}, 1000);",
+        "process.send({ pid: process.pid });",
+      ].join("\n");
+      const leader = [
+        "const { spawn } = require('node:child_process');",
+        "const { writeFileSync } = require('node:fs');",
+        `const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });`,
+        "child.once('message', ({ pid }) => {",
+        `writeFileSync(${JSON.stringify(identityPath)}, JSON.stringify({ group: process.pid, descendant: pid }));`,
+        "process.stdout.write('descendant-ready');",
+        "});",
+        "setInterval(() => {}, 1000);",
+      ].join("\n");
+      let identity;
+      const result = commandAsync(process.execPath, ["-e", leader], {
+        signal: controller.signal,
+        timeout: 5_000,
+      }).then(
+        () => ({ succeeded: true }),
+        (error) => ({ error }),
+      );
+      try {
+        const deadline = Date.now() + 4_000;
+        while (!existsSync(identityPath) && Date.now() < deadline)
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        identity = JSON.parse(readFileSync(identityPath, "utf8"));
+        assert.ok(Number.isInteger(identity.group) && identity.group > 0);
+        assert.ok(Number.isInteger(identity.descendant) && identity.descendant > 0);
+        process.kill(identity.descendant, 0);
+        if (interruption === "abort") controller.abort(new Error("group interrupted"));
+        const observed = await result;
+        assert.equal(
+          observed.error?.message,
+          interruption === "abort" ? "group interrupted" : `${process.execPath} timed out.`,
+        );
+        assert.match(observed.error.commandOutput, /descendant-ready/);
+        assert.throws(() => process.kill(-identity.group, 0), { code: "ESRCH" });
+        assert.throws(() => process.kill(identity.descendant, 0), { code: "ESRCH" });
+      } finally {
+        controller.abort(new Error("fixture cleanup"));
+        await result;
+        if (identity) {
+          try {
+            process.kill(-identity.group, "SIGKILL");
+          } catch (error) {
+            assert.equal(error.code, "ESRCH");
+          }
+        }
+        assert.equal(dirname(resolve(fixture)), resolve(tmpdir()));
+        rmSync(fixture, { recursive: true, force: true });
+      }
+    },
+  );
 
 test("Core liveness rejects an unbound database and production environment", () => {
   const health = {

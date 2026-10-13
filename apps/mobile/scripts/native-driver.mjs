@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname, platform } from "node:os";
@@ -52,7 +52,152 @@ export function parseOptions(args) {
     }
     options[key] = url.origin;
   }
+  const deviceOrigin = new URL(options["backend-origin"]);
+  const hostOrigin = new URL(options["backend-host-origin"]);
+  const loopback = new Set(["localhost", "127.0.0.1"]);
+  const deviceAliases = new Set([
+    ...loopback,
+    ...(options.platform === "android" ? ["10.0.2.2"] : []),
+  ]);
+  if (
+    !loopback.has(hostOrigin.hostname) ||
+    !deviceAliases.has(deviceOrigin.hostname) ||
+    deviceOrigin.port !== hostOrigin.port
+  )
+    throw new Error(
+      "Verification requires matching emulator and host loopback ports. LAN backend identity is unproved.",
+    );
   return options;
+}
+
+export function commandAsync(executable, args, { timeout = 120_000, signal } = {}) {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  const invocation = commandInvocation(executable, args);
+  return new Promise((resolve, reject) => {
+    const child = spawn(invocation.executable, invocation.args, {
+      cwd: repositoryRoot,
+      windowsHide: true,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+      detached: platform() !== "win32",
+    });
+    let stdout = "";
+    let stderr = "";
+    let failure;
+    let stopping;
+    const stopGroup = async () => {
+      if (!child.pid) return;
+      const send = (signal) => {
+        try {
+          process.kill(-child.pid, signal);
+          return true;
+        } catch (error) {
+          if (error.code === "ESRCH") return false;
+          throw error;
+        }
+      };
+      if (!send("SIGTERM")) return;
+      const forceAt = performance.now() + 5_000;
+      const deadline = forceAt + 5_000;
+      let forced = false;
+      while (send(0)) {
+        if (performance.now() >= deadline)
+          throw new Error(`Owned process group ${child.pid} survived forced cleanup.`);
+        if (!forced && performance.now() >= forceAt) {
+          if (!send("SIGKILL")) return;
+          forced = true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    };
+    const stop = (error) => {
+      if (stopping) return;
+      failure = error;
+      if (platform() === "win32") {
+        spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+        stopping = Promise.resolve();
+      } else
+        stopping = stopGroup().catch((cleanupError) => {
+          failure = new AggregateError(
+            [failure, cleanupError],
+            `${executable} could not stop its owned process group. ${cleanupError.message}`,
+          );
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", abort);
+          failure.commandOutput = `${stdout}\n${stderr}`;
+          reject(failure);
+        });
+    };
+    const abort = () => stop(signal.reason);
+    signal?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => stop(new Error(`${executable} timed out.`)), timeout);
+    const append = (chunk, stream) => {
+      if (stream === "stdout") stdout += chunk;
+      else stderr += chunk;
+      if (stdout.length + stderr.length > 10 * 1024 * 1024)
+        stop(new Error(`${executable} output exceeded 10 MiB.`));
+    };
+    child.stdout.on("data", (chunk) => append(chunk, "stdout"));
+    child.stderr.on("data", (chunk) => append(chunk, "stderr"));
+    if (signal?.aborted) abort();
+    child.on("error", (error) => {
+      failure = error;
+    });
+    child.on("close", async (code) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      await stopping;
+      if (failure || code !== 0) {
+        const error =
+          failure ?? new Error(`${executable} failed with exit ${code}. ${stderr.trim()}`);
+        error.commandOutput = `${stdout}\n${stderr}`;
+        reject(error);
+      } else resolve(stdout.trim());
+    });
+  });
+}
+
+export function collectOutput(child) {
+  let stdout = "";
+  let stderr = "";
+  let failure;
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  child.on("error", (error) => {
+    failure = error;
+  });
+  const closed = new Promise((resolve) => child.once("close", resolve));
+  return {
+    text: () => stdout,
+    async stop() {
+      child.kill();
+      const force = setTimeout(() => child.kill("SIGKILL"), 5_000);
+      await closed;
+      clearTimeout(force);
+      if (failure || stderr.trim()) throw failure ?? new Error(stderr.trim());
+      return stdout;
+    },
+  };
+}
+
+export function trialTimingLog(log, { fence, pid }) {
+  if (!/^\d+$/.test(pid)) throw new Error("A timing trial requires one fresh process ID.");
+  const lines = log.split(/\r?\n/);
+  const index = lines.findIndex(
+    (line) => line.includes("FreshMarketsProbe") && line.endsWith(fence),
+  );
+  if (index < 0) throw new Error("The timing capture did not observe its live launch fence.");
+  return lines
+    .slice(index + 1)
+    .filter(
+      (line) =>
+        line.includes("ActivityTaskManager") ||
+        (line.includes("FM_PERF") && line.trim().split(/\s+/)[1] === pid),
+    )
+    .join("\n");
 }
 
 export function command(executable, args, timeout = 30_000) {
@@ -195,7 +340,20 @@ export async function preflight(options) {
   const backend = validateBackend(
     await fetchJson(options["backend-host-origin"], "/api/core-health"),
   );
-  return { maestro, javaVersion, device, build, backend };
+  return {
+    maestro,
+    javaVersion,
+    device,
+    build,
+    backend,
+    identity: {
+      installedBinary: "Observed SHA-256 of installed development binary only.",
+      servedJavaScript:
+        "Unverified. An installed development binary can load another checkout's Metro bundle.",
+      backend:
+        "Host Core liveness and documented emulator origin alias only. No device instance attestation.",
+    },
+  };
 }
 
 export function createEvidence(options, purpose) {
@@ -206,7 +364,8 @@ export function createEvidence(options, purpose) {
     taskId: "MOBILE-20261012.1.FOUNDATION",
     purpose,
     status: "running",
-    sha: command("git", ["rev-parse", "HEAD"]),
+    hostCheckoutSha: command("git", ["rev-parse", "HEAD"]),
+    servedJavaScriptSha: "unverified",
     workingTree: command("git", ["status", "--porcelain"]),
     host: hostname(),
     hostPlatform: platform(),
@@ -224,7 +383,7 @@ export function saveEvidence(evidence) {
   );
 }
 
-export function runFlow(options, evidence, lane = options.lane, stopApp = true) {
+export async function runFlow(options, evidence, lane = options.lane, signal) {
   const backendPattern = options["backend-origin"].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const args = [
     "--device",
@@ -244,8 +403,6 @@ export function runFlow(options, evidence, lane = options.lane, stopApp = true) 
     `APP_ID=${appId}`,
     "-e",
     `BACKEND_ORIGIN=${backendPattern}`,
-    "-e",
-    `STOP_APP=${stopApp}`,
     join(mobileRoot, "flows", `${lane}.yaml`),
   ];
   writeFileSync(
@@ -253,7 +410,7 @@ export function runFlow(options, evidence, lane = options.lane, stopApp = true) 
     `${JSON.stringify({ executable: "maestro", args }, null, 2)}\n`,
   );
   try {
-    const output = command("maestro", args, 120_000);
+    const output = await commandAsync("maestro", args, { timeout: 120_000, signal });
     writeFileSync(join(evidence.directory, `${lane}.log`), `${output}\n`);
   } catch (error) {
     writeFileSync(

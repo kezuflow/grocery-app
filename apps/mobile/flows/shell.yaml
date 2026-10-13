@@ -1,7 +1,6 @@
 appId: ${APP_ID}
 ---
-- launchApp:
-    stopApp: ${STOP_APP}
+- launchApp
 - assertVisible:
     id: screen-home
 - assertVisible:
@@ -46,7 +45,6 @@ appId: ${APP_ID}
     id: search-input
     text: bananas
 - takeScreenshot: keyboard
-- hideKeyboard
 - tapOn:
     id: tab-home
 - assertVisible:
