@@ -1,0 +1,58 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible:
+    id: screen-home
+- assertVisible:
+    id: build-variant
+    text: development
+- assertVisible:
+    id: backend-origin
+    text: ${BACKEND_ORIGIN}
+- assertVisible:
+    id: backend-available
+- takeScreenshot: shell
+- repeat:
+    times: 3
+    commands:
+      - tapOn:
+          id: tab-search
+      - assertVisible:
+          id: screen-search
+      - tapOn:
+          id: tab-cart
+      - assertVisible:
+          id: screen-cart
+      - tapOn:
+          id: tab-orders
+      - assertVisible:
+          id: screen-orders
+      - tapOn:
+          id: tab-account
+      - assertVisible:
+          id: screen-account
+      - tapOn:
+          id: tab-home
+      - assertVisible:
+          id: screen-home
+- takeScreenshot: tabs
+- tapOn:
+    id: tab-search
+- tapOn:
+    id: search-input
+- inputText: bananas
+- assertVisible:
+    id: search-input
+    text: bananas
+- takeScreenshot: keyboard
+- tapOn:
+    id: tab-home
+- assertVisible:
+    id: screen-home
+- takeScreenshot: keyboard-dismissed
+- launchApp
+- assertVisible:
+    id: screen-home
+- assertVisible:
+    id: backend-available
+- takeScreenshot: relaunch

@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 overrides:
+  react-native-reanimated: 4.5.1
   "@esbuild-kit/core-utils>esbuild": 0.25.12
   "miniflare@4.20260721.0>sharp": 0.35.2
   "miniflare@4.20260721.0>undici": 7.29.0

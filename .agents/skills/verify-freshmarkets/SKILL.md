@@ -1,6 +1,6 @@
 ---
 name: verify-freshmarkets
-description: Verify FreshMarkets Web customer journeys against an isolated local Web/Core Worker and D1 stack with Playwright. Capture user actions, resulting state, and cleanup evidence. Use for changed browser behavior and mobile prerequisites; native Expo acceptance remains unavailable until apps/mobile exists.
+description: Verify FreshMarkets Web customer journeys against an isolated local Web/Core Worker and D1 stack with Playwright. Capture user actions, resulting state, and cleanup evidence. Use for changed browser behavior and mobile prerequisites; native Expo device acceptance remains unproved.
 ---
 
 # Verify FreshMarkets
@@ -63,7 +63,14 @@ If launch is interrupted or cleanup fails, inspect the recorded owner PID and Wi
 
 ## Native gate
 
-There is no `apps/mobile` application in this baseline. Web at a phone viewport is browser evidence, not Expo, iOS, Android, native OAuth, QR handling, push, or device acceptance. Do not invent native commands or report this gate passed.
+Foundation adds `apps/mobile` and real-driver command definitions. Its device runs remain unproved. Web at a phone viewport is browser evidence, not Expo, iOS, Android, native OAuth, QR handling, push, or device acceptance. Do not report this gate passed from unit tests or bundle exports.
+
+Read [the actual mobile command and evidence instructions](../../../apps/mobile/README.md).
+Run `pnpm --filter @freshmarkets/mobile doctor` with the explicit platform, device
+and isolated origins documented there, then `verify:journey`. Android and iOS need
+installed development builds. The runner retains manifests, actions and results
+and fails on unavailable prerequisites. iOS performance transport remains unavailable.
+These definitions require actual both-platform proof before they become proved recipes.
 
 The mobile foundation PR must extend this skill using the actual Expo package scripts, app identifier, development-build installation, test account, and device automation available at that revision. Prove its launch, read-only doctor, one real customer journey, action/result artifacts, and owned cleanup on Android and iOS. Mark unavailable devices or signing prerequisites explicitly. Add native feature recipes only when their selectors and commands work against the installed app.
 

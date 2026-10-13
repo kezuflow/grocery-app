@@ -1,0 +1,10 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible:
+    id: screen-home
+- assertVisible:
+    id: backend-unavailable
+- assertVisible:
+    id: retry-backend
+- takeScreenshot: network-off

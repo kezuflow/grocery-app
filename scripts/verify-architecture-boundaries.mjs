@@ -10,6 +10,8 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const messages = {
   WEB_IMPORTS_CORE:
     "Web source must communicate with Core through shared contracts and Service Bindings",
+  MOBILE_IMPORTS_IMPLEMENTATION:
+    "Mobile source must use public Web HTTP adapters and shared contracts, not server, storage, or provider implementations",
   CONTRACT_IMPORTS_INFRASTRUCTURE:
     "Shared contracts must not depend on application or infrastructure implementation types",
   DOMAIN_IMPORTS_OUTWARD:
@@ -106,6 +108,23 @@ export function analyzeSourceFile(fileNameInput, sourceText) {
 
   for (const imported of importedModules(tokens)) {
     const moduleName = normalizeFileName(imported.moduleName);
+
+    if (
+      fileName.startsWith("apps/mobile/") &&
+      (moduleName.startsWith("@freshmarkets/core") ||
+        moduleName.startsWith("@freshmarkets/web") ||
+        ["apps/core", "apps/web"].some((directory) =>
+          resolvesInto(fileName, moduleName, directory),
+        ) ||
+        /(?:^|\/)(?:apps\/(?:core|web)|infrastructure|repository|database|schema|migrations|providers?)(?:\/|$)/u.test(
+          moduleName,
+        ) ||
+        /(?:cloudflare|workers-types|drizzle|better-sqlite3|xendit|stripe|adyen)/iu.test(
+          moduleName,
+        ))
+    ) {
+      add("MOBILE_IMPORTS_IMPLEMENTATION", imported.position);
+    }
 
     if (
       fileName.startsWith("apps/web/") &&

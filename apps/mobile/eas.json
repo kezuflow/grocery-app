@@ -1,0 +1,14 @@
+{
+  "cli": { "version": ">=16.0.0", "appVersionSource": "local" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": { "EXPO_PUBLIC_APP_VARIANT": "development" }
+    },
+    "private-beta": {
+      "distribution": "internal",
+      "env": { "EXPO_PUBLIC_APP_VARIANT": "private-beta" }
+    }
+  }
+}

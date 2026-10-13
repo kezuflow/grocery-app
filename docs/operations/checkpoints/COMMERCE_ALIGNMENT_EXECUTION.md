@@ -1,5 +1,218 @@
 # Commerce alignment — active checkpoint
 
+## Native workspace foundation - MOBILE-20261012.1.FOUNDATION
+
+Phase **Establish the native workspace and verification path**;
+checkpoint `docs/operations/checkpoints/COMMERCE_ALIGNMENT_EXECUTION.md`.
+Acceptance owner is the repository owner. The owner explicitly requests this one
+implementation ID, its verification evidence and a ready PR, stopping before merge.
+Acceptance requires the Foundation build, unit, live, performance and review-media
+boxes in `docs/operations/MOBILE_PR_PLAN.md`. Later mobile slices are not started.
+
+Current head is `e40d6c83019921799ac1c6ab0d99b3ff8dfb93f4` on
+`codex/mobile-foundation`. Navigation/cleanup corrections are committed in
+`96a86462`; hosted proof and timing tools are committed in `e40d6c83`. The exact-head
+`pnpm check` exits zero in `.wrangler/mobile-foundation/check-proof-head.log` and
+`check-proof-head-result.json`, finished 2026-10-13T07:58:27Z with no tracked edits
+during the run. It includes 51 harness, 1960 Core, 812 Web, 27 Node mobile and 13
+Vitest mobile tests; two POSIX mobile tests skip on Windows. All builds pass.
+
+[Run 38364253354](https://github.com/kezuflow/grocery-app/actions/runs/38364253354)
+fails three jobs at that head. Android renders Home but the actual screenshot shows
+the system Pixel Launcher ANR dialog blocking readiness. Its Metro log records
+both semantic marks, but no native timing or completed shell acceptance is claimed.
+iOS stops before build because the driver interruption test receives `kill EPERM`
+while probing its owned process group. The descendant cleanup tests pass there.
+Apple's XNU source excludes zombie members when probing a group; the possible
+reaping race requires a bounded census and actual macOS proof. Paired Web starts
+both real isolated backends and fails its first baseline warmup because the literal
+`₱179.00` price is absent. There are no recorded HTTP/request/page errors. Both Web
+backend cleanup receipts complete. No measured performance result exists.
+
+One worker owns native-driver cleanup, one owns Web performance diagnostics and
+one owns the exact observed native-launch dialog handling. Root owns workflow,
+checkpoint and delivery. Next action is to review their corrections and rerun
+the hosted gates. Physical-phone and physical VoiceOver checks remain deferred;
+simulator layout/accessibility comparisons and complete timing remain open.
+
+Corrections are source-reviewed for the next hosted attempt. Real isolated browser
+reproduction shows the price paragraph is exactly `₱179.00 / 500 g`; the catalog's
+500 g variant is 17900 centavos. The old amount-only exact locator matched zero
+elements. The new assertion retains the full literal price label. The reproduction
+and successful owned cleanup are in `web-price-repro-5c2c6386-378e-4b1f-b32b-7fff7670ebeb`.
+Darwin cleanup now waits for an observed owned zombie-only group to reach actual
+ESRCH. Its hosted old-source control requires observed kernel EPERM, the original
+command rejection and successful fixture cleanup before accepting the expected
+failure. Android startup closes only the exact observed Pixel Launcher ANR dialog,
+records the incident and refuses timing in a contaminated session. Its health
+parser accepts only the known clean dump; reasonless ANR and unknown output fail
+timing acceptance. Focused mobile tests pass 30 Node plus 13 Vitest, with five
+Windows platform skips. Fresh independent reviews are clean. Actual runtime
+corroboration still requires the next CI run; the aggregate receipt above tests
+`e40d6c83`, not these new bytes.
+
+Owner continuation on 2026-10-13 requests actual proof and explicitly pauses
+real-phone checks. Continue with Android emulators and iOS simulators only;
+physical-device compatibility and physical VoiceOver acceptance remain deferred.
+Observed resumed HEAD is `6c84c02a937ad758913717d309aa1650ae3b572f`, with
+a clean tracked tree before this work. GitHub Actions is enabled on the public
+repository, with no registered self-hosted runners. Two independent designs and
+a cross-judge select Ubuntu Android plus macOS 26 iOS simulator jobs over installing
+personal toolchains. One worker owns the workflow, CI runner and conditional Metro
+bundle-response capture. Root owns generated-project ignores, narrow naming guard,
+documentation and delivery. No merge, signing, EAS distribution or provider activity
+is authorized. Existing source receipts below remain valid for their tested scope.
+Continuation source gates pass with 51 harness tests and 21 mobile tests, workspace
+types, lint, formatting, naming and diff checks. Actual Android prebuild passes;
+its debug manifest permits local HTTP. Installing Expo-supported system UI 57.0.4
+corrects the observed light-style prebuild warning. Windows iOS generation exits
+one with Expo's explicit unsupported-host message. Independent CI source review
+corrects Android AVD-name selection and retains D1 state if process/port cleanup
+fails. Both corrected source verdicts permit the first hosted attempt, not native
+acceptance. Hosted run [38311188514](https://github.com/kezuflow/grocery-app/actions/runs/38311188514)
+failed both jobs at `6c84c02a`. Both jobs booted the real Web/Core backend.
+Android compiled and installed the APK, then timed out fetching Metro's launch
+endpoint at `127.0.0.1`. iOS stopped before its build because exact runtime version
+`26.4` was unavailable. Neither job reached the native journey or captured media.
+Both receipts report successful owned process, port and disposable-state cleanup.
+The attempted aggregate in `check-native-ci-source.log` was interrupted; its result
+is unknown and is not a passing receipt.
+
+A real Node HTTP reproduction binds `localhost` to IPv6 by default and proves that
+Metro-only `--dns-result-order=ipv4first` permits the required IPv4 connection.
+The first CI run did not capture its socket family. The correction also disables
+Expo's standalone debugger installation through its headless setting, pins the
+runner's documented iOS runtime `26.4.1`, and runs Xcode first-launch setup.
+New receipts retain Xcode and simulator inventories plus launch-endpoint status
+and failure cause. Root owns the documentation; one worker owns only runner and
+workflow corrections. Those corrections passed fresh independent source review and
+were pushed as `09d97ae4836d5cf5d687f609adf8c27f04d9b8c2`.
+
+Current continuation evidence, 2026-10-13: [run 38347896824](https://github.com/kezuflow/grocery-app/actions/runs/38347896824)
+failed both jobs at `09d97ae4`. Android now reaches Metro, loads the captured actual
+bundle, and passes installed Home/development-origin/connected-backend assertions.
+Its actual screenshot is retained in `ci-38347896824-android` under
+`.wrangler/mobile-foundation`. Installed APK SHA-256 and served bundle SHA-256 are
+recorded in that receipt. The full shell flow then fails Maestro parsing because
+`stopApp` receives a string expression. Its 56.962-second video is failure evidence,
+not a passing navigation review video. Owned Android cleanup completes. iOS also
+fails. Its retrieved artifact proves successful Xcode 26.4.1/iOS 26.4.1 compilation
+and installation, but the readiness screenshot shows the system's exact
+`Open in “FreshMarkets Dev”?` confirmation over the development launcher.
+Maestro cannot see Home before that dialog is accepted. iOS owned cleanup completes.
+The GitHub connector confirms both job conclusions.
+
+`pnpm check` exits zero in `check-host-fix.log`, with `check-host-fix-result.json`
+recording HEAD `09d97ae4`. Native corrections were edited during this run. Its mobile
+suite ran before those edits and reports 8 Node plus 13 Vitest tests; it does not
+validate the new probes or final correction bytes. Core reports 1960 tests, Web
+812 tests, and all workspace builds pass. A fresh final-head aggregate remains due.
+
+Current uncommitted native corrections preserve tabs while the keyboard opens,
+await asynchronous Maestro termination, acquire ADB reverse without rebinding,
+label assertion-only ready observations, distinguish host checkout from unverified
+public served-JavaScript identity, and fence/drain fresh-PID Android timing logs.
+The Maestro boolean expression and unused parameter are removed together.
+Independent review reproduced a surviving POSIX descendant before cleanup and
+confirmed it gone after correction. Focused Windows driver tests pass 10 and
+explicitly skip two POSIX regressions. A final source review identifies iOS tab
+occlusion because keyboard avoidance encloses only screen content; a scoped worker
+has moved that controller around the entire tab navigator. Mobile TypeScript 6.0.3,
+focused lint and formatting pass, and fresh independent source review is clean.
+Actual keyboard navigation remains due on both platforms.
+
+The iOS C clock helper/transport/tests and paired Web performance runner/tests are
+implemented. Caller cancellation now reaches iOS trials, with separate bounded
+cleanup. Fresh independent integration review is clean. Focused mobile checks pass
+27 Node tests and 13 Vitest tests, with two POSIX cleanup tests skipped on Windows.
+The hosted jobs execute those POSIX checks. macOS compilation, simulator log
+transport, profiles and measured trials remain unexecuted. The next CI revision
+attempts both installed shell journeys, Android five warmups/thirty measured trials,
+one iOS clock smoke and thirty paired Web trials. Root owns delivery; all scoped
+writers are quiescent. Physical VoiceOver is unavailable in Simulator and deferred under
+the owner's instruction; ordinary Maestro suppresses Android accessibility
+services and cannot substitute for actual TalkBack driving.
+
+Automatic approval review timed out reading CI through the shell, then failed
+because its selected model was at capacity. Those commands were not executed.
+Read-only GitHub connector calls recovered job status and logs. Downloading the
+connector's iOS ZIP into the sandbox also failed. Protected verification commands
+subsequently resumed, and the authorized GitHub CLI download retrieved the iOS
+receipt and screenshot. No merge or deployment occurred. One next action is to
+commit/push the independently reviewed corrections, and run
+the installed shell plus paired Web measurements and one iOS clock smoke before
+extending the remaining native live/performance gates.
+
+Started from clean tracked planning branch `codex/mobile-pr-plan-verification` at
+`415e5f4e6ea28669f9f60a09b8e329e481a12917`. Refreshed origin and created
+`codex/mobile-foundation` from merged planning trunk
+`9b1b59cc`. Preserve ignored local/provider state and earlier commerce obligations.
+Root owns shared guards, lockfile, owning guides and this checkpoint. The native
+driver worker owns only mobile scripts, flows and README. Two shell worker starts
+failed at model capacity; root completed that bounded scope. All roles inherit
+current session settings. No recurring audit, deployment, distribution, provider
+transaction, outbound message or merge is authorized.
+
+Caller path is Expo tab -> native presentation -> parsed Web `/api/core-health`
+-> Core Service Binding. This read establishes liveness and binding configuration,
+never shopping/payment readiness. No Core, Web, contract or storage behavior changes.
+Five route-owned tabs share safe-area/keyboard/scroll layout. Dependent capabilities
+remain explicitly unavailable. Configuration separates development and private-beta
+application IDs, schemes and origins; no provider secret is copied into app config.
+Naming permits only Expo's required route conventions. Architecture guards reject
+native imports of server, storage and provider implementation.
+
+Source is committed through `79681d20efa86c9232655ea3dbf885c5501d6c55`.
+The official SDK 57 reference scaffold confirms the Expo Router entry point,
+strict TypeScript base and native dependency baseline. Mobile uses Expo-supported
+TypeScript 6.0.3 independently of repository TypeScript 7.0.2. A fresh compatibility
+check required overnight Expo patch updates to 57.0.28, Router 57.0.26 and
+development client 57.0.20. Existing Web/Core dependency definitions are unchanged.
+Optional React DOM/server-rendering peer warnings and existing Better Auth peer
+warnings remain; those server-rendering packages are not direct native dependencies.
+
+`pnpm check` passes at source `79681d20` with final documentation-only edits during
+the run, recorded in `.wrangler/mobile-foundation/check-sdk57-patch.log`. It includes
+50 harness, 1960 Core, 812 Web and 20 native tests, shared package tests,
+lint/types/guards/migrations/readiness and all workspace builds. Exit is zero.
+Final documentation formatting, local file links and `git diff --check` pass.
+Focused native tests and types pass; explicit-development `expo install --check` passes.
+Android/iOS JavaScript exports are bundle evidence, not installed-build acceptance.
+
+Real isolated Web/Core catalog search passes on trunk `9b1b59cc` and head
+`2bd4cf40`. Selected-location categories/current prices pass on head `55b80d99`
+after the real welcome close action; the same journey passes on trunk `9b1b59cc`. Admin
+scope navigation passes at `55b80d99`. The original Storefront scenario failed
+because it did not dismiss the welcome dialog; its failure trace is preserved.
+No Web application or test source was changed. Executed browser lanes use unique
+disposable D1 state and retain screenshots, traces and owned cleanup receipts.
+
+Independent source reviews pass through `79681d20`, including canonical backend
+configuration and actual Windows CLI argument behavior. Reviewers inherit session
+settings. The final dependency review confirms only the mobile importer and Expo
+packages changed. No comments or suppressions require removal. Exact receipts and
+remaining obligations are in [Mobile foundation evidence](../MOBILE_FOUNDATION_EVIDENCE.md).
+
+No Android SDK, adb, Maestro, installed build or iOS-capable runner was detected.
+At `79681d20`, both Android commands exit 1 for missing Maestro; both iOS commands
+exit 1 for unavailable macOS/Xcode. All four failed manifests retain that SHA and
+documentation-only working-tree scope. iOS timing transport and served JavaScript
+identity attestation were unimplemented at that revision. The current hosted runner
+captures actual Metro response hashes; the new iOS transport still needs runtime
+proof. No native timing result is claimed.
+Native live lanes, layout comparison screenshots, iOS timing, actual-build video,
+and the full paired Web/native performance gate remain open. Missing native
+observations fail acceptance. FOUNDATION is started, not complete; implementation
+count is **1/12 started, 0/12 accepted**, under five parent phases.
+[PR 5](https://github.com/kezuflow/grocery-app/pull/5) is open and non-draft for
+source review. It is not merge-ready. One next action is to push the reviewed
+native corrections and execute the hosted proof jobs, then complete timing,
+accessibility, layout and review-media gates. Android API 24 minimum support and
+API 36 compatibility need separate actual-device proof before a broad phone claim.
+
+The prior planning/workflow receipt below is historical evidence and does not
+reopen its completed deliverable.
+
 ## Adopt pstack PR delivery and verification - MOBILE-20261012.PR-PLAN-VERIFY
 
 Phase **Convert the Expo program to PRs and prove the project verification skill**;
@@ -1888,17 +2101,17 @@ This is inherited repository evidence, not a fresh production probe. Release sou
 
 The following nine-category table preserves the earlier checkpoint's bookkeeping. The owner's 2026-10-06 acceptance above supersedes its open-work wording; do not report these groups as outstanding or initiate work from them. In particular, its Mobile implementation/testing description predates the approved Mobile deferral and source removal. Historical local/browser/provider observations remain evidence at their recorded scope, while current authority comes from the owner request and owning specifications.
 
-| Group / stable IDs | Evidence and observable acceptance still needed |
-| --- | --- |
-| 1. Commerce Phase 7 — CA-7, CA-7.RULES-AUDIT-1, CA-7.ACCEPTANCE-20261004 | Selected local Worker/D1/browser journeys passed 22/22, including setup, both modes, freeze/late capture/refund, cancellation, courier and Manual recovery/replay. Live account discovery and both quotation modes passed; local webhook signing configuration repaired. Actual QR Ph capture/refund and Lalamove create/get/cancel/webhook/pickup/delivery remain open pending controlled live inputs. Local fakes/read-only production rendering do not supply actual provider evidence. The erased owner test Order cannot be reused as acceptance. |
-| 2. Admin reason fields | Separate unimplemented owner request: remove mandatory reasons for ordinary Admin actions while retaining actor/action/change audit and actual required operational inputs. Preserve financial/custody/scope guards; do not classify it implemented by deleting a plan. |
-| 3. HSPA-6 rollout | HSPA-0–5 source implemented; rolled-back staging measurements did not accept rollout. Four obligations: (a) matched desktop LCP/FCP non-regression and mobile LCP ≤2.5 s, warm/cold media/TTFB profiling; (b) ≥30% uncached catalog improvement plus authenticated Admin/immediate-readiness regressions; (c) authenticated staging, session replacement and provider protocol checks; (d) verify public edge cache TTL and immutable hashed-asset headers. The older root staging-binding harness failure is historical after the later passing aggregate; retain environment-specific binding checks, not that stale failing-status claim. Latest production release is not matched performance evidence. Preserve raw JSON and pinned before/after revisions. |
-| 4. Admin performance/visual — APS, SAUI | Local source and representative browser/visual checks exist. Reconcile stock-shadcn reset and single-link Fulfillment setup against authenticated production navigation/scope/visual behavior. Measure representative production cold/warm p50/p95/p99, rows read/returned and payload/parse cost before declaring a budget or adding indexes/projections. Historical Shopify visual scripts/model choices are superseded, not current requirements. |
-| 5. Mobile — MOB-1–4 | Source/local bundles and anonymous adapter reads exist. Execute authenticated address/cart/quote/order journey on safe local fixtures; Android/iOS secure storage, permissions, linking and native-device/emulator checks; deployed auth/payment-return origins and address-rate-limit binding; authorized geocoder/PayMongo/Lalamove/email acceptance. Admin handling of private feedback remains unresolved. No native/provider/production completion is recorded. |
-| 6. Messaging/notifications — MSG-1 and NOTIFICATION-UI-1 | Released source and later local audit repairs exist. Customer send/attachment/sound, live notification rows, reconnect/session revocation, expiry/hold/restore/R2 deletion and actual received transactional-email journeys remain separately unaccepted where no later receipt closes them. Presence/sound do not prove content delivery, and automatic acknowledgement does not resolve Problems or refunds. Reconcile dated limits before scheduling specific tests. |
-| 7. Historical financial incidents | September 26 Scheduled and September 27 first-live trace are historical, not a fresh defect list. Later Procurement freeze/cutover and audit releases supersede old purchase-liveness/receiving rules. Keep any actual unresolved captured-money/refund/provider-evidence obligation visible; resolve through current financial commands, not expired action status or D1 editing. October 4 owner-authorized D1 test-order cleanup is complete; provider transaction history/backup expiry and bank payout were not erased or independently accepted. Do not revive its superseded deletion/refund next action. |
-| 8. Launch inputs | Real service boundaries, pickup/contact/hours and staffed delivery promises, catalog/prices, actual provider account/method/refund activation and accounting/tax/seller/serial details require factual owner inputs. Transaction summaries remain NOT AN OFFICIAL BIR INVOICE; invoice readiness is not issuance. Customer-facing account closure/anonymization and private-feedback Admin policy remain deferred/unresolved as PRODUCT states. |
-| 9. Retained setup/data and earlier CA obligations | Keep direct-Core capability/location/disabled-principal checks, email/OAuth/invitation acceptance, clean schema and every supported retained upgrade, current address finalization, media publication failure recovery, transfer/count conservation, report reconciliation and complete command/replay/race effects from CA-0–6 visible through ENGINEERING. Later slices/releases do not implicitly close missing earlier end-to-end or actual-provider evidence. Use historical task receipts only for the specific missing claim. |
+| Group / stable IDs                                                       | Evidence and observable acceptance still needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Commerce Phase 7 — CA-7, CA-7.RULES-AUDIT-1, CA-7.ACCEPTANCE-20261004 | Selected local Worker/D1/browser journeys passed 22/22, including setup, both modes, freeze/late capture/refund, cancellation, courier and Manual recovery/replay. Live account discovery and both quotation modes passed; local webhook signing configuration repaired. Actual QR Ph capture/refund and Lalamove create/get/cancel/webhook/pickup/delivery remain open pending controlled live inputs. Local fakes/read-only production rendering do not supply actual provider evidence. The erased owner test Order cannot be reused as acceptance.                                                                                                                                                                                                           |
+| 2. Admin reason fields                                                   | Separate unimplemented owner request: remove mandatory reasons for ordinary Admin actions while retaining actor/action/change audit and actual required operational inputs. Preserve financial/custody/scope guards; do not classify it implemented by deleting a plan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 3. HSPA-6 rollout                                                        | HSPA-0–5 source implemented; rolled-back staging measurements did not accept rollout. Four obligations: (a) matched desktop LCP/FCP non-regression and mobile LCP ≤2.5 s, warm/cold media/TTFB profiling; (b) ≥30% uncached catalog improvement plus authenticated Admin/immediate-readiness regressions; (c) authenticated staging, session replacement and provider protocol checks; (d) verify public edge cache TTL and immutable hashed-asset headers. The older root staging-binding harness failure is historical after the later passing aggregate; retain environment-specific binding checks, not that stale failing-status claim. Latest production release is not matched performance evidence. Preserve raw JSON and pinned before/after revisions. |
+| 4. Admin performance/visual — APS, SAUI                                  | Local source and representative browser/visual checks exist. Reconcile stock-shadcn reset and single-link Fulfillment setup against authenticated production navigation/scope/visual behavior. Measure representative production cold/warm p50/p95/p99, rows read/returned and payload/parse cost before declaring a budget or adding indexes/projections. Historical Shopify visual scripts/model choices are superseded, not current requirements.                                                                                                                                                                                                                                                                                                             |
+| 5. Mobile — MOB-1–4                                                      | Source/local bundles and anonymous adapter reads exist. Execute authenticated address/cart/quote/order journey on safe local fixtures; Android/iOS secure storage, permissions, linking and native-device/emulator checks; deployed auth/payment-return origins and address-rate-limit binding; authorized geocoder/PayMongo/Lalamove/email acceptance. Admin handling of private feedback remains unresolved. No native/provider/production completion is recorded.                                                                                                                                                                                                                                                                                             |
+| 6. Messaging/notifications — MSG-1 and NOTIFICATION-UI-1                 | Released source and later local audit repairs exist. Customer send/attachment/sound, live notification rows, reconnect/session revocation, expiry/hold/restore/R2 deletion and actual received transactional-email journeys remain separately unaccepted where no later receipt closes them. Presence/sound do not prove content delivery, and automatic acknowledgement does not resolve Problems or refunds. Reconcile dated limits before scheduling specific tests.                                                                                                                                                                                                                                                                                          |
+| 7. Historical financial incidents                                        | September 26 Scheduled and September 27 first-live trace are historical, not a fresh defect list. Later Procurement freeze/cutover and audit releases supersede old purchase-liveness/receiving rules. Keep any actual unresolved captured-money/refund/provider-evidence obligation visible; resolve through current financial commands, not expired action status or D1 editing. October 4 owner-authorized D1 test-order cleanup is complete; provider transaction history/backup expiry and bank payout were not erased or independently accepted. Do not revive its superseded deletion/refund next action.                                                                                                                                                 |
+| 8. Launch inputs                                                         | Real service boundaries, pickup/contact/hours and staffed delivery promises, catalog/prices, actual provider account/method/refund activation and accounting/tax/seller/serial details require factual owner inputs. Transaction summaries remain NOT AN OFFICIAL BIR INVOICE; invoice readiness is not issuance. Customer-facing account closure/anonymization and private-feedback Admin policy remain deferred/unresolved as PRODUCT states.                                                                                                                                                                                                                                                                                                                  |
+| 9. Retained setup/data and earlier CA obligations                        | Keep direct-Core capability/location/disabled-principal checks, email/OAuth/invitation acceptance, clean schema and every supported retained upgrade, current address finalization, media publication failure recovery, transfer/count conservation, report reconciliation and complete command/replay/race effects from CA-0–6 visible through ENGINEERING. Later slices/releases do not implicitly close missing earlier end-to-end or actual-provider evidence. Use historical task receipts only for the specific missing claim.                                                                                                                                                                                                                             |
 
 ## Next commerce action and authority
 

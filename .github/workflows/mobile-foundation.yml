@@ -1,0 +1,187 @@
+name: Mobile foundation installed shell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/mobile-foundation]
+    paths:
+      - apps/mobile/**
+      - pnpm-lock.yaml
+      - .github/workflows/mobile-foundation.yml
+
+permissions:
+  contents: read
+
+env:
+  MAESTRO_CLI_NO_ANALYTICS: "1"
+
+concurrency:
+  group: mobile-foundation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.9
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pnpm install --frozen-lockfile
+      - name: Verify native driver and clock parsers
+        shell: bash
+        run: |
+          mkdir -p .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof
+          pnpm --filter @freshmarkets/mobile test 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/android-tests.log
+      - name: Install pinned Maestro
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.11.0/maestro.zip --output "$RUNNER_TEMP/maestro.zip"
+          echo '5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a  '"$RUNNER_TEMP/maestro.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro-cli"
+          echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build and drive Android development shell
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: node apps/mobile/scripts/run-native-ci.mjs android
+      - name: Preserve native evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: foundation-android-${{ github.sha }}
+          path: .wrangler/swarm/MOBILE-20261012.1.FOUNDATION
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.9
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Select Xcode and install dependencies
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.4.1.app/Contents/Developer
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+          pnpm install --frozen-lockfile
+      - name: Verify native driver and clock parsers
+        shell: bash
+        run: |
+          mkdir -p .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const before = 'apps/mobile/scripts/native-driver.before.mjs';
+          const test = 'apps/mobile/scripts/native-driver.before.test.mjs';
+          if (existsSync(before) || existsSync(test)) throw new Error('Refusing existing regression fixture files.');
+          writeFileSync(before, execFileSync('git', ['show', 'e40d6c83019921799ac1c6ab0d99b3ff8dfb93f4:apps/mobile/scripts/native-driver.mjs']));
+          writeFileSync(test, readFileSync('apps/mobile/scripts/native-driver.test.mjs', 'utf8').replace('./native-driver.mjs', './native-driver.before.mjs'));
+          NODE
+          trap 'rm -f apps/mobile/scripts/native-driver.before.mjs apps/mobile/scripts/native-driver.before.test.mjs' EXIT
+          set +e
+          node --test --test-name-pattern='Darwin cleanup waits' apps/mobile/scripts/native-driver.before.test.mjs 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/darwin-before.log
+          before_status=${PIPESTATUS[0]}
+          set -e
+          test "$before_status" -eq 1
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const log = readFileSync('.wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/darwin-before.log', 'utf8');
+          assert.match(log, /observedKernelError.*EPERM/);
+          assert.match(log, /could not stop its owned process group.*EPERM/);
+          assert.match(log, /fixtureCleanupResult.*ESRCH/);
+          NODE
+          rm apps/mobile/scripts/native-driver.before.mjs apps/mobile/scripts/native-driver.before.test.mjs
+          pnpm --filter @freshmarkets/mobile test 2>&1 | tee .wrangler/swarm/MOBILE-20261012.1.FOUNDATION/driver-proof/ios-tests.log
+      - name: Install pinned Maestro
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.11.0/maestro.zip --output "$RUNNER_TEMP/maestro.zip"
+          echo '5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a  '"$RUNNER_TEMP/maestro.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro-cli"
+          echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
+      - name: Build and drive iOS development shell
+        run: node apps/mobile/scripts/run-native-ci.mjs ios
+      - name: Preserve native evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: foundation-ios-${{ github.sha }}
+          path: .wrangler/swarm/MOBILE-20261012.1.FOUNDATION
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  paired-web-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out pinned baseline
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: 9b1b59cc8fb0ebe1e6374bc760cee8c82237410f
+          path: baseline
+      - name: Check out measured head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          path: head
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.9
+      - name: Install frozen baseline dependencies
+        working-directory: baseline
+        run: pnpm install --frozen-lockfile
+      - name: Install frozen head dependencies
+        working-directory: head
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        working-directory: head
+        run: pnpm --filter @freshmarkets/web exec playwright install --with-deps chromium
+      - name: Measure alternating baseline and head Web trials
+        working-directory: head
+        run: node apps/mobile/scripts/measure-web-baseline.mjs --baseline "$GITHUB_WORKSPACE/baseline" --head "$GITHUB_WORKSPACE/head"
+      - name: Preserve paired Web evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: foundation-paired-web-${{ github.sha }}
+          path: head/.wrangler/swarm/MOBILE-20261012.1.FOUNDATION
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

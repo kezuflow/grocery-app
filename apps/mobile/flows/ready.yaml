@@ -1,0 +1,13 @@
+appId: ${APP_ID}
+---
+- assertVisible:
+    id: screen-home
+- assertVisible:
+    id: build-variant
+    text: development
+- assertVisible:
+    id: backend-origin
+    text: ${BACKEND_ORIGIN}
+- assertVisible:
+    id: backend-available
+- takeScreenshot: ready

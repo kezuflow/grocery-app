@@ -1,6 +1,6 @@
 # FreshMarkets verification map
 
-Read the matching recipe before driving Web. The native Expo gate is unavailable because this checkout has no `apps/mobile` source.
+Read the matching recipe before driving Web. Foundation adds `apps/mobile` source and driver commands, but Android and iOS device proof remains unavailable. Read [the native command definitions](../../../../apps/mobile/README.md) without treating them as a proved recipe.
 
 ## Baseline preconditions
 

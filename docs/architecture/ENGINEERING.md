@@ -149,6 +149,14 @@ For agent instructions or verification-tool changes, check the changed documenta
 
 ## Existing commands and their limits
 
+The native Foundation adds `pnpm --filter @freshmarkets/mobile test`, `typecheck`
+and `build` to the recursive gates. Its build exports Android and iOS JavaScript
+bundles, not signed binaries. Mobile uses Expo SDK 57's supported TypeScript 6
+compiler independently of the repository's TypeScript 7 compiler. `doctor`,
+`verify:journey` and `verify:perf` run the native prerequisite/driver tools described
+in [the mobile README](../../apps/mobile/README.md). Missing devices or drivers fail
+these commands. Their presence does not establish native acceptance.
+
 Run from the repository root using the Node and pnpm versions declared in `package.json`.
 
 | Command | What it establishes |

@@ -57,14 +57,16 @@ const violations = [];
 export function isAppRouteGroupDirectory(relativePath) {
   const normalized = relativePath.split(sep).join("/");
   return (
-    (normalized.startsWith("apps/web/app/") || normalized.startsWith("mobile/app/")) &&
+    (normalized.startsWith("apps/web/app/") || normalized.startsWith("apps/mobile/app/")) &&
     /^\([a-z0-9]+(?:-[a-z0-9]+)*\)$/.test(normalized.slice(normalized.lastIndexOf("/") + 1))
   );
 }
 
 export function isMobileExpoRouteFile(relativePath) {
   const normalized = relativePath.split(sep).join("/");
-  return normalized.startsWith("mobile/app/") && normalized.endsWith("/_layout.tsx");
+  return (
+    normalized.startsWith("apps/mobile/app/") && /\/(?:_layout|\+not-found)\.tsx$/.test(normalized)
+  );
 }
 
 export function isDocumentationPathCompliant(relativePath) {
@@ -87,6 +89,7 @@ async function walk(directory) {
     if (entry.name.startsWith(".") && entry.name !== ".github") continue;
     if (ignoredDirectories.has(entry.name)) continue;
     const path = join(directory, entry.name);
+    if (["apps/mobile/android", "apps/mobile/ios"].includes(display(path))) continue;
     if (entry.isDirectory()) {
       const isRouteDirectory =
         routeDirectoryPattern.test(entry.name) || isAppRouteGroupDirectory(display(path));
